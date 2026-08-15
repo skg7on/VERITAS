@@ -8,7 +8,7 @@ The implementation checklist for these milestones lives in:
 
 The executable per-milestone implementation plans live in:
 
-`docs/plan/`
+`docs/plans/`
 
 The backbone data model and invariants live in:
 

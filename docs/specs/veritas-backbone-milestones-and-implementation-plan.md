@@ -77,7 +77,7 @@ Detailed milestone design specs live under `docs/specs/milestones/`:
 | M9 | `docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md` |
 | M10 | `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` |
 
-Executable per-milestone implementation plans live under `docs/plan/`.
+Executable per-milestone implementation plans live under `docs/plans/`.
 
 ---
 
