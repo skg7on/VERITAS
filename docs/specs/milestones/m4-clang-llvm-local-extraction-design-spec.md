@@ -171,7 +171,7 @@ struct ProjectAstIndex {
   std::vector<ExtractedFunctionDecl> declarations;
 };
 
-class ClangExtractor {
+class ProjectAstExtractor {
  public:
   StatusOr<ProjectAstIndex> ExtractProject(
       const build::AnalysisManifest& manifest);
@@ -193,15 +193,35 @@ class ProjectIrBuilder {
 `pipeline::ProgramIr` is declared only in private source-tree headers. It owns the `LLVMContext`, linked `llvm::Module`, local IR facts, and LLVM-to-VERITAS origin maps needed by M5. No installed public header contains this type or an LLVM native type.
 
 ```cpp
-namespace veritas::summary {
-StatusOr<v1::FunctionSummary> BuildLocalSummary(
-    const ExtractedFunctionDecl& decl,
-    const analysis::llvm::LocalIrFacts& facts,
-    const SummaryBuildContext& context);
+namespace veritas::analysis::llvm {
+struct FunctionLocalFacts {
+  core::StableId function_variant_id;
+  std::vector<summary::CallFact> calls;
+  std::vector<summary::MemoryEffectFact> memory_effects;
+  std::vector<summary::ValueFlowFact> value_flows;
+  std::vector<summary::RangeFact> range_facts;
+  std::vector<summary::UnknownFact> unknowns;
+};
+
+class LocalFactExtractor {
+ public:
+  StatusOr<std::vector<FunctionLocalFacts>> Extract(
+      pipeline::ProgramIr& program_ir);
+};
+}
+
+namespace veritas::analysis::pipeline {
+struct LocalAnalysisResult {
+  ProgramIr program_ir;
+  std::vector<summary::v1::FunctionSummary> summary_drafts;
+};
+
+StatusOr<LocalAnalysisResult> RunLocalAnalysis(
+    const build::AnalysisManifest& manifest);
 }
 ```
 
-The project-level public API remains `analysis::ProjectAnalyzer::AnalyzeProject(ProjectAnalysisRequest, AnalysisConfig)`. `ClangExtractor`, `ProjectIrBuilder`, and `ProgramIr` are internal stages called by that orchestrator.
+The project-level public API remains `analysis::ProjectAnalyzer::AnalyzeProject(ProjectAnalysisRequest, AnalysisConfig)`. `ProjectAstExtractor`, `ProjectIrBuilder`, `LocalFactExtractor`, and `ProgramIr` are internal stages called by that orchestrator.
 
 ---
 

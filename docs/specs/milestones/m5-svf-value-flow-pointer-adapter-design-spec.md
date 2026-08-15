@@ -32,7 +32,11 @@ SVF is pinned as a Git submodule:
 
 ```text
 third_party/SVF
+upstream: https://github.com/SVF-tools/SVF.git
+revision: 18fb5650600530a54f0afc22f4df1a10b03d3c02
 ```
+
+This revision is selected for its LLVM 22 and modern CMake support. VERITAS V1 uses LLVM and Clang 22.x for both its own compiler pipeline and the SVF subproject, and requires CMake 3.23 or newer because that is the pinned SVF revision's minimum.
 
 The repository records:
 
@@ -52,6 +56,12 @@ The standard CMake configuration must:
 4. build SVF against the same LLVM installation used by VERITAS,
 5. reject incompatible LLVM version, RTTI, exception, target, or ABI settings,
 6. fail configuration with a command showing how to initialize the submodule when it is absent.
+
+The initialization command is:
+
+```bash
+git submodule update --init --recursive third_party/SVF
+```
 
 There is no `VERITAS_ENABLE_SVF` option and no SVF-disabled standard build. There is no `FindSVF.cmake` path that silently substitutes an arbitrary system installation.
 
@@ -138,6 +148,14 @@ enum class AnalysisCompletion {
   kCompleteWithUnknowns,
 };
 
+struct AnalysisConfig {
+  std::chrono::seconds svf_soft_analysis_budget;
+  std::size_t svf_max_graph_nodes;
+  std::size_t svf_max_emitted_facts;
+
+  static AnalysisConfig Default();
+};
+
 struct ProjectAnalysisResult {
   AnalysisCompletion completion;
   core::StableId program_context_id;
@@ -167,14 +185,28 @@ struct SvfFacts {
   std::vector<summary::DependencyEdge> dependencies;
 };
 
-StatusOr<SvfFacts> AnalyzeProgramIr(
-    pipeline::ProgramIr& program_ir,
-    const SvfConfig& config,
-    const AnalyzerRunContext& run_context);
+enum class SvfMappingCompletion {
+  kComplete,
+  kCompleteWithUnknowns,
+};
+
+struct SvfMappingResult {
+  SvfMappingCompletion completion;
+  SvfFacts facts;
+};
+
+class SvfAnalysisStage {
+ public:
+  virtual ~SvfAnalysisStage() = default;
+  virtual StatusOr<SvfMappingResult> Analyze(
+      pipeline::ProgramIr& program_ir,
+      const AnalyzerRunContext& run_context,
+      const SvfConfig& config);
+};
 }
 ```
 
-This private function is called only by `ProjectAnalyzer`. It is not a separate user-facing tool or reusable public ingestion boundary.
+This private stage is called only by `ProjectAnalyzer`. It is not a separate user-facing tool or reusable public ingestion boundary.
 
 ---
 
@@ -182,11 +214,7 @@ This private function is called only by `ProjectAnalyzer`. It is not a separate 
 
 ```text
 SvfConfig {
-    pointer_analysis_level:
-        basic
-        andersen
-        demand
-
+    pointer_analysis: andersen_wave_diff
     soft_analysis_budget_seconds
     max_graph_nodes
     max_emitted_facts
@@ -204,7 +232,7 @@ Summary IR schema version
 whole-program module hash
 ```
 
-The configuration may select an SVF analysis mode, but it cannot disable the SVF stage.
+V1 uses the pinned revision's `AndersenWaveDiff` analysis. Adding another SVF analysis mode requires a later spec change because it changes fact precision, lifecycle, and analyzer identity. The configuration cannot disable the SVF stage.
 
 ---
 
@@ -221,7 +249,7 @@ The adapter owns the complete SVF lifecycle for one project analysis:
 
 Until the pinned SVF revision is proven safe for concurrent independent contexts, VERITAS serializes the SVF stage inside one process. Parallel Clang/IR preparation may occur before that serialized stage.
 
-Cleanup runs on success and every error path. No result may retain a pointer or reference into SVF or LLVM storage after `AnalyzeProgramIr` returns.
+Cleanup runs on success and every error path. No result may retain a pointer or reference into SVF or LLVM storage after `SvfAnalysisStage::Analyze` returns.
 
 ---
 
