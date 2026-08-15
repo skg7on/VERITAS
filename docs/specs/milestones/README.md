@@ -6,6 +6,10 @@ The implementation checklist for these milestones lives in:
 
 `docs/specs/veritas-backbone-milestones-and-implementation-plan.md`
 
+The executable per-milestone implementation plans live in:
+
+`docs/plan/`
+
 The backbone data model and invariants live in:
 
 `docs/specs/veritas-engineering-backbone-design-specification.md`
@@ -26,4 +30,3 @@ The backbone data model and invariants live in:
 | M10 | `m10-evidence-builder-input-apis-demo-design-spec.md` |
 
 M0 is the project skeleton and toolchain harness. It remains in the implementation plan because it is bootstrapping infrastructure rather than a semantic backbone subsystem.
-
