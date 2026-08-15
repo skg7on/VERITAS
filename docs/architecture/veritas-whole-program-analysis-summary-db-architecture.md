@@ -85,9 +85,9 @@ This separation avoids forcing all program-analysis workloads into a property gr
 # 3. Overall project architecture
 
 ```text
-                         Git / Build System
+                  Project Directory / Build System
                                 │
-                     compile_commands.json
+                  <project>/compile_commands.json
                                 │
                                 ▼
                     ┌─────────────────────┐
@@ -103,6 +103,9 @@ This separation avoids forcing all program-analysis workloads into a property gr
          Clang AST         LLVM IR          Debug/ABI info
               │                │                  │
               └────────────────┼──────────────────┘
+                               ▼
+                 Required In-Process SVF Stage
+                               │
                                ▼
                   Local Static Analysis Engine
                                │
@@ -1528,15 +1531,10 @@ veritas/
 I would make the developer experience simple from the start.
 
 ```bash
-veritas-build configure \
-    --compile-db build/compile_commands.json
+veritas-build analyze --project <project-directory>
 ```
 
-Then:
-
-```bash
-veritas-build index .
-```
+The project directory contains `compile_commands.json`. VERITAS owns compilation-database ingestion, Clang AST extraction, LLVM IR generation/linking, and required in-process SVF analysis. Diagnostic manifests and cached IR are internal outputs, not inputs to separate user-managed stages.
 
 Output:
 
@@ -1882,4 +1880,3 @@ LLM Agent
 If the first six layers are strong, the Review Agent becomes dramatically simpler: instead of trying to “understand a million-line repository,” it reasons over a compact semantic world already built by VERITAS.
 
 That is the technical moat I would aim to build first.
-

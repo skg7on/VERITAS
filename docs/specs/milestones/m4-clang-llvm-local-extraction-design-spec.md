@@ -1,4 +1,4 @@
-# M4 Clang/LLVM Local Extraction Adapter Design Spec
+# M4 VERITAS-Owned Clang/LLVM Project Analysis Design Spec
 
 **Status:** Draft
 **Milestone:** M4
@@ -9,9 +9,11 @@
 
 # 1. Purpose
 
-M4 extracts local semantic facts from real C/C++ translation units using Clang and LLVM. It produces FunctionSummary objects with direct calls, source anchors, CFG summary facts, dominator facts, memory operations, local value references, and initial unknowns.
+M4 extracts local semantic facts from real C/C++ translation units using Clang and LLVM. It receives the typed M1 project manifest inside the active `veritas-build analyze --project <directory>` invocation, executes every normalized compile command itself, and produces FunctionSummary inputs with direct calls, source anchors, CFG summary facts, dominator facts, memory operations, local value references, and initial unknowns.
 
-M4 must not persist Clang AST node pointers or LLVM `Value*` addresses. It converts frontend objects into VERITAS stable references.
+M4 also generates per-translation-unit LLVM modules and links them into a private, in-memory whole-program `ProgramIr` for required M5 SVF analysis. AST and IR construction are VERITAS-owned pipeline stages, not standalone user workflows.
+
+M4 must not persist Clang AST node pointers or LLVM `Value*` addresses. It converts frontend objects into VERITAS stable references and retains native objects only for the lifetime of the private M4/M5 pipeline.
 
 ---
 
@@ -42,6 +44,9 @@ basic callsite classification
 VERITAS owns:
 
 ```text
+execution of normalized compile commands
+Clang FrontendAction orchestration
+LLVM IR emission and whole-program linking
 FunctionSymbolID
 FunctionVariantID
 FunctionBodyID
@@ -54,9 +59,11 @@ RangeFact
 UnknownFact
 ```
 
+The production pipeline does not invoke `clang`, `llvm-link`, or `opt` as user-managed prerequisites. VERITAS may use Clang and LLVM library APIs internally and may cache VERITAS-generated IR as a content-addressed implementation detail.
+
 ---
 
-# 3. Local Extraction Boundary
+# 3. Project Analysis Boundary
 
 M4 records direct/local facts only. It does not expand callees.
 
@@ -71,6 +78,10 @@ vendorValidate has unknown postcondition
 ```
 
 M8 computes transitive effects later.
+
+M4 receives `build::AnalysisManifest` directly from M1. It must not re-open a user-supplied manifest or accept prebuilt `.bc`/`.ll` files. For every translation unit, it uses the same normalized command to coordinate AST extraction and IR generation, preserving a stable origin map between Clang declarations, LLVM values, and VERITAS identities.
+
+After local extraction, M4 links all compatible translation-unit modules into one move-only `pipeline::ProgramIr`. Failure to parse a required translation unit, generate its IR, or link the complete project is a full-analysis failure; M4 does not silently publish a partial project as complete.
 
 ---
 
@@ -156,24 +167,30 @@ unknowns:
 
 ```cpp
 namespace veritas::frontend::clang {
+struct ProjectAstIndex {
+  std::vector<ExtractedFunctionDecl> declarations;
+};
+
 class ClangExtractor {
  public:
-  StatusOr<std::vector<ExtractedFunctionDecl>> ExtractDeclarations(
-      const build::TranslationUnitCommand& command);
+  StatusOr<ProjectAstIndex> ExtractProject(
+      const build::AnalysisManifest& manifest);
 };
 }
 ```
 
 ```cpp
 namespace veritas::analysis::llvm {
-class LlvmExtractor {
+class ProjectIrBuilder {
  public:
-  StatusOr<LocalIrFacts> ExtractLocalFacts(
-      const build::TranslationUnitCommand& command,
-      const core::StableId& function_variant_id);
+  StatusOr<pipeline::ProgramIr> BuildProjectIr(
+      const build::AnalysisManifest& manifest,
+      const frontend::clang::ProjectAstIndex& ast_index);
 };
 }
 ```
+
+`pipeline::ProgramIr` is declared only in private source-tree headers. It owns the `LLVMContext`, linked `llvm::Module`, local IR facts, and LLVM-to-VERITAS origin maps needed by M5. No installed public header contains this type or an LLVM native type.
 
 ```cpp
 namespace veritas::summary {
@@ -183,6 +200,8 @@ StatusOr<v1::FunctionSummary> BuildLocalSummary(
     const SummaryBuildContext& context);
 }
 ```
+
+The project-level public API remains `analysis::ProjectAnalyzer::AnalyzeProject(ProjectAnalysisRequest, AnalysisConfig)`. `ClangExtractor`, `ProjectIrBuilder`, and `ProgramIr` are internal stages called by that orchestrator.
 
 ---
 
@@ -223,6 +242,8 @@ inline assembly
 Required assertions:
 
 ```text
+one project-directory request drives compilation-database loading, AST extraction, and IR generation
+all translation units in the manifest are processed or the project analysis fails
 overloads produce distinct FunctionSymbolIDs
 file-local functions do not collide
 macro source anchors include spelling and expansion locations
@@ -230,11 +251,15 @@ direct call emits MUST_CALL
 function pointer emits UNKNOWN_CALL or MAY_CALL with candidates
 memcpy callsite is represented
 unsupported inline assembly emits UnknownFact
+multi-translation-unit fixture produces one linked in-memory ProgramIr
+public CLI accepts no manifest, bitcode, or LLVM-module input
+tests do not require user-invoked clang, llvm-link, or opt preprocessing
 ```
 
 ---
 
 # 10. Handoff to M5
 
-M5 consumes LLVM module inputs and the local `ValueRef`/`MemoryRef` mapping created here. M4 is complete when local summaries can be produced without SVF and published through M3.
+M5 synchronously borrows the live, linked `ProgramIr` and its local `ValueRef`/`MemoryRef` origin maps. M5 does not load a module pathname or bitcode supplied by the user.
 
+M4 is independently testable when it can build deterministic local summaries and a linked `ProgramIr` from an M1 manifest. In the standard product build and `veritas-build analyze` workflow, that `ProgramIr` always continues into the required M5 SVF stage before the project analysis is complete.

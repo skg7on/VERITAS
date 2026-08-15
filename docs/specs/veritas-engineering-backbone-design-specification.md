@@ -16,9 +16,10 @@ This document turns the high-level SummaryDB architecture into an engineering de
 The backbone is the subsystem that makes VERITAS scalable before any LLM reviewer is introduced:
 
 ```text
-compile_commands.json
-    -> Build Intelligence
-    -> Clang/LLVM local analysis
+project directory containing compile_commands.json
+    -> VERITAS Build Intelligence
+    -> VERITAS-owned Clang AST and LLVM IR construction
+    -> required in-process SVF analysis
     -> stable function identities
     -> immutable function summaries
     -> semantic component hashes
@@ -79,19 +80,20 @@ The backbone MUST preserve these invariants.
 | B7 | Epistemic state and confidence are separate. | `MAY` is not low confidence, and `INFERRED` is not verified. |
 | B8 | Publication is atomic at metadata bindings, not object mutation. | Readers must never observe a half-written summary revision. |
 | B9 | Deterministic analysis is reproducible for the same inputs. | Enables stable hashes, diffing, and regression analysis. |
+| B10 | The only public source input is a project directory containing `compile_commands.json`; VERITAS owns AST, IR, and SVF execution. | Prevents external preprocessing artifacts from becoming public contracts or reproducibility gaps. |
 
 ---
 
 # 4. Logical Architecture
 
 ```text
-                 Source Revision + Build Config
+                Project Directory + Build Config
                               |
                               v
                       Build Intelligence
                               |
                               v
-                    Analysis Input Manifests
+                Typed In-Memory Project Context
                               |
                               v
               +---------------+----------------+
@@ -100,6 +102,9 @@ The backbone MUST preserve these invariants.
       Clang Semantic Frontend           LLVM Analysis Frontend
               |                                |
               +---------------+----------------+
+                              |
+                              v
+                   Required In-Process SVF
                               |
                               v
                      Local Summary Builder
@@ -1439,17 +1444,13 @@ These APIs are semantic. They should not expose SQL, RocksDB keys, or graph stor
 
 # 20. Initial CLI Workflow
 
-The first command-line workflow should prove that the backbone works without an LLM.
+The first command-line workflow should prove that the backbone works without an LLM or user-managed compiler-analysis preprocessing.
 
 ```bash
-veritas-build configure \
-    --compile-db build/compile_commands.json \
-    --build-variant arm64-release
+veritas-build analyze --project <project-directory>
 ```
 
-```bash
-veritas-build index .
-```
+`<project-directory>/compile_commands.json` is mandatory. Build Intelligence, Clang AST extraction, LLVM IR generation/linking, required in-process SVF analysis, and summary publication execute as internal stages of this one command. A diagnostic manifest or cached IR may be emitted under `.veritas`, but neither is a public input to a later command.
 
 Expected output:
 
@@ -1594,7 +1595,7 @@ Deliver:
 Exit criteria:
 
 ```text
-veritas-build index small_fixture
+veritas-build analyze --project tests/fixtures/projects/small_fixture
 veritas-query summary <function>
 veritas-diff same_revision same_revision -> no summary deltas
 ```
