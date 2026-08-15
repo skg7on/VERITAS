@@ -62,6 +62,21 @@ The source architecture says "Build a VERITAS CPG, but keep it thin." This docum
 
 Each milestone should merge independently. Every milestone has tests and a small user-visible CLI behavior.
 
+Detailed milestone design specs live under `docs/specs/milestones/`:
+
+| Milestone | Detailed Spec |
+| --- | --- |
+| M1 | `docs/specs/milestones/m1-build-intelligence-program-context-design-spec.md` |
+| M2 | `docs/specs/milestones/m2-identity-canonical-hashing-metadata-store-design-spec.md` |
+| M3 | `docs/specs/milestones/m3-summary-ir-cas-object-store-design-spec.md` |
+| M4 | `docs/specs/milestones/m4-clang-llvm-local-extraction-design-spec.md` |
+| M5 | `docs/specs/milestones/m5-svf-value-flow-pointer-adapter-design-spec.md` |
+| M6 | `docs/specs/milestones/m6-thin-veritas-cpg-projection-design-spec.md` |
+| M7 | `docs/specs/milestones/m7-reverse-dependency-incremental-scheduler-design-spec.md` |
+| M8 | `docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md` |
+| M9 | `docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md` |
+| M10 | `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` |
+
 ---
 
 # 3. Proposed Repository Structure
