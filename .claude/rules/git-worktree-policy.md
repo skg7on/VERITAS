@@ -77,12 +77,11 @@ Before the first repository write for any task:
 
 4. Choose a unique, descriptive branch named `claude/<task-slug>`.
 
-5. Create a sibling worktree without switching the primary checkout away from `main`:
+5. Create a linked worktree under `.claude/worktrees/` without switching the primary checkout away from `main`:
 
    ```bash
    PRIMARY_ROOT="$(git rev-parse --show-toplevel)"
-   REPOSITORY_NAME="$(basename "$PRIMARY_ROOT")"
-   WORKTREE_PARENT="$(dirname "$PRIMARY_ROOT")/${REPOSITORY_NAME}-worktrees"
+   WORKTREE_PARENT="${PRIMARY_ROOT}/.claude/worktrees"
    TASK_SLUG="<task-slug>"
    TASK_BRANCH="claude/${TASK_SLUG}"
    TASK_WORKTREE="${WORKTREE_PARENT}/${TASK_SLUG}"
@@ -90,6 +89,8 @@ Before the first repository write for any task:
    mkdir -p "$WORKTREE_PARENT"
    git worktree add -b "$TASK_BRANCH" "$TASK_WORKTREE" main
    ```
+
+   `.claude/worktrees/` is gitignored, so the primary checkout stays clean while task worktrees live inside the repository.
 
 6. Change into the task worktree and verify isolation:
 
