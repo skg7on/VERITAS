@@ -535,6 +535,7 @@ enum class ComponentKind {
   Calls,
   MemoryEffects,
   ValueFlow,
+  ControlFlow,
   RangeFacts,
   AliasFacts,
   Taint,
@@ -571,9 +572,10 @@ class ObjectStore {
 
 ## Implementation Plan
 
-- [ ] Write `summary.proto` with header, identity, component hash, calls, memory effects, value flows, ranges, aliases, unknowns, dependencies, and provenance refs.
+- [ ] Write `summary.proto` with header, identity, component hash, calls, memory effects, value flows, versioned `BasicBlockSummaryRef`/dominator control-flow summaries, ranges, aliases, unknowns, dependencies, and provenance refs.
 - [ ] Generate Protobuf C++ bindings through CMake.
 - [ ] Write tests for component hash stability.
+- [ ] Test that control-flow topology changes only the `ControlFlow` semantic hash, source/provenance display changes only its evidence hash, and reordered block-summary records preserve both hashes.
 - [ ] Implement canonical summary serialization for hashing.
 - [ ] Implement RocksDB `ObjectStore`.
 - [ ] Implement `SummaryRepository::PublishSummary` with SQLite transaction boundaries.
@@ -589,6 +591,9 @@ Required cases:
 ```text
 same summary bytes -> same FunctionSummaryID
 range-only change -> only range component semantic hash changes
+control-flow topology change -> only ControlFlow semantic hash changes
+control-flow source-display change -> only ControlFlow evidence hash changes
+reordered BasicBlockSummaryRef records -> ControlFlow hashes remain stable
 provenance-only change -> semantic hash stable, evidence hash changes
 object written before failed metadata transaction -> no current binding
 duplicate object put -> one stored object
