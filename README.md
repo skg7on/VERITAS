@@ -60,6 +60,50 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 
 ---
 
+## Building
+
+**Prerequisites:**
+
+- CMake 3.23+
+- LLVM/Clang 22+ (24.x recommended; build with `LLVM_ENABLE_RTTI=ON` and `LLVM_ENABLE_EH=ON`)
+- Z3 (`brew install z3` on macOS)
+
+**Configure with a local LLVM build tree** (recommended for development — reuses an existing `llvm-project` build):
+
+```bash
+cmake -S . -B build \
+  -DLLVM_PROJECT_BUILD_DIR=/path/to/llvm-project/build
+cmake --build build -j
+```
+
+`LLVM_PROJECT_BUILD_DIR` derives `LLVM_DIR` and `Clang_DIR` from that tree and shares one LLVM installation with the vendored SVF.
+
+**Configure without `LLVM_PROJECT_BUILD_DIR`** — falls back to `find_package(LLVM/Clang CONFIG)`; provide `LLVM_DIR` / `Clang_DIR` or let CMake search system paths:
+
+```bash
+cmake -S . -B build \
+  -DLLVM_DIR=/usr/local/lib/cmake/llvm \
+  -DClang_DIR=/usr/local/lib/cmake/clang
+cmake --build build -j
+```
+
+**Build options:**
+
+| Option | Default | Effect |
+|---|---|---|
+| `BUILD_SHARED_LIBS` | `ON` | VERITAS and SVF build as shared libraries (`.dylib` / `.so`). Set `OFF` for static. |
+| `VERITAS_BUILD_TESTS` | `ON` | Build the unit and integration test targets. |
+| `VERITAS_BUILD_TOOLS` | `ON` | Build the four CLI binaries (`veritas-build`, `veritas-query`, `veritas-diff`, `veritas-explain`). |
+
+**Build layout:**
+
+- `build/` — VERITAS build tree (libraries under `build/lib/`, binaries under `build/bin/`)
+- `build/svf-build/` — vendored SVF build tree (`SvfCore`, `SvfLLVM`, `extapi.bc`, CMake exports)
+
+See `docs/third_party/LLVM.md` and `docs/third_party/SVF.md` for the full toolchain contract.
+
+---
+
 ## Current State
 
 **Design-phase repository.** Four architecture documents (`docs/architecture/`), engineering-backbone spec, milestone specs M1–M12 (`docs/specs/milestones/`), implementation plans for M11/M12 (`docs/plans/`). No source code yet; `main` is clean awaiting M0 implementation.
