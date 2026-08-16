@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, LLVM 22 (`BitcodeReader`, `AsmParser`, `Linker`), CMake, GoogleTest.
 
-**Spec:** `docs/superpowers/specs/2026-08-16-summarydb-ingest-adapter-design.md`
+**Spec:** `docs/specs/veritas-summarydb-ingest-adapter-design.md`
 
 ## Global Constraints
 
