@@ -535,6 +535,7 @@ enum class ComponentKind {
   Calls,
   MemoryEffects,
   ValueFlow,
+  ControlFlow,
   RangeFacts,
   AliasFacts,
   Taint,
@@ -571,9 +572,10 @@ class ObjectStore {
 
 ## Implementation Plan
 
-- [ ] Write `summary.proto` with header, identity, component hash, calls, memory effects, value flows, ranges, aliases, unknowns, dependencies, and provenance refs.
+- [ ] Write `summary.proto` with header, identity, component hash, calls, memory effects, value flows, versioned `BasicBlockSummaryRef`/dominator control-flow summaries, ranges, aliases, unknowns, dependencies, and provenance refs.
 - [ ] Generate Protobuf C++ bindings through CMake.
 - [ ] Write tests for component hash stability.
+- [ ] Test that control-flow topology changes only the `ControlFlow` semantic hash, source/provenance display changes only its evidence hash, and reordered block-summary records preserve both hashes.
 - [ ] Implement canonical summary serialization for hashing.
 - [ ] Implement RocksDB `ObjectStore`.
 - [ ] Implement `SummaryRepository::PublishSummary` with SQLite transaction boundaries.
@@ -589,6 +591,9 @@ Required cases:
 ```text
 same summary bytes -> same FunctionSummaryID
 range-only change -> only range component semantic hash changes
+control-flow topology change -> only ControlFlow semantic hash changes
+control-flow source-display change -> only ControlFlow evidence hash changes
+reordered BasicBlockSummaryRef records -> ControlFlow hashes remain stable
 provenance-only change -> semantic hash stable, evidence hash changes
 object written before failed metadata transaction -> no current binding
 duplicate object put -> one stored object
@@ -789,25 +794,23 @@ No public VERITAS API exposes prebuilt IR inputs, SVF-native types, or SVF node 
 
 ---
 
-# 10. M6: Thin VERITAS CPG Projection
+# 10. M6: LLVM-Native Thin VERITAS CPG Projection
 
 ## Design Spec
 
-M6 builds the VERITAS CPG as a projection over SummaryDB facts, not as the primary source of truth. It should be thin:
+M6 builds a VERITAS-owned CPG directly from the live linked M4 `ProgramIr` and the completed in-memory summaries produced after required M5 mapping. It runs as a private C++ stage before `ProgramIr` destruction and before current bindings are published. It does not invoke Joern, PhASAR, an external CPG service, a compiler executable, or an artifact-driven analysis path.
 
 Persistent nodes:
 
 ```text
-TranslationUnit
-Namespace
-Type
 Function
 Parameter
 Global
 CallSite
 MemoryObject
-Field
 BasicBlockSummary
+Summary
+Unknown
 ```
 
 Persistent edges:
@@ -820,26 +823,35 @@ MAY_CALL
 READS
 WRITES
 FLOWS_TO
-MAY_ALIAS
+ALIASES
 DOMINATES_SUMMARY
 SUMMARIZED_BY
+UNKNOWN_AT
 ```
 
-Instruction-level nodes are generated on demand from Clang/LLVM or cached for a specific Evidence Case. This avoids turning the graph store into a giant duplicated compiler IR database.
+`ALIASES` carries the exact mapped state `MustAlias`, `MayAlias`, `NoAlias`, or `UnknownAlias` for M5-evaluated candidate pairs. M6 runs no second pointer analysis. A fixture-justified, clean-room PhASAR-inspired refinement belongs in a versioned M5 stage before summary completion and must emit only VERITAS `AliasFact` values.
 
-Joern's CPG and the CPG specification are schema inspiration. VERITAS should not copy Joern storage or require Joern as a runtime dependency for V1.
+Instruction-level nodes and native LLVM/SVF identity are never persisted globally. Source anchors, translation-unit IDs, declared type strings, qualified names, and memory field paths remain properties when M4/M5 already mapped them; M6 V1 does not invent source-semantic node identity that the handoff does not provide.
+
+Every persistent node has an explicit mapped identity: Function uses `FunctionVariantID`; Parameter uses `ValueRef`; Global and MemoryObject use `MemoryRef`; CallSite uses `CallSiteID`; BasicBlockSummary uses M4's canonical `BasicBlockSummaryID`; Summary uses `FunctionSummaryID`; and Unknown uses a canonical scoped hash. A missing mapping produces `UNKNOWN_AT`, never an LLVM ordinal or pointer-derived ID.
 
 ## Files
 
 - Create: `proto/veritas/cpg/v1/cpg.proto`
+- Create: `include/veritas/cpg/CpgTypes.h`
 - Create: `include/veritas/cpg/ThinCpg.h`
-- Create: `include/veritas/cpg/CpgBuilder.h`
 - Create: `include/veritas/cpg/CpgQuery.h`
+- Create: `include/veritas/cpg/CpgRepository.h`
+- Create: `src/analysis/cpg/CpgProjectionStage.cpp`
 - Create: `src/cpg/ThinCpg.cpp`
-- Create: `src/cpg/CpgBuilder.cpp`
+- Create: `src/cpg/CpgCanonicalizer.cpp`
+- Create: `src/cpg/CpgRepository.cpp`
 - Create: `src/cpg/CpgQuery.cpp`
+- Create: `include/veritas/summarydb/ProjectPublicationCoordinator.h`
+- Create: `src/summarydb/ProjectPublicationCoordinator.cpp`
 - Create: `tests/unit/cpg/ThinCpgTest.cpp`
-- Create: `tests/integration/cpg/CpgBuilderTest.cpp`
+- Create: `tests/integration/analysis/cpg/CpgProjectionStageTest.cpp`
+- Create: `tests/integration/summarydb/ProjectPublicationCoordinatorTest.cpp`
 - Modify: `src/tools/veritas-query.cpp`
 
 ## Interfaces
@@ -847,15 +859,14 @@ Joern's CPG and the CPG specification are schema inspiration. VERITAS should not
 ```cpp
 namespace veritas::cpg {
 enum class NodeKind {
-  TranslationUnit,
-  Type,
   Function,
   Parameter,
   Global,
   CallSite,
   MemoryObject,
-  Field,
-  BasicBlockSummary
+  BasicBlockSummary,
+  Summary,
+  Unknown
 };
 
 enum class EdgeKind {
@@ -866,49 +877,55 @@ enum class EdgeKind {
   Reads,
   Writes,
   FlowsTo,
-  MayAlias,
+  Aliases,
   DominatesSummary,
-  SummarizedBy
+  SummarizedBy,
+  UnknownAt
 };
 
-class CpgQuery {
- public:
-  std::vector<CpgNode> GetCallees(core::StableId function_variant_id) const;
-  std::vector<CpgPath> GetValueFlow(core::StableId src, core::StableId dst, int max_depth) const;
-  std::vector<CpgNode> GetWriters(core::StableId memory_object_id) const;
+template <typename T>
+struct TraversalResult {
+  std::vector<T> items;
+  std::vector<TruncationReason> truncation_reasons;
+  std::size_t explored_nodes;
+  std::size_t explored_paths;
 };
 }
 ```
 
 ## Implementation Plan
 
-- [ ] Write thin CPG schema with stable VERITAS IDs as node IDs.
-- [ ] Write graph unit tests for node/edge insertion and deduplication.
-- [ ] Implement `CpgBuilder` from current summary bindings.
-- [ ] Add query indexes for outgoing call edges, incoming memory writers, and value-flow adjacency.
-- [ ] Add `veritas-query callees <function>`.
-- [ ] Add `veritas-query flow <src> <dst> --max-depth N`.
-- [ ] Add tests proving instruction-level LLVM values are not persisted as global CPG nodes.
-- [ ] Run CPG tests.
-- [ ] Commit with message `feat: add thin CPG projection`.
+- [ ] Define stable CPG nodes, edges, support records, four-state aliases, canonical bytes, and `ProjectionID`.
+- [ ] Build and validate `ThinCpg` from the borrowed live `ProgramIr` plus completed in-memory summaries.
+- [ ] Add SQLite projection, node, edge, adjacency, historical, and current-binding rows.
+- [ ] Stage summary bindings and the CPG binding in one project-publication transaction.
+- [ ] Reject publication before the transaction unless graph and completed-summary revision/build/module identities and exact sorted `FunctionSummaryID` sets match.
+- [ ] Bind each `CpgQuery` to one immutable `ProjectionID` and return explicit traversal truncation metadata.
+- [ ] Add caller/callee, writer, value-flow, call-path, determinism, failure-injection, and ownership-boundary tests.
+- [ ] Follow `docs/plans/m6-thin-veritas-cpg-projection-implementation-plan.md` for test-first tasks and commits.
 
 ## Tests
 
 Required cases:
 
 ```text
-two summaries with same function node do not duplicate node
-CALLS edge can cite source callsite anchor
-FLOWS_TO path can traverse summary edges
-unknown call creates MAY_CALL or unknown node, not full graph fanout
-instruction detail request returns unsupported until Evidence expansion milestone
+the projector accepts live ProgramIr plus completed summaries and no artifact path
+identical inputs produce the same ProjectionID and canonical graph bytes
+CALLS/FLOWS_TO/ALIASES edges retain summary and opaque mapped provenance support
+all four M5 alias states survive without semantic upgrade or all-pairs fanout
+unknown calls terminate at bounded UNKNOWN_AT/MAY_CALL relations
+projection failure advances neither summary nor CPG current bindings
+query results distinguish no path from each exhausted budget
+using a budget exactly does not report truncation unless additional eligible work is rejected
+public headers and the standard build contain no native analysis or external CPG-generator boundary
 ```
 
 ## Exit Criteria
 
 ```text
-Thin CPG can answer caller/callee and value-flow adjacency queries.
-Persistent graph size is proportional to functions, callsites, objects, and summary edges, not every instruction.
+One `analyze --project` invocation publishes completed summaries and one matching immutable CPG snapshot.
+Thin CPG answers caller/callee, writer, value-flow, alias, and call-path queries with explicit budgets.
+Persistent graph size is proportional to functions, callsites, objects, and summary relations, not LLVM instruction count.
 ```
 
 ---
