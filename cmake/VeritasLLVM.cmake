@@ -45,7 +45,8 @@ else()
 endif()
 
 # Find LLVM package
-# Require LLVM 22.x as specified in CLAUDE.md
+# Require LLVM 22+ as specified in CLAUDE.md
+# LLVM 22, 23, 24, and later versions are supported
 find_package(LLVM 22 REQUIRED CONFIG)
 
 message(STATUS "VERITAS: Found LLVM ${LLVM_PACKAGE_VERSION}")

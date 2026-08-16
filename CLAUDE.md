@@ -20,7 +20,7 @@
 
 **Identity Model:** `RepositoryID → RevisionID → BuildVariantID → FunctionSymbolID → FunctionVariantID → FunctionBodyID → FunctionSummaryID`. All IDs are semantic (not file-line based), content-derived, canonicalized. Format: `<kind>:sha256:<digest>`.
 
-**Analysis Stack (V1):** C++20, CMake 3.23+, LLVM/Clang 22.x, required pinned SVF (`third_party/SVF@18fb5650…`), Z3, Protobuf, RocksDB, SQLite, Soufflé, GoogleTest. SVF is mandatory for L1 Andersen pointer analysis; no `VERITAS_ENABLE_SVF` toggle exists.
+**Analysis Stack (V1):** C++20, CMake 3.23+, LLVM/Clang 22+, required pinned SVF (`third_party/SVF@18fb5650…`), Z3, Protobuf, RocksDB, SQLite, Soufflé, GoogleTest. SVF is mandatory for L1 Andersen pointer analysis; no `VERITAS_ENABLE_SVF` toggle exists.
 
 **Milestones M0–M12:** Skeleton + toolchain → project ingestion → identity + metadata → Summary IR + CAS → Clang/LLVM local extraction → required in-process SVF → thin CPG projection → reverse-dep index + incremental scheduler → SCC WPA + Soufflé → provenance fact store + explain API → Evidence Builder input APIs + buffer-overflow demo → external IR adapter (bitcode) → external-facts importer (Joern/PhASAR).
 

@@ -1,13 +1,13 @@
 # LLVM and Clang Dependencies
 
-VERITAS requires LLVM/Clang 22.x for C/C++ frontend analysis, IR generation, and local static analysis.
+VERITAS requires LLVM/Clang 22+ for C/C++ frontend analysis, IR generation, and local static analysis.
 
 ## Upstream
 
 - **Project**: LLVM Compiler Infrastructure
 - **Repository**: https://github.com/llvm/llvm-project
 - **License**: Apache-2.0 WITH LLVM-exception
-- **Required Version**: LLVM/Clang 22.x
+- **Required Version**: LLVM/Clang 22+
 - **Components Used**: LLVM Core, Clang LibTooling, Clang CodeGen
 
 ## Configuration
@@ -67,8 +67,8 @@ If you need to build LLVM from source for VERITAS development:
 git clone https://github.com/llvm/llvm-project.git
 cd llvm-project
 
-# Checkout LLVM 22.x
-git checkout release/22.x
+# Checkout LLVM 22+
+git checkout release/22.x  # or later versions like release/24.x
 
 # Configure LLVM with Clang and required components
 cmake -S llvm -B build \
@@ -100,7 +100,7 @@ VERITAS and SVF must use compatible LLVM configurations:
 
 | Setting | Required Value | Rationale |
 |---------|---------------|-----------|
-| LLVM Version | 22.x | VERITAS targets LLVM 22 APIs; SVF submodule is pinned to compatible revision |
+| LLVM Version | 22+ | VERITAS requires LLVM 22 or later; SVF submodule is pinned to compatible revision |
 | RTTI | ON | VERITAS and SVF require LLVM RTTI for type introspection |
 | Exceptions | ON | C++ exception handling must be consistent across VERITAS/LLVM/SVF |
 | ABI | Match host compiler | Prevents linkage failures and UB from ABI mismatches |
@@ -127,11 +127,11 @@ cmake -S . -B build -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build"
 
 **Symptom:**
 ```
-VERITAS requires LLVM 22.x but found LLVM 18.x
+VERITAS requires LLVM 22+ but found LLVM 18.x
 ```
 
 **Solution:**
-Ensure your LLVM build is version 22.x. Check with:
+Ensure your LLVM build is version 22 or later. Check with:
 
 ```bash
 /path/to/llvm-project/build/bin/llvm-config --version
@@ -149,7 +149,7 @@ Rebuild LLVM with `-DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_EH=ON`.
 
 ## SVF Integration
 
-The pinned SVF submodule at `third_party/SVF` also depends on LLVM 22.x. When you configure VERITAS with `LLVM_PROJECT_BUILD_DIR`, both VERITAS and SVF will use the same LLVM installation, ensuring ABI compatibility.
+The pinned SVF submodule at `third_party/SVF` also depends on LLVM 22+. When you configure VERITAS with `LLVM_PROJECT_BUILD_DIR`, both VERITAS and SVF will use the same LLVM installation, ensuring ABI compatibility.
 
 ### How It Works
 
