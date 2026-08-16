@@ -1,3 +1,17 @@
+# Copyright 2026 VERITAS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Top-level CMake file for VERITAS.
 #
 # Verified Evidence Reasoning IR for Trans-program Analysis and Semantics.
@@ -85,6 +99,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # Toolchain and third-party dependencies
 # -----------------------------------------------------------------------------
 
+# Warning contract for VERITAS-owned targets (target-scoped, never applied
+# to SVF or LLVM).
+include(VeritasWarnings)
+
 # LLVM discovery:
 #   * If -DLLVM_PROJECT_BUILD_DIR is passed, derive LLVM_DIR / Clang_DIR from
 #     that build tree.
@@ -98,6 +116,11 @@ include(VeritasLLVM)
 # private veritas_third_party_svf wrapper target.
 include(VeritasSVF)
 
+# Remaining VERITAS dependencies: Z3, Protobuf, RocksDB, SQLite3, and
+# GoogleTest (when tests are enabled). Souffle is optional at M0 and
+# becomes required at M8. Resolved before src/ subdirectories are added.
+include(Dependencies)
+
 # -----------------------------------------------------------------------------
 # Sub-projects
 # -----------------------------------------------------------------------------
@@ -107,15 +130,13 @@ include(VeritasSVF)
 # `add_subdirectory` will be uncommented (or its guard removed) as the
 # corresponding milestone lands.
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/core/CMakeLists.txt")
-  add_subdirectory(src/core)
-endif()
+add_subdirectory(src/core)
 
-if(VERITAS_BUILD_TOOLS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/CMakeLists.txt")
+if(VERITAS_BUILD_TOOLS)
   add_subdirectory(src/tools)
 endif()
 
-if(VERITAS_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
+if(VERITAS_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
 endif()

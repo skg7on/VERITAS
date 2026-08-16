@@ -56,3 +56,7 @@ This repository enforces a mandatory Git worktree policy for every Claude Code s
 This repository has a canonical documentation layout. Design specs live under `docs/specs/` and implementation plans under `docs/plans/`. See the referenced rule below; the `superpowers` skills write to these paths.
 
 @.claude/rules/docs-layout.md
+
+Every VERITAS-authored source, header, and CMake file must open with an SPDX-style Apache-2.0 header. See the referenced rule below for the exact format, per-language comment style, and the pre-commit verification snippet.
+
+@.claude/rules/license-header-policy.md
