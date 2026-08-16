@@ -44,17 +44,26 @@ else()
   message(STATUS "VERITAS: Set LLVM_DIR and Clang_DIR, or let CMake search system paths")
 endif()
 
-# Find LLVM package
-# Require LLVM 22+ as specified in CLAUDE.md
-# LLVM 22, 23, 24, and later versions are supported
-find_package(LLVM 22 REQUIRED CONFIG)
+# Find LLVM package.
+# CLAUDE.md requires LLVM 22 or newer. LLVMConfigVersion.cmake marks only
+# the exact matching major.minor as compatible (no range support), so we
+# ask for the package unversioned and validate LLVM_PACKAGE_VERSION below.
+find_package(LLVM REQUIRED CONFIG)
+
+if(LLVM_PACKAGE_VERSION VERSION_LESS "22.0")
+  message(FATAL_ERROR
+    "VERITAS requires LLVM 22 or newer, but found ${LLVM_PACKAGE_VERSION}\n"
+    "from ${LLVM_DIR}. Point LLVM_PROJECT_BUILD_DIR (or LLVM_DIR / Clang_DIR)\n"
+    "at an LLVM/Clang 22+ build.")
+endif()
 
 message(STATUS "VERITAS: Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "VERITAS: LLVM definitions: ${LLVM_DEFINITIONS}")
 message(STATUS "VERITAS: LLVM include dirs: ${LLVM_INCLUDE_DIRS}")
 message(STATUS "VERITAS: LLVM library dirs: ${LLVM_LIBRARY_DIRS}")
 
-# Find Clang package
+# Find Clang package. Same rationale as LLVM above; Clang ships alongside
+# LLVM in the monorepo, so the version check on LLVM_PACKAGE_VERSION covers it.
 find_package(Clang REQUIRED CONFIG)
 
 message(STATUS "VERITAS: Found Clang ${CLANG_VERSION}")
