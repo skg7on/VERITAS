@@ -159,6 +159,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON \
             -DCMAKE_C_COMPILER="$RUNNER_TEMP/llvm-install/bin/clang" \
             -DCMAKE_CXX_COMPILER="$RUNNER_TEMP/llvm-install/bin/clang++" \
             -DLLVM_PROJECT_BUILD_DIR="$RUNNER_TEMP/llvm-install" \

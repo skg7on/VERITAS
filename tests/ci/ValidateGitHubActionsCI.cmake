@@ -82,6 +82,10 @@ veritas_require_ci_literal(
   "VERITAS LLVM configuration"
   "-DLLVM_PROJECT_BUILD_DIR=\"$RUNNER_TEMP/llvm-install\""
 )
+veritas_require_ci_literal(
+  "CMake config package preference"
+  "-DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON"
+)
 veritas_require_ci_literal("SVF build" "--target SvfCore SvfLLVM")
 veritas_require_ci_literal(
   "CTest execution"
