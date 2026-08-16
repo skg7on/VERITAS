@@ -6,7 +6,7 @@
 
 **Architecture:** VERITAS owns the complete project-analysis workflow from one project directory: compilation-database ingestion, Clang AST traversal, LLVM IR generation/linking, required in-process SVF analysis, Summary IR publication, persistence, incremental invalidation, thin CPG projection, provenance, and Evidence Builder APIs. Clang, LLVM, and a pinned SVF Git submodule provide compiler/analysis libraries behind private stages; they are never separate user-managed preprocessing tools or public artifact-input contracts.
 
-**Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22.x, Clang LibTooling and CodeGen, SVF commit `18fb5650600530a54f0afc22f4df1a10b03d3c02`, Z3, Protobuf, RocksDB, SQLite, Souffle, GoogleTest, and Python helper scripts for golden fixture checks.
+**Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22+, Clang LibTooling and CodeGen, SVF commit `18fb5650600530a54f0afc22f4df1a10b03d3c02`, Z3, Protobuf, RocksDB, SQLite, Souffle, GoogleTest, and Python helper scripts for golden fixture checks.
 
 **Spec:** `docs/specs/veritas-engineering-backbone-design-specification.md`
 
@@ -154,7 +154,7 @@ The layout keeps adapters separate from VERITAS-owned semantic models. If SVF or
 
 ## Design Spec
 
-M0 creates a buildable C++20 repository and the required compiler-analysis dependency contract, but no production analysis behavior. LLVM/Clang 22.x comes from one configured installation. SVF is source-pinned at `third_party/SVF` and is always part of the standard build; Souffle remains optional until M8.
+M0 creates a buildable C++20 repository and the required compiler-analysis dependency contract, but no production analysis behavior. LLVM/Clang 22+ comes from one configured installation. SVF is source-pinned at `third_party/SVF` and is always part of the standard build; Souffle remains optional until M8.
 
 The exact SVF contract is:
 
@@ -163,7 +163,7 @@ upstream: https://github.com/SVF-tools/SVF.git
 revision: 18fb5650600530a54f0afc22f4df1a10b03d3c02
 path: third_party/SVF
 minimum CMake: 3.23
-LLVM/Clang: 22.x, shared with VERITAS
+LLVM/Clang: 22+, shared with VERITAS
 ```
 
 ## Files
@@ -258,7 +258,7 @@ git add .gitmodules third_party/SVF
 ```
 
 - [ ] Create the CMake skeleton with targets `veritas_core`, `veritas-build`, `veritas-query`, `veritas-diff`, and `veritas-explain`.
-- [ ] Require CMake 3.23+, LLVM/Clang 22.x, Protobuf, RocksDB, SQLite, GoogleTest, and Z3; keep only Souffle optional in M0.
+- [ ] Require CMake 3.23+, LLVM/Clang 22+, Protobuf, RocksDB, SQLite, GoogleTest, and Z3; keep only Souffle optional in M0.
 - [ ] Fail configuration when the SVF submodule is absent with `git submodule update --init --recursive third_party/SVF`.
 - [ ] Add SVF with `add_subdirectory(third_party/SVF EXCLUDE_FROM_ALL)` and create private interface target `veritas_third_party_svf` linking `SvfCore` and `SvfLLVM`.
 - [ ] Verify VERITAS and SVF use the same LLVM version, RTTI, exception, target, and ABI settings.

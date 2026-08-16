@@ -36,7 +36,7 @@ upstream: https://github.com/SVF-tools/SVF.git
 revision: 18fb5650600530a54f0afc22f4df1a10b03d3c02
 ```
 
-This revision is selected for its LLVM 22 and modern CMake support. VERITAS V1 uses LLVM and Clang 22.x for both its own compiler pipeline and the SVF subproject, and requires CMake 3.23 or newer because that is the pinned SVF revision's minimum.
+This revision is selected for its LLVM 22 and modern CMake support. VERITAS V1 uses LLVM and Clang 22+ for both its own compiler pipeline and the SVF subproject, and requires CMake 3.23 or newer because that is the pinned SVF revision's minimum.
 
 The repository records:
 
