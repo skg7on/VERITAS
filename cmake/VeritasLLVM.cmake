@@ -1,15 +1,19 @@
 # VeritasLLVM.cmake
 #
-# Configures LLVM and Clang dependencies for VERITAS.
+# Configures LLVM and Clang dependencies for VERITAS and the SVF submodule.
 #
 # Accepts LLVM_PROJECT_BUILD_DIR to point to a local LLVM build directory,
-# and derives LLVM_DIR and Clang_DIR from it.
+# and derives LLVM_DIR and Clang_DIR from it. Both VERITAS and the pinned
+# SVF submodule at third_party/SVF will use the same LLVM installation.
 #
 # Usage:
 #   cmake -S . -B build -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build"
 #
 # If LLVM_PROJECT_BUILD_DIR is not set, falls back to standard find_package
 # behavior (uses LLVM_DIR and Clang_DIR directly, or searches system paths).
+#
+# IMPORTANT: This module must be included BEFORE add_subdirectory(third_party/SVF)
+# so that SVF inherits the cached LLVM_DIR variable.
 
 if(LLVM_PROJECT_BUILD_DIR)
   message(STATUS "VERITAS: Using local LLVM build at ${LLVM_PROJECT_BUILD_DIR}")
