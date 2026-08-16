@@ -12,23 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# tests/CMakeLists.txt
-#
-# Root of the VERITAS test tree. Only added when VERITAS_BUILD_TESTS=ON, and
-# only after enable_testing() has been called from the top-level CMake file.
-
-add_subdirectory(unit)
-add_subdirectory(integration)
-add_subdirectory(ci)
-
-find_program(VERITAS_BASH_EXECUTABLE bash REQUIRED)
-
 add_test(
-  NAME veritas_pre_commit_hook
+  NAME veritas_ci_workflow
   COMMAND
-    "${VERITAS_BASH_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/hooks/pre-commit-hook-test.sh"
-    "${PROJECT_SOURCE_DIR}/.githooks/pre-commit"
+    "${CMAKE_COMMAND}"
+    "-DVERITAS_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/ValidateGitHubActionsCI.cmake"
 )
 
-set_tests_properties(veritas_pre_commit_hook PROPERTIES TIMEOUT 30)
+set_tests_properties(veritas_ci_workflow PROPERTIES TIMEOUT 30)

@@ -1,0 +1,182 @@
+# Copyright 2026 VERITAS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: CI Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Ubuntu 24.04 / LLVM 24
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout VERITAS
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential \
+            cmake \
+            git \
+            libedit-dev \
+            libffi-dev \
+            libgtest-dev \
+            libprotobuf-dev \
+            librocksdb-dev \
+            libsqlite3-dev \
+            libtinfo-dev \
+            libxml2-dev \
+            libzstd-dev \
+            ninja-build \
+            pkg-config \
+            protobuf-compiler \
+            python3 \
+            zlib1g-dev
+
+      - name: Restore Z3 cache
+        id: z3-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/z3-install
+          key: veritas-ubuntu-24.04-x86_64-z3-ddb49568d3520e99799e364fb22f35fc67d887b1-r1
+
+      - name: Checkout Z3 source
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Z3Prover/z3
+          ref: ddb49568d3520e99799e364fb22f35fc67d887b1
+          path: z3
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build and install Z3
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S z3 -B "$RUNNER_TEMP/z3-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/z3-install" \
+            -DZ3_BUILD_LIBZ3_SHARED=ON \
+            -DZ3_BUILD_PYTHON_BINDINGS=OFF \
+            -DZ3_BUILD_DOCUMENTATION=OFF
+          cmake --build "$RUNNER_TEMP/z3-build" --target install --parallel 4
+          cmake -E remove_directory "$GITHUB_WORKSPACE/z3"
+          cmake -E remove_directory "$RUNNER_TEMP/z3-build"
+
+      - name: Validate Z3 installation
+        run: |
+          test -f "$RUNNER_TEMP/z3-install/include/z3++.h"
+          test -f "$RUNNER_TEMP/z3-install/lib/libz3.so"
+          test -f "$RUNNER_TEMP/z3-install/lib/cmake/z3/Z3Config.cmake"
+
+      - name: Restore LLVM cache
+        id: llvm-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/llvm-install
+          key: veritas-ubuntu-24.04-x86_64-llvm-860fcb7accb22e57a020a353a39f2fdbd0dc1b44-r1
+
+      - name: Checkout LLVM source
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: llvm/llvm-project
+          ref: 860fcb7accb22e57a020a353a39f2fdbd0dc1b44
+          path: llvm-project
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S llvm-project/llvm -B "$RUNNER_TEMP/llvm-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/llvm-install" \
+            -DLLVM_ENABLE_PROJECTS=clang \
+            -DLLVM_TARGETS_TO_BUILD=X86 \
+            -DLLVM_ENABLE_RTTI=ON \
+            -DLLVM_ENABLE_EH=ON \
+            -DLLVM_BUILD_LLVM_DYLIB=ON \
+            -DLLVM_LINK_LLVM_DYLIB=ON \
+            -DLLVM_INCLUDE_TESTS=OFF \
+            -DCLANG_INCLUDE_TESTS=OFF \
+            -DLLVM_INCLUDE_EXAMPLES=OFF \
+            -DLLVM_INCLUDE_BENCHMARKS=OFF \
+            -DLLVM_INCLUDE_DOCS=OFF \
+            -DLLVM_ENABLE_BINDINGS=OFF
+
+      - name: Build and install LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake --build "$RUNNER_TEMP/llvm-build" --target install --parallel 4
+          cmake -E remove_directory "$GITHUB_WORKSPACE/llvm-project"
+          cmake -E remove_directory "$RUNNER_TEMP/llvm-build"
+
+      - name: Validate LLVM installation
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib
+        run: |
+          test -x "$RUNNER_TEMP/llvm-install/bin/llvm-config"
+          test -x "$RUNNER_TEMP/llvm-install/bin/clang"
+          test -f "$RUNNER_TEMP/llvm-install/lib/cmake/llvm/LLVMConfig.cmake"
+          test -f "$RUNNER_TEMP/llvm-install/lib/cmake/clang/ClangConfig.cmake"
+          test "$("$RUNNER_TEMP/llvm-install/bin/llvm-config" --version)" = "24.0.0git"
+          "$RUNNER_TEMP/llvm-install/bin/clang" --version
+
+      - name: Configure VERITAS
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="$RUNNER_TEMP/llvm-install/bin/clang" \
+            -DCMAKE_CXX_COMPILER="$RUNNER_TEMP/llvm-install/bin/clang++" \
+            -DLLVM_PROJECT_BUILD_DIR="$RUNNER_TEMP/llvm-install" \
+            -DZ3_DIR="$RUNNER_TEMP/z3-install/lib/cmake/z3" \
+            -DVERITAS_BUILD_TESTS=ON \
+            -DVERITAS_BUILD_TOOLS=ON
+
+      - name: Build VERITAS
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
+        run: cmake --build build --parallel 4
+
+      - name: Build SVF
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
+        run: cmake --build build --target SvfCore SvfLLVM --parallel 4
+
+      - name: Run tests
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
+        run: ctest --test-dir build --output-on-failure
