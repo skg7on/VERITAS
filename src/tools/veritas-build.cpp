@@ -55,37 +55,63 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
   bool project_seen = false;
   bool output_seen = false;
 
+  auto is_rejected = [](std::string_view value) -> std::string_view {
+    for (const auto rejected : kRejectedFlags) {
+      if (value == rejected) return rejected;
+    }
+    return {};
+  };
+
+  // Consume the next argument as an option value. We validate that it exists
+  // and that it is not itself a rejected artifact flag — otherwise
+  // `veritas-build analyze --project --compile-db path` would silently take
+  // `--compile-db` as the project path and bypass the rejection contract.
+  auto take_value = [&](std::size_t& i, std::string_view option)
+      -> veritas::StatusOr<std::string> {
+    if (i + 1 >= args.size()) {
+      return veritas::Status::InvalidArgument(
+          std::string(option) + " requires a value argument");
+    }
+    const auto& value = args[i + 1];
+    if (const auto rejected = is_rejected(value); !rejected.empty()) {
+      return veritas::Status::InvalidArgument(
+          std::string("veritas-build analyze does not accept ") +
+          std::string(rejected) +
+          "; the project directory is the only source-input abstraction.");
+    }
+    if (!value.empty() && value.front() == '-') {
+      return veritas::Status::InvalidArgument(
+          std::string(option) + " requires a value, got flag: " + value);
+    }
+    ++i;
+    return value;
+  };
+
   for (std::size_t i = 0; i < args.size(); ++i) {
     const std::string& arg = args[i];
-    for (const auto rejected : kRejectedFlags) {
-      if (arg == rejected) {
-        return veritas::Status::InvalidArgument(
-            std::string("veritas-build analyze does not accept ") +
-            std::string(rejected) +
-            "; the project directory is the only source-input abstraction.");
-      }
+    if (const auto rejected = is_rejected(arg); !rejected.empty()) {
+      return veritas::Status::InvalidArgument(
+          std::string("veritas-build analyze does not accept ") +
+          std::string(rejected) +
+          "; the project directory is the only source-input abstraction.");
     }
     if (arg == "--project") {
-      if (i + 1 >= args.size()) {
-        return veritas::Status::InvalidArgument(
-            "--project requires a directory argument");
-      }
       if (project_seen) {
         return veritas::Status::InvalidArgument(
             "--project must be provided exactly once");
       }
-      parsed.project = args[++i];
+      auto value = take_value(i, "--project");
+      if (!value.ok()) return value.status();
+      parsed.project = *value;
       project_seen = true;
     } else if (arg == "--output") {
-      if (i + 1 >= args.size()) {
-        return veritas::Status::InvalidArgument(
-            "--output requires a directory argument");
-      }
       if (output_seen) {
         return veritas::Status::InvalidArgument(
             "--output must be provided at most once");
       }
-      parsed.output = args[++i];
+      auto value = take_value(i, "--output");
+      if (!value.ok()) return value.status();
+      parsed.output = *value;
       output_seen = true;
     } else {
       return veritas::Status::InvalidArgument("unknown argument: " + arg);

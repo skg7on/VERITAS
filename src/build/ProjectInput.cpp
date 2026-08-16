@@ -61,7 +61,13 @@ StatusOr<ProjectInput> ResolveProjectInput(
     std::error_code output_error;
     output = fs::weakly_canonical(request.output_root, output_error);
     if (output_error) {
-      output = fs::absolute(request.output_root);
+      std::error_code absolute_error;
+      output = fs::absolute(request.output_root, absolute_error);
+      if (absolute_error) {
+        return Status::InvalidArgument(
+            "cannot resolve output root " + request.output_root.string() +
+            ": " + absolute_error.message());
+      }
     }
   }
 

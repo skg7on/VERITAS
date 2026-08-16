@@ -110,10 +110,14 @@ TaggedPath ClassifyPath(const fs::path& absolute, const fs::path& project_root) 
 
 // -- argument normalization --------------------------------------------------
 //
-// Compiler basenames go into `compiler_id`; the argv[0] the caller keeps is
-// the basename too so the canonical bytes stay stable across checkout paths.
-// Repository-relative arguments are rewritten to `<repo>/...` so the same
-// project produces the same command hash regardless of where it lives.
+// argv[0] is reduced to a basename so `/usr/bin/clang++` and `clang++` produce
+// the same command bytes. Every other argument is left as the compiler-tool
+// wrote it, except that any occurrence of the canonical project-root prefix is
+// substituted with the sentinel `<repo>`. That handles both stand-alone paths
+// (`/abs/proj/main.cpp`) and joined flags (`-I/abs/proj/include`) without ever
+// asking the filesystem "does this string happen to name a file inside the
+// project?" — which would speculatively rewrite arguments like `-DFOO=main.cpp`
+// or `-o build/foo.o` and mutate the command M4 will replay.
 
 std::string BasenameOf(std::string_view program) {
   const auto slash = program.find_last_of('/');
@@ -121,35 +125,36 @@ std::string BasenameOf(std::string_view program) {
   return std::string(program.substr(slash + 1));
 }
 
-std::string NormalizeArgument(const std::string& argument,
-                              const fs::path& working_dir,
-                              const fs::path& project_root) {
-  if (argument.empty()) return argument;
-  fs::path maybe_path(argument);
-  std::error_code error;
-  fs::path resolved = maybe_path.is_absolute()
-                          ? maybe_path
-                          : working_dir / maybe_path;
-  resolved = fs::weakly_canonical(resolved, error);
-  if (!error && fs::exists(resolved, error) &&
-      IsWithin(resolved, project_root)) {
-    return "<repo>/" + fs::relative(resolved, project_root)
-                           .lexically_normal()
-                           .generic_string();
+std::string SubstituteProjectRoot(std::string_view argument,
+                                  std::string_view project_root_string) {
+  if (project_root_string.empty() || argument.empty()) {
+    return std::string(argument);
   }
-  return argument;
+  std::string out;
+  out.reserve(argument.size());
+  std::size_t cursor = 0;
+  while (cursor < argument.size()) {
+    const auto hit = argument.find(project_root_string, cursor);
+    if (hit == std::string_view::npos) {
+      out.append(argument.substr(cursor));
+      break;
+    }
+    out.append(argument.substr(cursor, hit - cursor));
+    out.append("<repo>");
+    cursor = hit + project_root_string.size();
+  }
+  return out;
 }
 
 std::vector<std::string> NormalizeArguments(
     const std::vector<std::string>& raw,
-    const fs::path& working_dir,
-    const fs::path& project_root) {
+    std::string_view project_root_string) {
   std::vector<std::string> normalized;
   normalized.reserve(raw.size());
   if (raw.empty()) return normalized;
   normalized.push_back(BasenameOf(raw.front()));
   for (std::size_t i = 1; i < raw.size(); ++i) {
-    normalized.push_back(NormalizeArgument(raw[i], working_dir, project_root));
+    normalized.push_back(SubstituteProjectRoot(raw[i], project_root_string));
   }
   return normalized;
 }
@@ -166,7 +171,6 @@ std::string JoinArguments(const std::vector<std::string>& args) {
 // -- per-TU construction -----------------------------------------------------
 
 struct NormalizedCommand {
-  fs::path source_absolute;
   TaggedPath source_tagged;
   TaggedPath working_directory_tagged;
   std::vector<std::string> arguments;
@@ -176,10 +180,21 @@ struct NormalizedCommand {
 StatusOr<NormalizedCommand> NormalizeCommand(
     const tooling::CompileCommand& command,
     const fs::path& project_root) {
-  const fs::path working_dir(command.Directory);
+  if (command.Directory.empty()) {
+    return Status::FailedPrecondition(
+        "compile command has empty working directory for: " + command.Filename);
+  }
+  std::error_code wd_error;
+  const auto canonical_working_dir =
+      fs::weakly_canonical(fs::path(command.Directory), wd_error);
+  if (wd_error) {
+    return Status::FailedPrecondition(
+        "cannot canonicalize compile command directory: " + command.Directory);
+  }
+
   fs::path resolved_source = fs::path(command.Filename);
   if (!resolved_source.is_absolute()) {
-    resolved_source = working_dir / resolved_source;
+    resolved_source = canonical_working_dir / resolved_source;
   }
   std::error_code canonical_error;
   resolved_source =
@@ -188,7 +203,9 @@ StatusOr<NormalizedCommand> NormalizeCommand(
     return Status::FailedPrecondition(
         "cannot canonicalize translation-unit source: " + command.Filename);
   }
-  if (!fs::is_regular_file(resolved_source)) {
+
+  std::error_code stat_error;
+  if (!fs::is_regular_file(resolved_source, stat_error) || stat_error) {
     return Status::FailedPrecondition(
         "translation-unit source is missing: " + resolved_source.string());
   }
@@ -196,21 +213,12 @@ StatusOr<NormalizedCommand> NormalizeCommand(
   auto contents = ReadFile(resolved_source);
   if (!contents.ok()) return contents.status();
 
-  std::error_code wd_error;
-  const auto canonical_working_dir =
-      fs::weakly_canonical(working_dir, wd_error);
-  if (wd_error) {
-    return Status::FailedPrecondition(
-        "cannot canonicalize compile command directory: " + working_dir.string());
-  }
-
   NormalizedCommand out;
-  out.source_absolute = resolved_source;
   out.source_tagged = ClassifyPath(resolved_source, project_root);
   out.working_directory_tagged =
       ClassifyPath(canonical_working_dir, project_root);
-  out.arguments = NormalizeArguments(command.CommandLine, canonical_working_dir,
-                                     project_root);
+  out.arguments =
+      NormalizeArguments(command.CommandLine, project_root.generic_string());
   out.source_content_hash =
       DomainHash("veritas.source_file.v1", *contents);
   return out;
@@ -218,6 +226,11 @@ StatusOr<NormalizedCommand> NormalizeCommand(
 
 // -- top-level orchestration -------------------------------------------------
 
+// Hash the sorted set of (source_path, content_hash) pairs. Sources that
+// appear in multiple compile_commands entries (multi-target builds compiling
+// `a.cpp` with -DTARGET=A and -DTARGET=B) contribute exactly once, so a
+// restructured project that compiles each source once produces the same
+// source_tree_hash as one that compiles it under N variants.
 std::string ComputeSourceTreeHash(
     const std::vector<NormalizedCommand>& normalized) {
   std::vector<std::string> lines;
@@ -230,6 +243,7 @@ std::string ComputeSourceTreeHash(
     lines.push_back(std::move(line));
   }
   std::sort(lines.begin(), lines.end());
+  lines.erase(std::unique(lines.begin(), lines.end()), lines.end());
   std::string joined;
   for (std::size_t i = 0; i < lines.size(); ++i) {
     if (i > 0) joined.push_back('\n');
@@ -257,12 +271,29 @@ std::string ComputeCompileOptionsHash(
   return DomainHash("veritas.compile_options.v1", joined);
 }
 
+// Return the sorted-unique set of compiler basenames observed across every
+// translation unit, joined by `,`. This is order-independent (fixes the case
+// where reordering entries between one clang++ TU and one gcc TU flipped
+// `compiler_id`) and still collapses to a single token for the common case
+// where every TU uses the same compiler.
 std::string DetectCompilerId(
     const std::vector<NormalizedCommand>& normalized) {
+  std::vector<std::string> compilers;
+  compilers.reserve(normalized.size());
   for (const auto& command : normalized) {
-    if (!command.arguments.empty()) return command.arguments.front();
+    if (!command.arguments.empty()) {
+      compilers.push_back(command.arguments.front());
+    }
   }
-  return {};
+  std::sort(compilers.begin(), compilers.end());
+  compilers.erase(std::unique(compilers.begin(), compilers.end()),
+                  compilers.end());
+  std::string joined;
+  for (std::size_t i = 0; i < compilers.size(); ++i) {
+    if (i > 0) joined.push_back(',');
+    joined.append(compilers[i]);
+  }
+  return joined;
 }
 
 }  // namespace

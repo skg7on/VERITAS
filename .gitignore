@@ -39,19 +39,25 @@
 *.out
 *.app
 
-# Build directories (anchored to repo root — do not match src/build/,
-# include/veritas/build/, tests/unit/build/, etc.).
+# Build directories. The top-level patterns are anchored to the repo root so
+# they do not match first-party trees like src/build/, include/veritas/build/,
+# tests/unit/build/, etc. Common tool-emitted output directories elsewhere in
+# the tree (Sphinx, mkdocs, generated fixture builds) remain ignored via the
+# unanchored `docs/build/` rule and any tool-specific overrides added later.
 /build/
 /Build/
 /build-*/
+docs/build/
 
-# CMake generated files
+# CMake generated files.
+# `compile_commands.json` is anchored to the repo root so it doesn't shadow
+# fixture files under `tests/fixtures/projects/*/compile_commands.json`.
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 Makefile
 install_manifest.txt
-compile_commands.json
+/compile_commands.json
 
 # CMake per-user preset overrides (CMakePresets.json is checked in).
 CMakeUserPresets.json

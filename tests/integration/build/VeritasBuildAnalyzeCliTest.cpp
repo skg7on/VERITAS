@@ -140,23 +140,45 @@ TEST(VeritasBuildAnalyzeCliTest, RejectsUnknownFlag) {
 }
 
 TEST(VeritasBuildAnalyzeCliTest, WritesDeterministicDiagnosticManifest) {
-  const auto project = testing::FixtureProject("multiple_tus");
-  auto output_a = fs::temp_directory_path() /
-                  ("veritas-cli-det-a-" + std::to_string(std::rand()));
-  auto output_b = fs::temp_directory_path() /
-                  ("veritas-cli-det-b-" + std::to_string(std::rand()));
-  ASSERT_EQ(0, RunVeritasBuild({"analyze", "--project", project.string(),
+  // Materialize the same fixture into two distinct temp directories. If any
+  // absolute-path leak sneaks back into the manifest, the two runs will
+  // produce different bytes.
+  const auto project_a = testing::FixtureProject("multiple_tus");
+  const auto project_b = testing::FixtureProject("multiple_tus");
+  ASSERT_NE(project_a, project_b);
+
+  const auto output_a = fs::temp_directory_path() /
+                        ("veritas-cli-det-a-" + std::to_string(std::rand()));
+  const auto output_b = fs::temp_directory_path() /
+                        ("veritas-cli-det-b-" + std::to_string(std::rand()));
+
+  ASSERT_EQ(0, RunVeritasBuild({"analyze", "--project", project_a.string(),
                                 "--output", output_a.string()})
                   .exit_code);
-  ASSERT_EQ(0, RunVeritasBuild({"analyze", "--project", project.string(),
+  ASSERT_EQ(0, RunVeritasBuild({"analyze", "--project", project_b.string(),
                                 "--output", output_b.string()})
                   .exit_code);
+
   std::ifstream a(output_a / "manifest.json");
   std::ifstream b(output_b / "manifest.json");
   std::stringstream a_buf, b_buf;
   a_buf << a.rdbuf();
   b_buf << b.rdbuf();
   EXPECT_EQ(a_buf.str(), b_buf.str());
+  EXPECT_FALSE(a_buf.str().empty());
+}
+
+TEST(VeritasBuildAnalyzeCliTest, RejectsFlagValueThatIsAnotherFlag) {
+  // If --project consumed the next token unconditionally, `--compile-db`
+  // would be swallowed as the project path and the rejection contract for
+  // artifact-input flags would be bypassed.
+  const auto result = RunVeritasBuild(
+      {"analyze", "--project", "--compile-db", "/tmp/db.json"});
+  EXPECT_NE(result.exit_code, 0);
+  EXPECT_TRUE(result.stdout_text.find("does not accept --compile-db") !=
+                  std::string::npos ||
+              result.stdout_text.find("requires a value") != std::string::npos)
+      << result.stdout_text;
 }
 
 }  // namespace

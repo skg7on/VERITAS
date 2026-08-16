@@ -91,6 +91,39 @@ TEST(ProjectManifestLoaderTest, CanonicalBytesStableAcrossCheckoutRoots) {
   EXPECT_EQ(first->context.repository_id, second->context.repository_id);
 }
 
+TEST(ProjectManifestLoaderTest, MixedCompilerOrderDoesNotChangeIdentity) {
+  auto ab = LoadProjectManifest(*ResolveFixture("mixed_compilers_ab"));
+  auto ba = LoadProjectManifest(*ResolveFixture("mixed_compilers_ba"));
+  ASSERT_TRUE(ab.ok()) << ab.status().message();
+  ASSERT_TRUE(ba.ok()) << ba.status().message();
+  EXPECT_EQ(ab->context.compiler_id, ba->context.compiler_id);
+  EXPECT_EQ(ab->context.build_variant_id, ba->context.build_variant_id);
+  EXPECT_EQ(ab->context.repository_id, ba->context.repository_id);
+  EXPECT_EQ(ToCanonicalBytes(*ab), ToCanonicalBytes(*ba));
+  // The compiler_id captures the full sorted set, so both compilers are
+  // represented regardless of database entry order.
+  EXPECT_NE(ab->context.compiler_id.find("clang++"), std::string::npos);
+  EXPECT_NE(ab->context.compiler_id.find("gcc"), std::string::npos);
+}
+
+TEST(ProjectManifestLoaderTest, ArgumentContainingProjectRootIsSubstituted) {
+  auto input = ResolveFixture("multiple_tus");
+  ASSERT_TRUE(input.ok()) << input.status().message();
+  auto manifest = LoadProjectManifest(*input);
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+  // No M1 fixture emits absolute path flags, so the manifest arguments must
+  // NOT contain the fixture's absolute path anywhere. If a future refactor
+  // reintroduces the speculative-rewrite bug, the raw project_root would
+  // appear in the canonical bytes and break cross-checkout stability.
+  const auto project_string = input->project_root.generic_string();
+  for (const auto& tu : manifest->translation_units) {
+    for (const auto& arg : tu.arguments) {
+      EXPECT_EQ(arg.find(project_string), std::string::npos)
+          << "argument leaks project root: " << arg;
+    }
+  }
+}
+
 TEST(ProjectManifestLoaderTest, MissingTranslationUnitFailsWholeLoad) {
   auto input = ResolveFixture("missing_source");
   ASSERT_TRUE(input.ok()) << input.status().message();
