@@ -600,7 +600,7 @@ git commit -m "feat: prepare local analysis for required SVF"
 - [ ] Build the M4 targets:
 
 ```bash
-cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_DIR="${LLVM_DIR}"
+cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_PROJECT_BUILD_DIR="${LLVM_PROJECT_BUILD_DIR}"
 cmake --build build --target veritas-build
 ```
 
