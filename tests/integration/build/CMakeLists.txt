@@ -27,3 +27,16 @@ target_link_libraries(ProjectManifestLoaderTest PRIVATE
 )
 veritas_add_warnings(ProjectManifestLoaderTest)
 gtest_discover_tests(ProjectManifestLoaderTest)
+
+add_executable(VeritasBuildAnalyzeCliTest VeritasBuildAnalyzeCliTest.cpp)
+target_link_libraries(VeritasBuildAnalyzeCliTest PRIVATE
+  veritas_test_support
+  GTest::gtest
+  GTest::gtest_main
+)
+target_compile_definitions(VeritasBuildAnalyzeCliTest PRIVATE
+  VERITAS_BUILD_BINARY="$<TARGET_FILE:veritas-build>"
+)
+add_dependencies(VeritasBuildAnalyzeCliTest veritas-build)
+veritas_add_warnings(VeritasBuildAnalyzeCliTest)
+gtest_discover_tests(VeritasBuildAnalyzeCliTest)

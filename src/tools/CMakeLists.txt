@@ -23,3 +23,7 @@ foreach(_veritas_cli veritas-build veritas-query veritas-diff veritas-explain)
   target_link_libraries(${_veritas_cli} PRIVATE veritas_core)
   veritas_add_warnings(${_veritas_cli})
 endforeach()
+
+# veritas-build is the M1 project-analysis entry point and links the
+# project-ingestion library.
+target_link_libraries(veritas-build PRIVATE veritas_build)
