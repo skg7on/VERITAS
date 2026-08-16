@@ -1,0 +1,90 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "VERITAS (Ninja, RelWithDebInfo)",
+      "description": "Ninja generator, build/ under repo root, RelWithDebInfo, compile_commands exported.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "default",
+      "displayName": "VERITAS Debug",
+      "description": "Debug build. Same binaryDir as default.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "default",
+      "displayName": "VERITAS Release",
+      "description": "Release build. Same binaryDir as default.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "static-release",
+      "inherits": "release",
+      "displayName": "VERITAS Static Release",
+      "description": "Release build with static libraries (BUILD_SHARED_LIBS=OFF).",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "displayName": "Build (default)"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Build (debug)"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Build (release)"
+    },
+    {
+      "name": "static-release",
+      "configurePreset": "static-release",
+      "displayName": "Build (static-release)"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "displayName": "Test (default)",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "default",
+      "configurePreset": "debug",
+      "displayName": "Test (debug)"
+    }
+  ]
+}

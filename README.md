@@ -69,27 +69,31 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 **Prerequisites:**
 
 - CMake 3.23+
+- Ninja (`brew install ninja` on macOS; `apt install ninja-build` on Debian/Ubuntu)
 - LLVM/Clang 22+ (24.x recommended; build with `LLVM_ENABLE_RTTI=ON` and `LLVM_ENABLE_EH=ON`)
 - Z3 (`brew install z3` on macOS)
 
-**Configure with a local LLVM build tree** (recommended for development — reuses an existing `llvm-project` build):
+**Canonical configure and build** (uses `CMakePresets.json` — Ninja generator, `build/` under the repo root, RelWithDebInfo):
 
 ```bash
-cmake -S . -B build \
+cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/path/to/llvm-project/build
+cmake --build --preset default
+ctest --preset default
+```
+
+`LLVM_PROJECT_BUILD_DIR` derives `LLVM_DIR` and `Clang_DIR` from a local `llvm-project` build tree and shares one LLVM installation with the vendored SVF. Omit it to fall back to `find_package(LLVM/Clang CONFIG)` — provide `LLVM_DIR` / `Clang_DIR` on the command line, or let CMake search system paths.
+
+**Available presets:** `default` (RelWithDebInfo), `debug`, `release`, `static-release` (opts out of `BUILD_SHARED_LIBS`). All resolve `binaryDir` to `<repo>/build`.
+
+**Configure without presets** (for CMake < 3.19 or non-Ninja generators):
+
+```bash
+cmake -S . -B build -G Ninja \
   -DLLVM_PROJECT_BUILD_DIR=/path/to/llvm-project/build
 cmake --build build -j
 ```
 
-`LLVM_PROJECT_BUILD_DIR` derives `LLVM_DIR` and `Clang_DIR` from that tree and shares one LLVM installation with the vendored SVF.
-
-**Configure without `LLVM_PROJECT_BUILD_DIR`** — falls back to `find_package(LLVM/Clang CONFIG)`; provide `LLVM_DIR` / `Clang_DIR` or let CMake search system paths:
-
-```bash
-cmake -S . -B build \
-  -DLLVM_DIR=/usr/local/lib/cmake/llvm \
-  -DClang_DIR=/usr/local/lib/cmake/clang
-cmake --build build -j
-```
+Non-Ninja generators still work but emit a warning at configure time; only Ninja is exercised in CI.
 
 **Build options:**
 

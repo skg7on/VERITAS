@@ -92,12 +92,14 @@ Files touched:
 
 ## Building
 
+The canonical configure uses the `default` preset, which pins the Ninja
+generator and the binary directory to `<repo>/build`:
+
 ```bash
-cmake -S . -B build \
-  -DVERITAS_BUILD_TESTS=ON \
+cmake --preset default \
   -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build" \
   -DZ3_DIR="$(brew --prefix z3)"
-cmake --build build -j
+cmake --build --preset default
 ```
 
 `SvfCore`, `SvfLLVM`, and the private `veritas_third_party_svf` wrapper (M0
