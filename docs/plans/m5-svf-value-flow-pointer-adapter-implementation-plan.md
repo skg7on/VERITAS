@@ -77,7 +77,7 @@ TEST(SvfConfigTest, DefaultIsRequiredBoundedAndersenWaveDiff) {
 Run:
 
 ```bash
-cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_DIR="${LLVM_DIR}"
+cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_PROJECT_BUILD_DIR="${LLVM_PROJECT_BUILD_DIR}"
 ctest --test-dir build -R "RequiredSvfContract|SvfConfig" --output-on-failure
 ```
 
@@ -920,7 +920,7 @@ Initialize: git submodule update --init --recursive third_party/SVF
 - [ ] **Step 3: Run the standard required build**
 
 ```bash
-cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_DIR="${LLVM_DIR}"
+cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_PROJECT_BUILD_DIR="${LLVM_PROJECT_BUILD_DIR}"
 cmake --build build --target veritas-build
 ctest --test-dir build --output-on-failure
 ```
@@ -933,7 +933,7 @@ Expected: configure, build, and all tests succeed with the pinned submodule and 
 svf_contract_tmp="$(mktemp -d)"
 git clone --no-hardlinks . "$svf_contract_tmp/source"
 if cmake -S "$svf_contract_tmp/source" -B "$svf_contract_tmp/build" \
-    -DVERITAS_BUILD_TESTS=ON -DLLVM_DIR="${LLVM_DIR}" \
+    -DVERITAS_BUILD_TESTS=ON -DLLVM_PROJECT_BUILD_DIR="${LLVM_PROJECT_BUILD_DIR}" \
     >"$svf_contract_tmp/configure.stdout" \
     2>"$svf_contract_tmp/configure.stderr"; then
   echo "configuration unexpectedly succeeded without initialized SVF" >&2
@@ -984,7 +984,7 @@ git commit -m "test: verify required in-process SVF pipeline"
 - [ ] Run the full standard build and tests:
 
 ```bash
-cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_DIR="${LLVM_DIR}"
+cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_PROJECT_BUILD_DIR="${LLVM_PROJECT_BUILD_DIR}"
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```

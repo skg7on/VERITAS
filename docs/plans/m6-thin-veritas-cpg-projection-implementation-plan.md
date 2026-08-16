@@ -81,7 +81,7 @@ TEST(CpgCanonicalizerTest, IgnoresInsertionOrderAndNativeAddresses) {
 Run:
 
 ```bash
-cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_DIR="${LLVM_DIR}"
+cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_PROJECT_BUILD_DIR="${LLVM_PROJECT_BUILD_DIR}"
 cmake --build build --target ThinCpgTest CpgCanonicalizerTest
 ctest --test-dir build -R "ThinCpg|CpgCanonicalizer" --output-on-failure
 ```
@@ -765,7 +765,7 @@ Update the M6 section to state the live `ProgramIr` + completed-summary input, V
 - [ ] **Step 7: Run the standard build and full test suite**
 
 ```bash
-cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_DIR="${LLVM_DIR}"
+cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_PROJECT_BUILD_DIR="${LLVM_PROJECT_BUILD_DIR}"
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
@@ -786,7 +786,7 @@ git commit -m "test: verify LLVM-native CPG pipeline"
 - [ ] Run the complete configured build and suite:
 
 ```bash
-cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_DIR="${LLVM_DIR}"
+cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_PROJECT_BUILD_DIR="${LLVM_PROJECT_BUILD_DIR}"
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```

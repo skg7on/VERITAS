@@ -574,7 +574,7 @@ git commit -m "feat: accept project directory for analysis"
 - [ ] Configure and build with the required toolchain:
 
 ```bash
-cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_DIR="${LLVM_DIR}"
+cmake -S . -B build -DVERITAS_BUILD_TESTS=ON -DLLVM_PROJECT_BUILD_DIR="${LLVM_PROJECT_BUILD_DIR}"
 cmake --build build --target veritas-build
 ```
 
