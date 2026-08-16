@@ -128,19 +128,21 @@ Project semantic graph relations from the completed in-memory summaries:
 CallFact          -> CALLS, MAY_CALL, or UNKNOWN_AT
 MemoryEffectFact  -> READS or WRITES
 ValueFlowFact     -> FLOWS_TO
-AliasFact         -> MAY_ALIAS with epistemic qualifier
+AliasFact         -> ALIASES with exact alias state
 dominator fact    -> DOMINATES_SUMMARY
 summary identity  -> SUMMARIZED_BY
 unknown fact      -> UNKNOWN_AT
 ```
 
-Every semantic edge carries its originating summary ID and provenance ID as properties. Dedicated persistent `Fact` nodes arrive with M9; M6 does not invent M9 `FactID` values early.
+Alias facts project to a generic `ALIASES` relation with a required `alias_state` property whose value is exactly one of `MustAlias`, `MayAlias`, `NoAlias`, or `UnknownAlias`. M6 emits an alias edge only for a candidate pair that M5 evaluated; it never manufactures all-pairs `NoAlias` edges.
+
+Every semantic edge carries a sorted, deduplicated list of support records. Each record contains the originating `FunctionSummaryID` and the opaque M3/M5 `summary::ProvenanceRef`. These are not M9 provenance-store IDs. Dedicated persistent `Fact` and provenance-DAG nodes arrive with M9; M6 does not invent those identities early.
 
 The fact is authoritative when LLVM structure and a mapped semantic fact overlap. LLVM traversal supplies topology and source ownership; it must not upgrade `MAY`, `UNKNOWN`, `INFERRED`, or `ASSUMED` facts to `MUST`.
 
-## 4.3 Source-level structure
+## 4.3 Source-level properties
 
-Namespaces, types, fields, translation units, source anchors, and language-level declaration relationships come from M4-originated facts already present in the completed summaries. M6 must not guess source-language semantics from lowered LLVM names when the mapping is absent.
+M6 V1 does not create standalone namespace, type, field, or translation-unit nodes because M4's current handoff does not retain a complete source-semantic index. Source anchors, translation-unit IDs, declared type strings, namespace-qualified names, and `MemoryRef` field paths may be retained as properties when they already exist in `OriginMap` or the completed summaries. M6 must not guess source-language semantics from lowered LLVM names when a mapping is absent. Adding source-semantic node kinds requires a later M4 handoff design that supplies stable source identities explicitly.
 
 ---
 
@@ -149,15 +151,11 @@ Namespaces, types, fields, translation units, source anchors, and language-level
 Persistent nodes:
 
 ```text
-TranslationUnit
-Namespace
-Type
 Function
 Parameter
 Global
 CallSite
 MemoryObject
-Field
 BasicBlockSummary
 Summary
 Unknown
@@ -173,7 +171,7 @@ MAY_CALL
 READS
 WRITES
 FLOWS_TO
-MAY_ALIAS
+ALIASES
 DOMINATES_SUMMARY
 SUMMARIZED_BY
 UNKNOWN_AT
@@ -205,10 +203,24 @@ source_node_id
 target_node_id
 semantic qualifiers
 epistemic state
-provenance_id
+sorted support records: FunctionSummaryID + summary::ProvenanceRef
 ```
 
-The projector sorts functions, nodes, facts, and edges by canonical VERITAS keys before insertion. LLVM iteration order, pointer addresses, SVF allocation order, hash-table order, and thread scheduling must not affect serialized graph bytes or projection IDs.
+`ProjectionID` is the M2 canonical hash of:
+
+```text
+graph schema version = veritas.cpg.v1
+revision_id
+build_variant_id
+ProgramIr module_hash
+sorted completed FunctionSummaryIDs
+sorted canonical node records
+sorted canonical edge records
+```
+
+`CpgCanonicalizer::CanonicalBytes` uses M2's versioned, length-prefixed canonical writer. Tests compare these canonical bytes and `ProjectionID`; they do not compare SQLite database-file bytes.
+
+The projector sorts functions, nodes, facts, support records, and edges by canonical VERITAS keys before insertion. LLVM iteration order, pointer addresses, SVF allocation order, hash-table order, and thread scheduling must not affect canonical graph bytes or projection IDs.
 
 Duplicate nodes and edges are idempotent. A duplicate stable ID with different canonical content is a fatal consistency error.
 
@@ -250,7 +262,7 @@ unknown calls do not fan out to all functions
 
 M6 projects the alias facts already produced by M5 `AndersenWaveDiff`. It does not run a second whole-program pointer analysis by default.
 
-A PhASAR-inspired pointer/alias algorithm may be reimplemented inside VERITAS only when a checked-in acceptance fixture demonstrates a required alias relation that the pinned M5 analysis reports as unknown or cannot represent. Such an addition requires all of the following:
+A PhASAR-inspired pointer/alias algorithm may be reimplemented inside VERITAS only when a checked-in acceptance fixture demonstrates a required alias relation that the pinned M5 analysis reports as unknown or cannot represent. It belongs in a versioned M5 refinement stage before summary completion; M6 only projects its resulting VERITAS `AliasFact` values. Such an addition requires all of the following:
 
 ```text
 a failing precision fixture and stated expected epistemic result
@@ -259,7 +271,7 @@ a clean-room C++ implementation over the live LLVM 22 ProgramIr
 no copied PhASAR source and no PhASAR runtime dependency
 license and literature attribution review before merge
 bounded execution with explicit truncation/unknown facts
-its own analyzer name, version, configuration, and provenance
+its own analyzer name, version, configuration, provenance, and analyzer identity input
 output mapped only to VERITAS AliasFact and related stable references
 ```
 
@@ -285,7 +297,7 @@ revision_id + build_variant_id -> current projection_id
 
 Projection construction and validation happen entirely in memory. Immutable summary objects may be written before the transaction, but the transaction that advances current summary bindings must also insert the validated graph and advance the current CPG binding. If projection validation or graph insertion fails, neither current binding advances.
 
-Historical projections remain addressable by `projection_id`. Rebuilding identical inputs produces the same projection ID and canonical node/edge content.
+Historical projections remain addressable by `ProjectionID`. Rebuilding identical inputs produces the same projection ID and canonical node/edge content.
 
 ---
 
@@ -293,29 +305,50 @@ Historical projections remain addressable by `projection_id`. Rebuilding identic
 
 ```cpp
 namespace veritas::cpg {
+enum class TruncationReason {
+  kMaxDepth,
+  kMaxNodes,
+  kMaxPaths,
+};
+
 struct QueryBudget {
   std::size_t max_depth;
   std::size_t max_nodes;
   std::size_t max_paths;
 };
 
+template <typename T>
+struct TraversalResult {
+  std::vector<T> items;
+  std::vector<TruncationReason> truncation_reasons;
+  std::size_t explored_nodes;
+  std::size_t explored_paths;
+};
+
 class CpgQuery {
  public:
+  static StatusOr<CpgQuery> OpenProjection(
+      const CpgRepository& repository, core::StableId projection_id);
+  static StatusOr<CpgQuery> OpenCurrent(
+      const CpgRepository& repository, core::StableId revision_id,
+      core::StableId build_variant_id);
+
+  core::StableId projection_id() const;
   StatusOr<std::vector<CpgNode>> GetCallees(
       core::StableId function_variant_id) const;
   StatusOr<std::vector<CpgNode>> GetCallers(
       core::StableId function_variant_id) const;
   StatusOr<std::vector<CpgNode>> GetWriters(
       core::StableId memory_object_id) const;
-  StatusOr<std::vector<CpgPath>> GetValueFlow(
+  StatusOr<TraversalResult<CpgPath>> GetValueFlow(
       core::StableId src, core::StableId dst, QueryBudget budget) const;
-  StatusOr<std::vector<CpgPath>> GetCallPaths(
+  StatusOr<TraversalResult<CpgPath>> GetCallPaths(
       core::StableId src, core::StableId dst, QueryBudget budget) const;
 };
 }
 ```
 
-Every traversal result reports whether `max_depth`, `max_nodes`, or `max_paths` truncated the search. Queries never expand unknown calls into whole-program fanout.
+`OpenCurrent` resolves the current binding once and returns a query object pinned to that immutable snapshot. Every traversal result reports each budget that truncated the search plus explored-node and explored-path counts. An empty, untruncated result means no path; a non-empty `truncation_reasons` list means the result is incomplete. `Status` remains reserved for operational errors. Queries never expand unknown calls into whole-program fanout.
 
 ---
 
@@ -358,13 +391,13 @@ FLOWS_TO paths traverse expandable summary edges
 SVF MustAlias/MayAlias/NoAlias/UnknownAlias map without epistemic upgrades
 unknown calls create UNKNOWN_AT or bounded MAY_CALL edges, not full fanout
 persistent graph size is not proportional to LLVM instruction count
-two identical project analyses produce byte-identical projections
+two identical project analyses produce the same ProjectionID and canonical graph bytes
 projection failure advances neither summary nor CPG current bindings
 budgeted traversal reports the exact truncation reason
 installed public headers contain no LLVM, SVF, Joern, or PhASAR native types
 ```
 
-Boundary tests scan the build, CLI, source tree, and public headers for prohibited artifact-input flags, external-tool invocation, and leaked native analysis types.
+Boundary tests scan `CMakeLists.txt`, `cmake/`, `src/`, `include/`, and `tests/` for prohibited artifact-input flags and external-tool invocation. A separate public-header scan rejects native analysis includes/types while allowing only explanatory comments in documentation.
 
 ---
 
