@@ -16,8 +16,7 @@
 #define BREAKCONSTANTGEPS_H
 
 #if LLVM_VERSION_MAJOR > 16
-#include "llvm/Passes/PassBuilder.h"
-#include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
+#include "SVF-LLVM/UnifyFunctionExitNodes.h"
 #endif
 
 namespace SVF
@@ -82,21 +81,7 @@ public:
             if(fun.isDeclaration())
                 continue;
 #if LLVM_VERSION_MAJOR > 16
-            llvm::PassBuilder PB;
-            llvm::LoopAnalysisManager LAM;
-            llvm::FunctionAnalysisManager FAM;
-            llvm::CGSCCAnalysisManager CGAM;
-            llvm::ModuleAnalysisManager MAM;
-
-            PB.registerModuleAnalyses(MAM);
-            PB.registerCGSCCAnalyses(CGAM);
-            PB.registerFunctionAnalyses(FAM);
-            PB.registerLoopAnalyses(LAM);
-            PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-
-            llvm::FunctionPassManager FPM;
-            FPM.addPass(llvm::UnifyFunctionExitNodesPass());
-            FPM.run(const_cast<llvm::Function&>(fun), FAM);
+            SVF::unifyFunctionExitNodes(const_cast<llvm::Function&>(fun));
         }
     }
 #else

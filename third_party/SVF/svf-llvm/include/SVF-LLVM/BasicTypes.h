@@ -51,7 +51,9 @@
 #include <llvm/Analysis/ScalarEvolution.h>
 #include <llvm/Analysis/ScalarEvolutionExpressions.h>
 
+#if LLVM_VERSION_MAJOR <= 16
 #include <llvm/Transforms/Utils/UnifyFunctionExitNodes.h>
+#endif
 
 #include <llvm/Support/SourceMgr.h>
 
@@ -76,11 +78,13 @@ typedef llvm::ModulePass ModulePass;
 typedef llvm::IRBuilder<> IRBuilder;
 #if LLVM_VERSION_MAJOR >= 12 && LLVM_VERSION_MAJOR <= 16
 typedef llvm::UnifyFunctionExitNodesLegacyPass UnifyFunctionExitNodes;
-#elif LLVM_VERSION_MAJOR > 16
-typedef llvm::UnifyFunctionExitNodesPass UnifyFunctionExitNodes;
-#else
+#elif LLVM_VERSION_MAJOR <= 11
 typedef llvm::UnifyFunctionExitNodes UnifyFunctionExitNodes;
 #endif
+// For LLVM_VERSION_MAJOR > 16 the pass typedef is intentionally omitted:
+// call SVF::unifyFunctionExitNodes(Function&) from
+// svf-llvm/include/SVF-LLVM/UnifyFunctionExitNodes.h instead. LLVM 24
+// (30abd9ec2b8d, PR #205519) removed the upstream pass entirely.
 
 /// LLVM Basic classes
 typedef llvm::Value Value;
@@ -253,7 +257,11 @@ typedef llvm::DIBasicType DIBasicType;
 typedef llvm::DISubrange DISubrange;
 typedef llvm::DINode DINode;
 typedef llvm::DINodeArray DINodeArray;
+#if LLVM_VERSION_MAJOR >= 24
+typedef llvm::DITypeArray DITypeRefArray;
+#else
 typedef llvm::DITypeRefArray DITypeRefArray;
+#endif
 namespace dwarf = llvm::dwarf;
 
 // Iterators.

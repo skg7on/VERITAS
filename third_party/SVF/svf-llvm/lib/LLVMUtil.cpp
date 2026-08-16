@@ -462,6 +462,19 @@ const std::string LLVMUtil::getSourceLoc(const Value* val )
     {
         if (SVFUtil::isa<AllocaInst>(inst))
         {
+#if LLVM_VERSION_MAJOR >= 24
+            // LLVM 24 replaced findDbgDeclares (returning DbgDeclareInst*)
+            // with findDVRDeclares (returning DbgVariableRecord*).
+            for (llvm::DbgVariableRecord *DVR : llvm::findDVRDeclares(const_cast<Instruction*>(inst)))
+            {
+                if (DVR->isDbgDeclare())
+                {
+                    llvm::DIVariable *DIVar = SVFUtil::cast<llvm::DIVariable>(DVR->getVariable());
+                    rawstr << "\"ln\": " << DIVar->getLine() << ", \"fl\": \"" << DIVar->getFilename().str() << "\"";
+                    break;
+                }
+            }
+#else
 #if LLVM_VERSION_MAJOR > 16
             for (llvm::DbgInfoIntrinsic *DII : llvm::findDbgDeclares(const_cast<Instruction*>(inst)))
 #else
@@ -475,6 +488,7 @@ const std::string LLVMUtil::getSourceLoc(const Value* val )
                     break;
                 }
             }
+#endif
         }
         else if (MDNode *N = inst->getMetadata("dbg"))   // Here I is an LLVM instruction
         {

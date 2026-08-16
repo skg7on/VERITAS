@@ -36,6 +36,9 @@
 #include "SVF-LLVM/LLVMUtil.h"
 #include "SVF-LLVM/CppUtil.h"
 #include "SVF-LLVM/BreakConstantExpr.h"
+#if LLVM_VERSION_MAJOR > 16
+#include "SVF-LLVM/UnifyFunctionExitNodes.h"
+#endif
 #include "SVF-LLVM/SymbolTableBuilder.h"
 #include "MSSA/SVFGBuilder.h"
 #include "llvm/Support/FileSystem.h"
@@ -262,8 +265,10 @@ void LLVMModuleSet::prePassSchedule()
     }
 
     /// MergeFunctionRets Pass
+#if LLVM_VERSION_MAJOR <= 16
     std::unique_ptr<UnifyFunctionExitNodes> p2 =
         std::make_unique<UnifyFunctionExitNodes>();
+#endif
     for (Module &M : getLLVMModules())
     {
         for (auto F = M.begin(), E = M.end(); F != E; ++F)
@@ -274,19 +279,7 @@ void LLVMModuleSet::prePassSchedule()
 #if LLVM_VERSION_MAJOR <= 16
             p2->runOnFunction(fun);
 #else
-            llvm::PassBuilder PB;
-            llvm::LoopAnalysisManager LAM;
-            llvm::FunctionAnalysisManager FAM;
-            llvm::CGSCCAnalysisManager CGAM;
-            llvm::ModuleAnalysisManager MAM;
-            PB.registerModuleAnalyses(MAM);
-            PB.registerCGSCCAnalyses(CGAM);
-            PB.registerFunctionAnalyses(FAM);
-            PB.registerLoopAnalyses(LAM);
-            PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-            llvm::FunctionPassManager FPM;
-            FPM.addPass(llvm::UnifyFunctionExitNodesPass());
-            FPM.run(fun, FAM);
+            SVF::unifyFunctionExitNodes(fun);
 #endif
         }
     }
