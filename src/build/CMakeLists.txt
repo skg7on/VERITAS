@@ -19,6 +19,7 @@
 # on Clang LibTooling for compilation-database parsing.
 
 add_library(veritas_build
+  AnalysisManifest.cpp
   ProjectInput.cpp
 )
 

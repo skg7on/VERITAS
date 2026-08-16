@@ -25,3 +25,12 @@ target_link_libraries(ProjectInputTest PRIVATE
 )
 veritas_add_warnings(ProjectInputTest)
 gtest_discover_tests(ProjectInputTest)
+
+add_executable(AnalysisManifestTest AnalysisManifestTest.cpp)
+target_link_libraries(AnalysisManifestTest PRIVATE
+  veritas_build
+  GTest::gtest
+  GTest::gtest_main
+)
+veritas_add_warnings(AnalysisManifestTest)
+gtest_discover_tests(AnalysisManifestTest)
