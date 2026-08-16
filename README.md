@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/veritas-logo.png" alt="VERITAS — Verified Evidence Reasoning IR for Trans-program Analysis and Semantics" width="100%">
+  <img src="docs/assets/veritas-logo.png" alt="VERITAS — Verified Evidence Reasoning IR for Trans-program Analysis and Semantics" width="50%">
 </p>
 
 # VERITAS
