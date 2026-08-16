@@ -4,9 +4,9 @@
 
 **Goal:** Break the VERITAS engineering backbone into small, testable milestones, each with a design spec and implementation plan.
 
-**Architecture:** VERITAS should own semantic identity, summaries, persistence, incremental invalidation, thin CPG projection, provenance, and Evidence Builder APIs. Mature program-analysis projects should do traditional compiler and analysis work behind stable adapters: Clang/LLVM for C/C++ frontend and local IR facts, SVF for pointer/value-flow analysis, Souffle for recursive fact derivation, and Joern/CPG concepts as a schema reference while keeping the persistent VERITAS CPG thin.
+**Architecture:** VERITAS owns the complete project-analysis workflow from one project directory: compilation-database ingestion, Clang AST traversal, LLVM IR generation/linking, required in-process SVF analysis, Summary IR publication, persistence, incremental invalidation, thin CPG projection, provenance, and Evidence Builder APIs. Clang, LLVM, and a pinned SVF Git submodule provide compiler/analysis libraries behind private stages; they are never separate user-managed preprocessing tools or public artifact-input contracts.
 
-**Tech Stack:** C++20, CMake, Clang LibTooling, LLVM analysis APIs, SVF, Protobuf, RocksDB, SQLite, Souffle, GoogleTest, Python helper scripts for golden fixture checks.
+**Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22.x, Clang LibTooling and CodeGen, SVF commit `18fb5650600530a54f0afc22f4df1a10b03d3c02`, Z3, Protobuf, RocksDB, SQLite, Souffle, GoogleTest, and Python helper scripts for golden fixture checks.
 
 **Spec:** `docs/specs/veritas-engineering-backbone-design-specification.md`
 
@@ -22,6 +22,9 @@
 - LLM or heuristic output is not a verified fact.
 - The persistent VERITAS CPG is function- and object-centric; instruction-level detail is generated or cached on demand.
 - The first language target is C/C++ through Clang and LLVM.
+- The only public source input is `veritas-build analyze --project <directory>`, where `<directory>/compile_commands.json` exists.
+- VERITAS owns AST parsing, LLVM IR generation/linking, and SVF invocation; public workflows do not accept manifests, bitcode, LLVM modules, or SVF artifacts.
+- SVF is required, lives at `third_party/SVF`, and is pinned to `18fb5650600530a54f0afc22f4df1a10b03d3c02`; no SVF-disabled standard build exists.
 - The first storage stack is RocksDB for immutable objects and SQLite for metadata.
 - The first WPA stack is a C++ worklist engine, with Souffle introduced when recursive fact export is stable.
 
@@ -33,9 +36,9 @@ The backbone should not reimplement mature static-analysis infrastructure unless
 
 | Area | Reuse | VERITAS Owns | Rationale |
 | --- | --- | --- | --- |
-| C/C++ parsing, AST, macros, source locations, compilation database | Clang LibTooling | Stable extraction adapters and source anchors | Clang tooling already runs `FrontendAction`s over source files using compilation databases. |
-| LLVM IR, SSA, MemorySSA, alias hooks, dominators, range-ish local facts | LLVM analysis APIs | Normalization into Summary IR and EIR-compatible facts | LLVM already exposes canonical IR and analysis infrastructure; VERITAS should not build a compiler frontend. |
-| Pointer/value-flow, VFG, Andersen-style and demand-driven refinements | SVF | Adapter boundary, stable value IDs, component hashes, uncertainty mapping | SVF is a mature static value-flow framework over LLVM IR; use it for heavy VFG/pointer jobs before inventing custom analyses. |
+| C/C++ parsing, AST, macros, source locations, compilation database | Clang 22 LibTooling | Project-level orchestration, stable extraction adapters, and source anchors | VERITAS calls `FrontendAction`s itself from the project compilation database. |
+| LLVM IR, SSA, MemorySSA, alias hooks, dominators, range-ish local facts | LLVM 22 libraries | In-process IR generation/linking, private `ProgramIr`, and normalization into Summary IR | VERITAS owns module construction and lifetime instead of accepting external IR artifacts. |
+| Pointer/value-flow, VFG, and AndersenWaveDiff analysis | Required pinned SVF Git submodule | Direct library invocation, stable value IDs, component hashes, lifecycle cleanup, and uncertainty mapping | SVF supplies mature analysis while VERITAS owns its input module, execution, and outputs. |
 | Recursive relations and transitive WPA facts | Souffle | Fact schemas, tuple IDs, provenance capture, publication | Souffle is designed as a Datalog tool for static analysis; VERITAS should add provenance and epistemic policy around it. |
 | CPG concepts and schema vocabulary | Joern CPG/spec | Thin persistent VERITAS CPG projection | The architecture wants CPG benefits without storing a full instruction-level universal graph for every repo. |
 | Security query idioms and data-flow test comparisons | CodeQL documentation and optional baseline runs | VERITAS-native summaries, dependencies, and evidence | CodeQL is useful as a conceptual and fixture baseline, but VERITAS should not make CodeQL DBs the core SummaryDB. |
@@ -48,12 +51,12 @@ The source architecture says "Build a VERITAS CPG, but keep it thin." This docum
 
 | Milestone | Name | Primary Deliverable | Depends On |
 | --- | --- | --- | --- |
-| M0 | Project skeleton and toolchain harness | Buildable repo with dependency detection and fixture tests | none |
-| M1 | Build intelligence and program context | Revision, build variant, translation unit manifest | M0 |
+| M0 | Project skeleton and required toolchain harness | Buildable repo with pinned SVF submodule and LLVM/Clang/SVF compatibility checks | none |
+| M1 | Project ingestion and program context | Project-level request, revision/build context, typed translation-unit manifest | M0 |
 | M2 | Identity, canonical hashing, and metadata store | Stable IDs and SQLite metadata schema | M1 |
 | M3 | Summary IR and CAS object store | Protobuf summaries, component hashes, RocksDB CAS | M2 |
-| M4 | Clang/LLVM local extraction adapter | AST/IR function facts, calls, CFG, source anchors | M3 |
-| M5 | SVF value-flow and pointer adapter | VFG, alias, memory/value-flow facts normalized into summaries | M4 |
+| M4 | VERITAS-owned Clang/LLVM project analysis | AST facts, linked private `ProgramIr`, and local summary drafts | M3 |
+| M5 | Required in-process SVF analysis | Required SVF facts merged and published from the project pipeline | M4 |
 | M6 | Thin VERITAS CPG projection | Function/object-centric graph projection and query API | M4, M5 |
 | M7 | Reverse dependency index and incremental scheduler | Component deltas and precise consumer scheduling | M3, M4, M5 |
 | M8 | SCC-aware WPA and Souffle fact engine | Recursive facts with fixpoint state and provenance hooks | M7 |
@@ -85,11 +88,18 @@ Executable per-milestone implementation plans live under `docs/plans/`.
 
 ```text
 veritas/
+  .gitmodules
   CMakeLists.txt
   cmake/
     Dependencies.cmake
-    FindSVF.cmake
+    VerifySvfSubmodule.cmake
     VeritasWarnings.cmake
+
+  third_party/
+    SVF/                       pinned Git submodule
+
+  docs/third_party/
+    SVF.md
 
   proto/
     veritas/core/v1/ids.proto
@@ -102,9 +112,7 @@ veritas/
     build/
     summary/
     summarydb/
-    frontend/clang/
-    analysis/llvm/
-    analysis/svf/
+    analysis/                  project-level public API only
     cpg/
     wpa/
     facts/
@@ -116,6 +124,7 @@ veritas/
     summary/
     summarydb/
     frontend/clang/
+    analysis/pipeline/
     analysis/llvm/
     analysis/svf/
     cpg/
@@ -127,7 +136,7 @@ veritas/
   tests/
     unit/
     integration/
-    fixtures/cpp/
+    fixtures/projects/
     golden/
 
   tools/
@@ -145,23 +154,27 @@ The layout keeps adapters separate from VERITAS-owned semantic models. If SVF or
 
 ## Design Spec
 
-M0 creates a buildable C++20 repository with dependency probes but no production analysis behavior. It establishes test conventions, fixture layout, and CLI entry points so later milestones have a stable place to land.
+M0 creates a buildable C++20 repository and the required compiler-analysis dependency contract, but no production analysis behavior. LLVM/Clang 22.x comes from one configured installation. SVF is source-pinned at `third_party/SVF` and is always part of the standard build; Souffle remains optional until M8.
 
-VERITAS should use CMake because Clang, LLVM, SVF, RocksDB, Protobuf, SQLite, and GoogleTest all have practical CMake integration paths. The first build should support two modes:
+The exact SVF contract is:
 
 ```text
-VERITAS_USE_SYSTEM_LLVM=ON
-VERITAS_USE_BUNDLED_THIRD_PARTY=OFF
+upstream: https://github.com/SVF-tools/SVF.git
+revision: 18fb5650600530a54f0afc22f4df1a10b03d3c02
+path: third_party/SVF
+minimum CMake: 3.23
+LLVM/Clang: 22.x, shared with VERITAS
 ```
-
-V1 should prefer system or developer-installed dependencies. Vendoring large tools should be a separate repository decision.
 
 ## Files
 
 - Create: `CMakeLists.txt`
+- Create: `.gitmodules`
 - Create: `cmake/Dependencies.cmake`
-- Create: `cmake/FindSVF.cmake`
+- Create: `cmake/VerifySvfSubmodule.cmake`
 - Create: `cmake/VeritasWarnings.cmake`
+- Add: `third_party/SVF` Git submodule at `18fb5650600530a54f0afc22f4df1a10b03d3c02`
+- Create: `docs/third_party/SVF.md`
 - Create: `include/veritas/core/Status.h`
 - Create: `include/veritas/core/Version.h`
 - Create: `src/core/Status.cpp`
@@ -172,8 +185,8 @@ V1 should prefer system or developer-installed dependencies. Vendoring large too
 - Create: `src/tools/veritas-explain.cpp`
 - Create: `tests/unit/core/VersionTest.cpp`
 - Create: `tests/unit/core/StatusTest.cpp`
-- Create: `tests/fixtures/cpp/smoke/compile_commands.json`
-- Create: `tests/fixtures/cpp/smoke/smoke.cpp`
+- Create: `tests/fixtures/projects/smoke/compile_commands.json`
+- Create: `tests/fixtures/projects/smoke/smoke.cpp`
 
 ## Interfaces
 
@@ -236,8 +249,19 @@ Each command prints the same version string and exits zero.
 
 ## Implementation Plan
 
+- [ ] Add and pin the required dependency exactly:
+
+```bash
+git submodule add https://github.com/SVF-tools/SVF.git third_party/SVF
+git -C third_party/SVF checkout 18fb5650600530a54f0afc22f4df1a10b03d3c02
+git add .gitmodules third_party/SVF
+```
+
 - [ ] Create the CMake skeleton with targets `veritas_core`, `veritas-build`, `veritas-query`, `veritas-diff`, and `veritas-explain`.
-- [ ] Add dependency discovery for LLVM, Clang, Protobuf, RocksDB, SQLite, GoogleTest, SVF, and Souffle, but make SVF and Souffle optional in M0.
+- [ ] Require CMake 3.23+, LLVM/Clang 22.x, Protobuf, RocksDB, SQLite, GoogleTest, and Z3; keep only Souffle optional in M0.
+- [ ] Fail configuration when the SVF submodule is absent with `git submodule update --init --recursive third_party/SVF`.
+- [ ] Add SVF with `add_subdirectory(third_party/SVF EXCLUDE_FROM_ALL)` and create private interface target `veritas_third_party_svf` linking `SvfCore` and `SvfLLVM`.
+- [ ] Verify VERITAS and SVF use the same LLVM version, RTTI, exception, target, and ABI settings.
 - [ ] Write `StatusTest.cpp` before implementing `Status` and `StatusOr`.
 - [ ] Implement the minimal `Status` and `StatusOr` API used by later milestones.
 - [ ] Write `VersionTest.cpp` before implementing `FormatVersion`.
@@ -247,7 +271,8 @@ Each command prints the same version string and exits zero.
 - [ ] Run `cmake -S . -B build -DVERITAS_BUILD_TESTS=ON`.
 - [ ] Run `cmake --build build`.
 - [ ] Run `ctest --test-dir build --output-on-failure`.
-- [ ] Commit with message `build: add VERITAS C++ skeleton`.
+- [ ] Preserve `third_party/SVF/LICENSE.TXT` and record upstream, revision, AGPL-3.0-or-later license, toolchain, and initialization command in `docs/third_party/SVF.md`.
+- [ ] Commit with message `build: add required SVF toolchain`.
 
 ## Tests
 
@@ -264,38 +289,61 @@ TEST(VersionTest, FormatsSemanticVersion) {
 All four CLI binaries build.
 All four CLI binaries print a version.
 ctest passes.
-No production code depends on SVF or Souffle yet.
+The standard build always provides SvfCore, SvfLLVM, and veritas_third_party_svf from the pinned submodule.
+No production analysis invokes SVF until M5; Souffle remains optional until M8.
 ```
 
 ---
 
-# 5. M1: Build Intelligence and Program Context
+# 5. M1: Project Ingestion and Program Context
 
 ## Design Spec
 
-M1 ingests a compilation database and creates a deterministic analysis manifest. The manifest defines repository, revision, build variant, and translation unit identities before any program facts are emitted.
-
-Clang LibTooling should be used for compilation database parsing because it already supports CMake-generated `compile_commands.json` and the same command semantics Clang tools use. VERITAS should normalize the result into its own manifest so downstream systems never depend directly on Clang's transient command objects.
+M1 accepts one project directory, resolves only `<project>/compile_commands.json`, and creates the typed deterministic analysis manifest used directly by M2 and M4. Diagnostic JSON is optional output; it is never a public input to another stage.
 
 ## Files
 
-- Create: `include/veritas/build/ProgramContext.h`
-- Create: `include/veritas/build/CompilationDatabaseLoader.h`
-- Create: `src/build/ProgramContext.cpp`
-- Create: `src/build/CompilationDatabaseLoader.cpp`
-- Create: `tests/unit/build/ProgramContextTest.cpp`
-- Create: `tests/integration/build/CompilationDatabaseLoaderTest.cpp`
+- Create: `include/veritas/analysis/ProjectAnalysisRequest.h`
+- Create: `include/veritas/build/ProjectInput.h`
+- Create: `include/veritas/build/AnalysisManifest.h`
+- Create: `include/veritas/build/ProjectManifestLoader.h`
+- Create: `src/build/ProjectInput.cpp`
+- Create: `src/build/AnalysisManifest.cpp`
+- Create: `src/build/ProjectManifestLoader.cpp`
+- Create: `tests/unit/build/ProjectInputTest.cpp`
+- Create: `tests/unit/build/AnalysisManifestTest.cpp`
+- Create: `tests/integration/build/ProjectManifestLoaderTest.cpp`
+- Create: `tests/integration/build/VeritasBuildAnalyzeCliTest.cpp`
 - Modify: `src/tools/veritas-build.cpp`
 
 ## Interfaces
 
 ```cpp
 namespace veritas::build {
+enum class PathRootKind {
+  kRepository,
+  kGenerated,
+  kExternal,
+  kToolchain,
+};
+
+struct TaggedPath {
+  PathRootKind root_kind;
+  std::string root_id;
+  std::filesystem::path relative_path;
+};
+
+struct ProjectInput {
+  std::filesystem::path project_root;
+  std::filesystem::path compile_database_path;
+  std::filesystem::path output_root;
+};
+
 struct ProgramContext {
   std::string repository_id;
   std::string revision_id;
   std::string build_variant_id;
-  std::string root_path;
+  std::filesystem::path project_root;
   std::string target_triple;
   std::string compiler_id;
   std::string compiler_version;
@@ -303,7 +351,8 @@ struct ProgramContext {
 
 struct TranslationUnitCommand {
   std::string translation_unit_id;
-  std::string source_path;
+  TaggedPath source_path;
+  TaggedPath working_directory;
   std::vector<std::string> arguments;
   std::string command_hash;
 };
@@ -313,47 +362,46 @@ struct AnalysisManifest {
   std::vector<TranslationUnitCommand> translation_units;
 };
 
-AnalysisManifest LoadCompilationDatabase(
-    const std::filesystem::path& compile_database_path,
-    const ProgramContext& base_context);
+StatusOr<ProjectInput> ResolveProjectInput(
+    const analysis::ProjectAnalysisRequest& request);
+StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input);
 }
 ```
 
 CLI contract:
 
 ```text
-veritas-build configure --compile-db <path> --output <manifest.json>
+veritas-build analyze --project <directory> [--output <directory>]
 ```
 
 ## Implementation Plan
 
-- [ ] Write unit tests for deterministic `ProgramContext` serialization.
-- [ ] Write an integration test that loads `tests/fixtures/cpp/smoke/compile_commands.json`.
-- [ ] Implement a thin wrapper around `clang::tooling::JSONCompilationDatabase`.
-- [ ] Normalize all source paths relative to repository root.
-- [ ] Hash compile command arguments in canonical order.
-- [ ] Emit `AnalysisManifest` as diagnostic JSON in M1.
-- [ ] Add `veritas-build configure`.
-- [ ] Run unit and integration tests.
-- [ ] Commit with message `feat: add build manifest ingestion`.
+- [ ] Resolve and validate the project root, fixed compilation-database path, and default `.veritas` output root.
+- [ ] Define tagged paths plus typed context, translation-unit, and manifest records.
+- [ ] Load all commands through Clang `JSONCompilationDatabase` and fail the project when any required source is missing.
+- [ ] Normalize path roots and ordered semantic arguments, then compute domain-separated SHA-256 hashes.
+- [ ] Implement deterministic canonical bytes and one-way diagnostic JSON.
+- [ ] Add `veritas-build analyze --project`; reject manifest, bitcode, LLVM-module, SVF-artifact, and alternate compile-database flags.
+- [ ] Follow `docs/plans/m1-build-intelligence-program-context-implementation-plan.md` for test-first task details and commits.
 
 ## Tests
 
 The integration test should assert:
 
 ```text
-one translation unit is discovered
-source path is repository-relative
-command hash is stable across repeated loads
-manifest JSON is byte-identical across repeated writes
+project root resolves exactly <project>/compile_commands.json
+reordered compilation entries produce identical canonical bytes
+repository-relative paths remain stable across checkout roots
+missing compilation database or source fails without a partial manifest
+public command parsing exposes only the project-level source input
 ```
 
 ## Exit Criteria
 
 ```text
-veritas-build configure reads compile_commands.json.
-The emitted manifest is deterministic.
-No function identity or summary storage is introduced in this milestone.
+veritas-build analyze --project loads the fixed compilation database into a typed deterministic manifest.
+Downstream stages receive that manifest in memory and never read a manifest file.
+No AST, LLVM IR, or SVF artifact is accepted from the user.
 ```
 
 ---
@@ -556,114 +604,92 @@ Publication is atomic at current bindings.
 
 ---
 
-# 8. M4: Clang/LLVM Local Extraction Adapter
+# 8. M4: VERITAS-Owned Clang/LLVM Project Analysis
 
 ## Design Spec
 
-M4 extracts function symbols, source anchors, direct calls, CFG/dominator facts, local memory operations, and LLVM value references from real C/C++ code.
+M4 consumes the live M1 manifest, runs Clang AST and CodeGen library stages for every translation unit, links one private in-memory `ProgramIr`, extracts local facts, and returns unpublished summary drafts plus the live module to M5.
 
 Reuse strategy:
 
-- Use Clang LibTooling for AST, declarations, USRs, templates, macros, and source mapping.
-- Use LLVM IR and analysis APIs for SSA-level instructions, CFG, dominators, MemorySSA, and alias-query integration points.
+- Use Clang 22 LibTooling and CodeGen from normalized M1 commands for AST, declarations, USRs, templates, macros, source mapping, and IR emission.
+- Use LLVM 22 libraries for in-process module linking, SSA facts, CFG, dominators, and MemorySSA.
 - Do not make Clang AST nodes or LLVM `Value*` pointers persistent IDs. Convert them into VERITAS stable references within a translation unit and function variant.
+- Do not accept manifests, bitcode, or LLVM-module paths and do not require user-invoked compiler tools.
 
 ## Files
 
-- Create: `include/veritas/frontend/clang/ClangExtractor.h`
-- Create: `include/veritas/frontend/clang/SourceAnchorBuilder.h`
-- Create: `include/veritas/analysis/llvm/LlvmExtractor.h`
-- Create: `include/veritas/analysis/llvm/ValueRef.h`
-- Create: `src/frontend/clang/ClangExtractor.cpp`
+- Create: `src/frontend/clang/ProjectAstExtractor.h`
+- Create: `src/frontend/clang/ProjectAstExtractor.cpp`
 - Create: `src/frontend/clang/SourceAnchorBuilder.cpp`
-- Create: `src/analysis/llvm/LlvmExtractor.cpp`
-- Create: `src/analysis/llvm/ValueRef.cpp`
-- Create: `tests/integration/frontend/ClangExtractorTest.cpp`
-- Create: `tests/integration/analysis/LlvmExtractorTest.cpp`
-- Modify: `src/tools/veritas-build.cpp`
+- Create: `src/analysis/pipeline/ProgramIr.h`
+- Create: `src/analysis/pipeline/ProgramIr.cpp`
+- Create: `src/analysis/pipeline/LocalAnalysisStage.h`
+- Create: `src/analysis/pipeline/LocalAnalysisStage.cpp`
+- Create: `src/analysis/llvm/ProjectIrBuilder.h`
+- Create: `src/analysis/llvm/ProjectIrBuilder.cpp`
+- Create: `src/analysis/llvm/OriginMap.h`
+- Create: `src/analysis/llvm/OriginMap.cpp`
+- Create: `src/analysis/llvm/LocalFactExtractor.h`
+- Create: `src/analysis/llvm/LocalFactExtractor.cpp`
+- Create: `tests/integration/frontend/ProjectAstExtractorTest.cpp`
+- Create: `tests/integration/analysis/ProjectIrBuilderTest.cpp`
+- Create: `tests/integration/analysis/LocalAnalysisStageTest.cpp`
 
 ## Interfaces
 
 ```cpp
-namespace veritas::frontend::clang {
-struct ExtractedFunctionDecl {
-  core::StableId function_symbol_id;
-  std::string qualified_name;
-  std::string mangled_name;
-  std::string canonical_signature;
-  std::string linkage_kind;
-  core::StableId source_anchor_id;
+namespace veritas::analysis::pipeline {
+struct LocalAnalysisResult {
+  ProgramIr program_ir;
+  std::vector<summary::v1::FunctionSummary> summary_drafts;
 };
 
-class ClangExtractor {
- public:
-  veritas::StatusOr<std::vector<ExtractedFunctionDecl>> ExtractDeclarations(
-      const build::TranslationUnitCommand& command);
-};
-}
-```
-
-```cpp
-namespace veritas::analysis::llvm {
-struct LocalIrFacts {
-  std::vector<summary::CallFact> direct_calls;
-  std::vector<summary::MemoryEffectFact> memory_effects;
-  std::vector<summary::ValueFlowFact> local_value_flows;
-  std::vector<summary::RangeFact> range_facts;
-  std::vector<summary::UnknownFact> unknowns;
-};
-
-class LlvmExtractor {
- public:
-  veritas::StatusOr<LocalIrFacts> ExtractLocalFacts(
-      const build::TranslationUnitCommand& command,
-      const core::StableId& function_variant_id);
-};
+StatusOr<LocalAnalysisResult> RunLocalAnalysis(
+    const build::AnalysisManifest& manifest);
 }
 ```
 
 ## Implementation Plan
 
-- [ ] Add fixture functions covering direct calls, static functions, overloads, templates, macros, and a simple `memcpy`.
-- [ ] Write Clang extractor tests for qualified names, signatures, linkage, and source anchors.
-- [ ] Implement declaration extraction through LibTooling `FrontendAction`.
-- [ ] Write LLVM extractor tests for direct call edges and basic memory effects.
-- [ ] Implement IR module loading or generation from the compile command.
-- [ ] Implement local CFG and dominator fact extraction.
-- [ ] Implement local memory read/write detection using LLVM memory instructions and MemorySSA where available.
-- [ ] Normalize extracted facts into M3 `FunctionSummary`.
-- [ ] Add `veritas-build index --local-only`.
-- [ ] Run integration tests on fixtures.
-- [ ] Commit with message `feat: extract local Clang LLVM summaries`.
+- [ ] Extract project-wide declarations and source anchors through private Clang frontend actions.
+- [ ] Generate a module for every normalized command and link one move-only private `ProgramIr`.
+- [ ] Build the LLVM-to-VERITAS origin map and deterministic module hash.
+- [ ] Extract direct calls, local CFG/dominator facts, memory effects, value flows, ranges, and scoped unknowns.
+- [ ] Return local summary drafts and the live `ProgramIr` without publishing before M5.
+- [ ] Follow `docs/plans/m4-clang-llvm-local-extraction-implementation-plan.md` for test-first task details and commits.
 
 ## Tests
 
 Required fixture assertions:
 
 ```text
+all manifest translation units are processed or analysis fails
 overloaded functions have distinct FunctionSymbolIDs
 static internal-linkage functions in different files do not collide
 macro-expanded call has spelling and expansion source anchors
 direct call edge has MUST_CALL
 unresolved function pointer call emits UNKNOWN_CALL
 memcpy callsite is represented as a callsite fact
+multi-translation-unit input produces one linked in-memory ProgramIr
+no public manifest, bitcode, or LLVM-module input exists
 ```
 
 ## Exit Criteria
 
 ```text
-veritas-build index --local-only emits real local summaries.
-No SVF dependency is required for this milestone.
-Instruction-level graph data is not persisted globally.
+M4 builds deterministic local summary drafts and a live linked ProgramIr from the M1 manifest.
+The standard pipeline does not claim completion or publish drafts until required M5 SVF succeeds.
+No instruction-level graph data or native pointer identity is persisted globally.
 ```
 
 ---
 
-# 9. M5: SVF Value-Flow and Pointer Adapter
+# 9. M5: Required In-Process SVF Analysis
 
 ## Design Spec
 
-M5 introduces SVF behind an adapter to produce higher-quality pointer, alias, and value-flow facts. SVF should be treated as an analysis provider, not as VERITAS's internal data model.
+M5 completes the standard project pipeline by running the pinned SVF libraries directly on M4's live `ProgramIr`, mapping results to VERITAS facts, merging them with local drafts, and publishing only after required SVF success.
 
 VERITAS should map SVF nodes and edges into:
 
@@ -685,57 +711,59 @@ NoAlias
 UnknownAlias
 ```
 
-No consumer outside `analysis/svf` should include SVF headers.
+No installed public header includes SVF or LLVM native types. SVF headers and lifecycle calls remain private to `src/analysis/svf`.
 
 ## Files
 
-- Create: `include/veritas/analysis/svf/SvfAdapter.h`
-- Create: `include/veritas/analysis/svf/SvfConfig.h`
-- Create: `src/analysis/svf/SvfAdapter.cpp`
+- Create: `include/veritas/analysis/ProjectAnalyzer.h`
+- Create: `src/analysis/ProjectAnalyzer.cpp`
+- Create: `src/analysis/svf/CMakeLists.txt`
+- Create: `src/analysis/svf/SvfSession.h`
+- Create: `src/analysis/svf/SvfSession.cpp`
+- Create: `src/analysis/svf/SvfFactMapper.h`
+- Create: `src/analysis/svf/SvfFactMapper.cpp`
+- Create: `src/analysis/svf/SvfAnalysisStage.h`
+- Create: `src/analysis/svf/SvfAnalysisStage.cpp`
 - Create: `src/analysis/svf/SvfConfig.cpp`
-- Create: `tests/integration/analysis/SvfAdapterTest.cpp`
-- Modify: `cmake/FindSVF.cmake`
+- Create: `tests/integration/analysis/svf/SvfSessionTest.cpp`
+- Create: `tests/integration/analysis/svf/SvfFactMapperTest.cpp`
+- Create: `tests/integration/analysis/ProjectAnalyzerSvfTest.cpp`
 - Modify: `src/tools/veritas-build.cpp`
 
 ## Interfaces
 
 ```cpp
 namespace veritas::analysis::svf {
+enum class PointerAnalysisKind { kAndersenWaveDiff };
+
 struct SvfConfig {
-  std::string pointer_analysis_level;  // basic, andersen, demand
-  int max_analysis_seconds;
-  bool emit_unknowns_on_timeout;
+  PointerAnalysisKind pointer_analysis;
+  std::chrono::seconds soft_analysis_budget;
+  std::size_t max_graph_nodes;
+  std::size_t max_emitted_facts;
+  bool field_sensitive;
 };
 
 struct SvfFacts {
   std::vector<summary::ValueFlowFact> value_flows;
   std::vector<summary::AliasFact> aliases;
   std::vector<summary::MemoryEffectFact> refined_memory_effects;
+  std::vector<summary::CallFact> refined_calls;
   std::vector<summary::UnknownFact> unknowns;
-};
-
-class SvfAdapter {
- public:
-  veritas::StatusOr<SvfFacts> AnalyzeModule(
-      const LlvmModuleInput& module,
-      const SvfConfig& config);
+  std::vector<summary::DependencyEdge> dependencies;
 };
 }
 ```
 
 ## Implementation Plan
 
-- [ ] Add CMake detection for SVF include directories and libraries.
-- [ ] Add `VERITAS_ENABLE_SVF` build option.
-- [ ] Write tests that are skipped with a clear message when SVF is unavailable.
-- [ ] Build a fixture with pointer assignment, field load/store, and parameter-to-return flow.
-- [ ] Implement SVF module ingestion from LLVM bitcode.
-- [ ] Map SVF value-flow nodes to VERITAS `ValueRef`.
-- [ ] Map SVF points-to/alias answers to VERITAS alias facts.
-- [ ] Merge SVF facts with M4 local summaries without replacing Clang source anchors.
-- [ ] Emit `UnknownFact` on timeout or unsupported construct.
-- [ ] Run SVF integration tests.
-- [ ] Commit with message `feat: add SVF value-flow adapter`.
+- [ ] Require M0's pinned `SvfCore`/`SvfLLVM` wrapper and expose no enable/disable switch.
+- [ ] Build an RAII serialized SVF session with `LLVMModuleSet::buildSVFModule(program_ir.module())`, `SVFIRBuilder`, `AndersenWaveDiff`, and `SVFGBuilder`.
+- [ ] Release Andersen, SVFIR, and LLVMModuleSet singleton state on every return path.
+- [ ] Resolve SVF values through LLVM values and M4 origins, then map value-flow, alias, memory, indirect-call, dependency, unknown, and provenance facts.
+- [ ] Preserve validated partial facts plus explicit truncation unknowns at supported soft-budget checkpoints.
+- [ ] Merge conservatively, publish only after required SVF completion, and route `analyze --project` through `ProjectAnalyzer`.
+- [ ] Follow `docs/plans/m5-svf-value-flow-pointer-adapter-implementation-plan.md` for test-first task details and commits.
 
 ## Tests
 
@@ -745,16 +773,18 @@ Required fixture assertions:
 arg0 -> return flow is emitted as ValueFlowFact
 store then load through pointer emits may-flow with alias provenance
 field-sensitive fact preserves field path when SVF provides enough detail
-timeout emits UnknownFact instead of dropping facts silently
-SVF disabled build still compiles all non-SVF targets
+supported soft-budget truncation emits UnknownFact instead of dropping facts silently
+two analyses in one process release singleton state and produce deterministic facts
+fatal SVF construction failure publishes no summaries
+the standard build has no SVF-disabled configuration
 ```
 
 ## Exit Criteria
 
 ```text
-SVF is optional at build time.
-When enabled, SVF improves value-flow and alias components.
-No public VERITAS API exposes SVF-native node IDs.
+The pinned SVF submodule is required by the standard build and full analysis.
+One project-directory command owns compilation-database ingestion, AST/IR construction, SVF execution, and publication.
+No public VERITAS API exposes prebuilt IR inputs, SVF-native types, or SVF node IDs.
 ```
 
 ---
@@ -1325,7 +1355,7 @@ Each milestone should pass these gates before moving on:
 3. Golden fixture output is deterministic.
 4. New persistent schemas have migration or fresh-create tests.
 5. Any third-party dependency is behind an adapter.
-6. No downstream module includes SVF, Clang, or LLVM headers unless it is inside the matching adapter subtree.
+6. Installed public headers expose no SVF, Clang, or LLVM native types; those headers remain in private `src/frontend/clang`, `src/analysis/llvm`, and `src/analysis/svf` stages.
 7. Any MAY/UNKNOWN/INFERRED fact remains epistemically visible.
 8. CLI output includes enough diagnostics to debug fixture failures.
 ```
@@ -1341,12 +1371,12 @@ If the answer is the latter, stop and add an adapter boundary before proceeding.
 # 16. Recommended Commit Sequence
 
 ```text
-M0  build: add VERITAS C++ skeleton
-M1  feat: add build manifest ingestion
+M0  build: add required SVF toolchain
+M1  feat: accept project directory for analysis
 M2  feat: add stable identity metadata
 M3  feat: add immutable summary store
-M4  feat: extract local Clang LLVM summaries
-M5  feat: add SVF value-flow adapter
+M4  feat: prepare local analysis for required SVF
+M5  feat: require SVF in project analysis
 M6  feat: add thin CPG projection
 M7  feat: add incremental dependency scheduler
 M8  feat: add SCC WPA fact engine
