@@ -151,6 +151,44 @@ Rebuild LLVM with `-DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_EH=ON`.
 
 The pinned SVF submodule at `third_party/SVF` also depends on LLVM 22.x. When you configure VERITAS with `LLVM_PROJECT_BUILD_DIR`, both VERITAS and SVF will use the same LLVM installation, ensuring ABI compatibility.
 
+### How It Works
+
+The `cmake/VeritasLLVM.cmake` module sets `LLVM_DIR` as a CMake cache variable. When SVF is added via `add_subdirectory(third_party/SVF EXCLUDE_FROM_ALL)`, it inherits this cached `LLVM_DIR` and finds the same LLVM configuration.
+
+**Example top-level CMakeLists.txt (M0):**
+
+```cmake
+# Configure LLVM first
+include(cmake/VeritasLLVM.cmake)  # Sets LLVM_DIR from LLVM_PROJECT_BUILD_DIR
+
+# SVF inherits the cached LLVM_DIR
+add_subdirectory(third_party/SVF EXCLUDE_FROM_ALL)
+```
+
+### Verification
+
+To verify VERITAS and SVF use the same LLVM:
+
+```bash
+# After configuration
+cmake -S . -B build -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build"
+
+# Check that both found the same LLVM
+grep "Found LLVM" build/CMakeCache.txt
+grep "LLVM_DIR" build/CMakeCache.txt
+```
+
+Both VERITAS and SVF should report the same LLVM version and library directory.
+
+### Requirements
+
+- **LLVM Version**: Both VERITAS and SVF require LLVM 22.x
+- **RTTI**: Must be enabled (`-DLLVM_ENABLE_RTTI=ON`)
+- **Exceptions**: Must be enabled (`-DLLVM_ENABLE_EH=ON`)
+- **ABI Consistency**: All three components (VERITAS, LLVM, SVF) must use compatible compiler flags
+
+The M0 milestone will verify these constraints at configure time.
+
 See `docs/third_party/SVF.md` for SVF-specific configuration details.
 
 ## References
