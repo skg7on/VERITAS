@@ -108,6 +108,21 @@ See `docs/third_party/LLVM.md` and `docs/third_party/SVF.md` for the full toolch
 
 ---
 
+## Development
+
+VERITAS C and C++ code follows the LLVM coding style. Enable the tracked
+pre-commit hook once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook requires `clang-format` on `PATH` and rejects commits whose staged
+C or C++ content is not formatted. It checks the Git index without modifying
+the working tree, so partially staged changes remain intact.
+
+---
+
 ## Current State
 
 **Design-phase repository.** Four architecture documents (`docs/architecture/`), engineering-backbone spec, milestone specs M1–M12 (`docs/specs/milestones/`), implementation plans for M11/M12 (`docs/plans/`). No source code yet; `main` is clean awaiting M0 implementation.
