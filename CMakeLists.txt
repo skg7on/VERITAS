@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The VERITAS Authors.
 # Top-level CMake file for VERITAS.
 #
 # Verified Evidence Reasoning IR for Trans-program Analysis and Semantics.

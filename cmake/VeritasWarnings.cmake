@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The VERITAS Authors.
 # VeritasWarnings.cmake
 #
 # Provides veritas_add_warnings(<target>) — the single place VERITAS-owned

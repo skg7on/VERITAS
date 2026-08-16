@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The VERITAS Authors.
 # src/core/CMakeLists.txt
 #
 # Builds `veritas_core`, the foundation library every other VERITAS

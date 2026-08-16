@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 The VERITAS Authors.
 // Version.h — VERITAS version identity.
 //
 // GetVersion() returns the semantic version baked in at configure time

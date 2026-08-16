@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 The VERITAS Authors.
 #include "veritas/core/Status.h"
 
 // All Status member functions are defined inline in the header. This

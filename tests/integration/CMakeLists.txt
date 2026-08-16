@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The VERITAS Authors.
 # tests/integration/CMakeLists.txt
 #
 # Placeholder. M0 establishes the fixture layout (tests/fixtures/projects/smoke)

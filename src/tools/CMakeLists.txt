@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The VERITAS Authors.
 # src/tools/CMakeLists.txt
 #
 # Four VERITAS CLI binaries. At M0 each one only implements `--version`; the

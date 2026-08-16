@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The VERITAS Authors.
 # Dependencies.cmake
 #
 # Discovers VERITAS's non-LLVM, non-SVF third-party dependencies. Included

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 The VERITAS Authors.
 // Status.h — error propagation primitives for VERITAS.
 //
 // Modelled loosely on absl::Status / absl::StatusOr: a lightweight value type

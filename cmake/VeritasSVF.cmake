@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The VERITAS Authors.
 # VeritasSVF.cmake
 #
 # Integrates the vendored SVF source tree at third_party/SVF as a required
