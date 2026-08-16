@@ -20,6 +20,7 @@
 - Alias facts use one `ALIASES` edge kind with an exact `MustAlias`, `MayAlias`, `NoAlias`, or `UnknownAlias` state; only M5-evaluated candidate pairs are emitted.
 - M6 does not implement a second pointer analysis. A PhASAR-inspired clean-room refinement requires a separate design and runs as a versioned M5 stage before summary completion.
 - `ProjectionID`, node IDs, and edge IDs use M2 canonical hashing; pointer addresses, allocation order, hash-table order, and thread scheduling never affect identity.
+- Every persistent node kind has an explicit origin mapping: Function to `FunctionVariantID`, Parameter to mapped `ValueRef`, Global/MemoryObject to mapped `MemoryRef`, CallSite to `CallSiteID`, BasicBlockSummary to mapped `BasicBlockSummaryID`, Summary to `FunctionSummaryID`, and Unknown to a canonical scoped hash.
 - Current summary bindings and the current CPG binding advance in one SQLite transaction after in-memory graph validation.
 - Query objects are pinned to one immutable `ProjectionID`; traversal results distinguish no path from budget truncation.
 
@@ -196,6 +197,9 @@ git commit -m "feat: add stable thin CPG model"
 ### Task 2: Private Projection Stage over Live `ProgramIr` and Completed Summaries
 
 **Files:**
+- Modify: `proto/veritas/summary/v1/summary.proto`
+- Modify: `src/analysis/llvm/LocalFactExtractor.h`
+- Modify: `src/analysis/llvm/LocalFactExtractor.cpp`
 - Create: `src/analysis/cpg/CpgProjectionStage.h`
 - Create: `src/analysis/cpg/CpgProjectionStage.cpp`
 - Create: `tests/integration/analysis/cpg/CpgProjectionStageTest.cpp`
@@ -205,6 +209,7 @@ git commit -m "feat: add stable thin CPG model"
 
 **Interfaces:**
 - Consumes: borrowed `analysis::pipeline::ProgramIr`, completed in-memory `FunctionSummary` span, revision ID, and build-variant ID
+- Produces: M4 `BasicBlockSummaryRef` values with canonical `BasicBlockSummaryID`
 - Produces: `StatusOr<cpg::ThinCpg> analysis::cpg::BuildThinCpg(const CpgProjectionInput&)`
 - Does not consume: `SvfSessionView`, SummaryDB readback, bitcode paths, or external-tool output
 
@@ -244,6 +249,15 @@ TEST(CpgProjectionStageTest, DoesNotInventSourceSemanticNodes) {
   EXPECT_FALSE(graph.HasNodeKindName("Field"));
   EXPECT_TRUE(graph.HasMemoryObjectWithFieldPath("record.payload"));
 }
+
+TEST(CpgProjectionStageTest, EveryPersistentNodeUsesMappedStableIdentity) {
+  auto graph = BuildFixtureProjection("multiple_tus_flow");
+  EXPECT_ALL_FUNCTION_IDS_ARE_FUNCTION_VARIANT_IDS(graph);
+  EXPECT_ALL_PARAMETER_IDS_ARE_MAPPED_VALUE_REFS(graph);
+  EXPECT_ALL_GLOBAL_IDS_ARE_MAPPED_MEMORY_REFS(graph);
+  EXPECT_ALL_CALLSITE_IDS_ARE_CALLSITE_IDS(graph);
+  EXPECT_ALL_BLOCK_IDS_ARE_BASIC_BLOCK_SUMMARY_IDS(graph);
+}
 ```
 
 - [ ] **Step 2: Run the focused tests and verify failure**
@@ -270,7 +284,23 @@ StatusOr<::veritas::cpg::ThinCpg> BuildThinCpg(
 
 Keep this header under `src/analysis/cpg`; public installed headers must not include `ProgramIr` or LLVM types.
 
-- [ ] **Step 4: Project stable LLVM structure while `ProgramIr` is alive**
+- [ ] **Step 4: Add stable M4 basic-block summary references**
+
+Add `BasicBlockSummaryRef` to Summary IR dominator/local-CFG facts. M4 computes its ID with the M2 canonical writer from the owning `FunctionVariantID`, ordered mapped semantic `SourceAnchorID` members, and sorted mapped predecessor/successor anchor IDs. Emit no block reference when those mappings are insufficient; emit the existing scoped M4 unknown instead.
+
+```cpp
+BasicBlockSummaryRef BuildBasicBlockSummaryRef(
+    const llvm::BasicBlock& block, const OriginMap& origins,
+    core::StableId function_variant_id) {
+  CanonicalWriter writer("bbsummary.v1");
+  writer.Add(function_variant_id);
+  writer.AddRange(OrderedMappedSemanticAnchors(block, origins));
+  writer.AddSortedRange(MappedPredecessorSuccessorAnchors(block, origins));
+  return BasicBlockSummaryRef{BuildStableId("bbsummary", writer.bytes())};
+}
+```
+
+- [ ] **Step 5: Project stable LLVM structure while `ProgramIr` is alive**
 
 Collect functions, parameters, globals, callsites, basic-block summaries, and resolvable memory objects. Resolve every native value through `OriginMap` before creating a node. Sort by the resolved stable ID before insertion.
 
@@ -284,9 +314,22 @@ for (const llvm::Function* function : SortedDefinedFunctions(module)) {
 }
 ```
 
-When origin resolution fails, emit a stable `Unknown` node and `UNKNOWN_AT` edge scoped by revision, build, owning function, unknown kind, and mapped provenance. Never derive identity from an address or LLVM iteration index.
+Use this complete mapping table:
 
-- [ ] **Step 5: Project completed summary facts into semantic edges**
+```text
+Function          -> OriginMap FunctionVariantID
+Parameter         -> OriginMap ValueRef for llvm::Argument
+Global            -> OriginMap MemoryRef for llvm::GlobalValue
+CallSite          -> completed CallFact CallSiteID, cross-checked with origin map
+MemoryObject      -> OriginMap/completed-fact MemoryRef
+BasicBlockSummary -> mapped M4 BasicBlockSummaryID
+Summary           -> FunctionSummaryID
+Unknown           -> canonical revision/build/scope/kind/provenance hash
+```
+
+When origin resolution fails, emit a stable `Unknown` node and `UNKNOWN_AT` edge scoped by revision, build, owning function, unknown kind, and mapped provenance. Never derive identity from an address, LLVM iteration index, parameter ordinal alone, or basic-block order.
+
+- [ ] **Step 6: Project completed summary facts into semantic edges**
 
 Map call, memory-effect, value-flow, dominator, summary, unknown, and alias components in sorted summary-ID order. Preserve fact epistemic state and attach the exact `FunctionSummaryID` plus opaque `summary::ProvenanceRef` support record.
 
@@ -301,20 +344,20 @@ for (const auto& fact : SortedAliasFacts(summary)) {
 
 Do not run alias analysis in this stage. Do not create edges for pointer pairs absent from the completed summaries.
 
-- [ ] **Step 6: Canonicalize and validate before returning**
+- [ ] **Step 7: Canonicalize and validate before returning**
 
 Set `module_hash`, sorted completed summary IDs, revision ID, and build-variant ID in projection metadata. Run `ThinCpg::Validate` before returning. A validation error is fatal to project publication.
 
-- [ ] **Step 7: Run projection tests and verify success**
+- [ ] **Step 8: Run projection tests and verify success**
 
 Run: `ctest --test-dir build -R CpgProjectionStage --output-on-failure`
 
 Expected: live-IR projection, exact alias-state mapping, source-property behavior, no-instruction persistence, and unknown handling pass.
 
-- [ ] **Step 8: Commit the live projection stage**
+- [ ] **Step 9: Commit the live projection stage**
 
 ```bash
-git add src/analysis/cpg tests/integration/analysis/cpg
+git add proto/veritas/summary/v1/summary.proto src/analysis/llvm/LocalFactExtractor.* src/analysis/cpg tests/integration/analysis/cpg
 git commit -m "feat: project CPG from live program analysis"
 ```
 
@@ -363,6 +406,15 @@ TEST(ProjectPublicationCoordinatorTest, ProjectionFailureAdvancesNoBindings) {
   Status status = fixture.Publish(CompletedAnalysisWithNewSummaryAndGraph());
   EXPECT_FALSE(status.ok());
   EXPECT_EQ(fixture.CurrentBindings(), before);
+}
+
+TEST(ProjectPublicationCoordinatorTest, RejectsMismatchedGraphSnapshot) {
+  auto fixture = PublishedProjectFixture();
+  auto completed = CompletedAnalysisWithNewSummaryAndGraph();
+  completed.graph.mutable_metadata().summary_ids.pop_back();
+  Status status = fixture.Publish(std::move(completed));
+  EXPECT_EQ(status.code(), StatusCode::FailedPrecondition);
+  EXPECT_EQ(fixture.CurrentBindings(), fixture.OriginalBindings());
 }
 ```
 
@@ -441,6 +493,10 @@ Write immutable summary objects before the metadata transaction, then stage summ
 Status ProjectPublicationCoordinator::Publish(
     CompletedProjectAnalysis completed) {
   VERITAS_RETURN_IF_ERROR(completed.graph.Validate());
+  VERITAS_RETURN_IF_ERROR(ValidateSnapshotCorrespondence(
+      completed.graph.metadata(), completed.summaries,
+      completed.revision_id, completed.build_variant_id,
+      completed.module_hash));
   VERITAS_RETURN_IF_ERROR(
       summaries_.PutImmutableObjects(completed.summaries));
   VERITAS_ASSIGN_OR_RETURN(auto transaction, metadata_.BeginTransaction());
@@ -452,7 +508,7 @@ Status ProjectPublicationCoordinator::Publish(
 }
 ```
 
-Failure leaves immutable unbound objects eligible for later reuse, but advances neither summary nor CPG current bindings.
+`ValidateSnapshotCorrespondence` compares revision ID, build-variant ID, module hash, and exact canonical sorted `FunctionSummaryID` set. It runs before immutable object writes or transaction creation. Failure advances no bindings and writes no object. A later transaction failure may leave immutable unbound objects eligible for reuse, but still advances neither current binding.
 
 - [ ] **Step 6: Place M6 before publication in `ProjectAnalyzer`**
 
@@ -530,6 +586,19 @@ TEST(CpgQueryTest, CurrentQueryPinsResolvedProjection) {
   PublishNewCurrentProjection(repository, "cpgproj:new");
   EXPECT_EQ(query.projection_id(), Id("cpgproj:old"));
 }
+
+TEST(CpgQueryTest, ExactBudgetBoundaryIsComplete) {
+  CpgQuery query = OpenFixtureProjection("single_path_exact_budget");
+  ASSERT_OK_AND_ASSIGN(auto result,
+      query.GetValueFlow(Id("flow:start"), Id("flow:end"),
+                         QueryBudget{.max_depth = 3,
+                                     .max_nodes = 4,
+                                     .max_paths = 1}));
+  EXPECT_EQ(result.items.size(), 1u);
+  EXPECT_TRUE(result.truncation_reasons.empty());
+  EXPECT_EQ(result.explored_nodes, 4u);
+  EXPECT_EQ(result.explored_paths, 1u);
+}
 ```
 
 - [ ] **Step 2: Run the focused query tests and verify failure**
@@ -569,12 +638,24 @@ struct TraversalResult {
 Visit adjacent edges in `(edge_kind, target_node_id, edge_id)` order. Stop adding work when any budget is exhausted, record every exhausted reason, and retain already-completed paths.
 
 ```cpp
-if (next_depth > budget.max_depth) reasons.insert(kMaxDepth);
-if (explored_nodes == budget.max_nodes) reasons.insert(kMaxNodes);
-if (result.items.size() == budget.max_paths) reasons.insert(kMaxPaths);
+for (const Candidate& candidate : eligible_candidates) {
+  if (candidate.depth > budget.max_depth) {
+    reasons.insert(kMaxDepth);
+    continue;
+  }
+  if (WouldAddNewNode(candidate) && explored_nodes >= budget.max_nodes) {
+    reasons.insert(kMaxNodes);
+    continue;
+  }
+  if (candidate.completes_path && result.items.size() >= budget.max_paths) {
+    reasons.insert(kMaxPaths);
+    continue;
+  }
+  Accept(candidate);
+}
 ```
 
-Unknown call nodes are terminal for call-path traversal; never expand them to all functions.
+Record a truncation reason only when an otherwise eligible node or completed path is rejected. Merely reaching a limit at the end of a complete search is not truncation. Add one-over-limit fixtures for each reason and exact-boundary fixtures that remain untruncated. Unknown call nodes are terminal for call-path traversal; never expand them to all functions.
 
 - [ ] **Step 6: Add CLI commands with explicit snapshot and budget output**
 
@@ -591,7 +672,7 @@ The flow command prints `Projection`, `Paths`, `Explored nodes`, `Explored paths
 
 Run: `ctest --test-dir build -R "CpgQuery|VeritasQueryCpg" --output-on-failure`
 
-Expected: snapshot pinning, no-path distinction, all three budget reasons, deterministic path order, unknown-call termination, and CLI output tests pass.
+Expected: snapshot pinning, no-path distinction, all three budget reasons, exact-boundary completion, deterministic path order, unknown-call termination, and CLI output tests pass.
 
 - [ ] **Step 8: Commit CPG queries**
 

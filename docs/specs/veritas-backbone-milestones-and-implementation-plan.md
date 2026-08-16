@@ -828,6 +828,8 @@ UNKNOWN_AT
 
 Instruction-level nodes and native LLVM/SVF identity are never persisted globally. Source anchors, translation-unit IDs, declared type strings, qualified names, and memory field paths remain properties when M4/M5 already mapped them; M6 V1 does not invent source-semantic node identity that the handoff does not provide.
 
+Every persistent node has an explicit mapped identity: Function uses `FunctionVariantID`; Parameter uses `ValueRef`; Global and MemoryObject use `MemoryRef`; CallSite uses `CallSiteID`; BasicBlockSummary uses M4's canonical `BasicBlockSummaryID`; Summary uses `FunctionSummaryID`; and Unknown uses a canonical scoped hash. A missing mapping produces `UNKNOWN_AT`, never an LLVM ordinal or pointer-derived ID.
+
 ## Files
 
 - Create: `proto/veritas/cpg/v1/cpg.proto`
@@ -892,6 +894,7 @@ struct TraversalResult {
 - [ ] Build and validate `ThinCpg` from the borrowed live `ProgramIr` plus completed in-memory summaries.
 - [ ] Add SQLite projection, node, edge, adjacency, historical, and current-binding rows.
 - [ ] Stage summary bindings and the CPG binding in one project-publication transaction.
+- [ ] Reject publication before the transaction unless graph and completed-summary revision/build/module identities and exact sorted `FunctionSummaryID` sets match.
 - [ ] Bind each `CpgQuery` to one immutable `ProjectionID` and return explicit traversal truncation metadata.
 - [ ] Add caller/callee, writer, value-flow, call-path, determinism, failure-injection, and ownership-boundary tests.
 - [ ] Follow `docs/plans/m6-thin-veritas-cpg-projection-implementation-plan.md` for test-first tasks and commits.
@@ -908,6 +911,7 @@ all four M5 alias states survive without semantic upgrade or all-pairs fanout
 unknown calls terminate at bounded UNKNOWN_AT/MAY_CALL relations
 projection failure advances neither summary nor CPG current bindings
 query results distinguish no path from each exhausted budget
+using a budget exactly does not report truncation unless additional eligible work is rejected
 public headers and the standard build contain no native analysis or external CPG-generator boundary
 ```
 

@@ -186,12 +186,17 @@ Instruction-level nodes may be materialized later for one Evidence Case while it
 Graph node IDs are VERITAS stable IDs:
 
 ```text
-Function node     -> FunctionVariantID
-CallSite node     -> CallSiteID
-MemoryObject node -> MemoryRef ID
-Summary node      -> FunctionSummaryID
-Unknown node      -> stable hash of scope, kind, and provenance
+Function node          -> FunctionVariantID from OriginMap
+Parameter node         -> mapped ValueRef ID for the llvm::Argument
+Global node            -> mapped MemoryRef ID for the llvm::GlobalValue
+CallSite node          -> CallSiteID from the completed CallFact/origin map
+MemoryObject node      -> MemoryRef ID
+BasicBlockSummary node -> BasicBlockSummaryID carried by mapped M4 summary facts
+Summary node           -> FunctionSummaryID
+Unknown node           -> stable hash of scope, kind, and provenance
 ```
+
+M4 constructs `BasicBlockSummaryID` with M2 canonical hashing over the owning `FunctionVariantID`, the block's ordered mapped semantic `SourceAnchorID` members, and its sorted mapped predecessor/successor anchor IDs. It emits this reference only for blocks represented by local summary facts. M6 does not use LLVM block order or pointer identity. If any required node mapping is absent, M6 emits a scoped `Unknown`/`UNKNOWN_AT` relation instead of inventing an ID.
 
 Edge IDs are canonical hashes of:
 
@@ -297,6 +302,8 @@ revision_id + build_variant_id -> current projection_id
 
 Projection construction and validation happen entirely in memory. Immutable summary objects may be written before the transaction, but the transaction that advances current summary bindings must also insert the validated graph and advance the current CPG binding. If projection validation or graph insertion fails, neither current binding advances.
 
+Before opening the transaction, the publication coordinator verifies that the graph metadata's revision ID, build-variant ID, module hash, and canonical sorted `FunctionSummaryID` set exactly match the completed project analysis being published. A mismatch is a fatal precondition error and writes no current binding.
+
 Historical projections remain addressable by `ProjectionID`. Rebuilding identical inputs produces the same projection ID and canonical node/edge content.
 
 ---
@@ -386,6 +393,7 @@ Required assertions:
 the projector consumes a live ProgramIr and completed in-memory summaries
 no bitcode, LLVM-module path, serialized CPG, Joern, or PhASAR process is accepted
 function and callsite nodes deduplicate across deterministic rebuilds
+parameters, globals, and basic-block summaries use their specified mapped stable IDs
 CALLS and MAY_CALL edges retain source anchors, epistemic state, and summary provenance
 FLOWS_TO paths traverse expandable summary edges
 SVF MustAlias/MayAlias/NoAlias/UnknownAlias map without epistemic upgrades
@@ -393,7 +401,9 @@ unknown calls create UNKNOWN_AT or bounded MAY_CALL edges, not full fanout
 persistent graph size is not proportional to LLVM instruction count
 two identical project analyses produce the same ProjectionID and canonical graph bytes
 projection failure advances neither summary nor CPG current bindings
+mismatched graph/summary snapshot metadata is rejected before any publication write
 budgeted traversal reports the exact truncation reason
+using a budget exactly is complete unless additional eligible work is rejected
 installed public headers contain no LLVM, SVF, Joern, or PhASAR native types
 ```
 
