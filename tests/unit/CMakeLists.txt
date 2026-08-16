@@ -13,3 +13,4 @@
 # limitations under the License.
 
 add_subdirectory(core)
+add_subdirectory(build)

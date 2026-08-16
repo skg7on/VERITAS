@@ -39,10 +39,11 @@
 *.out
 *.app
 
-# Build directories
-build/
-Build/
-build-*/
+# Build directories (anchored to repo root — do not match src/build/,
+# include/veritas/build/, tests/unit/build/, etc.).
+/build/
+/Build/
+/build-*/
 
 # CMake generated files
 CMakeFiles/
