@@ -5,7 +5,11 @@
 **Status:** Draft Architecture Specification
 **Version:** 0.1
 **Project:** VERITAS
-**Depends on:** `veritas-whole-program-analysis-summary-db-architecture.md`
+**Depends on:**
+
+- `docs/architecture/veritas-platform-architecture-design.md` — platform pipeline, principles P1–P8, ingest adapter tiers.
+- `docs/architecture/veritas-whole-program-analysis-design.md` — analyzer engines and SOTA C/C++ pointer-alias policy.
+- `docs/architecture/veritas-thin-summarydb-backends-design.md` — SummaryDB physical layers and pluggable storage backends.
 
 ---
 
