@@ -21,6 +21,7 @@
 add_library(veritas_build
   AnalysisManifest.cpp
   ProjectInput.cpp
+  ProjectManifestLoader.cpp
 )
 
 target_include_directories(veritas_build PUBLIC
@@ -28,7 +29,20 @@ target_include_directories(veritas_build PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(veritas_build PUBLIC veritas_core)
+# LLVM/Clang headers require both include trees. Propagate them as SYSTEM
+# so the strict warning contract does not flag upstream headers. We
+# deliberately skip LLVM_DEFINITIONS — the imported LLVM/Clang targets set
+# every compile option the libraries need, and the raw definitions string
+# ships with broken shell quoting on some LLVM builds.
+target_include_directories(veritas_build SYSTEM PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CLANG_INCLUDE_DIRS}
+)
+
+target_link_libraries(veritas_build
+  PUBLIC veritas_core
+  PRIVATE clangTooling LLVMSupport
+)
 
 target_compile_features(veritas_build PUBLIC cxx_std_20)
 

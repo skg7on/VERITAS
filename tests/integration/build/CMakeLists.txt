@@ -12,6 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# tests/integration/CMakeLists.txt
+# tests/integration/build/CMakeLists.txt
+#
+# Integration tests for the M1 project manifest loader. These tests read
+# real fixtures under tests/fixtures/projects and exercise the Clang
+# LibTooling compilation-database code path.
 
-add_subdirectory(build)
+add_executable(ProjectManifestLoaderTest ProjectManifestLoaderTest.cpp)
+target_link_libraries(ProjectManifestLoaderTest PRIVATE
+  veritas_build
+  veritas_test_support
+  GTest::gtest
+  GTest::gtest_main
+)
+veritas_add_warnings(ProjectManifestLoaderTest)
+gtest_discover_tests(ProjectManifestLoaderTest)
