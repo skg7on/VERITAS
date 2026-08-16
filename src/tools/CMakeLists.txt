@@ -12,22 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# tests/CMakeLists.txt
+# src/tools/CMakeLists.txt
 #
-# Root of the VERITAS test tree. Only added when VERITAS_BUILD_TESTS=ON, and
-# only after enable_testing() has been called from the top-level CMake file.
+# Four VERITAS CLI binaries. At M0 each one only implements `--version`; the
+# real ingest / query / diff / explain flows arrive with later milestones.
+# Every CLI links veritas_core and picks up the shared warning contract.
 
-add_subdirectory(unit)
-add_subdirectory(integration)
-
-find_program(VERITAS_BASH_EXECUTABLE bash REQUIRED)
-
-add_test(
-  NAME veritas_pre_commit_hook
-  COMMAND
-    "${VERITAS_BASH_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/hooks/pre-commit-hook-test.sh"
-    "${PROJECT_SOURCE_DIR}/.githooks/pre-commit"
-)
-
-set_tests_properties(veritas_pre_commit_hook PROPERTIES TIMEOUT 30)
+foreach(_veritas_cli veritas-build veritas-query veritas-diff veritas-explain)
+  add_executable(${_veritas_cli} "${_veritas_cli}.cpp")
+  target_link_libraries(${_veritas_cli} PRIVATE veritas_core)
+  veritas_add_warnings(${_veritas_cli})
+endforeach()

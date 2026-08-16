@@ -12,22 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# tests/CMakeLists.txt
+# tests/integration/CMakeLists.txt
 #
-# Root of the VERITAS test tree. Only added when VERITAS_BUILD_TESTS=ON, and
-# only after enable_testing() has been called from the top-level CMake file.
-
-add_subdirectory(unit)
-add_subdirectory(integration)
-
-find_program(VERITAS_BASH_EXECUTABLE bash REQUIRED)
-
-add_test(
-  NAME veritas_pre_commit_hook
-  COMMAND
-    "${VERITAS_BASH_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/hooks/pre-commit-hook-test.sh"
-    "${PROJECT_SOURCE_DIR}/.githooks/pre-commit"
-)
-
-set_tests_properties(veritas_pre_commit_hook PROPERTIES TIMEOUT 30)
+# Placeholder. M0 establishes the fixture layout (tests/fixtures/projects/smoke)
+# but wires no integration test targets — the earliest integration test lands
+# with M1 (project ingestion).
