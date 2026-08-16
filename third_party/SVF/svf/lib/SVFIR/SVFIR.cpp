@@ -1,0 +1,805 @@
+//===- SVFIR.cpp -- IR of SVF ---------------------------------------------//
+//
+//                     SVF: Static Value-Flow Analysis
+//
+// Copyright (C) <2013->  <Yulei Sui>
+//
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//
+//===----------------------------------------------------------------------===//
+
+/*
+ * SVFIR.cpp
+ *
+ *  Created on: 31, 12, 2021
+ *      Author: Yulei Sui
+ */
+
+#include "Util/Options.h"
+#include "SVFIR/SVFIR.h"
+#include "Graphs/CallGraph.h"
+
+using namespace SVF;
+using namespace SVFUtil;
+
+
+std::unique_ptr<SVFIR> SVFIR::pag;
+
+std::string SVFIR::pagReadFromTxt = "";
+
+SVFIR::SVFIR(bool buildFromFile) : IRGraph(buildFromFile), icfg(nullptr), chgraph(nullptr)
+{
+}
+
+
+const FunObjVar *SVFIR::getFunObjVar(const std::string &name)
+{
+    for (const auto &item: *callGraph)
+    {
+        if (item.second->getName() == name)
+        {
+            return item.second->getFunction();
+        }
+    }
+    return nullptr;
+}
+
+
+/*!
+ * Add Address edge
+ */
+AddrStmt* SVFIR::addAddrStmt(NodeID src, NodeID dst)
+{
+    SVFVar* srcNode = getGNode(src);
+    SVFVar* dstNode = getGNode(dst);
+    if(hasNonlabeledEdge(srcNode,dstNode, SVFStmt::Addr))
+        return nullptr;
+    else
+    {
+        AddrStmt* addrPE = new AddrStmt(srcNode, dstNode);
+        addAddrStmt(addrPE);
+        return addrPE;
+    }
+}
+void SVFIR::addAddrStmt(AddrStmt* edge)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(getGNode(edge->getRHSVarID()),getGNode(edge->getLHSVarID()), edge);
+}
+
+/*!
+ * Add Copy edge
+ */
+CopyStmt* SVFIR::addCopyStmt(NodeID src, NodeID dst, CopyStmt::CopyKind type)
+{
+    SVFVar* srcNode = getGNode(src);
+    SVFVar* dstNode = getGNode(dst);
+    if(hasNonlabeledEdge(srcNode,dstNode, SVFStmt::Copy))
+        return nullptr;
+    else
+    {
+        CopyStmt* copyPE = new CopyStmt(srcNode, dstNode, type);
+        addCopyStmt(copyPE);
+        return copyPE;
+    }
+}
+
+void SVFIR::addCopyStmt(CopyStmt* edge)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(getGNode(edge->getRHSVarID()),getGNode(edge->getLHSVarID()), edge);
+}
+
+/*!
+ * Add Phi statement
+ */
+PhiStmt* SVFIR::addPhiStmt(NodeID res, NodeID opnd, const ICFGNode* pred)
+{
+    ValVar* opNode = const_cast<ValVar*>(getValVar(opnd));
+    ValVar* resNode = const_cast<ValVar*>(getValVar(res));
+    PHINodeMap::iterator it = phiNodeMap.find(resNode);
+    if(it == phiNodeMap.end())
+    {
+        PhiStmt* phi = new PhiStmt(resNode, {opNode}, {pred});
+        addPhiStmt(phi, opNode, resNode);
+        return phi;
+    }
+    else
+    {
+        it->second->addOpVar(opNode,pred);
+        /// return null if we already added this PhiStmt
+        return nullptr;
+    }
+}
+
+void SVFIR::addPhiStmt(PhiStmt* edge, SVFVar* src, SVFVar* dst)
+{
+    SVFVar* opNode = src;
+    SVFVar* resNode = dst;
+
+    addToStmt2TypeMap(edge);
+    addEdge(opNode, resNode, edge);
+    phiNodeMap[resNode] = edge;
+
+}
+
+/*!
+ * Add Phi statement
+ */
+SelectStmt* SVFIR::addSelectStmt(NodeID res, NodeID op1, NodeID op2, NodeID cond)
+{
+    ValVar* op1Node = const_cast<ValVar*>(getValVar(op1));
+    ValVar* op2Node = const_cast<ValVar*>(getValVar(op2));
+    ValVar* dstNode = const_cast<ValVar*>(getValVar(res));
+    const SVFVar* condNode = getGNode(cond);
+    if(hasLabeledEdge(op1Node, dstNode, SVFStmt::Select, op2Node))
+        return nullptr;
+    else
+    {
+        std::vector<ValVar*> opnds = {op1Node, op2Node};
+        SelectStmt* select = new SelectStmt(dstNode, opnds, condNode);
+        addSelectStmt(select, op1Node, dstNode);
+        return select;
+    }
+}
+
+void SVFIR::addSelectStmt(SelectStmt* edge, SVFVar* src, SVFVar* dst)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(src, dst, edge);
+}
+
+/*!
+ * Add Compare edge
+ */
+CmpStmt* SVFIR::addCmpStmt(NodeID op1, NodeID op2, NodeID dst, u32_t predicate)
+{
+    ValVar* op1Node = const_cast<ValVar*>(getValVar(op1));
+    ValVar* op2Node = const_cast<ValVar*>(getValVar(op2));
+    ValVar* dstNode = const_cast<ValVar*>(getValVar(dst));
+    if(hasLabeledEdge(op1Node, dstNode, SVFStmt::Cmp, op2Node))
+        return nullptr;
+    else
+    {
+        std::vector<ValVar*> opnds = {op1Node, op2Node};
+        CmpStmt* cmp = new CmpStmt(dstNode, opnds, predicate);
+        addCmpStmt(cmp, op1Node, dstNode);
+        return cmp;
+    }
+}
+
+void SVFIR::addCmpStmt(CmpStmt* edge, SVFVar* src, SVFVar* dst)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(src, dst, edge);
+}
+
+
+/*!
+ * Add Compare edge
+ */
+BinaryOPStmt* SVFIR::addBinaryOPStmt(NodeID op1, NodeID op2, NodeID dst, u32_t opcode)
+{
+    ValVar* op1Node = const_cast<ValVar*>(getValVar(op1));
+    ValVar* op2Node = const_cast<ValVar*>(getValVar(op2));
+    ValVar* dstNode = const_cast<ValVar*>(getValVar(dst));
+    if(hasLabeledEdge(op1Node, dstNode, SVFStmt::BinaryOp, op2Node))
+        return nullptr;
+    else
+    {
+        std::vector<ValVar*> opnds = {op1Node, op2Node};
+        BinaryOPStmt* binaryOP = new BinaryOPStmt(dstNode, opnds, opcode);
+        addBinaryOPStmt(binaryOP,op1Node,dstNode);
+        return binaryOP;
+    }
+}
+
+void SVFIR::addBinaryOPStmt(BinaryOPStmt* edge, SVFVar* src, SVFVar* dst)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(src, dst, edge);
+}
+/*!
+ * Add Unary edge
+ */
+UnaryOPStmt* SVFIR::addUnaryOPStmt(NodeID src, NodeID dst, u32_t opcode)
+{
+    ValVar* srcNode = const_cast<ValVar*>(getValVar(src));
+    ValVar* dstNode = const_cast<ValVar*>(getValVar(dst));
+    if(hasNonlabeledEdge(srcNode,dstNode, SVFStmt::UnaryOp))
+        return nullptr;
+    else
+    {
+        UnaryOPStmt* unaryOP = new UnaryOPStmt(srcNode, dstNode, opcode);
+        addUnaryOPStmt(unaryOP, srcNode,dstNode);
+        return unaryOP;
+    }
+}
+
+void SVFIR::addUnaryOPStmt(UnaryOPStmt* edge, SVFVar* src, SVFVar* dst)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(src, dst, edge);
+}
+
+/*
+* Add BranchStmt
+*/
+BranchStmt* SVFIR::addBranchStmt(NodeID br, NodeID cond, const BranchStmt::SuccAndCondPairVec&  succs)
+{
+    ValVar* brNode = const_cast<ValVar*>(getValVar(br));
+    ValVar* condNode = const_cast<ValVar*>(getValVar(cond));
+    if(hasNonlabeledEdge(condNode,brNode, SVFStmt::Branch))
+        return nullptr;
+    else
+    {
+        BranchStmt* branch = new BranchStmt(brNode, condNode, succs);
+        addBranchStmt(branch,condNode,brNode);
+        return branch;
+    }
+}
+
+void SVFIR::addBranchStmt(BranchStmt* edge, SVFVar* src, SVFVar* dst)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(src, dst, edge);
+}
+
+/*!
+ * Add Load edge
+ */
+LoadStmt* SVFIR::addLoadStmt(NodeID src, NodeID dst)
+{
+    SVFVar* srcNode = getGNode(src);
+    SVFVar* dstNode = getGNode(dst);
+    if(hasNonlabeledEdge(srcNode,dstNode, SVFStmt::Load))
+        return nullptr;
+    else
+    {
+        LoadStmt* loadPE = new LoadStmt(srcNode, dstNode);
+        addLoadStmt(loadPE);
+        return loadPE;
+    }
+}
+
+void SVFIR::addLoadStmt(LoadStmt* edge)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(getGNode(edge->getRHSVarID()),getGNode(edge->getLHSVarID()), edge);
+}
+
+/*!
+ * Add Store edge
+ * Note that two store instructions may share the same Store SVFStmt
+ */
+StoreStmt* SVFIR::addStoreStmt(NodeID src, NodeID dst, const ICFGNode* curVal)
+{
+    SVFVar* srcNode = getGNode(src);
+    SVFVar* dstNode = getGNode(dst);
+    if(hasLabeledEdge(srcNode,dstNode, SVFStmt::Store, curVal))
+        return nullptr;
+    else
+    {
+        StoreStmt* storePE = new StoreStmt(srcNode, dstNode, curVal);
+        addStoreStmt(storePE,srcNode,dstNode);
+        return storePE;
+    }
+}
+
+void SVFIR::addStoreStmt(StoreStmt* edge, SVFVar* src, SVFVar* dst)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(src,dst, edge);
+}
+
+/*!
+ * Add Call edge (phi-like: merges actual params from all call sites into formal param)
+ */
+CallPE* SVFIR::addCallPE(NodeID src, NodeID dst, const CallICFGNode* cs, const FunEntryICFGNode* entry)
+{
+    ValVar* opNode = const_cast<ValVar*>(getValVar(src));
+    ValVar* resNode = const_cast<ValVar*>(getValVar(dst));
+    FParmToCallPEMap::iterator it = fParmToCallPEMap.find(resNode);
+    // if first operand, create a new CallPE, otherwise add the operand to the existing CallPE
+    if(it == fParmToCallPEMap.end())
+    {
+        CallPE* callPE = new CallPE(resNode, {opNode}, {cs}, entry);
+        addCallPE(callPE, opNode, resNode);
+        return callPE;
+    }
+    else
+    {
+        it->second->addOpVar(opNode, cs);
+        /// return null if we already added this CallPE
+        return nullptr;
+    }
+}
+
+void SVFIR::addCallPE(CallPE* edge, SVFVar* src, SVFVar* dst)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(src, dst, edge);
+    fParmToCallPEMap[dst] = edge;
+}
+
+/*!
+ * Add Return edge
+ */
+RetPE* SVFIR::addRetPE(NodeID src, NodeID dst, const CallICFGNode* cs, const FunExitICFGNode* exit)
+{
+    SVFVar* srcNode = getGNode(src);
+    SVFVar* dstNode = getGNode(dst);
+    if(hasLabeledEdge(srcNode,dstNode, SVFStmt::Ret, cs))
+        return nullptr;
+    else
+    {
+        RetPE* retPE = new RetPE(srcNode, dstNode, cs, exit);
+        addRetPE(retPE,srcNode,dstNode);
+        return retPE;
+    }
+}
+
+void SVFIR::addRetPE(RetPE* edge,  SVFVar* src, SVFVar* dst)
+{
+    addToStmt2TypeMap(edge);
+    addEdge(src, dst, edge);
+}
+
+/*!
+ * Add blackhole/constant edge
+ */
+SVFStmt* SVFIR::addBlackHoleAddrStmt(NodeID node)
+{
+    if(Options::HandBlackHole())
+        return pag->addAddrStmt(pag->getBlackHoleNode(), node);
+    else
+        return pag->addCopyStmt(pag->getNullPtr(), node, CopyStmt::COPYVAL);
+}
+
+/*!
+ * Add Thread fork edge for parameter passing from a spawner to its spawnees
+ */
+TDForkPE* SVFIR::addThreadForkPE(NodeID src, NodeID dst, const CallICFGNode* cs, const FunEntryICFGNode* entry)
+{
+    ValVar* opNode = const_cast<ValVar*>(getValVar(src));
+    ValVar* resNode = const_cast<ValVar*>(getValVar(dst));
+    FParmToCallPEMap::iterator it = fParmToCallPEMap.find(resNode);
+    // if first operand, create a new TDForkPE, otherwise add the operand to the existing TDForkPE
+    if(it == fParmToCallPEMap.end())
+    {
+        TDForkPE* forkPE = new TDForkPE(resNode, {opNode}, {cs}, entry);
+        addToStmt2TypeMap(forkPE);
+        addEdge(opNode, resNode, forkPE);
+        fParmToCallPEMap[resNode] = forkPE;
+        return forkPE;
+    }
+    else
+    {
+        it->second->addOpVar(opNode, cs);
+        return nullptr;
+    }
+}
+
+/*!
+ * Add Thread fork edge for parameter passing from a spawnee back to its spawners
+ */
+TDJoinPE* SVFIR::addThreadJoinPE(NodeID src, NodeID dst, const CallICFGNode* cs, const FunExitICFGNode* exit)
+{
+    SVFVar* srcNode = getGNode(src);
+    SVFVar* dstNode = getGNode(dst);
+    if(hasLabeledEdge(srcNode,dstNode, SVFStmt::ThreadJoin, cs))
+        return nullptr;
+    else
+    {
+        TDJoinPE* joinPE = new TDJoinPE(srcNode, dstNode, cs, exit);
+        addRetPE(joinPE,srcNode,dstNode);
+        return joinPE;
+    }
+}
+
+
+/*!
+ * Add Offset(Gep) edge
+ * Find the base node id of src and connect base node to dst node
+ * Create gep offset:  (offset + baseOff <nested struct gep size>)
+ */
+GepStmt* SVFIR::addGepStmt(NodeID src, NodeID dst, const AccessPath& ap, bool constGep)
+{
+
+    SVFVar* node = getGNode(src);
+    if (!constGep || node->hasIncomingVariantGepEdge())
+    {
+        /// Since the offset from base to src is variant,
+        /// the new gep edge being created is also a Variant GepStmt edge.
+        return addVariantGepStmt(src, dst, ap);
+    }
+    else
+    {
+        return addNormalGepStmt(src, dst, ap);
+    }
+}
+
+/*!
+ * Add normal (Gep) edge
+ */
+GepStmt* SVFIR::addNormalGepStmt(NodeID src, NodeID dst, const AccessPath& ap)
+{
+    SVFVar* baseNode = getGNode(src);
+    SVFVar* dstNode = getGNode(dst);
+    if(hasNonlabeledEdge(baseNode, dstNode, SVFStmt::Gep))
+        return nullptr;
+    else
+    {
+        GepStmt* gepPE = new GepStmt(baseNode, dstNode, ap);
+        addGepStmt(gepPE);
+        return gepPE;
+    }
+}
+
+void SVFIR::addGepStmt(GepStmt* gepPE)
+{
+    SVFVar* baseNode = getGNode(gepPE->getRHSVarID());
+    SVFVar* dstNode = getGNode(gepPE->getLHSVarID());
+    addToStmt2TypeMap(gepPE);
+    addEdge(baseNode, dstNode, gepPE);
+
+}
+
+/*!
+ * Add variant(Gep) edge
+ * Find the base node id of src and connect base node to dst node
+ */
+GepStmt* SVFIR::addVariantGepStmt(NodeID src, NodeID dst, const AccessPath& ap)
+{
+    SVFVar* baseNode = getGNode(src);
+    SVFVar* dstNode = getGNode(dst);
+    if(hasNonlabeledEdge(baseNode, dstNode, SVFStmt::Gep))
+        return nullptr;
+    else
+    {
+        GepStmt* gepPE = new GepStmt(baseNode, dstNode, ap, true);
+        addToStmt2TypeMap(gepPE);
+        addEdge(baseNode, dstNode, gepPE);
+        return gepPE;
+    }
+}
+
+
+
+/*!
+ * Add a temp field value node, this method can only invoked by getGepValVar
+ * due to constraint expression, curInst is used to distinguish different instructions (e.g., memorycpy) when creating GepValVar.
+ */
+NodeID SVFIR::addGepValNode(NodeID curInst,const ValVar* baseVar, const AccessPath& ap, NodeID i, const SVFType* type, const ICFGNode* icn)
+{
+    NodeID base = baseVar->getId();
+    //assert(findPAGNode(i) == false && "this node should not be created before");
+    assert(0==GepValObjMap[curInst].count(std::make_pair(base, ap))
+           && "this node should not be created before");
+    GepValObjMap[curInst][std::make_pair(base, ap)] = i;
+    GepValVar *node = new GepValVar(baseVar, i, ap, type, icn);
+    node->setLLVMVarInstID(curInst);
+    return addValNode(node);
+}
+
+/*!
+ * Given an object node, find its field object node
+ */
+NodeID SVFIR::getGepObjVar(NodeID id, const APOffset& apOffset)
+{
+    const SVFVar* node = pag->getSVFVar(id);
+    if (const GepObjVar* gepNode = SVFUtil::dyn_cast<GepObjVar>(node))
+        return getGepObjVar(gepNode->getBaseObj(), gepNode->getConstantFieldIdx() + apOffset);
+    else if (const BaseObjVar* baseNode = SVFUtil::dyn_cast<BaseObjVar>(node))
+        return getGepObjVar(baseNode, apOffset);
+    else if (const DummyObjVar* baseNode = SVFUtil::dyn_cast<DummyObjVar>(node))
+        return getGepObjVar(baseNode, apOffset);
+    else
+    {
+        assert(false && "new gep obj node kind?");
+        return id;
+    }
+}
+
+/*!
+ * Get a field obj SVFIR node according to base mem obj and offset
+ * To support flexible field sensitive analysis with regard to MaxFieldOffset
+ * offset = offset % obj->getMaxFieldOffsetLimit() to create limited number of mem objects
+ * maximum number of field object creation is obj->getMaxFieldOffsetLimit()
+ */
+NodeID SVFIR::getGepObjVar(const BaseObjVar* baseObj, const APOffset& apOffset)
+{
+    NodeID base = baseObj->getId();
+
+    /// if this obj is field-insensitive, just return the field-insensitive node.
+    if (baseObj->isFieldInsensitive())
+        return getFIObjVar(baseObj);
+
+    APOffset newLS = pag->getModulusOffset(baseObj, apOffset);
+
+    // Base and first field are the same memory location.
+    if (Options::FirstFieldEqBase() && newLS == 0) return base;
+
+    OffsetToGepVarMap::iterator iter = GepObjVarMap.find(std::make_pair(base, newLS));
+    if (iter == GepObjVarMap.end())
+    {
+        NodeID gepId = NodeIDAllocator::get()->allocateGepObjectId(base, apOffset, Options::MaxFieldLimit());
+        return addGepObjNode(baseObj, newLS, gepId);
+    }
+    else
+        return iter->second;
+
+}
+
+NodeID SVFIR::addGepObjNode(GepObjVar* gepObj, NodeID base, const APOffset& apOffset)
+{
+    assert(0==GepObjVarMap.count(std::make_pair(base, apOffset))
+           && "this node should not be created before");
+    GepObjVarMap[std::make_pair(base, apOffset)] = gepObj->getId();
+    memToFieldsMap[base].set(gepObj->getId());
+    return addObjNode(gepObj);
+}
+
+/*!
+ * Add a field obj node, this method can only invoked by getGepObjVar
+ */
+NodeID SVFIR::addGepObjNode(const BaseObjVar* baseObj, const APOffset& apOffset, const NodeID gepId)
+{
+    //assert(findPAGNode(i) == false && "this node should not be created before");
+    NodeID base = baseObj->getId();
+    assert(0==GepObjVarMap.count(std::make_pair(base, apOffset))
+           && "this node should not be created before");
+    //ABTest
+    GepObjVar *node = new GepObjVar(baseObj, gepId, apOffset);
+    return addGepObjNode(node, base, apOffset);
+}
+
+/*!
+ * Get all fields object nodes of an object
+ */
+NodeBS& SVFIR::getAllFieldsObjVars(const BaseObjVar* obj)
+{
+    NodeID base = obj->getId();
+    return memToFieldsMap[base];
+}
+
+/*!
+ * Get all fields object nodes of an object
+ */
+NodeBS& SVFIR::getAllFieldsObjVars(NodeID id)
+{
+    const SVFVar* node = pag->getSVFVar(id);
+    assert(SVFUtil::isa<ObjVar>(node) && "need an object node");
+    return getAllFieldsObjVars(getBaseObject(id));
+}
+
+/*!
+ * Get all fields object nodes of an object
+ * If this object is collapsed into one field insensitive object
+ * Then only return this field insensitive object
+ */
+NodeBS SVFIR::getFieldsAfterCollapse(NodeID id)
+{
+    const SVFVar* node = pag->getSVFVar(id);
+    assert(SVFUtil::isa<ObjVar>(node) && "need an object node");
+    const BaseObjVar* obj = getBaseObject(id);
+    if(obj->isFieldInsensitive())
+    {
+        NodeBS bs;
+        bs.set(getFIObjVar(obj));
+        return bs;
+    }
+    else
+        return getAllFieldsObjVars(obj);
+}
+
+/*!
+ * It is used to create a dummy GepValVar during global initialization.
+ */
+NodeID SVFIR::getGepValVar(NodeID curInst, NodeID base, const AccessPath& ap) const
+{
+    GepValueVarMap::const_iterator iter = GepValObjMap.find(curInst);
+    if(iter==GepValObjMap.end())
+    {
+        return UINT_MAX;
+    }
+    else
+    {
+        NodeAccessPathMap::const_iterator lit =
+            iter->second.find(std::make_pair(base, ap));
+        if (lit == iter->second.end())
+            return UINT_MAX;
+        else
+            return lit->second;
+    }
+}
+
+
+/*!
+ * Clean up memory
+ */
+void SVFIR::destroy()
+{
+    delete icfg;
+    icfg = nullptr;
+    delete chgraph;
+    chgraph = nullptr;
+    delete callGraph;
+    callGraph = nullptr;
+}
+
+/*!
+ * Print this SVFIR graph including its nodes and edges
+ */
+void SVFIR::print()
+{
+
+    outs() << "-------------------SVFIR------------------------------------\n";
+    SVFStmt::SVFStmtSetTy& addrs = pag->getSVFStmtSet(SVFStmt::Addr);
+    for (SVFStmt::SVFStmtSetTy::iterator iter = addrs.begin(), eiter =
+                addrs.end(); iter != eiter; ++iter)
+    {
+        outs() << (*iter)->getSrcID() << " -- Addr --> " << (*iter)->getDstID()
+               << "\n";
+    }
+
+    SVFStmt::SVFStmtSetTy& copys = pag->getSVFStmtSet(SVFStmt::Copy);
+    for (SVFStmt::SVFStmtSetTy::iterator iter = copys.begin(), eiter =
+                copys.end(); iter != eiter; ++iter)
+    {
+        outs() << (*iter)->getSrcID() << " -- Copy --> " << (*iter)->getDstID()
+               << "\n";
+    }
+
+    SVFStmt::SVFStmtSetTy& calls = pag->getSVFStmtSet(SVFStmt::Call);
+    for (SVFStmt::SVFStmtSetTy::iterator iter = calls.begin(), eiter =
+                calls.end(); iter != eiter; ++iter)
+    {
+        outs() << (*iter)->getSrcID() << " -- Call --> " << (*iter)->getDstID()
+               << "\n";
+    }
+
+    SVFStmt::SVFStmtSetTy& rets = pag->getSVFStmtSet(SVFStmt::Ret);
+    for (SVFStmt::SVFStmtSetTy::iterator iter = rets.begin(), eiter =
+                rets.end(); iter != eiter; ++iter)
+    {
+        outs() << (*iter)->getSrcID() << " -- Ret --> " << (*iter)->getDstID()
+               << "\n";
+    }
+
+    SVFStmt::SVFStmtSetTy& tdfks = pag->getSVFStmtSet(SVFStmt::ThreadFork);
+    for (SVFStmt::SVFStmtSetTy::iterator iter = tdfks.begin(), eiter =
+                tdfks.end(); iter != eiter; ++iter)
+    {
+        outs() << (*iter)->getSrcID() << " -- ThreadFork --> "
+               << (*iter)->getDstID() << "\n";
+    }
+
+    SVFStmt::SVFStmtSetTy& tdjns = pag->getSVFStmtSet(SVFStmt::ThreadJoin);
+    for (SVFStmt::SVFStmtSetTy::iterator iter = tdjns.begin(), eiter =
+                tdjns.end(); iter != eiter; ++iter)
+    {
+        outs() << (*iter)->getSrcID() << " -- ThreadJoin --> "
+               << (*iter)->getDstID() << "\n";
+    }
+
+    SVFStmt::SVFStmtSetTy& ngeps = pag->getSVFStmtSet(SVFStmt::Gep);
+    for (SVFStmt::SVFStmtSetTy::iterator iter = ngeps.begin(), eiter =
+                ngeps.end(); iter != eiter; ++iter)
+    {
+        GepStmt* gep = SVFUtil::cast<GepStmt>(*iter);
+        if(gep->isVariantFieldGep())
+            outs() << (*iter)->getSrcID() << " -- VariantGep --> "
+                   << (*iter)->getDstID() << "\n";
+        else
+            outs() << gep->getRHSVarID() << " -- Gep (" << gep->getConstantStructFldIdx()
+                   << ") --> " << gep->getLHSVarID() << "\n";
+    }
+
+    SVFStmt::SVFStmtSetTy& loads = pag->getSVFStmtSet(SVFStmt::Load);
+    for (SVFStmt::SVFStmtSetTy::iterator iter = loads.begin(), eiter =
+                loads.end(); iter != eiter; ++iter)
+    {
+        outs() << (*iter)->getSrcID() << " -- Load --> " << (*iter)->getDstID()
+               << "\n";
+    }
+
+    SVFStmt::SVFStmtSetTy& stores = pag->getSVFStmtSet(SVFStmt::Store);
+    for (SVFStmt::SVFStmtSetTy::iterator iter = stores.begin(), eiter =
+                stores.end(); iter != eiter; ++iter)
+    {
+        outs() << (*iter)->getSrcID() << " -- Store --> " << (*iter)->getDstID()
+               << "\n";
+    }
+    outs() << "----------------------------------------------------------\n";
+
+}
+
+/// Initialize candidate pointers
+void SVFIR::initialiseCandidatePointers()
+{
+    // collect candidate pointers for demand-driven analysis
+    for (iterator nIter = begin(); nIter != end(); ++nIter)
+    {
+        NodeID nodeId = nIter->first;
+        // do not compute points-to for isolated node
+        if (isValidPointer(nodeId) == false)
+            continue;
+        candidatePointers.insert(nodeId);
+    }
+}
+/*
+ * If this is a dummy node or node does not have incoming edges and outgoing edges we assume it is not a pointer here.
+ * However, if it is a pointer and it is an argument of a function definition, we assume it is a pointer here.
+ */
+bool SVFIR::isValidPointer(NodeID nodeId) const
+{
+    const SVFVar* node = pag->getSVFVar(nodeId);
+
+    if(node->isPointer())
+        if (const ValVar* pVar = pag->getBaseValVar(nodeId))
+            if (const ArgValVar* arg = SVFUtil::dyn_cast<ArgValVar>(pVar))
+                if (!(arg->getParent()->isDeclaration()))
+                    return true;
+
+    if ((node->getInEdges().empty() && node->getOutEdges().empty()))
+        return false;
+    return node->isPointer();
+}
+
+bool SVFIR::isValidTopLevelPtr(const SVFVar* node)
+{
+    if (SVFUtil::isa<ValVar>(node))
+    {
+        if (isValidPointer(node->getId()))
+        {
+            const ValVar* baseVar = pag->getBaseValVar(node->getId());
+            if(!SVFUtil::isa<DummyValVar, BlackHoleValVar>(baseVar))
+                return !SVFUtil::isArgOfUncalledFunction(baseVar);
+        }
+    }
+    return false;
+}
+
+/*!
+ * Whether to handle blackhole edge
+ */
+void SVFIR::handleBlackHole(bool b)
+{
+    Options::HandBlackHole.setValue(b);
+}
+
+NodeID SVFIR::addValNode(ValVar* node)
+{
+    assert(node && "node cannot be nullptr.");
+    assert(hasGNode(node->getId()) == false &&
+           "This NodeID clashes here. Please check NodeIDAllocator. Switch "
+           "Strategy::DBUG to SEQ or DENSE");
+    return addNode(node);
+}
+
+NodeID SVFIR::addObjNode(ObjVar* node)
+{
+    assert(node && "node cannot be nullptr.");
+    assert(hasGNode(node->getId()) == false &&
+           "This NodeID clashes here. Please check NodeIDAllocator. Switch "
+           "Strategy::DBUG to SEQ or DENSE");
+    return addNode(node);
+}
+
+NodeID SVFIR::addDummyObjNode(DummyObjVar* node)
+{
+    return addObjNode(node);
+}
