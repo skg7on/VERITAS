@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if ! command -v clang-format >/dev/null 2>&1; then
+  printf 'clang-format is required by the VERITAS pre-commit hook.\n' >&2
+  exit 1
+fi
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+temp_dir=$(mktemp -d "${TMPDIR:-/tmp}/veritas-clang-format.XXXXXX")
+trap 'rm -rf "$temp_dir"' EXIT
+
+format_failed=0
+while IFS= read -r -d '' path; do
+  case "$path" in
+    *.c | *.cc | *.cpp | *.cxx | *.h | *.hh | *.hpp | *.hxx | *.inc | *.ipp | *.tpp) ;;
+    *) continue ;;
+  esac
+
+  staged_file="$temp_dir/staged"
+  formatted_file="$temp_dir/formatted"
+
+  git show ":$path" >"$staged_file"
+  clang-format \
+    --style=file \
+    --assume-filename="$repo_root/$path" \
+    <"$staged_file" \
+    >"$formatted_file"
+
+  if ! cmp -s "$staged_file" "$formatted_file"; then
+    printf 'clang-format: staged content needs formatting: %s\n' "$path" >&2
+    format_failed=1
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if ((format_failed != 0)); then
+  printf '\nRun clang-format -i on the files above, then stage them again.\n' >&2
+  exit 1
+fi
