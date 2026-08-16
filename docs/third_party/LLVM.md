@@ -16,19 +16,17 @@ VERITAS supports two approaches for locating LLVM and Clang:
 
 ### Option 1: Local LLVM Build (Recommended for Development)
 
-If you have a local LLVM monorepo build, use the `LLVM_PROJECT_BUILD_DIR` CMake variable to point to your build directory:
+If you have a local LLVM monorepo build, use the `LLVM_PROJECT_BUILD_DIR` CMake variable to point to your build directory. The canonical form uses the `default` preset (Ninja + `<repo>/build`):
 
 ```bash
-cmake -S . -B build \
-  -DVERITAS_BUILD_TESTS=ON \
+cmake --preset default \
   -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build"
 ```
 
 **Example** (macOS development setup):
 
 ```bash
-cmake -S . -B build \
-  -DVERITAS_BUILD_TESTS=ON \
+cmake --preset default \
   -DLLVM_PROJECT_BUILD_DIR="/Users/skg7on/Workspace/Projects/llvm-project/build"
 ```
 
@@ -46,8 +44,7 @@ VERITAS will automatically derive:
 If LLVM is installed system-wide or in a non-standard location, set `LLVM_DIR` and `Clang_DIR` explicitly:
 
 ```bash
-cmake -S . -B build \
-  -DVERITAS_BUILD_TESTS=ON \
+cmake --preset default \
   -DLLVM_DIR="/usr/local/lib/cmake/llvm" \
   -DClang_DIR="/usr/local/lib/cmake/clang"
 ```
@@ -55,7 +52,7 @@ cmake -S . -B build \
 Or let CMake search standard system paths:
 
 ```bash
-cmake -S . -B build -DVERITAS_BUILD_TESTS=ON
+cmake --preset default
 ```
 
 ## Building LLVM Locally (Optional)
@@ -90,7 +87,7 @@ Then use the build directory with VERITAS:
 
 ```bash
 cd /path/to/veritas
-cmake -S . -B build \
+cmake --preset default \
   -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build"
 ```
 
@@ -120,7 +117,7 @@ Could NOT find LLVM (missing: LLVM_DIR)
 Set `LLVM_PROJECT_BUILD_DIR` or `LLVM_DIR` explicitly:
 
 ```bash
-cmake -S . -B build -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build"
+cmake --preset default -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build"
 ```
 
 ### Version mismatch between VERITAS and SVF LLVM
@@ -171,7 +168,7 @@ To verify VERITAS and SVF use the same LLVM:
 
 ```bash
 # After configuration
-cmake -S . -B build -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build"
+cmake --preset default -DLLVM_PROJECT_BUILD_DIR="/path/to/llvm-project/build"
 
 # Check that both found the same LLVM
 grep "Found LLVM" build/CMakeCache.txt

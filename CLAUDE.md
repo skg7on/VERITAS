@@ -32,18 +32,20 @@
 
 ## Build
 
-Canonical configure and build:
+Canonical configure and build (uses `CMakePresets.json` at repo root):
 
 ```bash
-cmake -S . -B build -DLLVM_PROJECT_BUILD_DIR=/path/to/llvm-project/build
-cmake --build build -j
+cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/path/to/llvm-project/build
+cmake --build --preset default
 ```
 
-- Requires CMake 3.23+, LLVM/Clang 22+ (24.x recommended), Z3. See `docs/third_party/LLVM.md` and `docs/third_party/SVF.md` for the toolchain contract (RTTI / EH must be ON in the LLVM build).
+- Presets pin the generator to **Ninja** and the binary directory to `<repo>/build`. Variants: `default` (RelWithDebInfo), `debug`, `release`, `static-release`.
+- Requires CMake 3.23+, Ninja, LLVM/Clang 22+ (24.x recommended), Z3. See `docs/third_party/LLVM.md` and `docs/third_party/SVF.md` for the toolchain contract (RTTI / EH must be ON in the LLVM build).
 - `LLVM_PROJECT_BUILD_DIR` is optional. When set, `cmake/VeritasLLVM.cmake` derives `LLVM_DIR` and `Clang_DIR` from that tree; otherwise `find_package(LLVM/Clang CONFIG)` falls back to explicit `LLVM_DIR` / `Clang_DIR` or system paths.
 - SVF is vendored at `third_party/SVF/` and always builds. Its build tree lives at `build/svf-build/` and stays out of the default `all` target — `SvfCore`/`SvfLLVM` build on demand through the private `veritas_third_party_svf` wrapper.
-- `BUILD_SHARED_LIBS` defaults to `ON`; VERITAS and SVF both build shared. Opt into static with `-DBUILD_SHARED_LIBS=OFF`.
+- `BUILD_SHARED_LIBS` defaults to `ON`; VERITAS and SVF both build shared. `--preset static-release` opts out.
 - Other options: `VERITAS_BUILD_TESTS` (ON), `VERITAS_BUILD_TOOLS` (ON).
+- Non-Ninja generators still configure but emit a warning; only Ninja is exercised in CI.
 
 ---
 

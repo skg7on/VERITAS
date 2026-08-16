@@ -62,7 +62,19 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Prevent accidental in-source builds; the build tree must live outside src.
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
   message(FATAL_ERROR
-    "VERITAS: in-source builds are not allowed. Use `cmake -S . -B build`.")
+    "VERITAS: in-source builds are not allowed. Use `cmake --preset default`.")
+endif()
+
+# Ninja is the supported default generator for VERITAS. Other generators
+# (Make, Xcode, Visual Studio) still work, but only Ninja is exercised in CI
+# and by the canonical `cmake --preset default` workflow.
+if(NOT CMAKE_GENERATOR STREQUAL "Ninja" AND
+   NOT CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
+  message(WARNING
+    "VERITAS: generator '${CMAKE_GENERATOR}' is not Ninja. "
+    "The canonical build uses Ninja and a build tree at <repo>/build. "
+    "Run `cmake --preset default` (or pass `-G Ninja -B build`) unless you "
+    "have a specific reason to use another generator.")
 endif()
 
 # -----------------------------------------------------------------------------
