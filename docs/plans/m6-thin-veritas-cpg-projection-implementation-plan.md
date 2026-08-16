@@ -200,6 +200,7 @@ git commit -m "feat: add stable thin CPG model"
 - Modify: `proto/veritas/summary/v1/summary.proto`
 - Modify: `src/analysis/llvm/LocalFactExtractor.h`
 - Modify: `src/analysis/llvm/LocalFactExtractor.cpp`
+- Modify: `tests/integration/analysis/LocalFactExtractorTest.cpp`
 - Create: `src/analysis/cpg/CpgProjectionStage.h`
 - Create: `src/analysis/cpg/CpgProjectionStage.cpp`
 - Create: `tests/integration/analysis/cpg/CpgProjectionStageTest.cpp`
@@ -357,7 +358,7 @@ Expected: live-IR projection, exact alias-state mapping, source-property behavio
 - [ ] **Step 9: Commit the live projection stage**
 
 ```bash
-git add proto/veritas/summary/v1/summary.proto src/analysis/llvm/LocalFactExtractor.* src/analysis/cpg tests/integration/analysis/cpg
+git add proto/veritas/summary/v1/summary.proto src/analysis/llvm/LocalFactExtractor.* src/analysis/cpg tests/integration/analysis/LocalFactExtractorTest.cpp tests/integration/analysis/cpg
 git commit -m "feat: project CPG from live program analysis"
 ```
 

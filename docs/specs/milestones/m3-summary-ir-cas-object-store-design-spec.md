@@ -33,6 +33,7 @@ FunctionSummary {
     calls
     memory_effects
     value_flows
+    control_flow_summaries
     range_facts
     alias_facts
     taint_transfers
@@ -97,6 +98,7 @@ Required component kinds:
 Calls
 MemoryEffects
 ValueFlow
+ControlFlow
 RangeFacts
 AliasFacts
 Taint
@@ -108,6 +110,30 @@ Assumptions
 Dependencies
 Provenance
 ```
+
+## 4.1 Versioned control-flow summary extension
+
+M6 extends the versioned Summary IR with compact M4 control-flow anchors rather than persistent LLVM basic blocks:
+
+```text
+BasicBlockSummaryRef {
+    basic_block_summary_id
+    function_variant_id
+    ordered_semantic_source_anchor_ids
+    sorted_predecessor_successor_anchor_ids
+}
+
+DominatorSummaryFact {
+    dominator
+    dominated
+    epistemic
+    provenance_ref
+}
+```
+
+`BasicBlockSummaryID` is the M2 canonical hash with kind prefix `bbsummary` over schema tag `bbsummary.v1`, owning `FunctionVariantID`, ordered mapped semantic `SourceAnchorID` members, and sorted mapped predecessor/successor anchor IDs. LLVM pointer identity and block order are forbidden inputs. M4 omits a block reference and emits a scoped unknown when the required mapped anchors are unavailable.
+
+The `ControlFlow` semantic component hash includes canonical block IDs, dominance endpoints, and epistemic state. Its evidence hash additionally includes source-display and provenance fields. Reordering serialized repeated fields does not change either canonical component hash.
 
 ---
 
@@ -193,6 +219,9 @@ Required tests:
 same summary -> same FunctionSummaryID
 same object inserted twice -> one CAS object
 range fact change -> RangeFacts semantic hash changes
+control-flow topology change -> only ControlFlow semantic hash changes
+control-flow source-display change -> only ControlFlow evidence hash changes
+reordered BasicBlockSummaryRef records -> ControlFlow hashes remain stable
 provenance ref change -> Provenance evidence hash changes
 source anchor display change -> evidence hash changes only
 failed metadata transaction leaves no current binding
@@ -209,9 +238,9 @@ M4 consumes:
 ```text
 summary.proto
 ComponentDigest
+BasicBlockSummaryRef and DominatorSummaryFact schema
 SummaryRepository::PublishSummary
 metadata publication context
 ```
 
 M3 is complete when synthetic summaries can be published, retrieved, hashed by component, and rebound without mutating old objects.
-

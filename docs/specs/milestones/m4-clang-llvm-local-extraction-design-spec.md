@@ -53,8 +53,10 @@ FunctionBodyID
 SourceAnchorID
 ValueRef
 MemoryRef
+BasicBlockSummaryRef
 CallFact
 MemoryEffectFact
+DominatorSummaryFact
 RangeFact
 UnknownFact
 ```
@@ -154,6 +156,11 @@ range_facts:
     simple comparison-derived constraints
     null checks
 
+control_flow_summaries:
+    stable BasicBlockSummaryRef values for blocks represented by local facts
+    local dominance relations between mapped block summaries
+    scoped unknowns for blocks without sufficient mapped anchors
+
 unknowns:
     unresolved call target
     inline assembly
@@ -199,6 +206,8 @@ struct FunctionLocalFacts {
   std::vector<summary::CallFact> calls;
   std::vector<summary::MemoryEffectFact> memory_effects;
   std::vector<summary::ValueFlowFact> value_flows;
+  std::vector<summary::BasicBlockSummaryRef> basic_block_summaries;
+  std::vector<summary::DominatorSummaryFact> dominator_summaries;
   std::vector<summary::RangeFact> range_facts;
   std::vector<summary::UnknownFact> unknowns;
 };
@@ -240,6 +249,10 @@ DOMINATES_SUMMARY edges
 source anchor refs
 ```
 
+The `BasicBlockSummaryRef` handoff is a compatible versioned Summary IR extension defined by M3's control-flow component. M4 constructs `BasicBlockSummaryID` with M2 canonical hashing over schema tag `bbsummary.v1`, owning `FunctionVariantID`, ordered mapped semantic `SourceAnchorID` members, and sorted mapped predecessor/successor anchor IDs. It creates references only for blocks represented by local summary facts. LLVM block pointer identity, creation order, and numeric block position are forbidden identity inputs.
+
+If a required anchor mapping is unavailable, M4 emits a scoped `UnknownFact` and does not create a `BasicBlockSummaryRef`. M6 therefore receives either a stable mapped block-summary identity or explicit uncertainty, never an invented ID.
+
 It must not persist full instruction graphs globally.
 
 ---
@@ -255,6 +268,7 @@ overloaded functions
 template specialization
 macro-expanded callsite
 simple memcpy path
+branch with a dominating validation block
 function pointer call
 inline assembly
 ```
@@ -270,6 +284,9 @@ macro source anchors include spelling and expansion locations
 direct call emits MUST_CALL
 function pointer emits UNKNOWN_CALL or MAY_CALL with candidates
 memcpy callsite is represented
+identical control flow rebuilt with different LLVM allocation order produces identical BasicBlockSummaryIDs
+changed mapped control-flow topology changes the ControlFlow semantic component hash
+unmapped block anchors emit UnknownFact and no BasicBlockSummaryRef
 unsupported inline assembly emits UnknownFact
 multi-translation-unit fixture produces one linked in-memory ProgramIr
 public CLI accepts no manifest, bitcode, or LLVM-module input
