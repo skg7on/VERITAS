@@ -5,44 +5,65 @@ code or a build script. It is enforced on every commit and every pull
 request.
 
 VERITAS is licensed under Apache-2.0. Every in-scope file must open with
-an SPDX-style header identifying the license and the copyright holder so
-license status is verifiable per-file, without inspecting `LICENSE` or
-`git log`.
+the full Apache-2.0 license notice so license status is verifiable
+per-file, without inspecting `LICENSE` or `git log`.
 
 ## Required header
 
-The header must appear on the first two lines of the file, before any
-other content (no leading blank line, no shebang between it and the top
-of the file — put shebangs above the header when needed).
+The header must appear at the very top of the file, before any other
+content. It uses the file's native comment syntax. For files with a
+shebang, the shebang stays on line 1 and the header follows immediately.
 
-### C, C++, header, template, and JSON-with-comments files
-
-```cpp
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 The VERITAS Authors.
-```
+### C, C++, header, and template files
 
 Applies to: `*.h`, `*.hpp`, `*.hh`, `*.c`, `*.cc`, `*.cpp`, `*.cxx`,
 `*.cpp.in`, `*.h.in`, `*.hpp.in`, `*.inc`.
 
-### CMake files and shell scripts
-
-```cmake
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 The VERITAS Authors.
+```cpp
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 ```
+
+### CMake files, shell scripts, and Python
 
 Applies to: `CMakeLists.txt`, `*.cmake`, `*.cmake.in`, `*.sh`, `*.bash`,
 `*.zsh`, `*.py`.
 
-For shell / Python scripts with a shebang, the shebang stays on line 1
-and the two-line header follows on lines 2–3.
+```cmake
+# Copyright 2026 VERITAS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+```
 
 ## Copyright year
 
 Use the year the file was first added to the repository. Do not update
 the year on unrelated edits. When bulk-adding headers to files that
 predate this policy, use the current calendar year.
+
+The copyright holder is always `VERITAS Contributors` — a collective
+attribution that avoids per-file author lists.
 
 ## In-scope directories
 
@@ -78,18 +99,18 @@ Reviewers reject PRs that add in-scope files without a header.
 ## Verification
 
 Before opening or updating a pull request, run a quick check from the
-task worktree:
+task worktree. The fingerprint is the Apache-2.0 grant clause, which is
+unique to the boilerplate and must appear in the first 20 lines of every
+in-scope file:
 
 ```bash
 missing=$(git ls-files \
-  'include/**/*.h' 'include/**/*.hpp' \
-  'src/**/*.c' 'src/**/*.cc' 'src/**/*.cpp' 'src/**/*.h' 'src/**/*.hpp' \
-  'src/**/*.cpp.in' 'src/**/*.h.in' \
-  'tests/**/*.cpp' 'tests/**/*.h' \
-  'cmake/**/*.cmake' 'cmake/CMakeLists.txt' \
-  'CMakeLists.txt' \
-  | while read -r f; do
-      head -2 "$f" | grep -q "SPDX-License-Identifier: Apache-2.0" || echo "$f"
+  'CMakeLists.txt' 'cmake' 'include' 'src' 'tests' \
+  | grep -v -E '^(third_party|build)/' \
+  | grep -v -E '\.(json|md|rst)$' \
+  | while IFS= read -r f; do
+      head -20 "$f" | grep -q 'Licensed under the Apache License, Version 2.0' \
+        || echo "$f"
     done)
 [ -z "$missing" ] || { printf 'missing license header:\n%s\n' "$missing" >&2; exit 1; }
 ```
