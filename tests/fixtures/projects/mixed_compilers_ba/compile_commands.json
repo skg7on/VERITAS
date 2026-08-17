@@ -1,0 +1,12 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": ["gcc", "-std=c11", "-c", "b.c"],
+    "file": "b.c"
+  },
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": ["clang++", "-std=c++20", "-c", "a.cpp"],
+    "file": "a.cpp"
+  }
+]

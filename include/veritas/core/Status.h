@@ -87,6 +87,9 @@ class StatusOr {
   T& operator*() & { return *value_; }
   T&& operator*() && { return std::move(*value_); }
 
+  const T* operator->() const { return &*value_; }
+  T* operator->() { return &*value_; }
+
  private:
   Status status_;
   std::optional<T> value_;
