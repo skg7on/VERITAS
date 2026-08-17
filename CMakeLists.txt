@@ -143,6 +143,8 @@ include(Dependencies)
 # corresponding milestone lands.
 
 add_subdirectory(src/core)
+add_subdirectory(src/build)
+add_subdirectory(src/summarydb)
 
 if(VERITAS_BUILD_TOOLS)
   add_subdirectory(src/tools)
