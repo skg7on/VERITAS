@@ -55,6 +55,12 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
   bool project_seen = false;
   bool output_seen = false;
 
+  auto rejection_error = [](std::string_view flag) {
+    return veritas::Status::InvalidArgument(
+        std::string("veritas-build analyze does not accept ") +
+        std::string(flag) +
+        "; the project directory is the only source-input abstraction.");
+  };
   auto is_rejected = [](std::string_view value) -> std::string_view {
     for (const auto rejected : kRejectedFlags) {
       if (value == rejected) return rejected;
@@ -74,10 +80,7 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
     }
     const auto& value = args[i + 1];
     if (const auto rejected = is_rejected(value); !rejected.empty()) {
-      return veritas::Status::InvalidArgument(
-          std::string("veritas-build analyze does not accept ") +
-          std::string(rejected) +
-          "; the project directory is the only source-input abstraction.");
+      return rejection_error(rejected);
     }
     if (!value.empty() && value.front() == '-') {
       return veritas::Status::InvalidArgument(
@@ -90,10 +93,7 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
   for (std::size_t i = 0; i < args.size(); ++i) {
     const std::string& arg = args[i];
     if (const auto rejected = is_rejected(arg); !rejected.empty()) {
-      return veritas::Status::InvalidArgument(
-          std::string("veritas-build analyze does not accept ") +
-          std::string(rejected) +
-          "; the project directory is the only source-input abstraction.");
+      return rejection_error(rejected);
     }
     if (arg == "--project") {
       if (project_seen) {
@@ -130,54 +130,58 @@ int ReportStatus(const veritas::Status& status) {
   return 1;
 }
 
-int WriteDiagnosticManifest(const fs::path& output_root,
-                            const veritas::build::AnalysisManifest& manifest) {
+veritas::Status WriteDiagnosticManifest(
+    const fs::path& output_root,
+    const veritas::build::AnalysisManifest& manifest) {
   std::error_code error;
   fs::create_directories(output_root, error);
   if (error) {
-    std::cerr << "veritas-build: cannot create output directory "
-              << output_root.string() << ": " << error.message() << '\n';
-    return 1;
+    return veritas::Status::Internal("cannot create output directory " +
+                                     output_root.string() + ": " +
+                                     error.message());
   }
   const auto path = output_root / "manifest.json";
   std::ofstream out(path, std::ios::trunc);
   if (!out) {
-    std::cerr << "veritas-build: cannot write manifest: " << path.string()
-              << '\n';
-    return 1;
+    return veritas::Status::Internal("cannot write manifest: " + path.string());
   }
   out << veritas::build::ToDiagnosticJson(manifest);
-  return 0;
+  return veritas::Status::Ok();
 }
 
-int RunAnalyze(const std::vector<std::string>& args) {
+veritas::Status Analyze(const std::vector<std::string>& args) {
   auto parsed = ParseAnalyzeArguments(args);
-  if (!parsed.ok()) return ReportStatus(parsed.status());
+  if (!parsed.ok()) return parsed.status();
 
   const veritas::analysis::ProjectAnalysisRequest request{
       .project_root = parsed->project,
       .output_root = parsed->output,
   };
   auto input = veritas::build::ResolveProjectInput(request);
-  if (!input.ok()) return ReportStatus(input.status());
+  if (!input.ok()) return input.status();
 
   auto manifest = veritas::build::LoadProjectManifest(*input);
-  if (!manifest.ok()) return ReportStatus(manifest.status());
+  if (!manifest.ok()) return manifest.status();
 
-  if (const int rc = WriteDiagnosticManifest(input->output_root, *manifest);
-      rc != 0) {
-    return rc;
+  if (auto status = WriteDiagnosticManifest(input->output_root, *manifest);
+      !status.ok()) {
+    return status;
   }
 
-  std::cout << "Project: " << input->project_root.string() << '\n';
-  std::cout << "Repository: " << manifest->context.repository_id << '\n';
-  std::cout << "Revision: " << manifest->context.revision_id << '\n';
-  std::cout << "Build Variant: " << manifest->context.build_variant_id << '\n';
-  std::cout << "Translation Units: " << manifest->translation_units.size()
-            << '\n';
-  std::cout << "Diagnostic Manifest: "
+  std::cout << "Project: " << input->project_root.string() << '\n'
+            << "Repository: " << manifest->context.repository_id << '\n'
+            << "Revision: " << manifest->context.revision_id << '\n'
+            << "Build Variant: " << manifest->context.build_variant_id << '\n'
+            << "Translation Units: " << manifest->translation_units.size()
+            << '\n'
+            << "Diagnostic Manifest: "
             << (input->output_root / "manifest.json").string() << '\n';
-  return 0;
+  return veritas::Status::Ok();
+}
+
+int RunAnalyze(const std::vector<std::string>& args) {
+  const auto status = Analyze(args);
+  return status.ok() ? 0 : ReportStatus(status);
 }
 
 }  // namespace

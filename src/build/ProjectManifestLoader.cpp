@@ -18,6 +18,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -28,6 +30,7 @@
 #include "clang/Tooling/CompilationDatabase.h"
 #include "clang/Tooling/JSONCompilationDatabase.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/SHA256.h"
 
 namespace veritas::build {
@@ -39,27 +42,17 @@ namespace tooling = clang::tooling;
 
 // -- domain-separated hashing ------------------------------------------------
 
-std::string HexDigest(llvm::ArrayRef<uint8_t> digest) {
-  static constexpr char kHex[] = "0123456789abcdef";
-  std::string out;
-  out.reserve(digest.size() * 2);
-  for (const auto byte : digest) {
-    out.push_back(kHex[(byte >> 4) & 0xf]);
-    out.push_back(kHex[byte & 0xf]);
-  }
-  return out;
+llvm::ArrayRef<uint8_t> AsBytes(std::string_view s) {
+  return {reinterpret_cast<const uint8_t*>(s.data()), s.size()};
 }
 
 std::string DomainHash(std::string_view domain, std::string_view bytes) {
   llvm::SHA256 hash;
-  hash.update(llvm::ArrayRef<uint8_t>(
-      reinterpret_cast<const uint8_t*>(domain.data()), domain.size()));
+  hash.update(AsBytes(domain));
   static constexpr uint8_t separator = 0;
   hash.update(llvm::ArrayRef<uint8_t>(&separator, 1));
-  hash.update(llvm::ArrayRef<uint8_t>(
-      reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()));
-  const auto digest = hash.final();
-  return HexDigest(digest);
+  hash.update(AsBytes(bytes));
+  return llvm::toHex(hash.final(), /*LowerCase=*/true);
 }
 
 std::string TaggedIdentifier(std::string_view kind, std::string_view domain,
@@ -159,11 +152,38 @@ std::vector<std::string> NormalizeArguments(
   return normalized;
 }
 
+// NUL-join keeps composite hash inputs unambiguous: no argument can contain a
+// literal `\0`, so the joined string is a bijection over the input vector.
+std::string JoinNul(std::initializer_list<std::string_view> parts) {
+  std::string joined;
+  bool first = true;
+  for (const auto part : parts) {
+    if (!first) joined.push_back('\0');
+    first = false;
+    joined.append(part);
+  }
+  return joined;
+}
+
 std::string JoinArguments(const std::vector<std::string>& args) {
   std::string joined;
   for (std::size_t i = 0; i < args.size(); ++i) {
     if (i > 0) joined.push_back('\0');
     joined.append(args[i]);
+  }
+  return joined;
+}
+
+// Sort, dedupe, and join a set of records with the given separator. Used for
+// every hash input that summarizes an unordered collection (source tree,
+// compile options, canonical compilation database, compiler set).
+std::string SortedUniqueJoined(std::vector<std::string> records, char sep) {
+  std::sort(records.begin(), records.end());
+  records.erase(std::unique(records.begin(), records.end()), records.end());
+  std::string joined;
+  for (std::size_t i = 0; i < records.size(); ++i) {
+    if (i > 0) joined.push_back(sep);
+    joined.append(records[i]);
   }
   return joined;
 }
@@ -226,56 +246,41 @@ StatusOr<NormalizedCommand> NormalizeCommand(
 
 // -- top-level orchestration -------------------------------------------------
 
-// Hash the sorted set of (source_path, content_hash) pairs. Sources that
-// appear in multiple compile_commands entries (multi-target builds compiling
-// `a.cpp` with -DTARGET=A and -DTARGET=B) contribute exactly once, so a
-// restructured project that compiles each source once produces the same
+// Hash the sorted-unique set of (source_path, content_hash) pairs. Sources
+// that appear in multiple compile_commands entries (multi-target builds
+// compiling `a.cpp` with -DTARGET=A and -DTARGET=B) contribute exactly once,
+// so a restructured project that compiles each source once produces the same
 // source_tree_hash as one that compiles it under N variants.
 std::string ComputeSourceTreeHash(
     const std::vector<NormalizedCommand>& normalized) {
   std::vector<std::string> lines;
   lines.reserve(normalized.size());
   for (const auto& command : normalized) {
-    std::string line;
-    line.append(command.source_tagged.relative_path.generic_string());
-    line.push_back('\0');
-    line.append(command.source_content_hash);
-    lines.push_back(std::move(line));
+    lines.push_back(JoinNul({
+        command.source_tagged.relative_path.generic_string(),
+        command.source_content_hash,
+    }));
   }
-  std::sort(lines.begin(), lines.end());
-  lines.erase(std::unique(lines.begin(), lines.end()), lines.end());
-  std::string joined;
-  for (std::size_t i = 0; i < lines.size(); ++i) {
-    if (i > 0) joined.push_back('\n');
-    joined.append(lines[i]);
-  }
-  return DomainHash("veritas.source_tree.v1", joined);
+  return DomainHash("veritas.source_tree.v1",
+                    SortedUniqueJoined(std::move(lines), '\n'));
 }
 
 std::string ComputeCompileOptionsHash(
     const std::vector<NormalizedCommand>& normalized) {
-  std::vector<std::string> unique_args;
+  std::vector<std::string> args;
   for (const auto& command : normalized) {
-    for (const auto& arg : command.arguments) {
-      unique_args.push_back(arg);
-    }
+    args.insert(args.end(), command.arguments.begin(),
+                command.arguments.end());
   }
-  std::sort(unique_args.begin(), unique_args.end());
-  unique_args.erase(std::unique(unique_args.begin(), unique_args.end()),
-                    unique_args.end());
-  std::string joined;
-  for (std::size_t i = 0; i < unique_args.size(); ++i) {
-    if (i > 0) joined.push_back('\0');
-    joined.append(unique_args[i]);
-  }
-  return DomainHash("veritas.compile_options.v1", joined);
+  return DomainHash("veritas.compile_options.v1",
+                    SortedUniqueJoined(std::move(args), '\0'));
 }
 
 // Return the sorted-unique set of compiler basenames observed across every
-// translation unit, joined by `,`. This is order-independent (fixes the case
-// where reordering entries between one clang++ TU and one gcc TU flipped
-// `compiler_id`) and still collapses to a single token for the common case
-// where every TU uses the same compiler.
+// translation unit, joined by `,`. Order-independent (fixes the case where
+// reordering entries between one clang++ TU and one gcc TU flipped
+// `compiler_id`) and collapses to a single token when every TU uses the same
+// compiler.
 std::string DetectCompilerId(
     const std::vector<NormalizedCommand>& normalized) {
   std::vector<std::string> compilers;
@@ -285,15 +290,7 @@ std::string DetectCompilerId(
       compilers.push_back(command.arguments.front());
     }
   }
-  std::sort(compilers.begin(), compilers.end());
-  compilers.erase(std::unique(compilers.begin(), compilers.end()),
-                  compilers.end());
-  std::string joined;
-  for (std::size_t i = 0; i < compilers.size(); ++i) {
-    if (i > 0) joined.push_back(',');
-    joined.append(compilers[i]);
-  }
-  return joined;
+  return SortedUniqueJoined(std::move(compilers), ',');
 }
 
 }  // namespace
@@ -323,46 +320,49 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
     normalized.push_back(std::move(*result));
   }
 
+  // Pre-compute per-TU command hashes and relative-path strings once. Every
+  // downstream field (compilation-DB hash, TU id, sort key) needs them; a
+  // second pass would either recompute or hoist them, and hoisting is the
+  // cheaper option.
+  struct PreparedTu {
+    std::string relative_path;  // repository-relative, generic form
+    std::string joined_args;    // NUL-joined arguments
+    std::string command_hash;   // SHA-256 over joined_args
+  };
+  std::vector<PreparedTu> prepared;
+  prepared.reserve(normalized.size());
+  for (const auto& command : normalized) {
+    PreparedTu p;
+    p.relative_path = command.source_tagged.relative_path.generic_string();
+    p.joined_args = JoinArguments(command.arguments);
+    p.command_hash = DomainHash("veritas.command.v1", p.joined_args);
+    prepared.push_back(std::move(p));
+  }
+
   const auto source_tree_hash = ComputeSourceTreeHash(normalized);
   const auto compile_options_hash = ComputeCompileOptionsHash(normalized);
   const auto compiler_id = DetectCompilerId(normalized);
 
-  // The compilation-database hash summarizes the *canonical* set of entries,
+  // The compilation-database hash summarizes the canonical set of entries,
   // not the raw JSON bytes on disk. Raw bytes would leak the checkout path
-  // through the `directory` fields and produce different digests for the
-  // same project laid out under two different roots. Hashing the normalized
+  // through the `directory` fields and produce different digests for the same
+  // project laid out under two different roots. Hashing the normalized
   // (path, args) tuples keeps the identity stable.
   std::vector<std::string> database_lines;
-  database_lines.reserve(normalized.size());
-  for (const auto& command : normalized) {
-    std::string line;
-    line.append(command.source_tagged.relative_path.generic_string());
-    line.push_back('\0');
-    line.append(JoinArguments(command.arguments));
-    database_lines.push_back(std::move(line));
-  }
-  std::sort(database_lines.begin(), database_lines.end());
-  std::string database_joined;
-  for (std::size_t i = 0; i < database_lines.size(); ++i) {
-    if (i > 0) database_joined.push_back('\n');
-    database_joined.append(database_lines[i]);
+  database_lines.reserve(prepared.size());
+  for (const auto& p : prepared) {
+    database_lines.push_back(JoinNul({p.relative_path, p.joined_args}));
   }
   const auto compilation_database_hash =
-      DomainHash("veritas.compilation_database.v1", database_joined);
+      DomainHash("veritas.compilation_database.v1",
+                 SortedUniqueJoined(std::move(database_lines), '\n'));
 
-  std::string variant_input;
-  variant_input.append(compiler_id);
-  variant_input.push_back('\0');
-  variant_input.append(compile_options_hash);
-  const auto build_variant_id =
-      TaggedIdentifier("bv", "veritas.build_variant.v1", variant_input);
-
-  std::string repository_input;
-  repository_input.append(source_tree_hash);
-  repository_input.push_back('\0');
-  repository_input.append(compilation_database_hash);
-  const auto repository_id =
-      TaggedIdentifier("repo", "veritas.repository.v1", repository_input);
+  const auto build_variant_id = TaggedIdentifier(
+      "bv", "veritas.build_variant.v1",
+      JoinNul({compiler_id, compile_options_hash}));
+  const auto repository_id = TaggedIdentifier(
+      "repo", "veritas.repository.v1",
+      JoinNul({source_tree_hash, compilation_database_hash}));
   const auto revision_id =
       TaggedIdentifier("rev", "veritas.revision.v1", source_tree_hash);
 
@@ -373,46 +373,39 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
   ctx.build_variant_id = build_variant_id;
   ctx.project_root = input.project_root;
   ctx.vcs_kind = "none";
-  ctx.vcs_revision = "";
   ctx.source_tree_hash = source_tree_hash;
   ctx.compilation_database_hash = compilation_database_hash;
-  ctx.target_triple = "";
   ctx.compiler_id = compiler_id;
-  ctx.compiler_version = "";
   ctx.compile_options_hash = compile_options_hash;
-  ctx.macro_set_hash = "";
-  ctx.include_closure_hash = "";
-  ctx.type_layout_hash = "";
+  // vcs_revision, target_triple, compiler_version, macro_set_hash,
+  // include_closure_hash, type_layout_hash, and TU preprocessor_hash all
+  // default to "" on the struct — M4 populates them from frontend data.
 
-  // Sort translation units so the manifest itself is deterministic. The
-  // canonical serializer already re-sorts by the same key, but keeping the
+  // Sort TU indices by source path so the manifest itself is deterministic.
+  // The canonical serializer re-sorts by the same key, but keeping the
   // in-memory order stable lets callers index into `translation_units`
   // predictably (a.cpp before b.cpp, regardless of database entry order).
-  std::sort(normalized.begin(), normalized.end(),
-            [](const NormalizedCommand& a, const NormalizedCommand& b) {
-              return a.source_tagged.relative_path.generic_string() <
-                     b.source_tagged.relative_path.generic_string();
+  std::vector<std::size_t> tu_order(prepared.size());
+  std::iota(tu_order.begin(), tu_order.end(), std::size_t{0});
+  std::sort(tu_order.begin(), tu_order.end(),
+            [&](std::size_t a, std::size_t b) {
+              return prepared[a].relative_path < prepared[b].relative_path;
             });
 
-  manifest.translation_units.reserve(normalized.size());
-  for (const auto& command : normalized) {
+  manifest.translation_units.reserve(prepared.size());
+  for (const auto index : tu_order) {
+    const auto& command = normalized[index];
+    const auto& p = prepared[index];
     TranslationUnitCommand tu;
     tu.revision_id = revision_id;
     tu.build_variant_id = build_variant_id;
     tu.source_path = command.source_tagged;
     tu.working_directory = command.working_directory_tagged;
     tu.arguments = command.arguments;
-    const auto joined = JoinArguments(command.arguments);
-    tu.command_hash = DomainHash("veritas.command.v1", joined);
-    tu.preprocessor_hash = "";
-    std::string tu_input;
-    tu_input.append(revision_id);
-    tu_input.push_back('\0');
-    tu_input.append(command.source_tagged.relative_path.generic_string());
-    tu_input.push_back('\0');
-    tu_input.append(tu.command_hash);
-    tu.translation_unit_id =
-        TaggedIdentifier("tu", "veritas.translation_unit.v1", tu_input);
+    tu.command_hash = p.command_hash;
+    tu.translation_unit_id = TaggedIdentifier(
+        "tu", "veritas.translation_unit.v1",
+        JoinNul({revision_id, p.relative_path, p.command_hash}));
     manifest.translation_units.push_back(std::move(tu));
   }
 

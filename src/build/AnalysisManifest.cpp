@@ -15,14 +15,14 @@
 #include "veritas/build/AnalysisManifest.h"
 
 #include <algorithm>
-#include <array>
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <vector>
+
+#include "llvm/Support/Endian.h"
+#include "llvm/Support/JSON.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace veritas::build {
 
@@ -30,124 +30,165 @@ namespace {
 
 // -- length-prefixed canonical encoding ---------------------------------------
 //
-// AppendU32 / AppendU64 write big-endian integers so the byte stream is
-// endianness-independent. AppendField writes:
-//   u32 key_size | key bytes | u64 value_size | value bytes
-// Records are appended in the exact order the caller emits them, and that
-// order is the source of truth for equality. Never rely on hash-map iteration.
+// AppendField writes:
+//   u32 key_size (big-endian) | key bytes | u64 value_size (big-endian) | value
+// Records land in the exact order the field visitor emits them, and that order
+// is the source of truth for equality. Never rely on hash-map iteration.
 
-void AppendU32(std::string& out, std::uint32_t value) {
-  std::array<std::uint8_t, 4> bytes = {
-      static_cast<std::uint8_t>((value >> 24) & 0xff),
-      static_cast<std::uint8_t>((value >> 16) & 0xff),
-      static_cast<std::uint8_t>((value >> 8) & 0xff),
-      static_cast<std::uint8_t>(value & 0xff),
-  };
-  out.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
-}
-
-void AppendU64(std::string& out, std::uint64_t value) {
-  std::array<std::uint8_t, 8> bytes = {
-      static_cast<std::uint8_t>((value >> 56) & 0xff),
-      static_cast<std::uint8_t>((value >> 48) & 0xff),
-      static_cast<std::uint8_t>((value >> 40) & 0xff),
-      static_cast<std::uint8_t>((value >> 32) & 0xff),
-      static_cast<std::uint8_t>((value >> 24) & 0xff),
-      static_cast<std::uint8_t>((value >> 16) & 0xff),
-      static_cast<std::uint8_t>((value >> 8) & 0xff),
-      static_cast<std::uint8_t>(value & 0xff),
-  };
-  out.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+template <typename T>
+void AppendBigEndian(std::string& out, T value) {
+  char bytes[sizeof(T)];
+  llvm::support::endian::write<T, llvm::support::unaligned>(
+      bytes, value, llvm::endianness::big);
+  out.append(bytes, sizeof(T));
 }
 
 void AppendField(std::string& out, std::string_view key,
                  std::string_view value) {
-  AppendU32(out, static_cast<std::uint32_t>(key.size()));
+  AppendBigEndian(out, static_cast<std::uint32_t>(key.size()));
   out.append(key.data(), key.size());
-  AppendU64(out, static_cast<std::uint64_t>(value.size()));
+  AppendBigEndian(out, static_cast<std::uint64_t>(value.size()));
   out.append(value.data(), value.size());
 }
 
-std::string RootKindToken(PathRootKind kind) {
+std::string_view RootKindToken(PathRootKind kind) {
   switch (kind) {
-    case PathRootKind::kRepository:
-      return "repository";
-    case PathRootKind::kGenerated:
-      return "generated";
-    case PathRootKind::kExternal:
-      return "external";
-    case PathRootKind::kToolchain:
-      return "toolchain";
+    case PathRootKind::kRepository: return "repository";
+    case PathRootKind::kGenerated:  return "generated";
+    case PathRootKind::kExternal:   return "external";
+    case PathRootKind::kToolchain:  return "toolchain";
   }
   return "unknown";
 }
 
-auto TranslationUnitSortKey(const TranslationUnitCommand& unit) {
-  return std::tuple<int, std::string_view, std::string, std::string_view>{
-      static_cast<int>(unit.source_path.root_kind),
-      unit.source_path.root_id,
-      unit.source_path.relative_path.generic_string(),
-      unit.command_hash,
-  };
+// -- field visitors -----------------------------------------------------------
+//
+// Both encoders walk fields in the same alphabetical order. Adding a field to
+// ProgramContext / TranslationUnitCommand means adding one line here and
+// nowhere else — encoders share the ordering by construction, so forgetting to
+// update one of them is impossible.
+
+template <typename EmitScalar>
+void VisitContextFields(const ProgramContext& ctx, EmitScalar emit) {
+  emit("build_variant_id", ctx.build_variant_id);
+  emit("compilation_database_hash", ctx.compilation_database_hash);
+  emit("compile_options_hash", ctx.compile_options_hash);
+  emit("compiler_id", ctx.compiler_id);
+  emit("compiler_version", ctx.compiler_version);
+  emit("include_closure_hash", ctx.include_closure_hash);
+  emit("macro_set_hash", ctx.macro_set_hash);
+  emit("repository_id", ctx.repository_id);
+  emit("revision_id", ctx.revision_id);
+  emit("source_tree_hash", ctx.source_tree_hash);
+  emit("target_triple", ctx.target_triple);
+  emit("type_layout_hash", ctx.type_layout_hash);
+  emit("vcs_kind", ctx.vcs_kind);
+  emit("vcs_revision", ctx.vcs_revision);
 }
 
-std::vector<TranslationUnitCommand> OrderedTranslationUnits(
+// TaggedPath flattens into three scalar fields sharing a prefix so both
+// encoders can emit them without a separate nested type.
+template <typename EmitScalar>
+void VisitTaggedPath(std::string_view prefix, const TaggedPath& path,
+                     EmitScalar emit) {
+  emit(std::string(prefix) + "_relative_path",
+       path.relative_path.generic_string());
+  emit(std::string(prefix) + "_root_id", path.root_id);
+  emit(std::string(prefix) + "_root_kind", RootKindToken(path.root_kind));
+}
+
+template <typename EmitScalar, typename EmitStringArray>
+void VisitTranslationUnitFields(const TranslationUnitCommand& unit,
+                                EmitScalar emit,
+                                EmitStringArray emit_array) {
+  emit_array("arguments", unit.arguments);
+  emit("build_variant_id", unit.build_variant_id);
+  emit("command_hash", unit.command_hash);
+  emit("preprocessor_hash", unit.preprocessor_hash);
+  emit("revision_id", unit.revision_id);
+  VisitTaggedPath("source", unit.source_path, emit);
+  emit("translation_unit_id", unit.translation_unit_id);
+  VisitTaggedPath("working_directory", unit.working_directory, emit);
+}
+
+std::string JoinNul(const std::vector<std::string>& items) {
+  std::string out;
+  for (std::size_t i = 0; i < items.size(); ++i) {
+    if (i > 0) out.push_back('\0');
+    out.append(items[i]);
+  }
+  return out;
+}
+
+struct TranslationUnitSortKey {
+  int root_kind;
+  std::string_view root_id;
+  std::string relative_path;
+  std::string_view command_hash;
+  auto tie() const {
+    return std::tie(root_kind, root_id, relative_path, command_hash);
+  }
+  bool operator<(const TranslationUnitSortKey& other) const {
+    return tie() < other.tie();
+  }
+};
+
+// Return pointers into `manifest.translation_units` sorted by (root_kind,
+// root_id, relative_path, command_hash). Precomputed keys avoid re-hashing
+// `generic_string()` on every comparison, and pointer output avoids deep-
+// copying every TU (arguments vector alone is often 20-40 strings).
+std::vector<const TranslationUnitCommand*> OrderedTranslationUnits(
     const AnalysisManifest& manifest) {
-  auto units = manifest.translation_units;
-  std::sort(units.begin(), units.end(),
-            [](const TranslationUnitCommand& a,
-               const TranslationUnitCommand& b) {
-              return TranslationUnitSortKey(a) < TranslationUnitSortKey(b);
-            });
-  return units;
+  const auto& units = manifest.translation_units;
+  std::vector<std::pair<TranslationUnitSortKey, const TranslationUnitCommand*>>
+      keyed;
+  keyed.reserve(units.size());
+  for (const auto& unit : units) {
+    keyed.push_back({
+        TranslationUnitSortKey{
+            static_cast<int>(unit.source_path.root_kind),
+            unit.source_path.root_id,
+            unit.source_path.relative_path.generic_string(),
+            unit.command_hash,
+        },
+        &unit,
+    });
+  }
+  std::sort(keyed.begin(), keyed.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+
+  std::vector<const TranslationUnitCommand*> ordered;
+  ordered.reserve(keyed.size());
+  for (const auto& entry : keyed) ordered.push_back(entry.second);
+  return ordered;
 }
 
 }  // namespace
 
 std::string ToCanonicalBytes(const TranslationUnitCommand& unit) {
   std::string bytes;
-  AppendField(bytes, "translation_unit_id", unit.translation_unit_id);
-  AppendField(bytes, "revision_id", unit.revision_id);
-  AppendField(bytes, "build_variant_id", unit.build_variant_id);
-  AppendField(bytes, "source_root_kind", RootKindToken(unit.source_path.root_kind));
-  AppendField(bytes, "source_root_id", unit.source_path.root_id);
-  AppendField(bytes, "source_path",
-              unit.source_path.relative_path.generic_string());
-  AppendField(bytes, "working_directory_root_kind",
-              RootKindToken(unit.working_directory.root_kind));
-  AppendField(bytes, "working_directory_root_id", unit.working_directory.root_id);
-  AppendField(bytes, "working_directory",
-              unit.working_directory.relative_path.generic_string());
-  AppendU32(bytes, static_cast<std::uint32_t>(unit.arguments.size()));
-  for (const auto& argument : unit.arguments) {
-    AppendField(bytes, "argument", argument);
-  }
-  AppendField(bytes, "command_hash", unit.command_hash);
-  AppendField(bytes, "preprocessor_hash", unit.preprocessor_hash);
+  VisitTranslationUnitFields(
+      unit,
+      [&](std::string_view key, std::string_view value) {
+        AppendField(bytes, key, value);
+      },
+      [&](std::string_view key, const std::vector<std::string>& list) {
+        AppendField(bytes, key, JoinNul(list));
+      });
   return bytes;
 }
 
 std::string ToCanonicalBytes(const AnalysisManifest& manifest) {
   std::string bytes;
-  const auto& ctx = manifest.context;
-  AppendField(bytes, "repository_id", ctx.repository_id);
-  AppendField(bytes, "revision_id", ctx.revision_id);
-  AppendField(bytes, "build_variant_id", ctx.build_variant_id);
-  AppendField(bytes, "vcs_kind", ctx.vcs_kind);
-  AppendField(bytes, "vcs_revision", ctx.vcs_revision);
-  AppendField(bytes, "source_tree_hash", ctx.source_tree_hash);
-  AppendField(bytes, "compilation_database_hash", ctx.compilation_database_hash);
-  AppendField(bytes, "target_triple", ctx.target_triple);
-  AppendField(bytes, "compiler_id", ctx.compiler_id);
-  AppendField(bytes, "compiler_version", ctx.compiler_version);
-  AppendField(bytes, "compile_options_hash", ctx.compile_options_hash);
-  AppendField(bytes, "macro_set_hash", ctx.macro_set_hash);
-  AppendField(bytes, "include_closure_hash", ctx.include_closure_hash);
-  AppendField(bytes, "type_layout_hash", ctx.type_layout_hash);
+  VisitContextFields(
+      manifest.context,
+      [&](std::string_view key, std::string_view value) {
+        AppendField(bytes, key, value);
+      });
   const auto ordered = OrderedTranslationUnits(manifest);
-  AppendU32(bytes, static_cast<std::uint32_t>(ordered.size()));
-  for (const auto& unit : ordered) {
-    AppendField(bytes, "translation_unit", ToCanonicalBytes(unit));
+  AppendBigEndian(bytes, static_cast<std::uint32_t>(ordered.size()));
+  for (const auto* unit : ordered) {
+    AppendField(bytes, "translation_unit", ToCanonicalBytes(*unit));
   }
   return bytes;
 }
@@ -156,127 +197,49 @@ std::string ToCanonicalBytes(const AnalysisManifest& manifest) {
 
 namespace {
 
-void AppendJsonEscaped(std::string& out, std::string_view text) {
-  out.push_back('"');
-  for (const char raw : text) {
-    const auto byte = static_cast<unsigned char>(raw);
-    switch (byte) {
-      case '"':  out.append("\\\""); break;
-      case '\\': out.append("\\\\"); break;
-      case '\b': out.append("\\b"); break;
-      case '\f': out.append("\\f"); break;
-      case '\n': out.append("\\n"); break;
-      case '\r': out.append("\\r"); break;
-      case '\t': out.append("\\t"); break;
-      default:
-        if (byte < 0x20) {
-          char escape[8];
-          std::snprintf(escape, sizeof(escape), "\\u%04x", byte);
-          out.append(escape);
-        } else {
-          out.push_back(raw);
-        }
-    }
-  }
-  out.push_back('"');
-}
-
-void AppendJsonKey(std::string& out, std::string_view key) {
-  AppendJsonEscaped(out, key);
-  out.append(": ");
-}
-
-void AppendJsonString(std::string& out, std::string_view key,
-                      std::string_view value) {
-  AppendJsonKey(out, key);
-  AppendJsonEscaped(out, value);
-}
-
-std::string ToJsonTaggedPath(const TaggedPath& path) {
-  std::string out;
-  out.append("{");
-  AppendJsonString(out, "root_kind", RootKindToken(path.root_kind));
-  out.append(", ");
-  AppendJsonString(out, "root_id", path.root_id);
-  out.append(", ");
-  AppendJsonString(out, "relative_path", path.relative_path.generic_string());
-  out.append("}");
-  return out;
-}
-
-std::string ToJsonTranslationUnit(const TranslationUnitCommand& unit) {
-  std::string out;
-  out.append("{\n");
-  out.append("      ");
-  AppendJsonString(out, "translation_unit_id", unit.translation_unit_id);
-  out.append(",\n      ");
-  AppendJsonString(out, "revision_id", unit.revision_id);
-  out.append(",\n      ");
-  AppendJsonString(out, "build_variant_id", unit.build_variant_id);
-  out.append(",\n      ");
-  AppendJsonKey(out, "source_path");
-  out.append(ToJsonTaggedPath(unit.source_path));
-  out.append(",\n      ");
-  AppendJsonKey(out, "working_directory");
-  out.append(ToJsonTaggedPath(unit.working_directory));
-  out.append(",\n      ");
-  AppendJsonKey(out, "arguments");
-  out.append("[");
-  for (std::size_t i = 0; i < unit.arguments.size(); ++i) {
-    if (i > 0) out.append(", ");
-    AppendJsonEscaped(out, unit.arguments[i]);
-  }
-  out.append("],\n      ");
-  AppendJsonString(out, "command_hash", unit.command_hash);
-  out.append(",\n      ");
-  AppendJsonString(out, "preprocessor_hash", unit.preprocessor_hash);
-  out.append("\n    }");
-  return out;
+// Emit one TU as a JSON object using the shared field visitor. Arguments
+// become a JSON array; every other field becomes an attribute. `llvm::json`
+// handles quoting, escaping, and UTF-8 correctness.
+void EmitTranslationUnitJson(llvm::json::OStream& j,
+                             const TranslationUnitCommand& unit) {
+  j.object([&] {
+    VisitTranslationUnitFields(
+        unit,
+        [&](std::string_view key, std::string_view value) {
+          j.attribute(llvm::StringRef(key.data(), key.size()),
+                      llvm::StringRef(value.data(), value.size()));
+        },
+        [&](std::string_view key, const std::vector<std::string>& list) {
+          j.attributeArray(llvm::StringRef(key.data(), key.size()), [&] {
+            for (const auto& arg : list) j.value(arg);
+          });
+        });
+  });
 }
 
 }  // namespace
 
 std::string ToDiagnosticJson(const AnalysisManifest& manifest) {
   std::string out;
-  out.append("{\n");
-
-  const auto& ctx = manifest.context;
-  out.append("  ");
-  AppendJsonKey(out, "context");
-  out.append("{\n");
-  auto append_ctx = [&](std::string_view key, std::string_view value,
-                        bool trailing) {
-    out.append("    ");
-    AppendJsonString(out, key, value);
-    out.append(trailing ? ",\n" : "\n");
-  };
-  append_ctx("build_variant_id", ctx.build_variant_id, true);
-  append_ctx("compilation_database_hash", ctx.compilation_database_hash, true);
-  append_ctx("compile_options_hash", ctx.compile_options_hash, true);
-  append_ctx("compiler_id", ctx.compiler_id, true);
-  append_ctx("compiler_version", ctx.compiler_version, true);
-  append_ctx("include_closure_hash", ctx.include_closure_hash, true);
-  append_ctx("macro_set_hash", ctx.macro_set_hash, true);
-  append_ctx("repository_id", ctx.repository_id, true);
-  append_ctx("revision_id", ctx.revision_id, true);
-  append_ctx("source_tree_hash", ctx.source_tree_hash, true);
-  append_ctx("target_triple", ctx.target_triple, true);
-  append_ctx("type_layout_hash", ctx.type_layout_hash, true);
-  append_ctx("vcs_kind", ctx.vcs_kind, true);
-  append_ctx("vcs_revision", ctx.vcs_revision, false);
-  out.append("  },\n");
-
-  const auto ordered = OrderedTranslationUnits(manifest);
-  out.append("  ");
-  AppendJsonKey(out, "translation_units");
-  out.append("[");
-  for (std::size_t i = 0; i < ordered.size(); ++i) {
-    out.append(i == 0 ? "\n    " : ",\n    ");
-    out.append(ToJsonTranslationUnit(ordered[i]));
-  }
-  if (!ordered.empty()) out.append("\n  ");
-  out.append("]\n");
-  out.append("}\n");
+  llvm::raw_string_ostream os(out);
+  llvm::json::OStream j(os, /*IndentSize=*/2);
+  j.object([&] {
+    j.attributeObject("context", [&] {
+      VisitContextFields(manifest.context,
+                         [&](std::string_view key, std::string_view value) {
+                           j.attribute(llvm::StringRef(key.data(), key.size()),
+                                       llvm::StringRef(value.data(),
+                                                       value.size()));
+                         });
+    });
+    j.attributeArray("translation_units", [&] {
+      for (const auto* unit : OrderedTranslationUnits(manifest)) {
+        EmitTranslationUnitJson(j, *unit);
+      }
+    });
+  });
+  os.flush();
+  out.push_back('\n');
   return out;
 }
 
