@@ -17,7 +17,9 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
 #include <string>
+#include <system_error>
 
 #include "ProjectFixture.h"
 #include "veritas/analysis/ProjectAnalysisRequest.h"
@@ -122,6 +124,32 @@ TEST(ProjectManifestLoaderTest, ArgumentContainingProjectRootIsSubstituted) {
           << "argument leaks project root: " << arg;
     }
   }
+}
+
+TEST(ProjectManifestLoaderTest, SourceTreeHashIgnoresVeritasOutputDirectory) {
+  // Design spec §10 required assertion: creating diagnostic-output artifacts
+  // under the project (`.veritas/`, temporary output dirs) must not shift
+  // source_tree_hash. The hash is computed from compile_commands.json entries,
+  // so files that never appear there should never enter the hash — this test
+  // guards against a future refactor that accidentally globs the tree.
+  auto input = ResolveFixture("multiple_tus");
+  ASSERT_TRUE(input.ok()) << input.status().message();
+  auto before = LoadProjectManifest(*input);
+  ASSERT_TRUE(before.ok()) << before.status().message();
+
+  const auto dot_veritas = input->project_root / ".veritas";
+  std::error_code error;
+  std::filesystem::create_directories(dot_veritas, error);
+  ASSERT_FALSE(error) << error.message();
+  std::ofstream(dot_veritas / "manifest.json") << "{\"stub\": true}";
+  std::ofstream(input->project_root / "tmp_output.o") << "stray artifact";
+
+  auto after = LoadProjectManifest(*input);
+  ASSERT_TRUE(after.ok()) << after.status().message();
+  EXPECT_EQ(before->context.source_tree_hash,
+            after->context.source_tree_hash);
+  EXPECT_EQ(before->context.repository_id, after->context.repository_id);
+  EXPECT_EQ(ToCanonicalBytes(*before), ToCanonicalBytes(*after));
 }
 
 TEST(ProjectManifestLoaderTest, MissingTranslationUnitFailsWholeLoad) {
