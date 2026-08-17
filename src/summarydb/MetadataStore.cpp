@@ -16,6 +16,8 @@
 
 #include <sqlite3.h>
 
+#include "veritas/build/AnalysisManifest.h"
+
 namespace veritas::summarydb {
 
 namespace {
@@ -91,6 +93,16 @@ StatusOr<MetadataStore> MetadataStore::Open(
     }
     return Status::Internal("Failed to open SQLite database");
   }
+
+  // Enforce foreign key constraints. Off by default in SQLite; must be set
+  // per connection. Required so PutManifestContext rolls back cleanly when
+  // a translation unit references a nonexistent revision.
+  auto status = ExecuteSQL(db, "PRAGMA foreign_keys = ON");
+  if (!status.ok()) {
+    sqlite3_close(db);
+    return status;
+  }
+
   return MetadataStore(db);
 }
 
@@ -450,6 +462,75 @@ StatusOr<int64_t> MetadataStore::PutAnalyzerRun(const AnalyzerRunRow& row) {
   }
 
   return sqlite3_last_insert_rowid(db_);
+}
+
+Status MetadataStore::PutManifestContext(
+    const veritas::build::AnalysisManifest& manifest) {
+  auto status = ExecuteSQL(db_, "BEGIN TRANSACTION");
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto rollback = [&](Status err) -> Status {
+    ExecuteSQL(db_, "ROLLBACK");
+    return err;
+  };
+
+  RepositoryRow repo;
+  repo.repository_id = manifest.context.repository_id;
+  repo.vcs_kind = manifest.context.vcs_kind;
+  repo.vcs_revision = manifest.context.vcs_revision;
+  repo.source_tree_hash = manifest.context.source_tree_hash;
+  status = PutRepository(repo);
+  if (!status.ok()) {
+    return rollback(status);
+  }
+
+  RevisionRow rev;
+  rev.revision_id = manifest.context.revision_id;
+  rev.repository_id = manifest.context.repository_id;
+  rev.vcs_revision = manifest.context.vcs_revision;
+  status = PutRevision(rev);
+  if (!status.ok()) {
+    return rollback(status);
+  }
+
+  BuildVariantRow bv;
+  bv.build_variant_id = manifest.context.build_variant_id;
+  bv.target_triple = manifest.context.target_triple;
+  bv.compiler_id = manifest.context.compiler_id;
+  bv.compiler_version = manifest.context.compiler_version;
+  bv.compile_options_hash = manifest.context.compile_options_hash;
+  bv.macro_set_hash = manifest.context.macro_set_hash;
+  bv.include_closure_hash = manifest.context.include_closure_hash;
+  bv.type_layout_hash = manifest.context.type_layout_hash;
+  status = PutBuildVariant(bv);
+  if (!status.ok()) {
+    return rollback(status);
+  }
+
+  for (const auto& tu : manifest.translation_units) {
+    TranslationUnitRow row;
+    row.translation_unit_id = tu.translation_unit_id;
+    row.revision_id = tu.revision_id;
+    row.build_variant_id = tu.build_variant_id;
+    row.source_path_root_kind = static_cast<int>(tu.source_path.root_kind);
+    row.source_path_root_id = tu.source_path.root_id;
+    row.source_path_relative = tu.source_path.relative_path.generic_string();
+    row.working_dir_root_kind =
+        static_cast<int>(tu.working_directory.root_kind);
+    row.working_dir_root_id = tu.working_directory.root_id;
+    row.working_dir_relative =
+        tu.working_directory.relative_path.generic_string();
+    row.command_hash = tu.command_hash;
+    row.preprocessor_hash = tu.preprocessor_hash;
+    status = PutTranslationUnit(row);
+    if (!status.ok()) {
+      return rollback(status);
+    }
+  }
+
+  return ExecuteSQL(db_, "COMMIT");
 }
 
 }  // namespace veritas::summarydb

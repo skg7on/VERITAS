@@ -29,6 +29,7 @@ target_include_directories(veritas_summarydb PUBLIC
 
 target_link_libraries(veritas_summarydb PUBLIC
   veritas::core
+  veritas::build
   SQLite::SQLite3
 )
 

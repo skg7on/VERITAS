@@ -30,6 +30,10 @@
 // Forward-declare sqlite3 to avoid pulling sqlite3.h into public headers.
 struct sqlite3;
 
+namespace veritas::build {
+struct AnalysisManifest;
+}
+
 namespace veritas::summarydb {
 
 struct RepositoryRow {
@@ -105,6 +109,13 @@ class MetadataStore {
 
   // Insert an analyzer run row. Returns the auto-generated analyzer_run_id.
   StatusOr<int64_t> PutAnalyzerRun(const AnalyzerRunRow& row);
+
+  // Persist an M1 analysis manifest in a single transaction. Inserts the
+  // repository, revision, build variant, and every translation unit atomically.
+  // If any row fails, the entire transaction is rolled back and no partial
+  // manifest context is committed. Idempotent: storing the same manifest twice
+  // produces one logical analysis context.
+  Status PutManifestContext(const veritas::build::AnalysisManifest& manifest);
 
   MetadataStore(MetadataStore&&) noexcept;
   MetadataStore& operator=(MetadataStore&&) noexcept;
