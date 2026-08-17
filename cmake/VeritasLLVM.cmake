@@ -81,3 +81,9 @@ message(STATUS "VERITAS: LLVM library dirs: ${LLVM_LIBRARY_DIRS}")
 find_package(Clang REQUIRED CONFIG)
 
 message(STATUS "VERITAS: Found Clang ${CLANG_VERSION}")
+
+# Report LLVM RTTI and exception handling settings.
+# LLVM_ENABLE_RTTI and LLVM_ENABLE_EH are set by LLVMConfig.cmake.
+# VERITAS and SVF will match whatever LLVM was built with.
+message(STATUS "VERITAS: LLVM RTTI enabled: ${LLVM_ENABLE_RTTI}")
+message(STATUS "VERITAS: LLVM EH enabled: ${LLVM_ENABLE_EH}")
