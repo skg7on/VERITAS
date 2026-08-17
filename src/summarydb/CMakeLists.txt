@@ -12,6 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summarydb)
+# src/summarydb/CMakeLists.txt
+#
+# Builds `veritas_summarydb`, the metadata and summary storage subsystem.
+
+find_package(SQLite3 REQUIRED)
+
+add_library(veritas_summarydb
+  MetadataStore.cpp
+)
+
+target_include_directories(veritas_summarydb PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+target_link_libraries(veritas_summarydb PUBLIC
+  veritas::core
+  SQLite::SQLite3
+)
+
+target_compile_features(veritas_summarydb PUBLIC cxx_std_20)
+
+veritas_add_warnings(veritas_summarydb)
+
+add_library(veritas::summarydb ALIAS veritas_summarydb)

@@ -12,6 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summarydb)
+# tests/unit/summarydb/CMakeLists.txt
+#
+# Unit tests for veritas_summarydb.
+
+add_executable(MetadataStoreTest MetadataStoreTest.cpp)
+target_link_libraries(MetadataStoreTest PRIVATE
+  veritas_summarydb
+  GTest::gtest
+  GTest::gtest_main
+)
+veritas_add_warnings(MetadataStoreTest)
+gtest_discover_tests(MetadataStoreTest)
