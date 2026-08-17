@@ -56,6 +56,11 @@ message(STATUS "VERITAS: SVF source dir  = ${VERITAS_SVF_SOURCE_DIR}")
 message(STATUS "VERITAS: SVF binary dir  = ${VERITAS_SVF_BINARY_DIR}")
 message(STATUS "VERITAS: SVF shared libs = ${BUILD_SHARED_LIBS}")
 
+# Disable -Werror for the vendored SVF build. SVF upstream may have warnings
+# that we cannot fix without patching. VERITAS code builds with -Werror, but
+# SVF is a pinned third-party dependency treated as an opaque library.
+set(SVF_WARN_AS_ERROR OFF CACHE BOOL "Disable -Werror for SVF" FORCE)
+
 # EXCLUDE_FROM_ALL keeps SVF's stand-alone front-end binaries (wpa, ae, dvf,
 # saber, svf-ex, llvm2svf, ...) out of the default `all` target. SvfCore and
 # SvfLLVM will still be built on demand because veritas_third_party_svf (and
