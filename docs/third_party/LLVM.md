@@ -69,11 +69,9 @@ git checkout release/22.x  # or later versions like release/24.x
 
 # Configure LLVM with Clang and required components
 cmake -S llvm -B build \
-  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_BUILD_TYPE=Debug \
   -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra" \
   -DLLVM_TARGETS_TO_BUILD="X86;AArch64" \
-  -DLLVM_ENABLE_RTTI=ON \
-  -DLLVM_ENABLE_EH=ON \
   -DCMAKE_INSTALL_PREFIX="$PWD/install"
 
 # Build (adjust -j based on your system)
@@ -98,11 +96,11 @@ VERITAS and SVF must use compatible LLVM configurations:
 | Setting | Required Value | Rationale |
 |---------|---------------|-----------|
 | LLVM Version | 22+ | VERITAS requires LLVM 22 or later; SVF submodule is pinned to compatible revision |
-| RTTI | ON | VERITAS and SVF require LLVM RTTI for type introspection |
-| Exceptions | ON | C++ exception handling must be consistent across VERITAS/LLVM/SVF |
+| RTTI | Match LLVM | VERITAS and SVF automatically match LLVM's RTTI setting (typically OFF) |
+| Exceptions | Match LLVM | C++ exception handling must be consistent across VERITAS/LLVM/SVF (typically OFF) |
 | ABI | Match host compiler | Prevents linkage failures and UB from ABI mismatches |
 
-The VERITAS CMake configuration verifies these constraints at configure time.
+The VERITAS CMake configuration detects and reports LLVM's RTTI/EH settings at configure time.
 
 ## Troubleshooting
 
@@ -142,7 +140,7 @@ undefined reference to `typeinfo for llvm::Value`
 ```
 
 **Solution:**
-Rebuild LLVM with `-DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_EH=ON`.
+This indicates an ABI mismatch. VERITAS, SVF, and LLVM must all use the same RTTI/EH settings. Check the CMake configure output for the reported LLVM settings, then ensure your LLVM build matches.
 
 ## SVF Integration
 
