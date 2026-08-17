@@ -210,7 +210,20 @@ message(
 # =================================================================================
 
 # Find the local FindZ3.cmake package; internally finds system Z3; falls back to manual search
-find_package(Z3 REQUIRED)
+find_package(Z3 REQUIRED CONFIG)
+
+# Ensure Z3_CXX_INCLUDE_DIRS is set (Z3Config.cmake may not set it)
+if(TARGET z3::libz3)
+  get_target_property(_z3_includes z3::libz3 INTERFACE_INCLUDE_DIRECTORIES)
+  if(_z3_includes)
+    set(Z3_CXX_INCLUDE_DIRS ${_z3_includes})
+    set(Z3_C_INCLUDE_DIRS ${_z3_includes})
+    if(NOT DEFINED Z3_INCLUDE_DIR)
+      set(Z3_INCLUDE_DIR ${_z3_includes})
+    endif()
+  endif()
+endif()
+
 message(
   STATUS
     "Using Z3 package:
@@ -262,6 +275,7 @@ target_link_directories(
 target_compile_definitions(SvfFlags INTERFACE $<BUILD_INTERFACE:SVF_INSTALL_EXTAPI_BC="${SVF_BUILD_EXTAPI_BC}">)
 
 # Add Z3 as a public dependency on the interface to ensure any users inherit the dependency
+target_include_directories(SvfFlags INTERFACE ${Z3_CXX_INCLUDE_DIRS})
 target_link_libraries(SvfFlags INTERFACE ${Z3_LIBRARIES})
 
 # Ensure the interface library is exposed during installation

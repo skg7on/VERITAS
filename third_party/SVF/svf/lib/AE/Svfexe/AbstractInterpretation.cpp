@@ -969,7 +969,7 @@ void AbstractInterpretation::handleSVFStatement(const SVFStmt *stmt)
     // entry if it actually exists.
     {
         const auto& vmap = getAbsState(stmt->getICFGNode()).getVarToVal();
-        auto it = vmap.find(IRGraph::NullPtr);
+        [[maybe_unused]] auto it = vmap.find(IRGraph::NullPtr);
         assert(it == vmap.end() ||
                (!it->second.isInterval() && !it->second.isAddr()));
     }

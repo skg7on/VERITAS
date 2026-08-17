@@ -138,6 +138,7 @@ static inline Type* getPtrElementType(const PointerType* pty)
     return pty->getNonOpaquePointerElementType();
 #else
     assert(false && "llvm version 17+ only support opaque pointers!");
+    __builtin_unreachable();
 #endif
 }
 

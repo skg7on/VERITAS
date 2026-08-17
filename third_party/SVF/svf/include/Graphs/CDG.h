@@ -216,7 +216,7 @@ public:
     CDGEdge *getCDGEdge(const CDGNode *src, const CDGNode *dst)
     {
         CDGEdge *edge = nullptr;
-        size_t counter = 0;
+        [[maybe_unused]] size_t counter = 0;
         for (CDGEdge::CDGEdgeSetTy::iterator iter = src->OutEdgeBegin();
                 iter != src->OutEdgeEnd(); ++iter)
         {
