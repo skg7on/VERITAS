@@ -46,6 +46,9 @@ configure_file(
 
 add_library(veritas_core
   Status.cpp
+  Hash.cpp
+  Ids.cpp
+  CanonicalValue.cpp
   "${CMAKE_CURRENT_BINARY_DIR}/Version.cpp"
 )
 

@@ -12,7 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# tests/integration/CMakeLists.txt
+# tests/integration/summarydb/CMakeLists.txt
+#
+# Integration tests that exercise MetadataStore against real fixture
+# manifests loaded through the M1 pipeline.
 
-add_subdirectory(build)
-add_subdirectory(summarydb)
+add_executable(ManifestPersistenceTest ManifestPersistenceTest.cpp)
+target_link_libraries(ManifestPersistenceTest PRIVATE
+  veritas_summarydb
+  veritas_build
+  veritas_test_support
+  SQLite::SQLite3
+  GTest::gtest
+  GTest::gtest_main
+)
+veritas_add_warnings(ManifestPersistenceTest)
+gtest_discover_tests(ManifestPersistenceTest)

@@ -35,3 +35,30 @@ target_link_libraries(VersionTest PRIVATE
 )
 veritas_add_warnings(VersionTest)
 gtest_discover_tests(VersionTest)
+
+add_executable(HashTest HashTest.cpp)
+target_link_libraries(HashTest PRIVATE
+  veritas_core
+  GTest::gtest
+  GTest::gtest_main
+)
+veritas_add_warnings(HashTest)
+gtest_discover_tests(HashTest)
+
+add_executable(IdsTest IdsTest.cpp)
+target_link_libraries(IdsTest PRIVATE
+  veritas_core
+  GTest::gtest
+  GTest::gtest_main
+)
+veritas_add_warnings(IdsTest)
+gtest_discover_tests(IdsTest)
+
+add_executable(CanonicalValueTest CanonicalValueTest.cpp)
+target_link_libraries(CanonicalValueTest PRIVATE
+  veritas_core
+  GTest::gtest
+  GTest::gtest_main
+)
+veritas_add_warnings(CanonicalValueTest)
+gtest_discover_tests(CanonicalValueTest)
