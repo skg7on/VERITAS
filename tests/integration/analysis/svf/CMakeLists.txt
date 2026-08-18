@@ -57,3 +57,26 @@ set_tests_properties(SvfFactMapperTest PROPERTIES
   TIMEOUT 30
   LABELS "integration;svf"
 )
+
+add_executable(svf_truncation_integration_test
+  SvfTruncationTest.cpp
+)
+
+target_link_libraries(svf_truncation_integration_test
+  PRIVATE
+    veritas_svf_analysis
+    veritas_analysis_pipeline
+    veritas_unit_test_support
+    LLVMCore
+    LLVMSupport
+)
+
+target_include_directories(svf_truncation_integration_test
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+)
+
+add_test(NAME SvfTruncationTest COMMAND svf_truncation_integration_test)
+set_tests_properties(SvfTruncationTest PROPERTIES
+  TIMEOUT 30
+  LABELS "integration;svf"
+)

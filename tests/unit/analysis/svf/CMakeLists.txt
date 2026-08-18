@@ -28,3 +28,20 @@ target_include_directories(svf_config_test
 
 add_test(NAME SvfConfigTest COMMAND svf_config_test)
 set_tests_properties(SvfConfigTest PROPERTIES TIMEOUT 10)
+
+add_executable(svf_budget_test
+  SvfBudgetTest.cpp
+)
+
+target_link_libraries(svf_budget_test
+  PRIVATE
+    veritas_svf_analysis
+    veritas_unit_test_support
+)
+
+target_include_directories(svf_budget_test
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+)
+
+add_test(NAME SvfBudgetTest COMMAND svf_budget_test)
+set_tests_properties(SvfBudgetTest PROPERTIES TIMEOUT 10)
