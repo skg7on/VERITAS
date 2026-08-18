@@ -80,3 +80,41 @@ set_tests_properties(SvfTruncationTest PROPERTIES
   TIMEOUT 30
   LABELS "integration;svf"
 )
+
+add_executable(repeated_project_analysis_test
+  RepeatedProjectAnalysisTest.cpp
+)
+
+target_link_libraries(repeated_project_analysis_test
+  PRIVATE
+    veritas_svf_analysis
+    veritas_analysis_pipeline
+    veritas_unit_test_support
+    LLVMCore
+    LLVMSupport
+)
+
+target_include_directories(repeated_project_analysis_test
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+)
+
+add_test(NAME RepeatedProjectAnalysisTest COMMAND repeated_project_analysis_test)
+set_tests_properties(RepeatedProjectAnalysisTest PROPERTIES
+  TIMEOUT 30
+  LABELS "integration;svf"
+)
+
+add_executable(required_svf_boundary_test
+  RequiredSvfBoundaryTest.cpp
+)
+
+target_link_libraries(required_svf_boundary_test
+  PRIVATE
+    veritas_unit_test_support
+)
+
+add_test(NAME RequiredSvfBoundaryTest COMMAND required_svf_boundary_test)
+set_tests_properties(RequiredSvfBoundaryTest PROPERTIES
+  TIMEOUT 10
+  LABELS "integration;svf;boundary"
+)
