@@ -104,14 +104,14 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-860fcb7accb22e57a020a353a39f2fdbd0dc1b44-r1
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
 
       - name: Checkout LLVM source
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: llvm/llvm-project
-          ref: 860fcb7accb22e57a020a353a39f2fdbd0dc1b44
+          ref: f9bda52e57a759d20224cd581f73f61ee3220e74
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false
