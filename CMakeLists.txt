@@ -146,6 +146,7 @@ add_subdirectory(src/core)
 add_subdirectory(src/build)
 add_subdirectory(src/summary)
 add_subdirectory(src/summarydb)
+add_subdirectory(src/frontend)
 
 if(VERITAS_BUILD_TOOLS)
   add_subdirectory(src/tools)

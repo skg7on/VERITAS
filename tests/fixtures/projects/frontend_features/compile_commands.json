@@ -1,0 +1,5 @@
+{
+  "directory": "/Users/test/veritas/fixtures/frontend_features",
+  "command": "clang++ -c -std=c++20 -o overloads.o overloads.cpp",
+  "file": "overloads.cpp"
+}
