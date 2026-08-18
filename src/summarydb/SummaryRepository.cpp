@@ -143,8 +143,9 @@ veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
   // Commit transaction
   auto commit_result = metadata_store_->CommitTransaction();
   if (!commit_result.ok()) {
-    // If commit fails, transaction is in undefined state - roll back
-    metadata_store_->RollbackTransaction();
+    // CommitTransaction already clears in_transaction_ flag on failure
+    // (SQLite auto-rolls-back). No manual rollback needed - RAII guard
+    // will handle cleanup if still needed.
     return commit_result;
   }
 
