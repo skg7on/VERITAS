@@ -94,6 +94,16 @@ veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
     return begin_result;
   }
 
+  // RAII guard to ensure rollback on early return or exception
+  auto rollback_guard = [this](bool* committed) {
+    if (!*committed) {
+      metadata_store_->RollbackTransaction();
+    }
+  };
+  bool committed = false;
+  std::unique_ptr<bool, decltype(rollback_guard)> guard(&committed,
+                                                         rollback_guard);
+
   // Insert summary object metadata
   auto insert_object_result = metadata_store_->Execute(
       "INSERT OR IGNORE INTO summary_objects (summary_id, object_key, "
@@ -101,7 +111,6 @@ veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
       {core::ToString(summary_id), object_key,
        summary.header().schema_version()});
   if (!insert_object_result.ok()) {
-    metadata_store_->RollbackTransaction();
     return insert_object_result;
   }
 
@@ -116,7 +125,6 @@ veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
          core::DigestToHex(digest.evidence_hash),
          std::to_string(digest.item_count)});
     if (!insert_component_result.ok()) {
-      metadata_store_->RollbackTransaction();
       return insert_component_result;
     }
   }
@@ -129,15 +137,19 @@ veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
       {context.function_variant_id, context.revision_id,
        context.build_variant_id, core::ToString(summary_id)});
   if (!update_binding_result.ok()) {
-    metadata_store_->RollbackTransaction();
     return update_binding_result;
   }
 
   // Commit transaction
   auto commit_result = metadata_store_->CommitTransaction();
   if (!commit_result.ok()) {
+    // If commit fails, transaction is in undefined state - roll back
+    metadata_store_->RollbackTransaction();
     return commit_result;
   }
+
+  // Mark as committed to prevent RAII rollback
+  committed = true;
 
   return summary_id;
 }

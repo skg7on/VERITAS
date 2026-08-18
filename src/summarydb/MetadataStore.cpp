@@ -50,10 +50,16 @@ Status BindInt(sqlite3_stmt* stmt, int index, int value) {
 }
 
 Status StepAndFinalize(sqlite3_stmt* stmt) {
+  if (!stmt) {
+    return Status::Internal("SQLite step failed: invalid statement");
+  }
   int rc = sqlite3_step(stmt);
   std::string error;
   if (rc != SQLITE_DONE) {
-    error = sqlite3_errmsg(sqlite3_db_handle(stmt));
+    sqlite3* db = sqlite3_db_handle(stmt);
+    if (db) {
+      error = sqlite3_errmsg(db);
+    }
   }
   sqlite3_finalize(stmt);
   if (rc != SQLITE_DONE) {
@@ -596,7 +602,9 @@ StatusOr<std::vector<std::vector<std::string>>> MetadataStore::Query(
   sqlite3_stmt* stmt = nullptr;
   int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
   if (rc != SQLITE_OK) {
-    return Status::Internal("SQLite prepare failed");
+    std::string error = sqlite3_errmsg(db_);
+    return Status::Internal("SQLite prepare failed: " + error + " (SQL: " +
+                            sql + ")");
   }
 
   for (size_t i = 0; i < params.size(); ++i) {
@@ -619,25 +627,50 @@ StatusOr<std::vector<std::vector<std::string>>> MetadataStore::Query(
     results.push_back(std::move(row));
   }
 
+  std::string error;
+  if (rc != SQLITE_DONE) {
+    error = sqlite3_errmsg(db_);
+  }
   sqlite3_finalize(stmt);
 
   if (rc != SQLITE_DONE) {
-    return Status::Internal("SQLite query failed");
+    return Status::Internal("SQLite query failed: " + error);
   }
 
   return results;
 }
 
 Status MetadataStore::BeginTransaction() {
-  return ExecuteSQL(db_, "BEGIN TRANSACTION");
+  if (in_transaction_) {
+    return Status::FailedPrecondition(
+        "Transaction already active - nested transactions not supported");
+  }
+  auto status = ExecuteSQL(db_, "BEGIN TRANSACTION");
+  if (status.ok()) {
+    in_transaction_ = true;
+  }
+  return status;
 }
 
 Status MetadataStore::CommitTransaction() {
-  return ExecuteSQL(db_, "COMMIT");
+  if (!in_transaction_) {
+    return Status::FailedPrecondition("No active transaction to commit");
+  }
+  auto status = ExecuteSQL(db_, "COMMIT");
+  if (status.ok()) {
+    in_transaction_ = false;
+  }
+  return status;
 }
 
 Status MetadataStore::RollbackTransaction() {
-  return ExecuteSQL(db_, "ROLLBACK");
+  if (!in_transaction_) {
+    return Status::FailedPrecondition("No active transaction to rollback");
+  }
+  auto status = ExecuteSQL(db_, "ROLLBACK");
+  // Always clear transaction state, even if rollback fails
+  in_transaction_ = false;
+  return status;
 }
 
 }  // namespace veritas::summarydb

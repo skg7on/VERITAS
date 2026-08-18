@@ -141,6 +141,7 @@ class MetadataStore {
   explicit MetadataStore(sqlite3* db);
 
   sqlite3* db_;
+  bool in_transaction_ = false;
 
   MetadataStore(const MetadataStore&) = delete;
   MetadataStore& operator=(const MetadataStore&) = delete;
