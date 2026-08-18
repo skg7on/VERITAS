@@ -117,6 +117,23 @@ class MetadataStore {
   // produces one logical analysis context.
   Status PutManifestContext(const veritas::build::AnalysisManifest& manifest);
 
+  // M3: Execute a SQL statement with parameters. Used for summary metadata.
+  Status Execute(const std::string& sql,
+                 const std::vector<std::string>& params);
+
+  // M3: Query with parameters, returning rows as vectors of strings.
+  StatusOr<std::vector<std::vector<std::string>>> Query(
+      const std::string& sql, const std::vector<std::string>& params);
+
+  // M3: Begin a transaction.
+  Status BeginTransaction();
+
+  // M3: Commit a transaction.
+  Status CommitTransaction();
+
+  // M3: Rollback a transaction.
+  Status RollbackTransaction();
+
   MetadataStore(MetadataStore&&) noexcept;
   MetadataStore& operator=(MetadataStore&&) noexcept;
 
@@ -124,6 +141,7 @@ class MetadataStore {
   explicit MetadataStore(sqlite3* db);
 
   sqlite3* db_;
+  bool in_transaction_ = false;
 
   MetadataStore(const MetadataStore&) = delete;
   MetadataStore& operator=(const MetadataStore&) = delete;

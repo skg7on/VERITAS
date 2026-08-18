@@ -12,7 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summary)
-add_subdirectory(summarydb)
+# tests/unit/summary/CMakeLists.txt
+
+add_executable(ComponentHashTest
+  ComponentHashTest.cpp
+)
+
+target_link_libraries(ComponentHashTest PRIVATE
+  veritas::summary
+  veritas::core
+  GTest::gtest
+  GTest::gtest_main
+)
+
+gtest_discover_tests(ComponentHashTest)

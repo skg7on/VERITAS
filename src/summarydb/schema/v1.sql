@@ -145,3 +145,37 @@ CREATE TABLE IF NOT EXISTS function_bodies (
   FOREIGN KEY (source_anchor_id) REFERENCES source_anchors(anchor_id)
 );
 CREATE INDEX IF NOT EXISTS idx_function_bodies_variant ON function_bodies(function_variant_id);
+
+-- M3: Summary objects — immutable CAS entries for function summaries.
+CREATE TABLE IF NOT EXISTS summary_objects (
+  summary_id TEXT PRIMARY KEY NOT NULL,
+  object_key TEXT NOT NULL UNIQUE,
+  schema_version TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+
+-- M3: Summary components — per-component hashes for incremental invalidation.
+CREATE TABLE IF NOT EXISTS summary_components (
+  summary_id TEXT NOT NULL,
+  component_kind INTEGER NOT NULL,
+  semantic_hash TEXT NOT NULL,
+  evidence_hash TEXT NOT NULL,
+  item_count INTEGER NOT NULL,
+  PRIMARY KEY (summary_id, component_kind),
+  FOREIGN KEY (summary_id) REFERENCES summary_objects(summary_id)
+);
+
+-- M3: Summary bindings — current summary selection per function variant.
+CREATE TABLE IF NOT EXISTS summary_bindings (
+  function_variant_id TEXT NOT NULL,
+  revision_id TEXT NOT NULL,
+  build_variant_id TEXT NOT NULL,
+  summary_id TEXT NOT NULL,
+  publication_epoch INTEGER NOT NULL,
+  is_current INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (function_variant_id, revision_id, build_variant_id),
+  FOREIGN KEY (summary_id) REFERENCES summary_objects(summary_id),
+  FOREIGN KEY (revision_id) REFERENCES revisions(revision_id),
+  FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_summary_bindings_summary ON summary_bindings(summary_id);

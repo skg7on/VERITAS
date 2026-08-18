@@ -1,0 +1,248 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package veritas.summary.v1;
+
+// FunctionSummary — immutable, content-addressed semantic effects of a
+// function. Each summary is identified by FunctionSummaryID computed from
+// canonical bytes. Component hashes enable incremental invalidation.
+message FunctionSummary {
+  SummaryHeader header = 1;
+  FunctionIdentity identity = 2;
+  repeated ComponentDigest component_digests = 3;
+
+  // Semantic components
+  repeated Call calls = 10;
+  repeated MemoryEffect memory_effects = 11;
+  repeated ValueFlow value_flows = 12;
+  repeated ControlFlowSummary control_flow = 13;
+  repeated RangeFact range_facts = 14;
+  repeated AliasFact alias_facts = 15;
+  repeated TaintTransfer taint_transfers = 16;
+  repeated OwnershipEffect ownership_effects = 17;
+  repeated LockEffect lock_effects = 18;
+  repeated StateTransition state_transitions = 19;
+
+  // Uncertainty and dependencies
+  repeated Unknown unknowns = 20;
+  repeated Assumption assumptions = 21;
+  repeated Dependency dependencies = 22;
+
+  // Evidence
+  repeated ProvenanceRef provenance_refs = 30;
+}
+
+message SummaryHeader {
+  string schema_version = 1;  // "summary.v1"
+  int64 creation_epoch_ms = 2;
+}
+
+message FunctionIdentity {
+  string repository_id = 1;
+  string revision_id = 2;
+  string build_variant_id = 3;
+  string function_variant_id = 4;
+  string function_body_id = 5;
+}
+
+// ComponentDigest records semantic and evidence hashes independently.
+message ComponentDigest {
+  ComponentKind kind = 1;
+  bytes semantic_hash = 2;  // SHA-256 digest
+  bytes evidence_hash = 3;  // SHA-256 digest
+  int32 item_count = 4;
+  int64 payload_offset = 5;
+  int64 payload_length = 6;
+}
+
+enum ComponentKind {
+  COMPONENT_KIND_UNSPECIFIED = 0;
+  COMPONENT_KIND_CALLS = 1;
+  COMPONENT_KIND_MEMORY_EFFECTS = 2;
+  COMPONENT_KIND_VALUE_FLOW = 3;
+  COMPONENT_KIND_CONTROL_FLOW = 4;
+  COMPONENT_KIND_RANGE_FACTS = 5;
+  COMPONENT_KIND_ALIAS_FACTS = 6;
+  COMPONENT_KIND_TAINT = 7;
+  COMPONENT_KIND_OWNERSHIP = 8;
+  COMPONENT_KIND_LOCKS = 9;
+  COMPONENT_KIND_STATE = 10;
+  COMPONENT_KIND_UNKNOWNS = 11;
+  COMPONENT_KIND_ASSUMPTIONS = 12;
+  COMPONENT_KIND_DEPENDENCIES = 13;
+  COMPONENT_KIND_PROVENANCE = 14;
+}
+
+// Call — function invokes another function or external symbol.
+message Call {
+  string callee_symbol = 1;
+  string call_site_anchor_id = 2;
+  EpistemicState epistemic = 3;
+  string provenance_ref = 4;
+}
+
+// MemoryEffect — read, write, or unknown effect on memory.
+message MemoryEffect {
+  EffectKind kind = 1;
+  string location = 2;
+  int64 offset = 3;
+  int64 size = 4;
+  EpistemicState epistemic = 5;
+  string provenance_ref = 6;
+}
+
+enum EffectKind {
+  EFFECT_KIND_UNSPECIFIED = 0;
+  EFFECT_KIND_READ = 1;
+  EFFECT_KIND_WRITE = 2;
+  EFFECT_KIND_UNKNOWN = 3;
+}
+
+// ValueFlow — data flows from source to sink.
+message ValueFlow {
+  string source = 1;
+  string sink = 2;
+  EpistemicState epistemic = 3;
+  string provenance_ref = 4;
+}
+
+// ControlFlowSummary — basic block summary with dominance.
+message ControlFlowSummary {
+  BasicBlockSummaryRef block = 1;
+  repeated DominatorSummaryFact dominators = 2;
+}
+
+message BasicBlockSummaryRef {
+  string basic_block_summary_id = 1;
+  string function_variant_id = 2;
+  repeated string semantic_source_anchor_ids = 3;
+  repeated string predecessor_anchor_ids = 4;
+  repeated string successor_anchor_ids = 5;
+}
+
+message DominatorSummaryFact {
+  string dominator = 1;
+  string dominated = 2;
+  EpistemicState epistemic = 3;
+  string provenance_ref = 4;
+}
+
+// RangeFact — value constraint on a variable or expression.
+message RangeFact {
+  string variable = 1;
+  int64 min_value = 2;
+  int64 max_value = 3;
+  EpistemicState epistemic = 4;
+  string provenance_ref = 5;
+}
+
+// AliasFact — two locations may alias.
+message AliasFact {
+  string location_a = 1;
+  string location_b = 2;
+  EpistemicState epistemic = 3;
+  string provenance_ref = 4;
+}
+
+// TaintTransfer — taint propagates from source to sink.
+message TaintTransfer {
+  string source = 1;
+  string sink = 2;
+  string taint_kind = 3;
+  EpistemicState epistemic = 4;
+  string provenance_ref = 5;
+}
+
+// OwnershipEffect — ownership transfer (move, borrow, release).
+message OwnershipEffect {
+  OwnershipKind kind = 1;
+  string object = 2;
+  EpistemicState epistemic = 3;
+  string provenance_ref = 4;
+}
+
+enum OwnershipKind {
+  OWNERSHIP_KIND_UNSPECIFIED = 0;
+  OWNERSHIP_KIND_MOVE = 1;
+  OWNERSHIP_KIND_BORROW = 2;
+  OWNERSHIP_KIND_RELEASE = 3;
+}
+
+// LockEffect — lock acquired or released.
+message LockEffect {
+  LockKind kind = 1;
+  string lock_object = 2;
+  EpistemicState epistemic = 3;
+  string provenance_ref = 4;
+}
+
+enum LockKind {
+  LOCK_KIND_UNSPECIFIED = 0;
+  LOCK_KIND_ACQUIRE = 1;
+  LOCK_KIND_RELEASE = 2;
+}
+
+// StateTransition — state machine transition.
+message StateTransition {
+  string from_state = 1;
+  string to_state = 2;
+  string event = 3;
+  EpistemicState epistemic = 4;
+  string provenance_ref = 5;
+}
+
+// Unknown — explicit marker for missing or unknowable information.
+message Unknown {
+  string kind = 1;
+  string reason = 2;
+  string scope = 3;
+  string provenance_ref = 4;
+}
+
+// Assumption — facts assumed without verification.
+message Assumption {
+  string description = 1;
+  string condition = 2;
+  string provenance_ref = 3;
+}
+
+// Dependency — summary depends on external symbol or function.
+message Dependency {
+  string symbol = 1;
+  string kind = 2;
+  string provenance_ref = 3;
+}
+
+// ProvenanceRef — pointer to source location, analysis step, or evidence.
+message ProvenanceRef {
+  string id = 1;
+  string file_path = 2;
+  int32 line = 3;
+  int32 column = 4;
+  string analysis_step = 5;
+  string display_text = 6;
+}
+
+// EpistemicState — certainty level of a fact.
+enum EpistemicState {
+  EPISTEMIC_STATE_UNSPECIFIED = 0;
+  EPISTEMIC_STATE_MUST = 1;
+  EPISTEMIC_STATE_MAY = 2;
+  EPISTEMIC_STATE_MUST_NOT = 3;
+  EPISTEMIC_STATE_INFERRED = 4;
+  EPISTEMIC_STATE_ASSUMED = 5;
+  EPISTEMIC_STATE_UNKNOWN = 6;
+}
