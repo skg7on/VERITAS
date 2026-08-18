@@ -24,8 +24,10 @@
 #include <vector>
 
 #include <rocksdb/db.h>
+#include <rocksdb/merge_operator.h>
 #include <rocksdb/options.h>
 #include <rocksdb/slice.h>
+#include <rocksdb/status.h>
 
 namespace veritas::summarydb {
 
@@ -74,6 +76,48 @@ class InMemoryObjectStore : public ObjectStore {
   std::map<std::string, std::vector<std::byte>> store_;
 };
 
+// Custom merge operator that implements put-if-absent with content verification.
+// For content-addressed storage, identical keys MUST have identical content.
+class PutIfAbsentMergeOperator : public rocksdb::MergeOperator {
+ public:
+  bool FullMergeV2(const MergeOperationInput& merge_in,
+                   MergeOperationOutput* merge_out) const override {
+    // If key doesn't exist (no existing value), use the first operand as the value
+    if (!merge_in.existing_value) {
+      merge_out->new_value = merge_in.operand_list[0].ToString();
+      return true;
+    }
+
+    // Key exists - verify all operands match the existing value
+    for (const auto& operand : merge_in.operand_list) {
+      if (operand != *merge_in.existing_value) {
+        // Content mismatch - this is a CAS invariant violation
+        // Return false to fail the merge, which will fail the Merge() call
+        return false;
+      }
+    }
+
+    // All operands match existing value - keep existing value unchanged
+    merge_out->existing_operand = merge_out->existing_value;
+    return true;
+  }
+
+  bool PartialMerge(const rocksdb::Slice& /*key*/,
+                    const rocksdb::Slice& left_operand,
+                    const rocksdb::Slice& right_operand,
+                    std::string* new_value,
+                    rocksdb::Logger* /*logger*/) const override {
+    // Partial merge: verify operands are identical
+    if (left_operand != right_operand) {
+      return false;  // Content mismatch
+    }
+    *new_value = left_operand.ToString();
+    return true;
+  }
+
+  const char* Name() const override { return "PutIfAbsentMergeOperator"; }
+};
+
 }  // namespace
 
 // RocksDB-backed ObjectStore implementation.
@@ -83,6 +127,7 @@ class ObjectStoreRocksDb : public ObjectStore {
       const std::string& db_path) {
     rocksdb::Options options;
     options.create_if_missing = true;
+    options.merge_operator = std::make_shared<PutIfAbsentMergeOperator>();
 
     std::unique_ptr<rocksdb::DB> db;
     rocksdb::Status status = rocksdb::DB::Open(options, db_path, &db);
@@ -103,29 +148,12 @@ class ObjectStoreRocksDb : public ObjectStore {
     std::string value_to_write(reinterpret_cast<const char*>(bytes.data()),
                                bytes.size());
 
-    // Check if key exists
-    std::string existing_value;
-    rocksdb::Status status = db_->Get(rocksdb::ReadOptions(), key_str,
-                                      &existing_value);
-
-    if (status.ok()) {
-      // Key exists, verify content matches
-      if (existing_value != value_to_write) {
-        return veritas::Status::Internal(
-            "ObjectStore: key exists with different content");
-      }
-      return veritas::Status::Ok();
-    }
-
-    if (!status.IsNotFound()) {
-      return veritas::Status::Internal("RocksDB Get failed: " +
-                                       status.ToString());
-    }
-
-    // Key doesn't exist, insert it
-    status = db_->Put(rocksdb::WriteOptions(), key_str, value_to_write);
+    // Use Merge with custom operator to atomically enforce put-if-absent with
+    // content verification. RocksDB guarantees atomicity of the merge operation.
+    rocksdb::Status status = db_->Merge(rocksdb::WriteOptions(), key_str,
+                                        value_to_write);
     if (!status.ok()) {
-      return veritas::Status::Internal("RocksDB Put failed: " +
+      return veritas::Status::Internal("RocksDB Merge failed: " +
                                        status.ToString());
     }
 

@@ -33,35 +33,50 @@ std::string SerializeComponentSemantic(v1::ComponentKind kind,
     case v1::COMPONENT_KIND_CALLS: {
       for (const auto& call : summary.calls()) {
         canonical += call.callee_symbol();
+        canonical += '\0';  // Delimiter to prevent ambiguous concatenation
         canonical += call.call_site_anchor_id();
+        canonical += '\0';
         canonical += std::to_string(static_cast<int>(call.epistemic()));
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_RANGE_FACTS: {
       for (const auto& fact : summary.range_facts()) {
         canonical += fact.variable();
+        canonical += '\0';
         canonical += std::to_string(fact.min_value());
+        canonical += '\0';
         canonical += std::to_string(fact.max_value());
+        canonical += '\0';
         canonical += std::to_string(static_cast<int>(fact.epistemic()));
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_MEMORY_EFFECTS: {
       for (const auto& effect : summary.memory_effects()) {
         canonical += std::to_string(static_cast<int>(effect.kind()));
+        canonical += '\0';
         canonical += effect.location();
+        canonical += '\0';
         canonical += std::to_string(effect.offset());
+        canonical += '\0';
         canonical += std::to_string(effect.size());
+        canonical += '\0';
         canonical += std::to_string(static_cast<int>(effect.epistemic()));
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_VALUE_FLOW: {
       for (const auto& flow : summary.value_flows()) {
         canonical += flow.source();
+        canonical += '\0';
         canonical += flow.sink();
+        canonical += '\0';
         canonical += std::to_string(static_cast<int>(flow.epistemic()));
+        canonical += '\0';
       }
       break;
     }
@@ -69,20 +84,28 @@ std::string SerializeComponentSemantic(v1::ComponentKind kind,
       for (const auto& cf : summary.control_flow()) {
         const auto& block = cf.block();
         canonical += block.basic_block_summary_id();
+        canonical += '\0';
         canonical += block.function_variant_id();
+        canonical += '\0';
         for (const auto& anchor : block.semantic_source_anchor_ids()) {
           canonical += anchor;
+          canonical += '\0';
         }
         for (const auto& pred : block.predecessor_anchor_ids()) {
           canonical += pred;
+          canonical += '\0';
         }
         for (const auto& succ : block.successor_anchor_ids()) {
           canonical += succ;
+          canonical += '\0';
         }
         for (const auto& dom : cf.dominators()) {
           canonical += dom.dominator();
+          canonical += '\0';
           canonical += dom.dominated();
+          canonical += '\0';
           canonical += std::to_string(static_cast<int>(dom.epistemic()));
+          canonical += '\0';
         }
       }
       break;
@@ -90,64 +113,88 @@ std::string SerializeComponentSemantic(v1::ComponentKind kind,
     case v1::COMPONENT_KIND_ALIAS_FACTS: {
       for (const auto& alias : summary.alias_facts()) {
         canonical += alias.location_a();
+        canonical += '\0';
         canonical += alias.location_b();
+        canonical += '\0';
         canonical += std::to_string(static_cast<int>(alias.epistemic()));
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_TAINT: {
       for (const auto& taint : summary.taint_transfers()) {
         canonical += taint.source();
+        canonical += '\0';
         canonical += taint.sink();
+        canonical += '\0';
         canonical += taint.taint_kind();
+        canonical += '\0';
         canonical += std::to_string(static_cast<int>(taint.epistemic()));
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_OWNERSHIP: {
       for (const auto& ownership : summary.ownership_effects()) {
         canonical += std::to_string(static_cast<int>(ownership.kind()));
+        canonical += '\0';
         canonical += ownership.object();
+        canonical += '\0';
         canonical += std::to_string(static_cast<int>(ownership.epistemic()));
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_LOCKS: {
       for (const auto& lock : summary.lock_effects()) {
         canonical += std::to_string(static_cast<int>(lock.kind()));
+        canonical += '\0';
         canonical += lock.lock_object();
+        canonical += '\0';
         canonical += std::to_string(static_cast<int>(lock.epistemic()));
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_STATE: {
       for (const auto& state : summary.state_transitions()) {
         canonical += state.from_state();
+        canonical += '\0';
         canonical += state.to_state();
+        canonical += '\0';
         canonical += state.event();
+        canonical += '\0';
         canonical += std::to_string(static_cast<int>(state.epistemic()));
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_UNKNOWNS: {
       for (const auto& unknown : summary.unknowns()) {
         canonical += unknown.kind();
+        canonical += '\0';
         canonical += unknown.reason();
+        canonical += '\0';
         canonical += unknown.scope();
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_ASSUMPTIONS: {
       for (const auto& assumption : summary.assumptions()) {
         canonical += assumption.description();
+        canonical += '\0';
         canonical += assumption.condition();
+        canonical += '\0';
       }
       break;
     }
     case v1::COMPONENT_KIND_DEPENDENCIES: {
       for (const auto& dep : summary.dependencies()) {
         canonical += dep.symbol();
+        canonical += '\0';
         canonical += dep.kind();
+        canonical += '\0';
       }
       break;
     }

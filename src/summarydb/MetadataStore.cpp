@@ -507,13 +507,14 @@ StatusOr<int64_t> MetadataStore::PutAnalyzerRun(const AnalyzerRunRow& row) {
 
 Status MetadataStore::PutManifestContext(
     const veritas::build::AnalysisManifest& manifest) {
-  auto status = ExecuteSQL(db_, "BEGIN TRANSACTION");
+  // Use the transaction state tracking methods instead of raw SQL
+  auto status = BeginTransaction();
   if (!status.ok()) {
     return status;
   }
 
   auto rollback = [&](Status err) -> Status {
-    ExecuteSQL(db_, "ROLLBACK");
+    RollbackTransaction();
     return err;
   };
 
@@ -571,7 +572,7 @@ Status MetadataStore::PutManifestContext(
     }
   }
 
-  return ExecuteSQL(db_, "COMMIT");
+  return CommitTransaction();
 }
 
 // M3 methods for SummaryRepository
@@ -622,6 +623,9 @@ StatusOr<std::vector<std::vector<std::string>>> MetadataStore::Query(
     for (int i = 0; i < col_count; ++i) {
       const char* text =
           reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
+      // Note: Converts NULL to empty string. Callers cannot distinguish
+      // NULL columns from actual empty strings. Use sqlite3_column_type()
+      // if NULL distinction is needed.
       row.push_back(text ? text : "");
     }
     results.push_back(std::move(row));
@@ -657,9 +661,9 @@ Status MetadataStore::CommitTransaction() {
     return Status::FailedPrecondition("No active transaction to commit");
   }
   auto status = ExecuteSQL(db_, "COMMIT");
-  if (status.ok()) {
-    in_transaction_ = false;
-  }
+  // Always clear transaction state on commit attempt.
+  // SQLite auto-rolls-back on commit failure, so in_transaction_ must match.
+  in_transaction_ = false;
   return status;
 }
 
