@@ -1,0 +1,5 @@
+{
+  "directory": ".",
+  "file": "parameter_return.cpp",
+  "command": "clang++ -c parameter_return.cpp -o parameter_return.o"
+}

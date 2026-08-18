@@ -15,6 +15,7 @@
 add_library(veritas_svf_analysis STATIC
   SvfConfig.cpp
   SvfSession.cpp
+  SvfFactMapper.cpp
 )
 
 target_link_libraries(veritas_svf_analysis
