@@ -51,9 +51,13 @@ Status BindInt(sqlite3_stmt* stmt, int index, int value) {
 
 Status StepAndFinalize(sqlite3_stmt* stmt) {
   int rc = sqlite3_step(stmt);
+  std::string error;
+  if (rc != SQLITE_DONE) {
+    error = sqlite3_errmsg(sqlite3_db_handle(stmt));
+  }
   sqlite3_finalize(stmt);
   if (rc != SQLITE_DONE) {
-    return Status::Internal("SQLite step failed");
+    return Status::Internal("SQLite step failed: " + error);
   }
   return Status::Ok();
 }
@@ -224,6 +228,37 @@ CREATE TABLE IF NOT EXISTS function_bodies (
   FOREIGN KEY (source_anchor_id) REFERENCES source_anchors(anchor_id)
 );
 CREATE INDEX IF NOT EXISTS idx_function_bodies_variant ON function_bodies(function_variant_id);
+
+CREATE TABLE IF NOT EXISTS summary_objects (
+  summary_id TEXT PRIMARY KEY NOT NULL,
+  object_key TEXT NOT NULL UNIQUE,
+  schema_version TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS summary_components (
+  summary_id TEXT NOT NULL,
+  component_kind INTEGER NOT NULL,
+  semantic_hash TEXT NOT NULL,
+  evidence_hash TEXT NOT NULL,
+  item_count INTEGER NOT NULL,
+  PRIMARY KEY (summary_id, component_kind),
+  FOREIGN KEY (summary_id) REFERENCES summary_objects(summary_id)
+);
+
+CREATE TABLE IF NOT EXISTS summary_bindings (
+  function_variant_id TEXT NOT NULL,
+  revision_id TEXT NOT NULL,
+  build_variant_id TEXT NOT NULL,
+  summary_id TEXT NOT NULL,
+  publication_epoch INTEGER NOT NULL,
+  is_current INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (function_variant_id, revision_id, build_variant_id),
+  FOREIGN KEY (summary_id) REFERENCES summary_objects(summary_id),
+  FOREIGN KEY (revision_id) REFERENCES revisions(revision_id),
+  FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_summary_bindings_summary ON summary_bindings(summary_id);
 )";
 
   return ExecuteSQL(db_, schema_sql);
@@ -531,6 +566,78 @@ Status MetadataStore::PutManifestContext(
   }
 
   return ExecuteSQL(db_, "COMMIT");
+}
+
+// M3 methods for SummaryRepository
+
+Status MetadataStore::Execute(const std::string& sql,
+                              const std::vector<std::string>& params) {
+  sqlite3_stmt* stmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+  if (rc != SQLITE_OK) {
+    std::string error = sqlite3_errmsg(db_);
+    return Status::Internal("SQLite prepare failed: " + error + " (SQL: " +
+                            sql + ")");
+  }
+
+  for (size_t i = 0; i < params.size(); ++i) {
+    auto status = BindText(stmt, static_cast<int>(i + 1), params[i]);
+    if (!status.ok()) {
+      sqlite3_finalize(stmt);
+      return status;
+    }
+  }
+
+  return StepAndFinalize(stmt);
+}
+
+StatusOr<std::vector<std::vector<std::string>>> MetadataStore::Query(
+    const std::string& sql, const std::vector<std::string>& params) {
+  sqlite3_stmt* stmt = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+  if (rc != SQLITE_OK) {
+    return Status::Internal("SQLite prepare failed");
+  }
+
+  for (size_t i = 0; i < params.size(); ++i) {
+    auto status = BindText(stmt, static_cast<int>(i + 1), params[i]);
+    if (!status.ok()) {
+      sqlite3_finalize(stmt);
+      return status;
+    }
+  }
+
+  std::vector<std::vector<std::string>> results;
+  while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+    std::vector<std::string> row;
+    int col_count = sqlite3_column_count(stmt);
+    for (int i = 0; i < col_count; ++i) {
+      const char* text =
+          reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
+      row.push_back(text ? text : "");
+    }
+    results.push_back(std::move(row));
+  }
+
+  sqlite3_finalize(stmt);
+
+  if (rc != SQLITE_DONE) {
+    return Status::Internal("SQLite query failed");
+  }
+
+  return results;
+}
+
+Status MetadataStore::BeginTransaction() {
+  return ExecuteSQL(db_, "BEGIN TRANSACTION");
+}
+
+Status MetadataStore::CommitTransaction() {
+  return ExecuteSQL(db_, "COMMIT");
+}
+
+Status MetadataStore::RollbackTransaction() {
+  return ExecuteSQL(db_, "ROLLBACK");
 }
 
 }  // namespace veritas::summarydb

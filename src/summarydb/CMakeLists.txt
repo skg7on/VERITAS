@@ -17,9 +17,12 @@
 # Builds `veritas_summarydb`, the metadata and summary storage subsystem.
 
 find_package(SQLite3 REQUIRED)
+find_package(RocksDB REQUIRED CONFIG)
 
 add_library(veritas_summarydb
   MetadataStore.cpp
+  ObjectStoreRocksDb.cpp
+  SummaryRepository.cpp
 )
 
 target_include_directories(veritas_summarydb PUBLIC
@@ -30,7 +33,9 @@ target_include_directories(veritas_summarydb PUBLIC
 target_link_libraries(veritas_summarydb PUBLIC
   veritas::core
   veritas::build
+  veritas::summary
   SQLite::SQLite3
+  RocksDB::rocksdb
 )
 
 target_compile_features(veritas_summarydb PUBLIC cxx_std_20)

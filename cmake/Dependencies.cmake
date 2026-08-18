@@ -50,6 +50,21 @@ message(STATUS "VERITAS: Found Protobuf ${Protobuf_VERSION}")
 # -----------------------------------------------------------------------------
 # RocksDB — CAS object store backing the Summary IR.
 # -----------------------------------------------------------------------------
+# RocksDB requires zstd::zstd, but the package may provide zstd::libzstd_shared
+# or zstd::libzstd_static instead. Create the alias if needed.
+if(NOT TARGET zstd::zstd)
+  if(TARGET zstd::libzstd_shared)
+    add_library(zstd::zstd ALIAS zstd::libzstd_shared)
+    message(STATUS "VERITAS: Created zstd::zstd alias for zstd::libzstd_shared")
+  elseif(TARGET zstd::libzstd_static)
+    add_library(zstd::zstd ALIAS zstd::libzstd_static)
+    message(STATUS "VERITAS: Created zstd::zstd alias for zstd::libzstd_static")
+  else()
+    # zstd not found yet, try to find it
+    find_package(zstd REQUIRED CONFIG)
+  endif()
+endif()
+
 find_package(RocksDB REQUIRED CONFIG)
 message(STATUS "VERITAS: Found RocksDB")
 

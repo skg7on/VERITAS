@@ -1,0 +1,68 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef VERITAS_SUMMARYDB_SUMMARY_REPOSITORY_H_
+#define VERITAS_SUMMARYDB_SUMMARY_REPOSITORY_H_
+
+#include <memory>
+#include <string>
+
+#include "veritas/core/Ids.h"
+#include "veritas/core/Status.h"
+#include "veritas/summary/v1/summary.pb.h"
+#include "veritas/summarydb/MetadataStore.h"
+#include "veritas/summarydb/ObjectStore.h"
+
+namespace veritas::summarydb {
+
+// PublicationContext provides the metadata for publishing a summary.
+struct PublicationContext {
+  std::string revision_id;
+  std::string build_variant_id;
+  std::string function_variant_id;
+};
+
+// SummaryRepository manages the publication and retrieval of function summaries.
+// Summaries are stored immutably in the ObjectStore, with metadata bindings
+// managed transactionally in the MetadataStore.
+class SummaryRepository {
+ public:
+  static veritas::StatusOr<std::unique_ptr<SummaryRepository>> Open(
+      const std::string& db_path);
+
+  // Publish a summary and atomically bind it as current.
+  // Returns the FunctionSummaryID on success.
+  veritas::StatusOr<core::StableId> PublishSummary(
+      const summary::v1::FunctionSummary& summary,
+      const PublicationContext& context);
+
+  // Retrieve the current summary for a function variant.
+  veritas::StatusOr<summary::v1::FunctionSummary> GetCurrentSummary(
+      const std::string& function_variant_id) const;
+
+  // Retrieve a specific summary by ID.
+  veritas::StatusOr<summary::v1::FunctionSummary> GetSummary(
+      const core::StableId& summary_id) const;
+
+ private:
+  SummaryRepository(std::unique_ptr<ObjectStore> object_store,
+                    std::unique_ptr<MetadataStore> metadata_store);
+
+  std::unique_ptr<ObjectStore> object_store_;
+  std::unique_ptr<MetadataStore> metadata_store_;
+};
+
+}  // namespace veritas::summarydb
+
+#endif  // VERITAS_SUMMARYDB_SUMMARY_REPOSITORY_H_
