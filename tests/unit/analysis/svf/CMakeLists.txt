@@ -12,14 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_unit_test_support INTERFACE)
-target_link_libraries(veritas_unit_test_support INTERFACE
-  GTest::gtest
-  GTest::gtest_main
+add_executable(svf_config_test
+  SvfConfigTest.cpp
 )
 
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summary)
-add_subdirectory(summarydb)
-add_subdirectory(analysis)
+target_link_libraries(svf_config_test
+  PRIVATE
+    veritas_svf_analysis
+    veritas_unit_test_support
+)
+
+target_include_directories(svf_config_test
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+)
+
+add_test(NAME SvfConfigTest COMMAND svf_config_test)
+set_tests_properties(SvfConfigTest PROPERTIES TIMEOUT 10)

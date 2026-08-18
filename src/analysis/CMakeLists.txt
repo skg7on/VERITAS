@@ -14,3 +14,4 @@
 
 add_subdirectory(pipeline)
 add_subdirectory(llvm)
+add_subdirectory(svf)
