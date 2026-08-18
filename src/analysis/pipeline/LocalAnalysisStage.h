@@ -25,7 +25,7 @@
 #include "analysis/llvm/ProjectIrBuilder.h"
 #include "analysis/llvm/ValueFlowExtractor.h"
 #include "analysis/pipeline/ProgramIr.h"
-#include "core/FunctionSymbolId.h"
+#include "veritas/core/Ids.h"
 
 namespace veritas::analysis::pipeline {
 
@@ -42,7 +42,7 @@ class LocalAnalysisStage {
  public:
   struct LocalFacts {
     core::FunctionSymbolId function_id;
-    std::vector<llvm::CallGraphExtractor::DirectCall> direct_calls;
+    std::vector<std::string> direct_calls;
     std::vector<llvm::MemoryAccessExtractor::MemoryAccess> memory_accesses;
     std::vector<llvm::ValueFlowExtractor::ValueFlow> value_flows;
   };

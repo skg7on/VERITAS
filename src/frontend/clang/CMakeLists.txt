@@ -20,6 +20,8 @@ add_library(veritas_frontend_clang
 target_include_directories(veritas_frontend_clang
   PUBLIC
     ${CMAKE_SOURCE_DIR}/include
+    ${LLVM_INCLUDE_DIRS}
+    ${CLANG_INCLUDE_DIRS}
 )
 
 target_link_libraries(veritas_frontend_clang

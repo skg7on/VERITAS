@@ -62,7 +62,7 @@ LocalAnalysisStage::LocalFacts LocalAnalysisStage::ExtractFacts(
   facts.function_id = func_id;
 
   // Extract call graph edges
-  facts.direct_calls = call_extractor_->ExtractDirectCalls(llvm_func);
+  facts.direct_calls = call_extractor_->ExtractCalls(llvm_func);
 
   // Extract memory access patterns
   facts.memory_accesses = memory_extractor_->ExtractMemoryAccesses(llvm_func);
