@@ -14,6 +14,7 @@
 
 add_library(veritas_analysis_pipeline
   ProgramIr.cpp
+  LocalAnalysisStage.cpp
 )
 
 target_include_directories(veritas_analysis_pipeline

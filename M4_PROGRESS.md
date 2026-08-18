@@ -58,10 +58,20 @@
 - [ ] Create `tests/integration/analysis/MemoryAccessExtractorTest.cpp`
 - [ ] Create `tests/integration/analysis/ValueFlowExtractorTest.cpp`
 
-### Task 4: Local Summary Drafts and M5 Handoff
-- [ ] Create `src/analysis/pipeline/LocalAnalysisStage.h` and `.cpp`
-- [ ] Implement pipeline orchestration combining AST, IR, and fact extraction
-- [ ] Create ownership tests verifying no artifact input modes
+### Task 4: Local Summary Drafts and M5 Handoff ✓
+
+**Created Files:**
+- `src/analysis/pipeline/LocalAnalysisStage.h` - Pipeline orchestration interface
+- `src/analysis/pipeline/LocalAnalysisStage.cpp` - Orchestrates AST, IR, and fact extraction
+
+**Updated Files:**
+- `src/analysis/pipeline/CMakeLists.txt` - Added LocalAnalysisStage build target
+
+### Task 5: Milestone Verification
+- [ ] Run full test suite with LLVM 22+
+- [ ] Verify no LLVM headers in public API
+- [ ] Verify no artifact input flags
+- [ ] Create PR
 
 ### Task 5: Milestone Verification
 - [ ] Run full test suite
