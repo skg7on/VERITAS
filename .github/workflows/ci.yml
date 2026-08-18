@@ -42,8 +42,22 @@ jobs:
           persist-credentials: false
 
       - name: Install system dependencies
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt: apt-get update"
+            if sudo apt-get update; then
+              break
+            fi
+            if [ $attempt -lt 3 ]; then
+              echo "apt-get update failed, retrying in 10 seconds..."
+              sleep 10
+            else
+              echo "apt-get update failed after 3 attempts"
+              exit 1
+            fi
+          done
+
           sudo apt-get install --yes --no-install-recommends \
             build-essential \
             cmake \
