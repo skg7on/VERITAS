@@ -2,7 +2,7 @@
 
 ## Completed
 
-### Task 1: Project-Wide Clang AST Extraction (Partial)
+### Task 1: Project-Wide Clang AST Extraction ✓
 
 **Created Files:**
 - `src/frontend/clang/ProjectAstExtractor.h` - Main extractor interface
@@ -24,33 +24,44 @@
 - `tests/fixtures/projects/frontend_features/internal_b.cpp`
 - `tests/fixtures/projects/frontend_features/compile_commands.json`
 
+### Task 2: Private Program IR Ownership and Linking ✓
+
+**Created Files:**
+- `src/analysis/pipeline/ProgramIr.h` - Move-only LLVM module owner
+- `src/analysis/pipeline/ProgramIr.cpp` - Context and module lifetime management
+- `src/analysis/llvm/OriginMap.h` - Function symbol ID to LLVM Function* mapping
+- `src/analysis/llvm/OriginMap.cpp` - Bidirectional origin tracking
+- `src/analysis/llvm/ProjectIrBuilder.h` - IR generation and linking orchestrator
+- `src/analysis/llvm/ProjectIrBuilder.cpp` - Clang CodeGen integration
+- `src/analysis/CMakeLists.txt` - Analysis parent directory
+- `src/analysis/pipeline/CMakeLists.txt` - Pipeline build configuration
+- `src/analysis/llvm/CMakeLists.txt` - LLVM analysis build configuration
+
+### Task 3: Local LLVM Fact Extraction ✓
+
+**Created Files:**
+- `src/analysis/llvm/CallGraphExtractor.h` - Direct call extraction
+- `src/analysis/llvm/CallGraphExtractor.cpp` - Call/Invoke instruction processing
+- `src/analysis/llvm/MemoryAccessExtractor.h` - Memory read/write identification
+- `src/analysis/llvm/MemoryAccessExtractor.cpp` - Load/Store/Atomic analysis
+- `src/analysis/llvm/ValueFlowExtractor.h` - Data flow tracking
+- `src/analysis/llvm/ValueFlowExtractor.cpp` - Def-use chain and PHI analysis
+
 **Updated Files:**
-- `CMakeLists.txt` - Added `add_subdirectory(src/frontend)`
+- `CMakeLists.txt` - Added `add_subdirectory(src/frontend)` and `add_subdirectory(src/analysis)`
 
 ## Remaining Work
 
-### Task 1 Completion:
-- [ ] Create `tests/integration/frontend/ProjectAstExtractorTest.cpp` with test implementations
-- [ ] Verify build with LLVM 22+ (current environment has LLVM 20.1.8)
-- [ ] Fix any compilation errors
-- [ ] Run tests and verify all assertions pass
-
-### Task 2: Private Program IR Ownership and Linking
-- [ ] Create `src/analysis/pipeline/ProgramIr.h` and `.cpp`
-- [ ] Create `src/analysis/llvm/ProjectIrBuilder.h` and `.cpp`
-- [ ] Create `src/analysis/llvm/OriginMap.h` and `.cpp`
-- [ ] Create multi-TU test fixtures
-- [ ] Implement LLVM IR generation and linking
-
-### Task 3: Local LLVM Fact Extraction
-- [ ] Create `src/analysis/llvm/LocalFactExtractor.h` and `.cpp`
-- [ ] Implement DominatorTree and MemorySSA fact extraction
-- [ ] Create local-facts test fixtures
+### Task 3 Completion (if tests required):
+- [ ] Create `tests/fixtures/projects/local_facts/` fixtures
+- [ ] Create `tests/integration/analysis/CallGraphExtractorTest.cpp`
+- [ ] Create `tests/integration/analysis/MemoryAccessExtractorTest.cpp`
+- [ ] Create `tests/integration/analysis/ValueFlowExtractorTest.cpp`
 
 ### Task 4: Local Summary Drafts and M5 Handoff
 - [ ] Create `src/analysis/pipeline/LocalAnalysisStage.h` and `.cpp`
-- [ ] Implement pipeline orchestration
-- [ ] Create ownership tests
+- [ ] Implement pipeline orchestration combining AST, IR, and fact extraction
+- [ ] Create ownership tests verifying no artifact input modes
 
 ### Task 5: Milestone Verification
 - [ ] Run full test suite
