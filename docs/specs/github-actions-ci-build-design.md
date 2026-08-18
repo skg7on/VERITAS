@@ -41,7 +41,7 @@ All third-party Actions and source repositories use immutable commit SHAs.
 | --- | --- | --- |
 | `actions/checkout` | `3d3c42e5aac5ba805825da76410c181273ba90b1` (`v7.0.1`) | Checkout VERITAS and pinned dependency sources |
 | `actions/cache` | `27d5ce7f107fe9357f9df03efb73ab90386fccae` (`v5.0.5`) | Restore and save installed dependency trees |
-| LLVM | `860fcb7accb22e57a020a353a39f2fdbd0dc1b44` | Exact LLVM 24 development source used by CI |
+| LLVM | `f9bda52e57a759d20224cd581f73f61ee3220e74` | Exact LLVM 24 development source used by CI |
 | Z3 | `ddb49568d3520e99799e364fb22f35fc67d887b1` (`z3-4.16.0`) | Provide the required CMake package absent from Ubuntu's `libz3-dev` package |
 
 The action tags appear only as comments beside the pinned SHAs for
@@ -86,7 +86,7 @@ cached because they are large, unnecessary on a hit, and likely to exceed
 GitHub-hosted runner disk or repository cache limits.
 
 The initial cache key is
-`veritas-ubuntu-24.04-x86_64-llvm-860fcb7accb22e57a020a353a39f2fdbd0dc1b44-r1`.
+`veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1`.
 It contains:
 
 - the explicit `ubuntu-24.04` platform;

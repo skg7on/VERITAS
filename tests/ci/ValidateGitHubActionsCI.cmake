@@ -64,7 +64,11 @@ veritas_require_ci_literal(
 )
 veritas_require_ci_literal(
   "LLVM source pin"
-  "860fcb7accb22e57a020a353a39f2fdbd0dc1b44"
+  "f9bda52e57a759d20224cd581f73f61ee3220e74"
+)
+veritas_require_ci_literal(
+  "LLVM cache key"
+  "veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1"
 )
 veritas_require_ci_literal(
   "Z3 cache gate"

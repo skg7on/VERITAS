@@ -15,7 +15,7 @@
 - Run on the explicit `ubuntu-24.04` GitHub-hosted runner.
 - Pin `actions/checkout` to `3d3c42e5aac5ba805825da76410c181273ba90b1` (`v7.0.1`).
 - Pin `actions/cache` to `27d5ce7f107fe9357f9df03efb73ab90386fccae` (`v5.0.5`).
-- Pin LLVM 24 source to `860fcb7accb22e57a020a353a39f2fdbd0dc1b44`.
+- Pin LLVM 24 source to `f9bda52e57a759d20224cd581f73f61ee3220e74`.
 - Pin Z3 source to `ddb49568d3520e99799e364fb22f35fc67d887b1` (`z3-4.16.0`).
 - Cache installed dependency trees only; never cache LLVM or Z3 source/build trees.
 - Use exact cache keys without `restore-keys`.
@@ -146,7 +146,7 @@ veritas_require_ci_literal(
 )
 veritas_require_ci_literal(
   "LLVM source pin"
-  "860fcb7accb22e57a020a353a39f2fdbd0dc1b44"
+  "f9bda52e57a759d20224cd581f73f61ee3220e74"
 )
 veritas_require_ci_literal(
   "Z3 cache gate"
@@ -324,14 +324,14 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-860fcb7accb22e57a020a353a39f2fdbd0dc1b44-r1
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
 
       - name: Checkout LLVM source
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: llvm/llvm-project
-          ref: 860fcb7accb22e57a020a353a39f2fdbd0dc1b44
+          ref: f9bda52e57a759d20224cd581f73f61ee3220e74
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false
