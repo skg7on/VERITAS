@@ -12,4 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+add_executable(project_analyzer_integration_test
+  ProjectAnalyzerTest.cpp
+)
+
+target_link_libraries(project_analyzer_integration_test
+  PRIVATE
+    veritas_analysis
+    veritas_unit_test_support
+)
+
+add_test(NAME ProjectAnalyzerTest COMMAND project_analyzer_integration_test)
+set_tests_properties(ProjectAnalyzerTest PROPERTIES
+  TIMEOUT 30
+  LABELS "integration;analysis"
+)
+
 add_subdirectory(svf)

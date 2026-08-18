@@ -12,6 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+add_library(veritas_analysis
+  ProjectAnalyzer.cpp
+)
+
+target_include_directories(veritas_analysis
+  PUBLIC
+    "${PROJECT_SOURCE_DIR}/include"
+  PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
+)
+
+target_link_libraries(veritas_analysis
+  PUBLIC
+    veritas_core
+  PRIVATE
+    veritas_svf_analysis
+)
+
 add_subdirectory(pipeline)
 add_subdirectory(llvm)
 add_subdirectory(svf)
