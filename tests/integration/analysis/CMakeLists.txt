@@ -12,17 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_svf_analysis STATIC
-  SvfConfig.cpp
-  SvfSession.cpp
-)
-
-target_link_libraries(veritas_svf_analysis
-  PRIVATE
-    veritas_third_party_svf
-    veritas_analysis_pipeline
-)
-
-target_include_directories(veritas_svf_analysis
-  PRIVATE "${PROJECT_SOURCE_DIR}/src"
-)
+add_subdirectory(svf)

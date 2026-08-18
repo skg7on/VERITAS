@@ -12,17 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_svf_analysis STATIC
-  SvfConfig.cpp
-  SvfSession.cpp
+add_executable(svf_session_integration_test
+  SvfSessionTest.cpp
 )
 
-target_link_libraries(veritas_svf_analysis
+target_link_libraries(svf_session_integration_test
   PRIVATE
-    veritas_third_party_svf
+    veritas_svf_analysis
     veritas_analysis_pipeline
+    veritas_unit_test_support
+    LLVMCore
+    LLVMSupport
 )
 
-target_include_directories(veritas_svf_analysis
+target_include_directories(svf_session_integration_test
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
+)
+
+add_test(NAME SvfSessionTest COMMAND svf_session_integration_test)
+set_tests_properties(SvfSessionTest PROPERTIES
+  TIMEOUT 30
+  LABELS "integration;svf"
 )
