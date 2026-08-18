@@ -167,7 +167,7 @@ void FullSparseAbstractInterpretation::pullObjValueFlows(const ICFGNode* node)
                 assert(v && "SVFG incoming edge must have a destination node");
 
                 const ICFGNode* srcICFG = src->getICFGNode();
-                const ICFGNode* dstICFG = v->getICFGNode();
+                [[maybe_unused]] const ICFGNode* dstICFG = v->getICFGNode();
                 assert(srcICFG && "SVFG source node must have an ICFG node");
                 assert(dstICFG &&
                        "SVFG destination node must have an ICFG node");

@@ -342,7 +342,7 @@ inline ICFGNode* ICFGBuilder::addBlockICFGNode(const Instruction* inst)
 
 IntraICFGNode* ICFGBuilder::addIntraBlockICFGNode(const Instruction* inst)
 {
-    IntraICFGNode* node = llvmModuleSet()->getIntraBlock(inst);
+    [[maybe_unused]] IntraICFGNode* node = llvmModuleSet()->getIntraBlock(inst);
     assert (node==nullptr && "no IntraICFGNode for this instruction?");
     IntraICFGNode* sNode = icfg->addIntraICFGNode(
                                llvmModuleSet()->getSVFBasicBlock(inst->getParent()), SVFUtil::isa<ReturnInst>(inst));
