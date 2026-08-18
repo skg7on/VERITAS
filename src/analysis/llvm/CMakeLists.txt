@@ -35,4 +35,5 @@ target_link_libraries(veritas_analysis_llvm
     clangCodeGen
     clangFrontend
     clangTooling
+    clangSerialization
 )

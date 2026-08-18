@@ -22,7 +22,6 @@
 #include "analysis/llvm/CallGraphExtractor.h"
 #include "analysis/llvm/MemoryAccessExtractor.h"
 #include "analysis/llvm/OriginMap.h"
-#include "analysis/llvm/ProjectIrBuilder.h"
 #include "analysis/llvm/ValueFlowExtractor.h"
 #include "analysis/pipeline/ProgramIr.h"
 #include "veritas/core/Ids.h"
@@ -56,7 +55,7 @@ class LocalAnalysisStage {
       const std::string& compile_commands_path);
 
  private:
-  std::unique_ptr<llvm::ProjectIrBuilder> ir_builder_;
+  std::unique_ptr<ProgramIr> program_ir_;
   std::unique_ptr<llvm::CallGraphExtractor> call_extractor_;
   std::unique_ptr<llvm::MemoryAccessExtractor> memory_extractor_;
   std::unique_ptr<llvm::ValueFlowExtractor> flow_extractor_;
