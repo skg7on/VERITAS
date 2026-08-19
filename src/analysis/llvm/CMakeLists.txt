@@ -13,11 +13,13 @@
 # limitations under the License.
 
 add_library(veritas_analysis_llvm
+  ProgramIr.cpp
   OriginMap.cpp
   ProjectIrBuilder.cpp
   CallGraphExtractor.cpp
   MemoryAccessExtractor.cpp
   ValueFlowExtractor.cpp
+  LocalFactExtractor.cpp
 )
 
 target_include_directories(veritas_analysis_llvm
@@ -32,8 +34,11 @@ target_link_libraries(veritas_analysis_llvm
     LLVMCore
     LLVMSupport
     LLVMLinker
+    LLVMBitWriter
     clangCodeGen
     clangFrontend
     clangTooling
     clangSerialization
+    clangBasic
+    veritas_summary
 )

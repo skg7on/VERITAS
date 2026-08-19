@@ -46,6 +46,7 @@ protobuf_generate(
 add_library(veritas_summary
   ComponentHash.cpp
   FunctionSummary.cpp
+  LocalSummaryBuilder.cpp
 )
 
 target_include_directories(veritas_summary PUBLIC

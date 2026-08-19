@@ -14,49 +14,39 @@
 
 #include "analysis/pipeline/LocalAnalysisStage.h"
 
+#include <vector>
+
+#include "analysis/llvm/LocalFactExtractor.h"
+#include "analysis/llvm/ProjectIrBuilder.h"
+#include "veritas/summary/LocalSummaryBuilder.h"
+
 namespace veritas::analysis::pipeline {
 
-LocalAnalysisStage::LocalAnalysisStage()
-    : program_ir_(std::make_unique<ProgramIr>()),
-      call_extractor_(std::make_unique<llvm::CallGraphExtractor>()),
-      memory_extractor_(std::make_unique<llvm::MemoryAccessExtractor>()),
-      flow_extractor_(std::make_unique<llvm::ValueFlowExtractor>()) {}
+StatusOr<LocalAnalysisResult> RunLocalAnalysis(
+    const build::AnalysisManifest& manifest) {
+  llvm::ProjectIrBuilder ir_builder;
+  auto program_ir = ir_builder.BuildProjectIr(manifest);
+  if (!program_ir.ok()) {
+    return program_ir.status();
+  }
 
-LocalAnalysisStage::~LocalAnalysisStage() = default;
+  llvm::LocalFactExtractor fact_extractor;
+  auto local_facts = fact_extractor.Extract(*program_ir);
+  if (!local_facts.ok()) {
+    return local_facts.status();
+  }
 
-std::vector<LocalAnalysisStage::LocalFacts>
-LocalAnalysisStage::AnalyzeProject(
-    const std::string& compile_commands_path) {
-  std::vector<LocalFacts> all_facts;
+  std::vector<summary::v1::FunctionSummary> drafts;
+  drafts.reserve(local_facts->size());
+  for (const auto& facts : *local_facts) {
+    auto summary = summary::BuildLocalSummary(facts, manifest.context);
+    if (!summary.ok()) {
+      return summary.status();
+    }
+    drafts.push_back(std::move(*summary));
+  }
 
-  // TODO(M4): Implement full pipeline:
-  // 1. Parse compile_commands.json
-  // 2. Build LLVM IR using ProjectIrBuilder with ProgramIr's context
-  // 3. Populate OriginMap with function symbol IDs
-  // 4. Extract local facts for each function
-  //
-  // Current stub returns empty to allow compilation.
-  (void)compile_commands_path;  // Suppress unused parameter warning
-
-  return all_facts;
-}
-
-LocalAnalysisStage::LocalFacts LocalAnalysisStage::ExtractFacts(
-    const core::FunctionSymbolId& func_id,
-    const ::llvm::Function* llvm_func) {
-  LocalFacts facts;
-  facts.function_id = func_id;
-
-  // Extract call graph edges
-  facts.direct_calls = call_extractor_->ExtractCalls(llvm_func);
-
-  // Extract memory access patterns
-  facts.memory_accesses = memory_extractor_->ExtractMemoryAccesses(llvm_func);
-
-  // Extract value flow relationships
-  facts.value_flows = flow_extractor_->ExtractValueFlows(llvm_func);
-
-  return facts;
+  return LocalAnalysisResult{std::move(*program_ir), std::move(drafts)};
 }
 
 }  // namespace veritas::analysis::pipeline

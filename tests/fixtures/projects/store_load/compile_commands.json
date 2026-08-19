@@ -1,7 +1,7 @@
 [
   {
-    "directory": ".",
-    "file": "store_load.cpp",
-    "command": "clang++ -c store_load.cpp -o store_load.o"
+    "directory": "@PROJECT_ROOT@",
+    "arguments": ["clang++", "-std=c++20", "-c", "store_load.cpp"],
+    "file": "store_load.cpp"
   }
 ]
