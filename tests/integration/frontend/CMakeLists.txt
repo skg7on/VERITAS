@@ -12,9 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# tests/integration/CMakeLists.txt
+add_executable(project_ast_extractor_integration_test
+  ProjectAstExtractorTest.cpp
+)
 
-add_subdirectory(build)
-add_subdirectory(summarydb)
-add_subdirectory(analysis)
-add_subdirectory(frontend)
+target_include_directories(project_ast_extractor_integration_test PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+
+target_link_libraries(project_ast_extractor_integration_test PRIVATE
+  veritas_frontend_clang
+  veritas_build
+  veritas_test_support
+  GTest::gtest
+  GTest::gtest_main
+)
+
+add_test(NAME ProjectAstExtractorTest
+  COMMAND project_ast_extractor_integration_test)
+set_tests_properties(ProjectAstExtractorTest PROPERTIES
+  TIMEOUT 120
+  LABELS "integration;frontend"
+)

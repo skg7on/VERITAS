@@ -30,6 +30,7 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include "analysis/llvm/OriginMap.h"
+#include "veritas/build/CompileFlags.h"
 
 namespace veritas::analysis::llvm {
 namespace {
@@ -70,44 +71,6 @@ class EmitModuleActionFactory
   std::unique_ptr<::llvm::Module>* out_;
 };
 
-// Resolve the M1 `<repo>` sentinel (substituted during argument normalization)
-// back to the actual project root so Clang can resolve include paths.
-std::string ResolveArguments(const std::string& arg,
-                             const std::string& project_root) {
-  std::string out = arg;
-  std::size_t pos = 0;
-  while ((pos = out.find("<repo>", pos)) != std::string::npos) {
-    out.replace(pos, 6, project_root);
-    pos += project_root.size();
-  }
-  return out;
-}
-
-// Build the compiler flags for a translation unit: drop argv[0] (the compiler
-// driver), the `-c` and `-o <file>` driver flags, and the source file itself.
-// ClangTool supplies the source file separately from its file list, so leaving
-// it in the flags would produce a duplicate compile job.
-std::vector<std::string> CompileFlags(
-    const build::TranslationUnitCommand& command,
-    const fs::path& project_root) {
-  const std::string source_basename =
-      command.source_path.relative_path.filename().string();
-  std::vector<std::string> flags;
-  flags.reserve(command.arguments.size());
-  for (std::size_t i = 1; i < command.arguments.size(); ++i) {
-    const std::string& arg = command.arguments[i];
-    if (arg == "-c") continue;
-    if (arg == "-o") {
-      ++i;  // skip the output path
-      continue;
-    }
-    if (arg == source_basename) continue;
-    if (arg == command.source_path.relative_path.generic_string()) continue;
-    flags.push_back(ResolveArguments(arg, project_root.string()));
-  }
-  return flags;
-}
-
 // Generate LLVM IR for one translation unit using the same ClangTool pattern as
 // ProjectAstExtractor.
 StatusOr<std::unique_ptr<::llvm::Module>> BuildTranslationUnitModule(
@@ -120,7 +83,7 @@ StatusOr<std::unique_ptr<::llvm::Module>> BuildTranslationUnitModule(
       (project_root / command.source_path.relative_path).string();
 
   const std::vector<std::string> arguments =
-      CompileFlags(command, project_root);
+      build::CompileFlags(command, project_root);
 
   ::clang::tooling::FixedCompilationDatabase database(working_dir, arguments);
   ::clang::tooling::ClangTool tool(database, {source});
