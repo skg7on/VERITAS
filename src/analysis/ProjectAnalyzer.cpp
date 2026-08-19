@@ -18,6 +18,7 @@
 
 #include "analysis/cpg/CpgProjectionStage.h"
 #include "analysis/pipeline/LocalAnalysisStage.h"
+#include "cpg/CpgCanonicalizer.h"
 #include "analysis/svf/SvfAnalysisStage.h"
 #include "analysis/svf/SvfConfig.h"
 #include "analysis/svf/SvfMerge.h"
@@ -97,6 +98,11 @@ class ProjectAnalyzer::Impl {
     });
     if (!graph.ok()) return graph.status();
 
+    const std::string projection_id_str =
+        core::ToString(::veritas::cpg::CpgCanonicalizer::ProjectionId(*graph));
+    const std::size_t node_count = graph->nodes().size();
+    const std::size_t edge_count = graph->edges().size();
+
     // M2 + M3 + M6: persist the context and publish summaries + CPG atomically.
     auto coordinator =
         ProjectPublicationCoordinator::Open(input->output_root.string());
@@ -108,6 +114,9 @@ class ProjectAnalyzer::Impl {
     if (!published.ok()) return published.status();
 
     ProjectAnalysisResult result;
+    result.projection_id = projection_id_str;
+    result.cpg_node_count = node_count;
+    result.cpg_edge_count = edge_count;
     result.completion =
         svf_result->completion == svf::SvfMappingCompletion::kComplete
             ? AnalysisCompletion::kComplete

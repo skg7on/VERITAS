@@ -12,6 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+add_executable(cpg_end_to_end_integration_test
+  CpgEndToEndTest.cpp
+)
+target_link_libraries(cpg_end_to_end_integration_test PRIVATE
+  veritas_analysis
+  veritas_test_support
+  GTest::gtest
+  GTest::gtest_main
+)
+add_test(NAME CpgEndToEndTest COMMAND cpg_end_to_end_integration_test)
+set_tests_properties(CpgEndToEndTest PROPERTIES
+  TIMEOUT 180
+  LABELS "integration;analysis"
+)
+
 add_executable(cpg_projection_stage_integration_test
   CpgProjectionStageTest.cpp
 )

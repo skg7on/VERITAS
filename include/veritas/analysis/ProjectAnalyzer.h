@@ -59,6 +59,9 @@ struct ProjectAnalysisResult {
   std::string program_context_id;
   std::vector<std::string> published_summary_ids;
   std::vector<UnknownFact> unknowns;
+  std::string projection_id;
+  std::size_t cpg_node_count = 0;
+  std::size_t cpg_edge_count = 0;
 };
 
 // ProjectAnalyzer orchestrates the full M1→M4→M5→M3 analysis pipeline.
