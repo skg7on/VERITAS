@@ -44,6 +44,20 @@ std::string_view IdKindToString(IdKind kind) {
       return "summary";
     case IdKind::kFact:
       return "fact";
+    case IdKind::kValueRef:
+      return "valref";
+    case IdKind::kMemoryRef:
+      return "memref";
+    case IdKind::kCallSite:
+      return "callsite";
+    case IdKind::kBasicBlockSummary:
+      return "bbsummary";
+    case IdKind::kCpgProjection:
+      return "cpgproj";
+    case IdKind::kCpgEdge:
+      return "edge";
+    case IdKind::kUnknownNode:
+      return "unknown";
   }
   return "unknown";
 }
@@ -59,6 +73,13 @@ std::optional<IdKind> StringToIdKind(std::string_view str) {
       {"funcbody", IdKind::kFunctionBody},
       {"summary", IdKind::kFunctionSummary},
       {"fact", IdKind::kFact},
+      {"valref", IdKind::kValueRef},
+      {"memref", IdKind::kMemoryRef},
+      {"callsite", IdKind::kCallSite},
+      {"bbsummary", IdKind::kBasicBlockSummary},
+      {"cpgproj", IdKind::kCpgProjection},
+      {"edge", IdKind::kCpgEdge},
+      {"unknown", IdKind::kUnknownNode},
   };
   auto it = mapping.find(str);
   if (it != mapping.end()) {

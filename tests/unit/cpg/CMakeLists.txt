@@ -12,15 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_unit_test_support INTERFACE)
-target_link_libraries(veritas_unit_test_support INTERFACE
+add_executable(ThinCpgTest
+  ThinCpgTest.cpp
+)
+target_link_libraries(ThinCpgTest PRIVATE
+  veritas::cpg
   GTest::gtest
   GTest::gtest_main
 )
+gtest_discover_tests(ThinCpgTest)
 
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summary)
-add_subdirectory(summarydb)
-add_subdirectory(cpg)
-add_subdirectory(analysis)
+add_executable(CpgCanonicalizerTest
+  CpgCanonicalizerTest.cpp
+)
+target_include_directories(CpgCanonicalizerTest PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+target_link_libraries(CpgCanonicalizerTest PRIVATE
+  veritas::cpg
+  veritas::core
+  GTest::gtest
+  GTest::gtest_main
+)
+gtest_discover_tests(CpgCanonicalizerTest)

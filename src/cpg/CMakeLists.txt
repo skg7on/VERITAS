@@ -12,15 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_unit_test_support INTERFACE)
-target_link_libraries(veritas_unit_test_support INTERFACE
-  GTest::gtest
-  GTest::gtest_main
+# src/cpg/CMakeLists.txt
+#
+# Builds `veritas_cpg`, the thin in-memory Code Property Graph and its
+# deterministic canonicalizer.
+
+add_library(veritas_cpg
+  ThinCpg.cpp
+  CpgCanonicalizer.cpp
 )
 
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summary)
-add_subdirectory(summarydb)
-add_subdirectory(cpg)
-add_subdirectory(analysis)
+target_include_directories(veritas_cpg
+  PUBLIC
+    "${PROJECT_SOURCE_DIR}/include"
+  PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
+)
+
+target_link_libraries(veritas_cpg
+  PUBLIC
+    veritas::core
+)
+
+target_compile_features(veritas_cpg PUBLIC cxx_std_20)
+
+veritas_add_warnings(veritas_cpg)
+
+add_library(veritas::cpg ALIAS veritas_cpg)

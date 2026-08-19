@@ -47,14 +47,21 @@ enum class IdKind {
   kFunctionBody,
   kFunctionSummary,
   kFact,
+  // CPG (M6) identities
+  kValueRef,
+  kMemoryRef,
+  kCallSite,
+  kBasicBlockSummary,
+  kCpgProjection,
+  kCpgEdge,
+  kUnknownNode,
 };
 
 struct StableId {
   IdKind kind;
   std::string digest_hex;
 
-  bool operator==(const StableId&) const = default;
-  bool operator!=(const StableId&) const = default;
+  auto operator<=>(const StableId&) const = default;
 };
 
 // Construct a StableId from kind and canonical bytes. Uses SHA-256.
