@@ -21,7 +21,6 @@
 add_executable(StatusTest StatusTest.cpp)
 target_link_libraries(StatusTest PRIVATE
   veritas_core
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(StatusTest)
@@ -30,7 +29,6 @@ gtest_discover_tests(StatusTest DISCOVERY_TIMEOUT 60)
 add_executable(VersionTest VersionTest.cpp)
 target_link_libraries(VersionTest PRIVATE
   veritas_core
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(VersionTest)
@@ -39,7 +37,6 @@ gtest_discover_tests(VersionTest DISCOVERY_TIMEOUT 60)
 add_executable(HashTest HashTest.cpp)
 target_link_libraries(HashTest PRIVATE
   veritas_core
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(HashTest)
@@ -48,7 +45,6 @@ gtest_discover_tests(HashTest DISCOVERY_TIMEOUT 60)
 add_executable(IdsTest IdsTest.cpp)
 target_link_libraries(IdsTest PRIVATE
   veritas_core
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(IdsTest)
@@ -57,7 +53,6 @@ gtest_discover_tests(IdsTest DISCOVERY_TIMEOUT 60)
 add_executable(CanonicalValueTest CanonicalValueTest.cpp)
 target_link_libraries(CanonicalValueTest PRIVATE
   veritas_core
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(CanonicalValueTest)

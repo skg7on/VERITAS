@@ -39,6 +39,26 @@
 
 cmake_minimum_required(VERSION 3.23)
 
+# Homebrew ships its prebuilt dependencies (Abseil, Protobuf, Z3, RocksDB,
+# GTest, ...) targeting the newest macOS SDK. When the host compiler predates
+# that SDK (the intentional llvm@17 skew), it emits no -mmacosx-version-min and
+# the linker falls back to a much older floor, producing "built for newer
+# macOS version" warnings on every link. Derive the deployment target from the
+# active SDK so VERITAS matches the Homebrew floor. Overridable via
+# -DCMAKE_OSX_DEPLOYMENT_TARGET=...
+if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+  execute_process(
+    COMMAND xcrun --show-sdk-version
+    OUTPUT_VARIABLE VERITAS_MACOS_SDK_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+  if(VERITAS_MACOS_SDK_VERSION MATCHES "^([0-9]+)")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "${CMAKE_MATCH_1}.0" CACHE STRING
+        "Minimum macOS deployment target (derived from SDK ${VERITAS_MACOS_SDK_VERSION})")
+  endif()
+endif()
+
 project(VERITAS
   VERSION 0.1.0
   DESCRIPTION "Verified Evidence Reasoning IR for Trans-program Analysis and Semantics"

@@ -29,3 +29,7 @@ target_link_libraries(veritas_svf_analysis
 target_include_directories(veritas_svf_analysis
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
 )
+
+# SVF headers (included from this target) use LLVM 24-deprecated APIs and
+# std::iterator; suppress the deprecation warnings they emit into these TUs.
+target_compile_options(veritas_svf_analysis PRIVATE -Wno-deprecated-declarations)

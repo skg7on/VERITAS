@@ -19,7 +19,6 @@
 add_executable(MetadataStoreTest MetadataStoreTest.cpp)
 target_link_libraries(MetadataStoreTest PRIVATE
   veritas_summarydb
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(MetadataStoreTest)
@@ -28,7 +27,6 @@ gtest_discover_tests(MetadataStoreTest DISCOVERY_TIMEOUT 60)
 add_executable(ObjectStoreTest ObjectStoreTest.cpp)
 target_link_libraries(ObjectStoreTest PRIVATE
   veritas_summarydb
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(ObjectStoreTest)
@@ -38,7 +36,6 @@ add_executable(SummaryRepositoryTest SummaryRepositoryTest.cpp)
 target_link_libraries(SummaryRepositoryTest PRIVATE
   veritas_summarydb
   veritas::summary
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(SummaryRepositoryTest)

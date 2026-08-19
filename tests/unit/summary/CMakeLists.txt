@@ -21,7 +21,6 @@ add_executable(ComponentHashTest
 target_link_libraries(ComponentHashTest PRIVATE
   veritas::summary
   veritas::core
-  GTest::gtest
   GTest::gtest_main
 )
 
