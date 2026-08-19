@@ -22,6 +22,7 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/GlobalDecl.h"
 #include "clang/AST/Mangle.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -59,19 +60,21 @@ StatusOr<ClangToolCommand> ToClangToolCommand(
 
 std::string GetLinkageName(::clang::Linkage linkage) {
   switch (linkage) {
-    case ::clang::Linkage::NoLinkage: return "none";
-    case ::clang::Linkage::InternalLinkage: return "internal";
-    case ::clang::Linkage::UniqueExternalLinkage: return "unique_external";
-    case ::clang::Linkage::VisibleNoLinkage: return "visible_none";
-    case ::clang::Linkage::ModuleLinkage: return "module";
-    case ::clang::Linkage::ExternalLinkage: return "external";
+    case ::clang::Linkage::Invalid: return "invalid";
+    case ::clang::Linkage::None: return "none";
+    case ::clang::Linkage::Internal: return "internal";
+    case ::clang::Linkage::UniqueExternal: return "unique_external";
+    case ::clang::Linkage::VisibleNone: return "visible_none";
+    case ::clang::Linkage::Module: return "module";
+    case ::clang::Linkage::External: return "external";
     default: return "unknown";
   }
 }
 
 std::string MangleFunctionName(const ::clang::FunctionDecl& decl,
                                 ::clang::ASTContext& context) {
-  if (!context.getMangleContext()) {
+  auto* mangle_ctx = context.createMangleContext();
+  if (!mangle_ctx) {
     return decl.getNameAsString();
   }
 
@@ -79,16 +82,21 @@ std::string MangleFunctionName(const ::clang::FunctionDecl& decl,
   llvm::raw_string_ostream stream(mangled);
 
   if (const auto* ctor = ::clang::dyn_cast<::clang::CXXConstructorDecl>(&decl)) {
-    context.getMangleContext()->mangleCXXCtor(ctor, ::clang::Ctor_Complete, stream);
+    ::clang::GlobalDecl GD(ctor, ::clang::Ctor_Complete);
+    mangle_ctx->mangleName(GD, stream);
   } else if (const auto* dtor = ::clang::dyn_cast<::clang::CXXDestructorDecl>(&decl)) {
-    context.getMangleContext()->mangleCXXDtor(dtor, ::clang::Dtor_Complete, stream);
-  } else if (context.getMangleContext()->shouldMangleDeclName(&decl)) {
-    context.getMangleContext()->mangleName(&decl, stream);
+    ::clang::GlobalDecl GD(dtor, ::clang::Dtor_Complete);
+    mangle_ctx->mangleName(GD, stream);
+  } else if (mangle_ctx->shouldMangleDeclName(&decl)) {
+    ::clang::GlobalDecl GD(&decl);
+    mangle_ctx->mangleName(GD, stream);
   } else {
+    delete mangle_ctx;
     return decl.getNameAsString();
   }
 
   stream.flush();
+  delete mangle_ctx;
   return mangled;
 }
 
@@ -107,8 +115,10 @@ std::string GetCanonicalSignature(const ::clang::FunctionDecl& decl) {
 
   sig += ")";
 
-  if (decl.isConst()) {
-    sig += " const";
+  if (const auto* method = ::clang::dyn_cast<::clang::CXXMethodDecl>(&decl)) {
+    if (method->isConst()) {
+      sig += " const";
+    }
   }
 
   return sig;
@@ -140,17 +150,23 @@ core::StableId BuildFunctionSymbolId(const ::clang::FunctionDecl& decl,
   canonical_form += "|";
   canonical_form += GetLinkageName(decl.getLinkageInternal());
 
-  if (decl.getLinkageInternal() == ::clang::InternalLinkage) {
+  if (decl.getLinkageInternal() == ::clang::Linkage::Internal) {
     canonical_form += "|";
-    canonical_form += translation_unit_id.value;
+    canonical_form += translation_unit_id.digest_hex;
   }
 
-  auto hash_result = core::ComputeSha256(canonical_form);
-  if (!hash_result.ok()) {
-    return core::StableId{"functionsymbol:error:hash_failed"};
+  // Convert string to bytes for hashing
+  std::vector<std::byte> bytes;
+  bytes.reserve(canonical_form.size());
+  for (char c : canonical_form) {
+    bytes.push_back(static_cast<std::byte>(c));
   }
 
-  return core::StableId{"functionsymbol:sha256:" + hash_result.value()};
+  auto digest = core::ComputeSHA256(bytes);
+  std::string hex = core::DigestToHex(digest);
+
+  return core::MakeStableId(core::IdKind::kFunctionSymbol,
+                            std::as_bytes(std::span(digest)));
 }
 
 class FunctionDeclVisitor : public ::clang::RecursiveASTVisitor<FunctionDeclVisitor> {
@@ -265,7 +281,7 @@ StatusOr<ProjectAstIndex> ProjectAstExtractor::ExtractProject(
   for (const auto& command : manifest.translation_units) {
     auto invocation = ToClangToolCommand(manifest.context.project_root, command);
     if (!invocation.ok()) {
-      return Status(StatusCode::kFailedPrecondition,
+      return Status::FailedPrecondition(
                     "Failed to convert translation unit command: " +
                     std::string(invocation.status().message()));
     }
@@ -276,7 +292,7 @@ StatusOr<ProjectAstIndex> ProjectAstExtractor::ExtractProject(
 
     auto tu_id = core::ParseStableId(command.translation_unit_id);
     if (!tu_id.ok()) {
-      return Status(StatusCode::kFailedPrecondition,
+      return Status::FailedPrecondition(
                     "Invalid translation unit ID: " + command.translation_unit_id);
     }
 
@@ -284,7 +300,7 @@ StatusOr<ProjectAstIndex> ProjectAstExtractor::ExtractProject(
         tu_id.value(), &index);
 
     if (tool.run(action_factory.get()) != 0) {
-      return Status(StatusCode::kFailedPrecondition,
+      return Status::FailedPrecondition(
                     "Clang AST extraction failed for " + command.translation_unit_id);
     }
 

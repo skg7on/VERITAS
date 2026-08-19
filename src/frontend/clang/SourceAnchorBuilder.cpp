@@ -37,7 +37,7 @@ SourceAnchor SourceAnchorBuilder::Build(
     anchor.start_column = source_manager.getSpellingColumnNumber(spelling_loc);
 
     if (auto file_id = source_manager.getFileID(spelling_loc); file_id.isValid()) {
-      if (const auto* file_entry = source_manager.getFileEntryForID(file_id)) {
+      if (auto file_entry = source_manager.getFileEntryRefForID(file_id)) {
         anchor.file_path = file_entry->getName().str();
       }
     }

@@ -98,7 +98,7 @@ class PutIfAbsentMergeOperator : public rocksdb::MergeOperator {
     }
 
     // All operands match existing value - keep existing value unchanged
-    merge_out->existing_operand = merge_out->existing_value;
+    merge_out->existing_operand = *merge_in.existing_value;
     return true;
   }
 

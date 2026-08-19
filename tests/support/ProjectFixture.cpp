@@ -17,7 +17,9 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -51,8 +53,8 @@ fs::path MakeUniqueTestDirectory(std::string_view slug) {
   std::error_code error;
   fs::create_directories(path, error);
   if (error) {
-    throw std::runtime_error("cannot create fixture directory: " +
-                             error.message());
+    std::cerr << "cannot create fixture directory: " << error.message() << "\n";
+    std::abort();
   }
   return fs::canonical(path);
 }
@@ -61,7 +63,8 @@ void ReplaceAllInFile(const fs::path& file, std::string_view needle,
                       std::string_view replacement) {
   std::ifstream in(file);
   if (!in) {
-    throw std::runtime_error("cannot open fixture file: " + file.string());
+    std::cerr << "cannot open fixture file: " << file.string() << "\n";
+    std::abort();
   }
   std::ostringstream buffer;
   buffer << in.rdbuf();
@@ -76,7 +79,8 @@ void ReplaceAllInFile(const fs::path& file, std::string_view needle,
 
   std::ofstream out(file, std::ios::trunc);
   if (!out) {
-    throw std::runtime_error("cannot rewrite fixture file: " + file.string());
+    std::cerr << "cannot rewrite fixture file: " << file.string() << "\n";
+    std::abort();
   }
   out << contents;
 }
@@ -90,7 +94,8 @@ fs::path TestSourceRoot() {
 fs::path FixtureProject(std::string_view name) {
   const auto source = TestSourceRoot() / "fixtures" / "projects" / name;
   if (!fs::is_directory(source)) {
-    throw std::runtime_error("unknown project fixture: " + source.string());
+    std::cerr << "unknown project fixture: " << source.string() << "\n";
+    std::abort();
   }
 
   const auto destination = MakeUniqueTestDirectory(name);
@@ -99,9 +104,10 @@ fs::path FixtureProject(std::string_view name) {
            fs::copy_options::recursive | fs::copy_options::overwrite_existing,
            copy_error);
   if (copy_error) {
-    throw std::runtime_error("cannot copy fixture " + source.string() +
-                             " to " + destination.string() + ": " +
-                             copy_error.message());
+    std::cerr << "cannot copy fixture " << source.string()
+              << " to " << destination.string() << ": "
+              << copy_error.message() << "\n";
+    std::abort();
   }
 
   const auto database = destination / "compile_commands.json";

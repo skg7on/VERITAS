@@ -20,10 +20,13 @@ add_library(veritas_analysis_pipeline
 target_include_directories(veritas_analysis_pipeline
   PUBLIC
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/include
+    ${LLVM_INCLUDE_DIRS}
 )
 
 target_link_libraries(veritas_analysis_pipeline
   PUBLIC
+    veritas_analysis_llvm
     LLVMCore
     LLVMSupport
 )

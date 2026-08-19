@@ -23,6 +23,8 @@ add_library(veritas_analysis_llvm
 target_include_directories(veritas_analysis_llvm
   PUBLIC
     ${PROJECT_SOURCE_DIR}/src
+    ${LLVM_INCLUDE_DIRS}
+    ${CLANG_INCLUDE_DIRS}
 )
 
 target_link_libraries(veritas_analysis_llvm
@@ -33,4 +35,5 @@ target_link_libraries(veritas_analysis_llvm
     clangCodeGen
     clangFrontend
     clangTooling
+    clangSerialization
 )

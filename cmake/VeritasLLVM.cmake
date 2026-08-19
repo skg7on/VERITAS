@@ -87,3 +87,22 @@ message(STATUS "VERITAS: Found Clang ${CLANG_VERSION}")
 # VERITAS and SVF will match whatever LLVM was built with.
 message(STATUS "VERITAS: LLVM RTTI enabled: ${LLVM_ENABLE_RTTI}")
 message(STATUS "VERITAS: LLVM EH enabled: ${LLVM_ENABLE_EH}")
+
+# Apply LLVM's RTTI and EH settings to VERITAS targets.
+# If LLVM was built without RTTI, we must disable it for VERITAS as well,
+# otherwise we'll get linker errors for missing typeinfo symbols.
+if(NOT LLVM_ENABLE_RTTI)
+  if(MSVC)
+    add_compile_options(/GR-)
+  else()
+    add_compile_options(-fno-rtti)
+  endif()
+endif()
+
+if(NOT LLVM_ENABLE_EH)
+  if(MSVC)
+    add_compile_options(/EHs-c-)
+  else()
+    add_compile_options(-fno-exceptions)
+  endif()
+endif()

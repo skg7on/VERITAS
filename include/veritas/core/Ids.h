@@ -67,6 +67,9 @@ std::string ToString(const StableId& id);
 // format is invalid or the kind/algorithm is unrecognized.
 StatusOr<StableId> ParseStableId(std::string_view text);
 
+// Type aliases for specific ID kinds
+using FunctionSymbolId = std::string;
+
 }  // namespace veritas::core
 
 #endif  // VERITAS_CORE_IDS_H_

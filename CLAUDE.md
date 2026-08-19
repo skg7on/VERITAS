@@ -62,3 +62,11 @@ This repository has a canonical documentation layout. Design specs live under `d
 Every VERITAS-authored source, header, and CMake file must open with an SPDX-style Apache-2.0 header. See the referenced rule below for the exact format, per-language comment style, and the pre-commit verification snippet.
 
 @.claude/rules/license-header-policy.md
+
+VERITAS builds with RTTI and exceptions disabled to maintain compatibility with LLVM. See the referenced rule below for the rationale, coding constraints, and alternative patterns.
+
+@.claude/rules/cpp-compilation-policy.md
+
+Every push to the remote must pass local build and test verification. See the referenced rule below for the complete pre-push checklist and verification steps.
+
+@.claude/rules/pre-push-verification-policy.md
