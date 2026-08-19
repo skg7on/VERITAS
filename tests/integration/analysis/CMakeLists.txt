@@ -50,3 +50,4 @@ set_tests_properties(LocalAnalysisStageTest PROPERTIES
 )
 
 add_subdirectory(svf)
+add_subdirectory(cpg)

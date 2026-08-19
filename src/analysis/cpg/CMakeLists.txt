@@ -12,28 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_analysis
-  ProjectAnalyzer.cpp
+add_library(veritas_analysis_cpg
+  CpgProjectionStage.cpp
 )
 
-target_include_directories(veritas_analysis
+target_include_directories(veritas_analysis_cpg
   PUBLIC
     "${PROJECT_SOURCE_DIR}/include"
   PRIVATE
     "${PROJECT_SOURCE_DIR}/src"
+    "${LLVM_INCLUDE_DIRS}"
 )
 
-target_link_libraries(veritas_analysis
-  PUBLIC
-    veritas_core
+target_link_libraries(veritas_analysis_cpg
   PRIVATE
-    veritas_svf_analysis
-    veritas_analysis_pipeline
-    veritas_build
-    veritas_summarydb
+    veritas::cpg
+    veritas_analysis_llvm
+    veritas::summary
 )
-
-add_subdirectory(pipeline)
-add_subdirectory(llvm)
-add_subdirectory(svf)
-add_subdirectory(cpg)
