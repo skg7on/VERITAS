@@ -20,7 +20,7 @@
 
 **Identity Model:** `RepositoryID → RevisionID → BuildVariantID → FunctionSymbolID → FunctionVariantID → FunctionBodyID → FunctionSummaryID`. All IDs are semantic (not file-line based), content-derived, canonicalized. Format: `<kind>:sha256:<digest>`.
 
-**Analysis Stack (V1):** C++20, CMake 3.23+, LLVM/Clang 22+, required pinned SVF (`third_party/SVF@18fb5650…`), Z3, Protobuf, RocksDB, SQLite, Soufflé, GoogleTest. SVF is mandatory for L1 Andersen pointer analysis; no `VERITAS_ENABLE_SVF` toggle exists.
+**Analysis Stack (V1):** C++20, CMake 3.23+, LLVM/Clang 22+ libraries, required pinned SVF (`third_party/SVF@18fb5650…`), Z3, Protobuf, RocksDB, SQLite, Soufflé, GoogleTest. SVF is mandatory for L1 Andersen pointer analysis; no `VERITAS_ENABLE_SVF` toggle exists.
 
 **Milestones M0–M12:** Skeleton + toolchain → project ingestion → identity + metadata → Summary IR + CAS → Clang/LLVM local extraction → required in-process SVF → thin CPG projection → reverse-dep index + incremental scheduler → SCC WPA + Soufflé → provenance fact store + explain API → Evidence Builder input APIs + buffer-overflow demo → external IR adapter (bitcode) → external-facts importer (Joern/PhASAR).
 
@@ -40,8 +40,9 @@ cmake --build --preset default
 ```
 
 - Presets pin the generator to **Ninja** and the binary directory to `<repo>/build`. Variants: `default` (RelWithDebInfo), `debug`, `release`, `static-release`.
-- Requires CMake 3.23+, Ninja, LLVM/Clang 22+ (24.x recommended), Z3. See `docs/third_party/LLVM.md` and `docs/third_party/SVF.md` for the toolchain contract (VERITAS and SVF automatically match LLVM's RTTI/EH settings).
+- Requires CMake 3.23+, Ninja, LLVM/Clang 22+ libraries (24.x recommended), Z3. See `docs/third_party/LLVM.md` and `docs/third_party/SVF.md` for the toolchain contract. VERITAS and SVF build with RTTI and exceptions disabled (`-fno-rtti -fno-exceptions`), matching LLVM's `LLVM_ENABLE_RTTI=OFF` / `LLVM_ENABLE_EH=OFF`.
 - `LLVM_PROJECT_BUILD_DIR` is optional. When set, `cmake/VeritasLLVM.cmake` derives `LLVM_DIR` and `Clang_DIR` from that tree; otherwise `find_package(LLVM/Clang CONFIG)` falls back to explicit `LLVM_DIR` / `Clang_DIR` or system paths.
+- The **host C/C++ compiler** is auto-detected by CMake (or set via `CC`/`CXX` / `CMAKE_C_COMPILER`) and is independent of the LLVM library version: `LLVM_PROJECT_BUILD_DIR` supplies only the LLVM/Clang **headers and libraries**, never the compiler. On the current dev machine the host compiler is llvm@17 (clang 17.0.6) against LLVM 24.x libraries — that skew is intentional. VERITAS code is compiled as C++20.
 - SVF is vendored at `third_party/SVF/` and always builds. Its build tree lives at `build/svf-build/` and stays out of the default `all` target — `SvfCore`/`SvfLLVM` build on demand through the private `veritas_third_party_svf` wrapper.
 - `BUILD_SHARED_LIBS` defaults to `ON`; VERITAS and SVF both build shared. `--preset static-release` opts out.
 - Other options: `VERITAS_BUILD_TESTS` (ON), `VERITAS_BUILD_TOOLS` (ON).
