@@ -12,14 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_unit_test_support INTERFACE)
-target_link_libraries(veritas_unit_test_support INTERFACE
-  GTest::gtest
-  GTest::gtest_main
-)
+# RequiredSvfContract.cmake
+#
+# Build contract test: verify that SVF is required and configured correctly
+# in the standard VERITAS build.
 
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summary)
-add_subdirectory(summarydb)
-add_subdirectory(analysis)
+if(DEFINED VERITAS_ENABLE_SVF)
+  message(FATAL_ERROR "VERITAS_ENABLE_SVF must not exist")
+endif()
+
+if(NOT TARGET SvfCore OR NOT TARGET SvfLLVM)
+  message(FATAL_ERROR "required pinned SVF library targets are missing")
+endif()
+
+if(NOT TARGET veritas_third_party_svf)
+  message(FATAL_ERROR "VERITAS third-party SVF wrapper is missing")
+endif()
+
+message(STATUS "VERITAS: Required SVF contract test passed")

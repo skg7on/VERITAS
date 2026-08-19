@@ -128,6 +128,9 @@ include(VeritasLLVM)
 # private veritas_third_party_svf wrapper target.
 include(VeritasSVF)
 
+# Verify the required SVF build contract.
+include(tests/RequiredSvfContract)
+
 # Remaining VERITAS dependencies: Z3, Protobuf, RocksDB, SQLite3, and
 # GoogleTest (when tests are enabled). Souffle is optional at M0 and
 # becomes required at M8. Resolved before src/ subdirectories are added.

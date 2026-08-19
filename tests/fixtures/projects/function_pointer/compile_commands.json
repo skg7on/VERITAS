@@ -1,0 +1,7 @@
+[
+  {
+    "directory": ".",
+    "file": "function_pointer.cpp",
+    "command": "clang++ -c function_pointer.cpp -o function_pointer.o"
+  }
+]

@@ -1,0 +1,7 @@
+[
+  {
+    "directory": ".",
+    "file": "field_access.cpp",
+    "command": "clang++ -c field_access.cpp -o field_access.o"
+  }
+]

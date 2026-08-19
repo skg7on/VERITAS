@@ -103,7 +103,7 @@ jobs:
             -DZ3_BUILD_LIBZ3_SHARED=ON \
             -DZ3_BUILD_PYTHON_BINDINGS=OFF \
             -DZ3_BUILD_DOCUMENTATION=OFF
-          cmake --build "$RUNNER_TEMP/z3-build" --target install --parallel 4
+          cmake --build "$RUNNER_TEMP/z3-build" --target install --parallel $(nproc)
           cmake -E remove_directory "$GITHUB_WORKSPACE/z3"
           cmake -E remove_directory "$RUNNER_TEMP/z3-build"
 
@@ -129,7 +129,7 @@ jobs:
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r2
 
       - name: Checkout LLVM source
         if: steps.llvm-cache.outputs.cache-hit != 'true'
@@ -158,12 +158,16 @@ jobs:
             -DLLVM_INCLUDE_EXAMPLES=OFF \
             -DLLVM_INCLUDE_BENCHMARKS=OFF \
             -DLLVM_INCLUDE_DOCS=OFF \
-            -DLLVM_ENABLE_BINDINGS=OFF
+            -DLLVM_ENABLE_BINDINGS=OFF \
+            -DLLVM_BUILD_TOOLS=OFF \
+            -DLLVM_BUILD_UTILS=OFF \
+            -DCLANG_BUILD_TOOLS=OFF \
+            -DLLVM_OPTIMIZED_TABLEGEN=ON
 
       - name: Build and install LLVM
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         run: |
-          cmake --build "$RUNNER_TEMP/llvm-build" --target install --parallel 4
+          cmake --build "$RUNNER_TEMP/llvm-build" --target install --parallel $(nproc)
           cmake -E remove_directory "$GITHUB_WORKSPACE/llvm-project"
           cmake -E remove_directory "$RUNNER_TEMP/llvm-build"
 
@@ -204,12 +208,12 @@ jobs:
       - name: Build VERITAS
         env:
           LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
-        run: cmake --build build --parallel 4
+        run: cmake --build build --parallel $(nproc)
 
       - name: Build SVF
         env:
           LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
-        run: cmake --build build --target SvfCore SvfLLVM --parallel 4
+        run: cmake --build build --target SvfCore SvfLLVM --parallel $(nproc)
 
       - name: Run tests
         env:
