@@ -162,8 +162,9 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
 
   // Step 3: Sort and deduplicate all facts
   auto canonicalize = [](auto& fact_vec) {
-    std::ranges::sort(fact_vec);
-    auto [first, last] = std::ranges::unique(fact_vec);
+    std::ranges::sort(fact_vec.begin(), fact_vec.end());
+    auto [first, last] =
+        std::ranges::unique(fact_vec.begin(), fact_vec.end());
     fact_vec.erase(first, last);
   };
 
