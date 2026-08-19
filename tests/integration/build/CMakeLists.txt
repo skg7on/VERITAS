@@ -26,7 +26,7 @@ target_link_libraries(ProjectManifestLoaderTest PRIVATE
   GTest::gtest_main
 )
 veritas_add_warnings(ProjectManifestLoaderTest)
-gtest_discover_tests(ProjectManifestLoaderTest)
+gtest_discover_tests(ProjectManifestLoaderTest DISCOVERY_TIMEOUT 60)
 
 add_executable(VeritasBuildAnalyzeCliTest VeritasBuildAnalyzeCliTest.cpp)
 target_link_libraries(VeritasBuildAnalyzeCliTest PRIVATE
@@ -39,4 +39,4 @@ target_compile_definitions(VeritasBuildAnalyzeCliTest PRIVATE
 )
 add_dependencies(VeritasBuildAnalyzeCliTest veritas-build)
 veritas_add_warnings(VeritasBuildAnalyzeCliTest)
-gtest_discover_tests(VeritasBuildAnalyzeCliTest)
+gtest_discover_tests(VeritasBuildAnalyzeCliTest DISCOVERY_TIMEOUT 60)

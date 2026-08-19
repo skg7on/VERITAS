@@ -117,4 +117,5 @@ add_test(NAME RequiredSvfBoundaryTest COMMAND required_svf_boundary_test)
 set_tests_properties(RequiredSvfBoundaryTest PROPERTIES
   TIMEOUT 10
   LABELS "integration;svf;boundary"
+  WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )

@@ -23,7 +23,7 @@ target_link_libraries(MetadataStoreTest PRIVATE
   GTest::gtest_main
 )
 veritas_add_warnings(MetadataStoreTest)
-gtest_discover_tests(MetadataStoreTest)
+gtest_discover_tests(MetadataStoreTest DISCOVERY_TIMEOUT 60)
 
 add_executable(ObjectStoreTest ObjectStoreTest.cpp)
 target_link_libraries(ObjectStoreTest PRIVATE
@@ -32,7 +32,7 @@ target_link_libraries(ObjectStoreTest PRIVATE
   GTest::gtest_main
 )
 veritas_add_warnings(ObjectStoreTest)
-gtest_discover_tests(ObjectStoreTest)
+gtest_discover_tests(ObjectStoreTest DISCOVERY_TIMEOUT 60)
 
 add_executable(SummaryRepositoryTest SummaryRepositoryTest.cpp)
 target_link_libraries(SummaryRepositoryTest PRIVATE
@@ -42,4 +42,4 @@ target_link_libraries(SummaryRepositoryTest PRIVATE
   GTest::gtest_main
 )
 veritas_add_warnings(SummaryRepositoryTest)
-gtest_discover_tests(SummaryRepositoryTest)
+gtest_discover_tests(SummaryRepositoryTest DISCOVERY_TIMEOUT 60)
