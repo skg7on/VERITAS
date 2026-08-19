@@ -86,6 +86,10 @@ TEST(SvfFactMapperTest, MapsParameterReturnFlow) {
   EXPECT_TRUE(result.completion == SvfMappingCompletion::kComplete ||
               result.completion == SvfMappingCompletion::kCompleteWithUnknowns);
 
+  // The synthetic function returns its argument, so SVF should map a real
+  // value flow rather than returning an empty fact set.
+  EXPECT_GT(result.facts.value_flows.size(), 0u);
+
   // All facts should have provenance
   for (const auto& fact : result.facts.value_flows) {
     EXPECT_FALSE(fact.provenance.empty());
