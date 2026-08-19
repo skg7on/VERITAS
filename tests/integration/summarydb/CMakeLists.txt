@@ -23,7 +23,6 @@ target_link_libraries(ManifestPersistenceTest PRIVATE
   veritas_build
   veritas_test_support
   SQLite::SQLite3
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(ManifestPersistenceTest)

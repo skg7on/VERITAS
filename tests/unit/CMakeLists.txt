@@ -14,7 +14,6 @@
 
 add_library(veritas_unit_test_support INTERFACE)
 target_link_libraries(veritas_unit_test_support INTERFACE
-  GTest::gtest
   GTest::gtest_main
 )
 

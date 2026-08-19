@@ -47,6 +47,14 @@ endif()
 find_package(Protobuf REQUIRED)
 message(STATUS "VERITAS: Found Protobuf ${Protobuf_VERSION}")
 
+# Protobuf 7.x generated code (via ABSL_CHECK / ABSL_LOG) references Abseil
+# logging symbols directly. CMake's FindProtobuf module does not propagate
+# Protobuf's Abseil dependency onto `protobuf::libprotobuf`, so targets that
+# link generated .pb.cc files must link the Abseil log/check libraries
+# themselves (see src/summary/CMakeLists.txt).
+find_package(absl CONFIG REQUIRED)
+message(STATUS "VERITAS: Found Abseil (Protobuf transitive dependency)")
+
 # -----------------------------------------------------------------------------
 # RocksDB — CAS object store backing the Summary IR.
 # -----------------------------------------------------------------------------

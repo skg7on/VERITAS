@@ -71,6 +71,14 @@ add_subdirectory(
   EXCLUDE_FROM_ALL
 )
 
+# The pinned SVF revision predates LLVM 24's API deprecations (BranchInst,
+# Type::getPointerTo, ...) and still derives from std::iterator (deprecated in
+# C++17). We cannot patch the vendored sources, so silence the resulting
+# -Wdeprecated-declarations noise in SVF's own compilation. SVF_WARN_AS_ERROR
+# is already OFF above; this keeps the remaining warnings out of the build log.
+target_compile_options(SvfCore PRIVATE -Wno-deprecated-declarations)
+target_compile_options(SvfLLVM PRIVATE -Wno-deprecated-declarations)
+
 # Single private wrapper. VERITAS code links veritas_third_party_svf and
 # never references SvfCore / SvfLLVM directly, so SVF headers and types
 # never leak into public VERITAS headers.

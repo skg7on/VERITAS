@@ -34,6 +34,10 @@ target_include_directories(veritas_summary_proto PUBLIC
 
 target_link_libraries(veritas_summary_proto PUBLIC
   protobuf::libprotobuf
+  # Protobuf 7.x generated code references Abseil logging/checking symbols
+  # directly; CMake's FindProtobuf does not carry these transitively.
+  absl::absl_log
+  absl::absl_check
 )
 
 protobuf_generate(

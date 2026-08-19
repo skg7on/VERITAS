@@ -42,3 +42,8 @@ set_target_properties(veritas_frontend_clang PROPERTIES
   CXX_STANDARD_REQUIRED ON
   CXX_EXTENSIONS OFF
 )
+
+# Clang's own AST headers (OpenMPClause.h) use `[=]` lambdas that implicitly
+# capture `this`, which C++20 deprecates. We cannot patch the upstream headers,
+# so silence the resulting -Wdeprecated-this-capture warning.
+target_compile_options(veritas_frontend_clang PRIVATE -Wno-deprecated-this-capture)

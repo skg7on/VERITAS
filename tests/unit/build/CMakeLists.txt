@@ -20,7 +20,6 @@ add_executable(ProjectInputTest ProjectInputTest.cpp)
 target_link_libraries(ProjectInputTest PRIVATE
   veritas_build
   veritas_test_support
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(ProjectInputTest)
@@ -29,7 +28,6 @@ gtest_discover_tests(ProjectInputTest DISCOVERY_TIMEOUT 60)
 add_executable(AnalysisManifestTest AnalysisManifestTest.cpp)
 target_link_libraries(AnalysisManifestTest PRIVATE
   veritas_build
-  GTest::gtest
   GTest::gtest_main
 )
 veritas_add_warnings(AnalysisManifestTest)
