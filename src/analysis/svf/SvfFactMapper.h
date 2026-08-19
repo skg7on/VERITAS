@@ -33,19 +33,19 @@ namespace summary {
 
 struct ValueRef {
   std::string name;
-  bool operator==(const ValueRef&) const = default;
+  auto operator<=>(const ValueRef&) const = default;
 };
 
 struct MemoryRef {
   std::string name;
-  bool operator==(const MemoryRef&) const = default;
+  auto operator<=>(const MemoryRef&) const = default;
 };
 
 struct ValueFlowFact {
   ValueRef source;
   ValueRef destination;
   std::string provenance;
-  bool operator==(const ValueFlowFact&) const = default;
+  auto operator<=>(const ValueFlowFact&) const = default;
 };
 
 struct AliasFact {
@@ -53,7 +53,7 @@ struct AliasFact {
   MemoryRef right;
   std::string relationship;  // MUST_ALIAS, MAY_ALIAS, NO_ALIAS, UNKNOWN_ALIAS
   std::string provenance;
-  bool operator==(const AliasFact&) const = default;
+  auto operator<=>(const AliasFact&) const = default;
 };
 
 struct MemoryEffectFact {
@@ -61,7 +61,7 @@ struct MemoryEffectFact {
   MemoryRef memory;
   std::string effect_kind;  // READ, WRITE, MAY_READ, MAY_WRITE
   std::string provenance;
-  bool operator==(const MemoryEffectFact&) const = default;
+  auto operator<=>(const MemoryEffectFact&) const = default;
 };
 
 struct CallFact {
@@ -69,21 +69,21 @@ struct CallFact {
   ValueRef target;
   std::string call_kind;  // MUST_CALL, MAY_CALL, UNKNOWN_CALL
   std::string provenance;
-  bool operator==(const CallFact&) const = default;
+  auto operator<=>(const CallFact&) const = default;
 };
 
 struct UnknownFact {
   std::string scope;
   std::string reason;
   std::string provenance;
-  bool operator==(const UnknownFact&) const = default;
+  auto operator<=>(const UnknownFact&) const = default;
 };
 
 struct DependencyEdge {
   ValueRef from;
   ValueRef to;
   std::string kind;
-  bool operator==(const DependencyEdge&) const = default;
+  auto operator<=>(const DependencyEdge&) const = default;
 };
 
 }  // namespace summary

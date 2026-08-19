@@ -25,4 +25,4 @@ target_link_libraries(ComponentHashTest PRIVATE
   GTest::gtest_main
 )
 
-gtest_discover_tests(ComponentHashTest)
+gtest_discover_tests(ComponentHashTest DISCOVERY_TIMEOUT 60)

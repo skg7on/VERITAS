@@ -21,6 +21,7 @@
 #include <llvm/IR/Module.h>
 
 #include "analysis/pipeline/ProgramIr.h"
+#include "analysis/svf/SvfFactMapper.h"
 #include "analysis/svf/SvfSession.h"
 
 namespace veritas::analysis {

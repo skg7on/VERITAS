@@ -55,8 +55,12 @@ veritas_require_ci_literal(
   "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 )
 veritas_require_ci_literal(
-  "cache pin"
-  "actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae"
+  "cache restore pin"
+  "actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae"
+)
+veritas_require_ci_literal(
+  "cache save pin"
+  "actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae"
 )
 veritas_require_ci_literal(
   "Z3 source pin"
@@ -104,10 +108,10 @@ string(
   "${VERITAS_CI_CONTENT}"
 )
 list(LENGTH VERITAS_ACTION_REFERENCES VERITAS_ACTION_REFERENCE_COUNT)
-if(NOT VERITAS_ACTION_REFERENCE_COUNT EQUAL 5)
+if(NOT VERITAS_ACTION_REFERENCE_COUNT EQUAL 7)
   message(
     FATAL_ERROR
-    "Expected five pinned Action references, found ${VERITAS_ACTION_REFERENCE_COUNT}"
+    "Expected seven pinned Action references, found ${VERITAS_ACTION_REFERENCE_COUNT}"
   )
 endif()
 
@@ -116,7 +120,9 @@ foreach(VERITAS_ACTION_REFERENCE IN LISTS VERITAS_ACTION_REFERENCES)
     NOT VERITAS_ACTION_REFERENCE STREQUAL
         "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
     AND NOT VERITAS_ACTION_REFERENCE STREQUAL
-        "uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae"
+        "uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae"
+    AND NOT VERITAS_ACTION_REFERENCE STREQUAL
+        "uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae"
   )
     message(
       FATAL_ERROR

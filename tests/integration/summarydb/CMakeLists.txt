@@ -27,4 +27,4 @@ target_link_libraries(ManifestPersistenceTest PRIVATE
   GTest::gtest_main
 )
 veritas_add_warnings(ManifestPersistenceTest)
-gtest_discover_tests(ManifestPersistenceTest)
+gtest_discover_tests(ManifestPersistenceTest DISCOVERY_TIMEOUT 60)
