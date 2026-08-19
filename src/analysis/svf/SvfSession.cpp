@@ -21,7 +21,7 @@
 #include <SVFIR/SVFIR.h>
 #include <WPA/Andersen.h>
 #include <Graphs/SVFG.h>
-#include <Graphs/SVFGBuilder.h>
+#include <MSSA/SVFGBuilder.h>
 
 #include "analysis/pipeline/ProgramIr.h"
 
