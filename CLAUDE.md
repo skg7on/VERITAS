@@ -39,7 +39,7 @@ cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/path/to/llvm-project/build
 cmake --build --preset default
 ```
 
-- Presets pin the generator to **Ninja** and the binary directory to `<repo>/build`. Variants: `default` (RelWithDebInfo), `debug`, `release`, `static-release`.
+- Presets pin the generator to **Ninja** and the binary directory to `<repo>/build`. Variants: `default` (Debug), `debug`, `release`, `static-release`.
 - Requires CMake 3.23+, Ninja, LLVM/Clang 22+ (24.x recommended), Z3. See `docs/third_party/LLVM.md` and `docs/third_party/SVF.md` for the toolchain contract (VERITAS and SVF automatically match LLVM's RTTI/EH settings).
 - `LLVM_PROJECT_BUILD_DIR` is optional. When set, `cmake/VeritasLLVM.cmake` derives `LLVM_DIR` and `Clang_DIR` from that tree; otherwise `find_package(LLVM/Clang CONFIG)` falls back to explicit `LLVM_DIR` / `Clang_DIR` or system paths.
 - SVF is vendored at `third_party/SVF/` and always builds. Its build tree lives at `build/svf-build/` and stays out of the default `all` target — `SvfCore`/`SvfLLVM` build on demand through the private `veritas_third_party_svf` wrapper.

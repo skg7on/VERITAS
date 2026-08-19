@@ -8,12 +8,12 @@
   "configurePresets": [
     {
       "name": "default",
-      "displayName": "VERITAS (Ninja, RelWithDebInfo)",
-      "description": "Ninja generator, build/ under repo root, RelWithDebInfo, compile_commands exported.",
+      "displayName": "VERITAS (Ninja, Debug)",
+      "description": "Ninja generator, build/ under repo root, Debug, compile_commands exported.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
