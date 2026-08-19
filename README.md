@@ -49,7 +49,8 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 **Analysis Stack (V1):**
 - **Languages:** C++20
 - **Build System:** CMake 3.23+
-- **Compiler:** LLVM/Clang 22.x
+- **Host compiler:** CMake auto-detected (current dev machine: llvm@17 17.0.6)
+- **LLVM/Clang libraries:** 22+ (24.x recommended)
 - **Pointer Analysis:** SVF (pinned at `third_party/SVF@18fb5650…`, required, in-process)
 - **Constraint Solver:** Z3
 - **WPA Engine:** Soufflé Datalog
@@ -70,7 +71,7 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 
 - CMake 3.23+
 - Ninja (`brew install ninja` on macOS; `apt install ninja-build` on Debian/Ubuntu)
-- LLVM/Clang 22+ (24.x recommended; build with `LLVM_ENABLE_RTTI=ON` and `LLVM_ENABLE_EH=ON`)
+- LLVM/Clang 22+ libraries (24.x recommended; build with `LLVM_ENABLE_RTTI=OFF` and `LLVM_ENABLE_EH=OFF`). The host C/C++ compiler is auto-detected separately and need not match the LLVM library version.
 - Z3 (`brew install z3` on macOS)
 
 **Canonical configure and build** (uses `CMakePresets.json` — Ninja generator, `build/` under the repo root, Debug):
@@ -81,7 +82,7 @@ cmake --build --preset default
 ctest --preset default
 ```
 
-`LLVM_PROJECT_BUILD_DIR` derives `LLVM_DIR` and `Clang_DIR` from a local `llvm-project` build tree and shares one LLVM installation with the vendored SVF. Omit it to fall back to `find_package(LLVM/Clang CONFIG)` — provide `LLVM_DIR` / `Clang_DIR` on the command line, or let CMake search system paths.
+`LLVM_PROJECT_BUILD_DIR` derives `LLVM_DIR` and `Clang_DIR` from a local `llvm-project` build tree and shares one LLVM installation with the vendored SVF. It supplies only the LLVM/Clang **headers and libraries** — the host C/C++ compiler is auto-detected independently (via `CC`/`CXX` or `CMAKE_C_COMPILER`) and need not match the LLVM version. Omit it to fall back to `find_package(LLVM/Clang CONFIG)` — provide `LLVM_DIR` / `Clang_DIR` on the command line, or let CMake search system paths.
 
 **Available presets:** `default` (Debug), `debug`, `release`, `static-release` (opts out of `BUILD_SHARED_LIBS`). All resolve `binaryDir` to `<repo>/build`.
 
