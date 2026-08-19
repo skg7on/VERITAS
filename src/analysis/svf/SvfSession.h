@@ -74,10 +74,11 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
                          const SvfConfig& config,
                          SvfSessionCallback callback);
 
-// Test-only: verify SVF global state is clean between runs.
-#ifdef VERITAS_SVF_SESSION_TEST_HOOKS
+// Test-only: verify SVF global state is clean between runs. Declared and
+// defined unconditionally (rather than behind a macro) so the test target that
+// links the private library always finds the symbol; it is private to this
+// header and never reaches an installed API.
 bool SvfGlobalStateIsCleanForTest();
-#endif
 
 }  // namespace veritas::analysis::svf
 

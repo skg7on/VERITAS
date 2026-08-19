@@ -53,10 +53,9 @@ struct SvfCleanup final {
   }
 };
 
-#ifdef VERITAS_SVF_SESSION_TEST_HOOKS
-// Track lifecycle for test verification
+// Track lifecycle for test verification. Always compiled so the test-only
+// hook has a stable definition regardless of how the library is built.
 static int g_svf_session_count = 0;
-#endif
 
 }  // namespace
 
@@ -65,9 +64,7 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
                          SvfSessionCallback callback) {
   std::scoped_lock lock(ProcessWideSvfMutex());
 
-#ifdef VERITAS_SVF_SESSION_TEST_HOOKS
   ++g_svf_session_count;
-#endif
 
   SvfCleanup cleanup;
 
@@ -115,12 +112,10 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
   // Step 6: Cleanup happens automatically via SvfCleanup destructor
 }
 
-#ifdef VERITAS_SVF_SESSION_TEST_HOOKS
 bool SvfGlobalStateIsCleanForTest() {
   // In a real implementation, this would check SVF internal state.
   // For now, just verify sessions have run.
   return g_svf_session_count > 0;
 }
-#endif
 
 }  // namespace veritas::analysis::svf

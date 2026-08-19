@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#define VERITAS_SVF_SESSION_TEST_HOOKS
 #include "analysis/svf/SvfSession.h"
 
 #include <gtest/gtest.h>
