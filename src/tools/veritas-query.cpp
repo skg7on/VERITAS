@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <charconv>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -52,6 +53,13 @@ int ReportError(std::string_view message) {
   return 1;
 }
 
+// Non-throwing unsigned parse (VERITAS builds with -fno-exceptions).
+bool ParseSize(std::string_view text, std::size_t* out) {
+  const auto [ptr, ec] =
+      std::from_chars(text.data(), text.data() + text.size(), *out);
+  return ec == std::errc() && ptr == text.data() + text.size();
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -87,11 +95,17 @@ int main(int argc, char* argv[]) {
     } else if (arg == "--projection") {
       projection = TakeValue(args, &i, "--projection");
     } else if (arg == "--max-depth") {
-      budget.max_depth = std::stoul(TakeValue(args, &i, "--max-depth"));
+      if (!ParseSize(TakeValue(args, &i, "--max-depth"), &budget.max_depth)) {
+        return ReportError("invalid --max-depth");
+      }
     } else if (arg == "--max-nodes") {
-      budget.max_nodes = std::stoul(TakeValue(args, &i, "--max-nodes"));
+      if (!ParseSize(TakeValue(args, &i, "--max-nodes"), &budget.max_nodes)) {
+        return ReportError("invalid --max-nodes");
+      }
     } else if (arg == "--max-paths") {
-      budget.max_paths = std::stoul(TakeValue(args, &i, "--max-paths"));
+      if (!ParseSize(TakeValue(args, &i, "--max-paths"), &budget.max_paths)) {
+        return ReportError("invalid --max-paths");
+      }
     } else {
       positionals.push_back(arg);
     }

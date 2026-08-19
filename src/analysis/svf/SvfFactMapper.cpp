@@ -26,6 +26,7 @@
 #include <WPA/Andersen.h>
 #include <Graphs/SVFG.h>
 #include <llvm/IR/Argument.h>
+#include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Value.h>
 
@@ -34,18 +35,36 @@
 namespace veritas::analysis::svf {
 namespace {
 
-// A VERITAS name for a resolved LLVM value. The name is a deterministic,
-// human-readable proxy; the M4 origin map supplies true stable ValueRef
-// identity for arguments and named values when present.
-std::string LlvmValueName(const ::llvm::Value* value) {
-  if (value->hasName()) return value->getName().str();
+// The owning function of an LLVM value, or nullptr for globals/constants.
+const ::llvm::Function* OwningFunction(const ::llvm::Value* value) {
+  if (const auto* inst = ::llvm::dyn_cast<::llvm::Instruction>(value)) {
+    return inst->getFunction();
+  }
   if (const auto* arg = ::llvm::dyn_cast<::llvm::Argument>(value)) {
-    return "arg" + std::to_string(arg->getArgNo());
+    return arg->getParent();
   }
-  if (::llvm::isa<::llvm::Instruction>(value)) {
-    return "tmp";
+  return nullptr;
+}
+
+// A VERITAS name for a resolved LLVM value, function-qualified so the merge
+// stage can attribute interprocedural facts to the owning summary. The name is
+// a deterministic proxy; the M4 origin map supplies true stable ValueRef
+// identity when populated.
+std::string LlvmValueName(const ::llvm::Value* value) {
+  std::string name;
+  if (value->hasName()) {
+    name = value->getName().str();
+  } else if (const auto* arg = ::llvm::dyn_cast<::llvm::Argument>(value)) {
+    name = "arg" + std::to_string(arg->getArgNo());
+  } else if (::llvm::isa<::llvm::Instruction>(value)) {
+    name = "tmp";
+  } else {
+    name = "value";
   }
-  return "value";
+  if (const ::llvm::Function* function = OwningFunction(value)) {
+    return function->getName().str() + ":" + name;
+  }
+  return name;
 }
 
 // Resolve an SVF value to a VERITAS ValueRef through the session-scoped LLVM

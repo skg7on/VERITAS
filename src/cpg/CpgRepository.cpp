@@ -14,8 +14,10 @@
 
 #include "veritas/cpg/CpgRepository.h"
 
+#include <charconv>
 #include <map>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -24,6 +26,17 @@
 
 namespace veritas::cpg {
 namespace {
+
+// Non-throwing integer parse (VERITAS builds with -fno-exceptions).
+StatusOr<int> ParseInt(std::string_view text) {
+  int value = 0;
+  const auto [ptr, ec] =
+      std::from_chars(text.data(), text.data() + text.size(), value);
+  if (ec != std::errc() || ptr != text.data() + text.size()) {
+    return Status::Internal("corrupt integer in CPG metadata");
+  }
+  return value;
+}
 
 // Join/separate stable IDs with a separator that never appears in a
 // serialized ID ("<kind>:sha256:<hex>").
@@ -159,9 +172,10 @@ StatusOr<ThinCpg> CpgRepository::LoadProjection(
   for (const auto& node_row : *nodes) {
     auto node_id = core::ParseStableId(node_row[0]);
     if (!node_id.ok()) return node_id.status();
+    auto node_kind = ParseInt(node_row[1]);
+    if (!node_kind.ok()) return node_kind.status();
     auto status = graph.AddNode(
-        CpgNode{*node_id, static_cast<NodeKind>(std::stoi(node_row[1])),
-                node_row[2]});
+        CpgNode{*node_id, static_cast<NodeKind>(*node_kind), node_row[2]});
     if (!status.ok()) return status;
   }
 
@@ -193,12 +207,15 @@ StatusOr<ThinCpg> CpgRepository::LoadProjection(
     }
     CpgEdge edge;
     edge.edge_id = *edge_id;
-    edge.kind = static_cast<EdgeKind>(std::stoi(edge_row[1]));
+    auto edge_kind = ParseInt(edge_row[1]);
+    if (!edge_kind.ok()) return edge_kind.status();
+    auto alias_state = ParseInt(edge_row[4]);
+    if (!alias_state.ok()) return alias_state.status();
+    edge.kind = static_cast<EdgeKind>(*edge_kind);
     edge.source_node_id = *source;
     edge.target_node_id = *target;
-    const int alias_state = std::stoi(edge_row[4]);
-    if (alias_state >= 0) {
-      edge.alias_state = static_cast<AliasState>(alias_state);
+    if (*alias_state >= 0) {
+      edge.alias_state = static_cast<AliasState>(*alias_state);
     }
     edge.expandable = (edge_row[5] == "1");
     edge.support = support_by_edge[edge_row[0]];

@@ -131,8 +131,10 @@ StatusOr<TraversalResult<CpgPath>> CpgQuery::Traverse(
             continue;
           }
           const std::string key = core::ToString(edge.target_node_id);
-          const bool is_new = (explored.find(key) == explored.end());
-          if (is_new && explored.size() >= budget.max_nodes) {
+          if (explored.find(key) != explored.end()) {
+            continue;  // already visited; don't re-expand (bounds cyclic work)
+          }
+          if (explored.size() >= budget.max_nodes) {
             reasons.insert(TruncationReason::kMaxNodes);
             continue;
           }
