@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
@@ -46,6 +47,15 @@ class SummaryRepository {
   veritas::StatusOr<core::StableId> PublishSummary(
       const summary::v1::FunctionSummary& summary,
       const PublicationContext& context);
+
+  // Publish a batch of summaries atomically: every current binding advances in
+  // one SQLite transaction, or none do. Immutable objects are written first
+  // (outside the transaction); the metadata inserts and binding updates are
+  // staged together. Returns the FunctionSummaryIDs in input order.
+  veritas::StatusOr<std::vector<core::StableId>> PublishProjectSummaries(
+      const std::string& revision_id,
+      const std::string& build_variant_id,
+      const std::vector<summary::v1::FunctionSummary>& summaries);
 
   // Retrieve the current summary for a function variant.
   veritas::StatusOr<summary::v1::FunctionSummary> GetCurrentSummary(

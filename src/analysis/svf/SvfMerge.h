@@ -12,27 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "SvfAnalysisStage.h"
+#ifndef VERITAS_ANALYSIS_SVF_SVFMERGE_H_
+#define VERITAS_ANALYSIS_SVF_SVFMERGE_H_
 
-#include "analysis/pipeline/ProgramIr.h"
+#include <vector>
+
+#include "veritas/summary/v1/summary.pb.h"
 
 namespace veritas::analysis::svf {
 
-StatusOr<SvfMappingResult> SvfAnalysisStage::Analyze(
-    pipeline::ProgramIr& program_ir,
-    const AnalyzerRunContext& run_context,
-    const SvfConfig& config) {
-  SvfMappingResult result;
-  auto status = RunWithSvfSession(
-      program_ir, config,
-      [&](const SvfSessionView& view) {
-        return MapSvfFacts(program_ir, view, run_context, config, &result);
-      });
+struct SvfFacts;
 
-  if (!status.ok()) {
-    return status;
-  }
-  return result;
-}
+// Merge SVF-mapped facts into M4 summary drafts. M4 MUST facts are never
+// erased; SVF value-flow, alias, memory-effect, call, and unknown facts augment
+// the matching draft. Unknowns are never dropped. Returns the merged drafts.
+std::vector<summary::v1::FunctionSummary> MergeSvfFacts(
+    std::vector<summary::v1::FunctionSummary> drafts,
+    const SvfFacts& svf_facts);
 
 }  // namespace veritas::analysis::svf
+
+#endif  // VERITAS_ANALYSIS_SVF_SVFMERGE_H_

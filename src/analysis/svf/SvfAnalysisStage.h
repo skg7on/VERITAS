@@ -47,10 +47,10 @@ class SvfAnalysisStage {
   // Returns error if SVF construction fails (fatal).
   // Returns success with kCompleteWithUnknowns if budget limits were reached
   // or SVF nodes could not be mapped.
-  virtual Status Analyze(pipeline::ProgramIr& program_ir,
-                         const AnalyzerRunContext& run_context,
-                         const SvfConfig& config,
-                         SvfMappingResult* result);
+  virtual StatusOr<SvfMappingResult> Analyze(
+      pipeline::ProgramIr& program_ir,
+      const AnalyzerRunContext& run_context,
+      const SvfConfig& config);
 };
 
 }  // namespace veritas::analysis::svf

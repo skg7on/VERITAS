@@ -18,6 +18,7 @@
 #include <functional>
 
 #include "analysis/svf/SvfConfig.h"
+#include "veritas/core/Status.h"
 
 // Forward declarations of SVF types to keep them out of the public header
 namespace SVF {
@@ -33,16 +34,7 @@ class ProgramIr;
 
 namespace veritas::analysis::svf {
 
-// Status type placeholder - in real implementation would use veritas::Status
-class Status {
- public:
-  static Status Ok() { return Status(true); }
-  static Status Internal(const char* msg) { return Status(false); }
-  bool ok() const { return ok_; }
- private:
-  explicit Status(bool ok) : ok_(ok) {}
-  bool ok_;
-};
+using veritas::Status;
 
 // SvfSessionView provides callback-scoped access to live SVF analysis results.
 // Valid only within the RunWithSvfSession callback.
