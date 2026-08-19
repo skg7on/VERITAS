@@ -27,3 +27,6 @@ endforeach()
 # veritas-build is the project-analysis entry point: it loads the M1 manifest,
 # writes the diagnostic manifest, then runs the analyzer.
 target_link_libraries(veritas-build PRIVATE veritas_analysis veritas_build)
+
+# veritas-query queries published CPG projections.
+target_link_libraries(veritas-query PRIVATE veritas_cpg veritas_summarydb)

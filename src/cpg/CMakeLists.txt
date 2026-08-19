@@ -21,6 +21,7 @@ add_library(veritas_cpg
   ThinCpg.cpp
   CpgCanonicalizer.cpp
   CpgRepository.cpp
+  CpgQuery.cpp
 )
 
 target_include_directories(veritas_cpg

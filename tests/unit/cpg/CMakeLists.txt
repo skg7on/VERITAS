@@ -22,6 +22,21 @@ target_link_libraries(ThinCpgTest PRIVATE
 )
 gtest_discover_tests(ThinCpgTest)
 
+add_executable(CpgQueryTest
+  CpgQueryTest.cpp
+)
+target_include_directories(CpgQueryTest PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+target_link_libraries(CpgQueryTest PRIVATE
+  veritas::cpg
+  veritas_summarydb
+  veritas::core
+  GTest::gtest
+  GTest::gtest_main
+)
+gtest_discover_tests(CpgQueryTest)
+
 add_executable(CpgRepositoryTest
   CpgRepositoryTest.cpp
 )
