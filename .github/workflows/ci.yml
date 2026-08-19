@@ -142,7 +142,7 @@ jobs:
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r2
 
       - name: Checkout LLVM source
         if: steps.llvm-cache.outputs.cache-hit != 'true'
@@ -172,9 +172,7 @@ jobs:
             -DLLVM_INCLUDE_BENCHMARKS=OFF \
             -DLLVM_INCLUDE_DOCS=OFF \
             -DLLVM_ENABLE_BINDINGS=OFF \
-            -DLLVM_BUILD_TOOLS=OFF \
             -DLLVM_BUILD_UTILS=OFF \
-            -DCLANG_BUILD_TOOLS=OFF \
             -DLLVM_OPTIMIZED_TABLEGEN=ON
 
       - name: Build and install LLVM
@@ -202,7 +200,7 @@ jobs:
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r2
 
       - name: Configure VERITAS
         env:
