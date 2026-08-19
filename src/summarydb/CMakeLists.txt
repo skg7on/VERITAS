@@ -25,9 +25,20 @@ add_library(veritas_summarydb
   SummaryRepository.cpp
 )
 
+# Embed schema/v1.sql as a compile-time string so ApplySchema has a single
+# source of truth and no runtime file-path dependency.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/schema/v1.sql" VERITAS_SCHEMA_SQL)
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/schema/schema_v1.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/schema_v1.h"
+  @ONLY
+)
+
 target_include_directories(veritas_summarydb PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
+  PRIVATE
+  ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 target_link_libraries(veritas_summarydb PUBLIC

@@ -22,7 +22,7 @@
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER PRIMARY KEY
 );
-INSERT INTO schema_version (version) VALUES (1);
+INSERT OR IGNORE INTO schema_version (version) VALUES (1);
 
 -- Repositories: one per source tree root.
 CREATE TABLE IF NOT EXISTS repositories (
