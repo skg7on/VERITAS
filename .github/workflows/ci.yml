@@ -44,6 +44,19 @@ jobs:
       - name: Install system dependencies
         timeout-minutes: 10
         run: |
+          # The Azure runner image routes apt through azure.archive.ubuntu.com
+          # (via /etc/apt/apt-mirrors.txt), which intermittently hangs instead of
+          # failing fast and blows past this step's timeout. Fail fast on
+          # unresponsive mirrors so the retry loop below can recover, and demote
+          # the Azure mirror so archive.ubuntu.com is preferred when the mirror
+          # list is present.
+          echo 'Acquire::http::Timeout "30";'  | sudo tee /etc/apt/apt.conf.d/99veritas-apt >/dev/null
+          echo 'Acquire::https::Timeout "30";' | sudo tee -a /etc/apt/apt.conf.d/99veritas-apt >/dev/null
+          echo 'Acquire::Retries "2";'         | sudo tee -a /etc/apt/apt.conf.d/99veritas-apt >/dev/null
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i 's/priority:1/priority:9/' /etc/apt/apt-mirrors.txt || true
+          fi
+
           for attempt in 1 2 3; do
             echo "Attempt $attempt: apt-get update"
             if sudo apt-get update; then
@@ -159,9 +172,7 @@ jobs:
             -DLLVM_INCLUDE_BENCHMARKS=OFF \
             -DLLVM_INCLUDE_DOCS=OFF \
             -DLLVM_ENABLE_BINDINGS=OFF \
-            -DLLVM_BUILD_TOOLS=OFF \
             -DLLVM_BUILD_UTILS=OFF \
-            -DCLANG_BUILD_TOOLS=OFF \
             -DLLVM_OPTIMIZED_TABLEGEN=ON
 
       - name: Build and install LLVM
@@ -189,7 +200,7 @@ jobs:
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r2
 
       - name: Configure VERITAS
         env:
