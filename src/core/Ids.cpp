@@ -31,7 +31,7 @@ std::string_view IdKindToString(IdKind kind) {
     case IdKind::kRevision:
       return "rev";
     case IdKind::kBuildVariant:
-      return "build";
+      return "bv";
     case IdKind::kTranslationUnit:
       return "tu";
     case IdKind::kFunctionSymbol:
@@ -66,7 +66,7 @@ std::optional<IdKind> StringToIdKind(std::string_view str) {
   static const std::unordered_map<std::string_view, IdKind> mapping = {
       {"repo", IdKind::kRepository},
       {"rev", IdKind::kRevision},
-      {"build", IdKind::kBuildVariant},
+      {"bv", IdKind::kBuildVariant},
       {"tu", IdKind::kTranslationUnit},
       {"funcsym", IdKind::kFunctionSymbol},
       {"funcvar", IdKind::kFunctionVariant},

@@ -20,6 +20,7 @@
 add_library(veritas_cpg
   ThinCpg.cpp
   CpgCanonicalizer.cpp
+  CpgRepository.cpp
 )
 
 target_include_directories(veritas_cpg
@@ -32,6 +33,8 @@ target_include_directories(veritas_cpg
 target_link_libraries(veritas_cpg
   PUBLIC
     veritas::core
+  PRIVATE
+    veritas_summarydb
 )
 
 target_compile_features(veritas_cpg PUBLIC cxx_std_20)

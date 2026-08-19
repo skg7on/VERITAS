@@ -14,6 +14,7 @@
 
 add_library(veritas_analysis
   ProjectAnalyzer.cpp
+  ProjectPublicationCoordinator.cpp
 )
 
 target_include_directories(veritas_analysis
@@ -29,6 +30,8 @@ target_link_libraries(veritas_analysis
   PRIVATE
     veritas_svf_analysis
     veritas_analysis_pipeline
+    veritas_analysis_cpg
+    veritas_cpg
     veritas_build
     veritas_summarydb
 )

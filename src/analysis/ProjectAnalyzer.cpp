@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "analysis/cpg/CpgProjectionStage.h"
 #include "analysis/pipeline/LocalAnalysisStage.h"
 #include "analysis/svf/SvfAnalysisStage.h"
 #include "analysis/svf/SvfConfig.h"
@@ -23,9 +24,9 @@
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
 #include "veritas/core/Ids.h"
-#include "veritas/summarydb/SummaryRepository.h"
 
 #include "ProjectAnalyzerInternal.h"
+#include "ProjectPublicationCoordinator.h"
 
 namespace veritas::analysis {
 
@@ -83,15 +84,27 @@ class ProjectAnalyzer::Impl {
     auto merged = svf::MergeSvfFacts(std::move(local->summary_drafts),
                                      svf_result->facts);
 
-    // M2 + M3: persist the program context and publish summaries atomically.
-    auto repository =
-        summarydb::SummaryRepository::Open(input->output_root.string());
-    if (!repository.ok()) return repository.status();
-    auto persist = (*repository)->PersistManifestContext(*manifest);
+    // M6: project the CPG from the live ProgramIr and completed summaries.
+    auto revision_id = core::ParseStableId(manifest->context.revision_id);
+    auto build_variant_id = core::ParseStableId(manifest->context.build_variant_id);
+    if (!revision_id.ok()) return revision_id.status();
+    if (!build_variant_id.ok()) return build_variant_id.status();
+    auto graph = cpg::BuildThinCpg(cpg::CpgProjectionInput{
+        .program_ir = local->program_ir,
+        .completed_summaries = merged,
+        .revision_id = *revision_id,
+        .build_variant_id = *build_variant_id,
+    });
+    if (!graph.ok()) return graph.status();
+
+    // M2 + M3 + M6: persist the context and publish summaries + CPG atomically.
+    auto coordinator =
+        ProjectPublicationCoordinator::Open(input->output_root.string());
+    if (!coordinator.ok()) return coordinator.status();
+    auto persist = (*coordinator)->PersistManifestContext(*manifest);
     if (!persist.ok()) return persist;
-    auto published = (*repository)->PublishProjectSummaries(
-        manifest->context.revision_id, manifest->context.build_variant_id,
-        merged);
+    auto published = (*coordinator)->Publish(
+        CompletedProjectAnalysis{std::move(merged), std::move(*graph)});
     if (!published.ok()) return published.status();
 
     ProjectAnalysisResult result;

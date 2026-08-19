@@ -71,6 +71,22 @@ class SummaryRepository {
   // bindings' revision/build-variant foreign keys resolve. Idempotent.
   veritas::Status PersistManifestContext(const build::AnalysisManifest& manifest);
 
+  // Expose the backing MetadataStore so the publication coordinator can stage
+  // summaries and the CPG projection in one transaction.
+  MetadataStore& metadata_store() { return *metadata_store_; }
+
+  // Write immutable summary objects (no transaction) and return their
+  // FunctionSummaryIDs in input order.
+  veritas::StatusOr<std::vector<core::StableId>> PutImmutableSummaries(
+      const std::vector<summary::v1::FunctionSummary>& summaries);
+
+  // Stage summary metadata and current bindings within the current transaction.
+  // Assumes BeginTransaction has already been called on metadata_store().
+  veritas::Status StageCurrentBindings(
+      const std::string& revision_id,
+      const std::string& build_variant_id,
+      const std::vector<summary::v1::FunctionSummary>& summaries);
+
  private:
   SummaryRepository(std::unique_ptr<ObjectStore> object_store,
                     std::unique_ptr<MetadataStore> metadata_store);
