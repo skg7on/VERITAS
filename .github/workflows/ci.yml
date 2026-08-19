@@ -79,7 +79,7 @@ jobs:
 
       - name: Restore Z3 cache
         id: z3-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/z3-install
           key: veritas-ubuntu-24.04-x86_64-z3-ddb49568d3520e99799e364fb22f35fc67d887b1-r1
@@ -113,9 +113,20 @@ jobs:
           test -f "$RUNNER_TEMP/z3-install/lib/libz3.so"
           test -f "$RUNNER_TEMP/z3-install/lib/cmake/z3/Z3Config.cmake"
 
+      # Save the Z3 cache immediately after validation, before any later step
+      # (VERITAS build / SVF / tests) can fail. Without this, a job failure in a
+      # downstream step would skip the implicit post-job cache save, so a
+      # successfully built Z3 would never be cached on the current branch.
+      - name: Save Z3 cache
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/z3-install
+          key: veritas-ubuntu-24.04-x86_64-z3-ddb49568d3520e99799e364fb22f35fc67d887b1-r1
+
       - name: Restore LLVM cache
         id: llvm-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
           key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
@@ -166,6 +177,15 @@ jobs:
           test -f "$RUNNER_TEMP/llvm-install/lib/cmake/clang/ClangConfig.cmake"
           test "$("$RUNNER_TEMP/llvm-install/bin/llvm-config" --version)" = "24.0.0git"
           "$RUNNER_TEMP/llvm-install/bin/clang" --version
+
+      # Save the LLVM cache immediately after validation, before any later step
+      # (VERITAS build / SVF / tests) can fail. See the Z3 cache note above.
+      - name: Save LLVM cache
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/llvm-install
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
 
       - name: Configure VERITAS
         env:
