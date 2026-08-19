@@ -24,6 +24,7 @@ namespace SVF {
 class SVFIR;
 class AndersenWaveDiff;
 class SVFG;
+class LLVMModuleSet;
 }  // namespace SVF
 
 namespace veritas::analysis::pipeline {
@@ -45,10 +46,16 @@ class Status {
 
 // SvfSessionView provides callback-scoped access to live SVF analysis results.
 // Valid only within the RunWithSvfSession callback.
+//
+// `module_set` carries the LLVMModuleSet instance created by this session so
+// that fact mapping resolves SVF values through session-scoped state rather
+// than re-querying the process-wide singleton. This prevents cross-session
+// contamination when the singleton is released or replaced between runs.
 struct SvfSessionView {
   SVF::SVFIR* svf_ir;
   SVF::AndersenWaveDiff* andersen;
   SVF::SVFG* svfg;
+  SVF::LLVMModuleSet* module_set;
 };
 
 // Callback invoked with live SVF session state.

@@ -80,6 +80,11 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
   SVF::LLVMModuleSet::buildSVFModule(*llvm_module);
   cleanup.module_set_built = true;
 
+  // Capture the session's module set so downstream mapping uses session-scoped
+  // state rather than re-querying the global singleton (which may be stale or
+  // released if cleanup runs out of order).
+  SVF::LLVMModuleSet* module_set = SVF::LLVMModuleSet::getLLVMModuleSet();
+
   // Step 2: Build SVFIR
   SVF::SVFIRBuilder builder;
   SVF::SVFIR* svf_ir = builder.build();
@@ -104,7 +109,7 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
   }
 
   // Step 5: Invoke callback with live SVF state
-  SvfSessionView view{svf_ir, andersen, svfg};
+  SvfSessionView view{svf_ir, andersen, svfg, module_set};
   return callback(view);
 
   // Step 6: Cleanup happens automatically via SvfCleanup destructor

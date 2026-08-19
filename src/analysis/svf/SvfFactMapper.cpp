@@ -28,20 +28,25 @@
 namespace veritas::analysis::svf {
 namespace {
 
-// Resolve an SVF value to a VERITAS ValueRef through LLVM and M4 origin maps
+// Resolve an SVF value to a VERITAS ValueRef through LLVM and M4 origin maps.
+//
+// Uses the session-scoped LLVMModuleSet carried by `view` rather than the
+// process-wide singleton. This keeps value resolution tied to the live SVF
+// session and prevents mapping SVF values against stale module state from a
+// previous session.
 std::optional<summary::ValueRef> ResolveValue(
     const SVF::SVFValue* svf_value,
+    const SvfSessionView& view,
     const pipeline::ProgramIr& program_ir) {
-  if (!svf_value) {
+  if (!svf_value || !view.module_set) {
     return std::nullopt;
   }
 
-  auto* modules = SVF::LLVMModuleSet::getLLVMModuleSet();
-  if (!modules || !modules->hasLLVMValue(svf_value)) {
+  if (!view.module_set->hasLLVMValue(svf_value)) {
     return std::nullopt;
   }
 
-  const ::llvm::Value* llvm_value = modules->getLLVMValue(svf_value);
+  const ::llvm::Value* llvm_value = view.module_set->getLLVMValue(svf_value);
   if (!llvm_value) {
     return std::nullopt;
   }
@@ -116,9 +121,9 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
     if (!edge) continue;
 
     auto source = ResolveValue(
-        SvfValueForNode(edge->getSrcNode()), program_ir);
+        SvfValueForNode(edge->getSrcNode()), view, program_ir);
     auto dest = ResolveValue(
-        SvfValueForNode(edge->getDstNode()), program_ir);
+        SvfValueForNode(edge->getDstNode()), view, program_ir);
 
     if (!source || !dest) {
       ++unmapped_count;

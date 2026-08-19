@@ -1,5 +1,7 @@
-{
-  "directory": ".",
-  "file": "store_load.cpp",
-  "command": "clang++ -c store_load.cpp -o store_load.o"
-}
+[
+  {
+    "directory": ".",
+    "file": "store_load.cpp",
+    "command": "clang++ -c store_load.cpp -o store_load.o"
+  }
+]
