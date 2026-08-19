@@ -10,6 +10,10 @@
 
 **Verified Evidence Reasoning IR for Trans-program Analysis and Semantics**
 
+<p align="center">
+  <a href="https://github.com/skg7on/VERITAS/actions/workflows/ci.yml"><img src="https://github.com/skg7on/VERITAS/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Build"></a>
+</p>
+
 ---
 
 ## Overview
