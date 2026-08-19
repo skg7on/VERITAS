@@ -14,8 +14,18 @@
 
 #include "veritas/analysis/ProjectAnalyzer.h"
 
+#include <string>
+
+#include "analysis/pipeline/LocalAnalysisStage.h"
 #include "analysis/svf/SvfAnalysisStage.h"
 #include "analysis/svf/SvfConfig.h"
+#include "analysis/svf/SvfMerge.h"
+#include "veritas/build/ProjectInput.h"
+#include "veritas/build/ProjectManifestLoader.h"
+#include "veritas/core/Ids.h"
+#include "veritas/summarydb/SummaryRepository.h"
+
+#include "ProjectAnalyzerInternal.h"
 
 namespace veritas::analysis {
 
@@ -28,35 +38,77 @@ AnalysisConfig AnalysisConfig::Default() {
   };
 }
 
+namespace {
+
+svf::SvfConfig ToSvfConfig(const AnalysisConfig& config) {
+  return svf::SvfConfig{
+      .pointer_analysis = svf::PointerAnalysisKind::kAndersenWaveDiff,
+      .soft_analysis_budget = config.svf_soft_analysis_budget,
+      .max_graph_nodes = config.svf_max_graph_nodes,
+      .max_emitted_facts = config.svf_max_emitted_facts,
+      .field_sensitive = true,
+  };
+}
+
+}  // namespace
+
 // ProjectAnalyzer::Impl holds the implementation details
 class ProjectAnalyzer::Impl {
  public:
   Impl() : svf_stage_(std::make_unique<svf::SvfAnalysisStage>()) {}
 
-  ProjectAnalysisResult AnalyzeProject(const ProjectAnalysisRequest& request,
-                                        const AnalysisConfig& config) {
-    // Placeholder implementation showing the pipeline structure
-    // In real implementation would:
-    // 1. Call M1 to load compile_commands.json from request.project_root
-    // 2. Call M4 to run Clang and build ProgramIr + local summaries
-    // 3. Create AnalyzerRunContext with IDs
-    // 4. Call SVF stage (below)
-    // 5. Merge SVF facts conservatively with M4 summaries
-    // 6. Publish atomically to SummaryRepository
+  StatusOr<ProjectAnalysisResult> AnalyzeProject(
+      const ProjectAnalysisRequest& request, const AnalysisConfig& config) {
+    // M1: resolve and load the project manifest.
+    auto input = build::ResolveProjectInput(request);
+    if (!input.ok()) return input.status();
+    auto manifest = build::LoadProjectManifest(*input);
+    if (!manifest.ok()) return manifest.status();
 
-    // For now, demonstrate the SVF stage structure
-    svf::SvfConfig svf_config{
-        .pointer_analysis = svf::PointerAnalysisKind::kAndersenWaveDiff,
-        .soft_analysis_budget = config.svf_soft_analysis_budget,
-        .max_graph_nodes = config.svf_max_graph_nodes,
-        .max_emitted_facts = config.svf_max_emitted_facts,
-        .field_sensitive = true,
+    // M4: build linked IR and extract local summary drafts.
+    auto local = pipeline::RunLocalAnalysis(*manifest);
+    if (!local.ok()) return local.status();
+
+    // M5: run the required SVF stage over the live ProgramIr.
+    svf::AnalyzerRunContext run_context{
+        .analyzer_run_id = manifest->context.revision_id,
+        .llvm_toolchain_identity = "llvm",
+        .program_module_hash = std::string(local->program_ir.module_hash()),
     };
+    auto svf_result = svf_stage_->Analyze(local->program_ir, run_context,
+                                          ToSvfConfig(config));
+    if (!svf_result.ok()) return svf_result.status();
 
-    // Placeholder return
+    // Merge SVF facts conservatively into the M4 drafts.
+    auto merged = svf::MergeSvfFacts(std::move(local->summary_drafts),
+                                     svf_result->facts);
+
+    // M2 + M3: persist the program context and publish summaries atomically.
+    auto repository =
+        summarydb::SummaryRepository::Open(input->output_root.string());
+    if (!repository.ok()) return repository.status();
+    auto persist = (*repository)->PersistManifestContext(*manifest);
+    if (!persist.ok()) return persist;
+    auto published = (*repository)->PublishProjectSummaries(
+        manifest->context.revision_id, manifest->context.build_variant_id,
+        merged);
+    if (!published.ok()) return published.status();
+
     ProjectAnalysisResult result;
-    result.completion = AnalysisCompletion::kComplete;
-    result.program_context_id = "placeholder_context";
+    result.completion =
+        svf_result->completion == svf::SvfMappingCompletion::kComplete
+            ? AnalysisCompletion::kComplete
+            : AnalysisCompletion::kCompleteWithUnknowns;
+    result.program_context_id = manifest->context.revision_id;
+    result.published_summary_ids.reserve(published->size());
+    for (const auto& id : *published) {
+      result.published_summary_ids.push_back(core::ToString(id));
+    }
+    result.unknowns.reserve(svf_result->facts.unknowns.size());
+    for (const auto& unknown : svf_result->facts.unknowns) {
+      result.unknowns.push_back(
+          UnknownFact{unknown.scope, unknown.reason, unknown.provenance});
+    }
     return result;
   }
 
@@ -76,16 +128,23 @@ ProjectAnalyzer::~ProjectAnalyzer() = default;
 
 ProjectAnalyzer::ProjectAnalyzer(ProjectAnalyzer&&) noexcept = default;
 
-ProjectAnalyzer& ProjectAnalyzer::operator=(ProjectAnalyzer&&) noexcept = default;
+ProjectAnalyzer& ProjectAnalyzer::operator=(ProjectAnalyzer&&) noexcept =
+    default;
 
-ProjectAnalysisResult ProjectAnalyzer::AnalyzeProject(
-    const ProjectAnalysisRequest& request,
-    const AnalysisConfig& config) {
+StatusOr<ProjectAnalysisResult> ProjectAnalyzer::AnalyzeProject(
+    const ProjectAnalysisRequest& request, const AnalysisConfig& config) {
   return impl_->AnalyzeProject(request, config);
 }
 
 // Private constructor for test factory
 ProjectAnalyzer::ProjectAnalyzer(std::unique_ptr<Impl> impl)
     : impl_(std::move(impl)) {}
+
+ProjectAnalyzer internal::ProjectAnalyzerTestFactory::Create(
+    std::unique_ptr<svf::SvfAnalysisStage> stage) {
+  auto impl = std::make_unique<ProjectAnalyzer::Impl>();
+  impl->SetSvfStage(std::move(stage));
+  return ProjectAnalyzer(std::move(impl));
+}
 
 }  // namespace veritas::analysis

@@ -28,6 +28,9 @@ target_link_libraries(veritas_analysis
     veritas_core
   PRIVATE
     veritas_svf_analysis
+    veritas_analysis_pipeline
+    veritas_build
+    veritas_summarydb
 )
 
 add_subdirectory(pipeline)

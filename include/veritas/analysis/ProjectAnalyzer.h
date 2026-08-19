@@ -21,6 +21,9 @@
 #include <string>
 #include <vector>
 
+#include "veritas/analysis/ProjectAnalysisRequest.h"
+#include "veritas/core/Status.h"
+
 namespace veritas::analysis {
 
 // Forward declarations to avoid exposing implementation types
@@ -43,14 +46,7 @@ struct AnalysisConfig {
   static AnalysisConfig Default();
 };
 
-// ProjectAnalysisRequest specifies the input for a project analysis
-struct ProjectAnalysisRequest {
-  std::string project_root;
-  std::string output_root;
-};
-
 // UnknownFact represents a scope where analysis was incomplete or uncertain
-// (placeholder - in real implementation from include/veritas/summary/)
 struct UnknownFact {
   std::string scope;
   std::string reason;
@@ -65,18 +61,16 @@ struct ProjectAnalysisResult {
   std::vector<UnknownFact> unknowns;
 };
 
-// ProjectAnalyzer orchestrates the full M1→M4→M5 analysis pipeline.
+// ProjectAnalyzer orchestrates the full M1→M4→M5→M3 analysis pipeline.
 //
 // The standard workflow:
-// 1. M1: Load compile_commands.json
-// 2. M4: Run Clang and build LLVM IR, extract local facts
-// 3. M5: Run required SVF analysis on linked IR
-// 4. M5: Map SVF results and merge conservatively with M4 facts
-// 5. M3: Publish atomically to SummaryRepository
+// 1. M1: Resolve the project and load its compile_commands.json manifest
+// 2. M2: Persist the program context
+// 3. M4: Build linked LLVM IR and extract local facts into summary drafts
+// 4. M5: Run the required SVF analysis and merge results conservatively
+// 5. M3: Publish the completed summaries atomically
 //
 // SVF is a required stage. If SVF construction fails, no summaries are published.
-// If SVF completes with budget limits, partial validated facts are published with
-// unknowns documenting the truncation.
 class ProjectAnalyzer {
  public:
   ProjectAnalyzer();
@@ -90,16 +84,15 @@ class ProjectAnalyzer {
 
   // AnalyzeProject runs the full pipeline on the specified project.
   //
-  // Returns the completion status, context ID, published summary IDs, and
-  // any unknowns. Fails if:
+  // Fails if:
   // - project_root is invalid or missing compile_commands.json
   // - SVF construction fails (fatal, not a budget limit)
   // - publication fails
   //
   // Does NOT fail on budget limits or unmapped SVF nodes; those return
   // kCompleteWithUnknowns with explanatory unknowns.
-  ProjectAnalysisResult AnalyzeProject(const ProjectAnalysisRequest& request,
-                                        const AnalysisConfig& config);
+  StatusOr<ProjectAnalysisResult> AnalyzeProject(
+      const ProjectAnalysisRequest& request, const AnalysisConfig& config);
 
  private:
   class Impl;

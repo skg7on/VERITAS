@@ -19,6 +19,7 @@ add_executable(project_analyzer_integration_test
 target_link_libraries(project_analyzer_integration_test
   PRIVATE
     veritas_analysis
+    veritas_test_support
     veritas_unit_test_support
 )
 

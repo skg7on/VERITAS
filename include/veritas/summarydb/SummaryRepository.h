@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "veritas/build/AnalysisManifest.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 #include "veritas/summary/v1/summary.pb.h"
@@ -64,6 +65,11 @@ class SummaryRepository {
   // Retrieve a specific summary by ID.
   veritas::StatusOr<summary::v1::FunctionSummary> GetSummary(
       const core::StableId& summary_id) const;
+
+  // Persist the M1 program context (repository, revision, build variant, and
+  // translation units). Required before PublishProjectSummaries so the summary
+  // bindings' revision/build-variant foreign keys resolve. Idempotent.
+  veritas::Status PersistManifestContext(const build::AnalysisManifest& manifest);
 
  private:
   SummaryRepository(std::unique_ptr<ObjectStore> object_store,

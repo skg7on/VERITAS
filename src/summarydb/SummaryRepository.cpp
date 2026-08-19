@@ -15,8 +15,10 @@
 #include "veritas/summarydb/SummaryRepository.h"
 
 #include <cstddef>
+#include <filesystem>
 #include <span>
 #include <string>
+#include <system_error>
 
 #include "veritas/core/Hash.h"
 #include "veritas/summarydb/MetadataStore.h"
@@ -34,6 +36,13 @@ SummaryRepository::SummaryRepository(
 
 veritas::StatusOr<std::unique_ptr<SummaryRepository>> SummaryRepository::Open(
     const std::string& db_path) {
+  std::error_code error;
+  std::filesystem::create_directories(db_path, error);
+  if (error) {
+    return veritas::Status::Internal("cannot create repository directory " +
+                                     db_path + ": " + error.message());
+  }
+
   // Open object store (RocksDB)
   auto object_store_result = CreateObjectStore(db_path + "/objects");
   if (!object_store_result.ok()) {
@@ -284,6 +293,11 @@ SummaryRepository::GetCurrentSummary(
   }
 
   return GetSummary(*summary_id_result);
+}
+
+veritas::Status SummaryRepository::PersistManifestContext(
+    const build::AnalysisManifest& manifest) {
+  return metadata_store_->PutManifestContext(manifest);
 }
 
 veritas::StatusOr<summary::v1::FunctionSummary> SummaryRepository::GetSummary(

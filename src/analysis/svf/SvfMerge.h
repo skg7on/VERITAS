@@ -26,8 +26,8 @@ struct SvfFacts;
 // Merge SVF-mapped facts into M4 summary drafts. M4 MUST facts are never
 // erased; SVF value-flow, alias, memory-effect, call, and unknown facts augment
 // the matching draft. Unknowns are never dropped. Returns the merged drafts.
-std::vector<summary::v1::FunctionSummary> MergeSvfFacts(
-    std::vector<summary::v1::FunctionSummary> drafts,
+std::vector<::veritas::summary::v1::FunctionSummary> MergeSvfFacts(
+    std::vector<::veritas::summary::v1::FunctionSummary> drafts,
     const SvfFacts& svf_facts);
 
 }  // namespace veritas::analysis::svf
