@@ -19,6 +19,7 @@ add_executable(project_analyzer_integration_test
 target_link_libraries(project_analyzer_integration_test
   PRIVATE
     veritas_analysis
+    veritas_test_support
     veritas_unit_test_support
 )
 
@@ -28,4 +29,25 @@ set_tests_properties(ProjectAnalyzerTest PROPERTIES
   LABELS "integration;analysis"
 )
 
+add_executable(local_analysis_stage_integration_test
+  LocalAnalysisStageTest.cpp
+)
+
+target_link_libraries(local_analysis_stage_integration_test
+  PRIVATE
+    veritas_analysis_pipeline
+    veritas_build
+    veritas_test_support
+    GTest::gtest
+    GTest::gtest_main
+)
+
+add_test(NAME LocalAnalysisStageTest
+  COMMAND local_analysis_stage_integration_test)
+set_tests_properties(LocalAnalysisStageTest PROPERTIES
+  TIMEOUT 120
+  LABELS "integration;analysis"
+)
+
 add_subdirectory(svf)
+add_subdirectory(cpg)

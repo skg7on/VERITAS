@@ -18,12 +18,14 @@ add_library(veritas_svf_analysis STATIC
   SvfFactMapper.cpp
   SvfBudget.cpp
   SvfAnalysisStage.cpp
+  SvfMerge.cpp
 )
 
 target_link_libraries(veritas_svf_analysis
   PRIVATE
     veritas_third_party_svf
     veritas_analysis_pipeline
+    veritas_summary
 )
 
 target_include_directories(veritas_svf_analysis

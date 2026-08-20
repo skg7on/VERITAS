@@ -110,6 +110,7 @@ add_executable(required_svf_boundary_test
 
 target_link_libraries(required_svf_boundary_test
   PRIVATE
+    veritas_test_support
     veritas_unit_test_support
 )
 

@@ -17,7 +17,9 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "veritas/build/AnalysisManifest.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 #include "veritas/summary/v1/summary.pb.h"
@@ -47,6 +49,15 @@ class SummaryRepository {
       const summary::v1::FunctionSummary& summary,
       const PublicationContext& context);
 
+  // Publish a batch of summaries atomically: every current binding advances in
+  // one SQLite transaction, or none do. Immutable objects are written first
+  // (outside the transaction); the metadata inserts and binding updates are
+  // staged together. Returns the FunctionSummaryIDs in input order.
+  veritas::StatusOr<std::vector<core::StableId>> PublishProjectSummaries(
+      const std::string& revision_id,
+      const std::string& build_variant_id,
+      const std::vector<summary::v1::FunctionSummary>& summaries);
+
   // Retrieve the current summary for a function variant.
   veritas::StatusOr<summary::v1::FunctionSummary> GetCurrentSummary(
       const std::string& function_variant_id) const;
@@ -54,6 +65,27 @@ class SummaryRepository {
   // Retrieve a specific summary by ID.
   veritas::StatusOr<summary::v1::FunctionSummary> GetSummary(
       const core::StableId& summary_id) const;
+
+  // Persist the M1 program context (repository, revision, build variant, and
+  // translation units). Required before PublishProjectSummaries so the summary
+  // bindings' revision/build-variant foreign keys resolve. Idempotent.
+  veritas::Status PersistManifestContext(const build::AnalysisManifest& manifest);
+
+  // Expose the backing MetadataStore so the publication coordinator can stage
+  // summaries and the CPG projection in one transaction.
+  MetadataStore& metadata_store() { return *metadata_store_; }
+
+  // Write immutable summary objects (no transaction) and return their
+  // FunctionSummaryIDs in input order.
+  veritas::StatusOr<std::vector<core::StableId>> PutImmutableSummaries(
+      const std::vector<summary::v1::FunctionSummary>& summaries);
+
+  // Stage summary metadata and current bindings within the current transaction.
+  // Assumes BeginTransaction has already been called on metadata_store().
+  veritas::Status StageCurrentBindings(
+      const std::string& revision_id,
+      const std::string& build_variant_id,
+      const std::vector<summary::v1::FunctionSummary>& summaries);
 
  private:
   SummaryRepository(std::unique_ptr<ObjectStore> object_store,

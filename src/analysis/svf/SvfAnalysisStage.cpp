@@ -18,28 +18,21 @@
 
 namespace veritas::analysis::svf {
 
-Status SvfAnalysisStage::Analyze(pipeline::ProgramIr& program_ir,
-                                  const AnalyzerRunContext& run_context,
-                                  const SvfConfig& config,
-                                  SvfMappingResult* result) {
-  if (!result) {
-    return Status::Internal("result is null");
-  }
-
-  // Run SVF session and map facts inside the callback
+StatusOr<SvfMappingResult> SvfAnalysisStage::Analyze(
+    pipeline::ProgramIr& program_ir,
+    const AnalyzerRunContext& run_context,
+    const SvfConfig& config) {
+  SvfMappingResult result;
   auto status = RunWithSvfSession(
       program_ir, config,
       [&](const SvfSessionView& view) {
-        return MapSvfFacts(program_ir, view, run_context, config, result);
+        return MapSvfFacts(program_ir, view, run_context, config, &result);
       });
 
   if (!status.ok()) {
     return status;
   }
-
-  // Verify the callback populated the result
-  // (MapSvfFacts should have set result, but verify)
-  return Status::Ok();
+  return result;
 }
 
 }  // namespace veritas::analysis::svf

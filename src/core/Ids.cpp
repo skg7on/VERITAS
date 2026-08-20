@@ -31,7 +31,7 @@ std::string_view IdKindToString(IdKind kind) {
     case IdKind::kRevision:
       return "rev";
     case IdKind::kBuildVariant:
-      return "build";
+      return "bv";
     case IdKind::kTranslationUnit:
       return "tu";
     case IdKind::kFunctionSymbol:
@@ -44,6 +44,20 @@ std::string_view IdKindToString(IdKind kind) {
       return "summary";
     case IdKind::kFact:
       return "fact";
+    case IdKind::kValueRef:
+      return "valref";
+    case IdKind::kMemoryRef:
+      return "memref";
+    case IdKind::kCallSite:
+      return "callsite";
+    case IdKind::kBasicBlockSummary:
+      return "bbsummary";
+    case IdKind::kCpgProjection:
+      return "cpgproj";
+    case IdKind::kCpgEdge:
+      return "edge";
+    case IdKind::kUnknownNode:
+      return "unknown";
   }
   return "unknown";
 }
@@ -52,13 +66,20 @@ std::optional<IdKind> StringToIdKind(std::string_view str) {
   static const std::unordered_map<std::string_view, IdKind> mapping = {
       {"repo", IdKind::kRepository},
       {"rev", IdKind::kRevision},
-      {"build", IdKind::kBuildVariant},
+      {"bv", IdKind::kBuildVariant},
       {"tu", IdKind::kTranslationUnit},
       {"funcsym", IdKind::kFunctionSymbol},
       {"funcvar", IdKind::kFunctionVariant},
       {"funcbody", IdKind::kFunctionBody},
       {"summary", IdKind::kFunctionSummary},
       {"fact", IdKind::kFact},
+      {"valref", IdKind::kValueRef},
+      {"memref", IdKind::kMemoryRef},
+      {"callsite", IdKind::kCallSite},
+      {"bbsummary", IdKind::kBasicBlockSummary},
+      {"cpgproj", IdKind::kCpgProjection},
+      {"edge", IdKind::kCpgEdge},
+      {"unknown", IdKind::kUnknownNode},
   };
   auto it = mapping.find(str);
   if (it != mapping.end()) {

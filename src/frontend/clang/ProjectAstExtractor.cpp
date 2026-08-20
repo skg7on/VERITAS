@@ -32,6 +32,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "SourceAnchorBuilder.h"
+#include "veritas/build/CompileFlags.h"
 #include "veritas/core/Hash.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
@@ -53,7 +54,7 @@ StatusOr<ClangToolCommand> ToClangToolCommand(
 
   result.working_directory = (project_root / command.working_directory.relative_path).string();
   result.source_path = (project_root / command.source_path.relative_path).string();
-  result.arguments = command.arguments;
+  result.arguments = build::CompileFlags(command, project_root);
 
   return result;
 }

@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "ProjectFixture.h"
+
 namespace veritas::analysis {
 namespace {
 
@@ -32,29 +34,34 @@ TEST(ProjectAnalyzerTest, ConstructsAndDestructs) {
   // Should construct and destruct cleanly
 }
 
-TEST(ProjectAnalyzerTest, AnalyzeProjectReturnsResult) {
+TEST(ProjectAnalyzerTest, FailsForMissingProject) {
   ProjectAnalyzer analyzer;
-
   ProjectAnalysisRequest request{
       .project_root = "/nonexistent/project",
       .output_root = "/tmp/output",
   };
-
-  // In real implementation with M1/M4, this would fail on missing project
-  // For now, placeholder implementation returns success
   auto result = analyzer.AnalyzeProject(request, AnalysisConfig::Default());
-
-  // Verify result has expected structure
-  EXPECT_FALSE(result.program_context_id.empty());
+  EXPECT_FALSE(result.ok());
 }
 
 TEST(ProjectAnalyzerTest, MovableNotCopyable) {
   ProjectAnalyzer analyzer1;
   ProjectAnalyzer analyzer2 = std::move(analyzer1);
 
-  // Should compile and work
   static_assert(!std::is_copy_constructible_v<ProjectAnalyzer>);
   static_assert(std::is_move_constructible_v<ProjectAnalyzer>);
+}
+
+TEST(ProjectAnalyzerTest, PublishesSummariesForFixture) {
+  ProjectAnalyzer analyzer;
+  ProjectAnalysisRequest request{
+      .project_root = testing::FixtureProject("multiple_tus"),
+      .output_root = testing::FixtureProject("multiple_tus") / ".veritas",
+  };
+  auto result = analyzer.AnalyzeProject(request, AnalysisConfig::Default());
+  ASSERT_TRUE(result.ok()) << result.status().message();
+  EXPECT_FALSE(result->program_context_id.empty());
+  EXPECT_FALSE(result->published_summary_ids.empty());
 }
 
 }  // namespace

@@ -22,7 +22,7 @@
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER PRIMARY KEY
 );
-INSERT INTO schema_version (version) VALUES (1);
+INSERT OR IGNORE INTO schema_version (version) VALUES (1);
 
 -- Repositories: one per source tree root.
 CREATE TABLE IF NOT EXISTS repositories (
@@ -179,3 +179,58 @@ CREATE TABLE IF NOT EXISTS summary_bindings (
   FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
 );
 CREATE INDEX IF NOT EXISTS idx_summary_bindings_summary ON summary_bindings(summary_id);
+
+-- M6: CPG projections — one immutable graph per (revision, build variant).
+CREATE TABLE IF NOT EXISTS cpg_projections (
+  projection_id TEXT PRIMARY KEY NOT NULL,
+  schema_version TEXT NOT NULL,
+  revision_id TEXT NOT NULL,
+  build_variant_id TEXT NOT NULL,
+  module_hash TEXT NOT NULL,
+  summary_ids TEXT NOT NULL,
+  canonical_hash TEXT NOT NULL
+);
+
+-- M6: CPG nodes — typed, deduplicated per projection.
+CREATE TABLE IF NOT EXISTS cpg_nodes (
+  projection_id TEXT NOT NULL,
+  node_id TEXT NOT NULL,
+  node_kind INTEGER NOT NULL,
+  node_label TEXT NOT NULL,
+  PRIMARY KEY (projection_id, node_id),
+  FOREIGN KEY (projection_id) REFERENCES cpg_projections(projection_id)
+);
+
+-- M6: CPG edges — adjacency per projection.
+CREATE TABLE IF NOT EXISTS cpg_edges (
+  projection_id TEXT NOT NULL,
+  edge_id TEXT NOT NULL,
+  edge_kind INTEGER NOT NULL,
+  source_node_id TEXT NOT NULL,
+  target_node_id TEXT NOT NULL,
+  alias_state INTEGER NOT NULL,
+  expandable INTEGER NOT NULL,
+  PRIMARY KEY (projection_id, edge_id),
+  FOREIGN KEY (projection_id) REFERENCES cpg_projections(projection_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cpg_edges_source ON cpg_edges(projection_id, source_node_id, edge_kind);
+CREATE INDEX IF NOT EXISTS idx_cpg_edges_target ON cpg_edges(projection_id, target_node_id, edge_kind);
+
+-- M6: CPG edge support records (provenance) — ordered per edge.
+CREATE TABLE IF NOT EXISTS cpg_edge_support (
+  projection_id TEXT NOT NULL,
+  edge_id TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  function_summary_id TEXT NOT NULL,
+  provenance_ref TEXT NOT NULL,
+  PRIMARY KEY (projection_id, edge_id, position),
+  FOREIGN KEY (projection_id, edge_id) REFERENCES cpg_edges(projection_id, edge_id)
+);
+
+-- M6: current CPG projection per (revision, build variant).
+CREATE TABLE IF NOT EXISTS current_cpg_projections (
+  revision_id TEXT NOT NULL,
+  build_variant_id TEXT NOT NULL,
+  projection_id TEXT NOT NULL,
+  PRIMARY KEY (revision_id, build_variant_id)
+);

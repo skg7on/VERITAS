@@ -194,5 +194,37 @@ TEST_F(SummaryRepositoryTest, GetCurrentSummaryReturnsNotFoundForUnknownVariant)
   EXPECT_EQ(result.status().code(), StatusCode::kNotFound);
 }
 
+TEST_F(SummaryRepositoryTest, PublishProjectSummariesBindsAllAtomically) {
+  auto repo_result = SummaryRepository::Open(test_dir_.string());
+  ASSERT_TRUE(repo_result.ok());
+  auto repo = std::move(*repo_result);
+
+  const std::string revision = "rev:sha256:def";
+  const std::string build_variant = "variant:sha256:ghi";
+  PublicationContext context;
+  context.revision_id = revision;
+  context.build_variant_id = build_variant;
+  context.function_variant_id = "funcvar:sha256:jkl";
+  SetupParentRows(context);
+
+  auto first = MakeSyntheticSummary();
+  auto second = MakeSyntheticSummary();
+  second.mutable_identity()->set_function_variant_id("funcvar:sha256:second");
+
+  auto result =
+      repo->PublishProjectSummaries(revision, build_variant, {first, second});
+  ASSERT_TRUE(result.ok()) << result.status().message();
+  ASSERT_EQ(result->size(), 2u);
+
+  // Both bindings are current and both immutable objects are readable.
+  auto first_current = repo->GetCurrentSummary("funcvar:sha256:jkl");
+  auto second_current = repo->GetCurrentSummary("funcvar:sha256:second");
+  ASSERT_TRUE(first_current.ok());
+  ASSERT_TRUE(second_current.ok());
+  for (const auto& id : *result) {
+    EXPECT_TRUE(repo->GetSummary(id).ok());
+  }
+}
+
 }  // namespace
 }  // namespace veritas::summarydb

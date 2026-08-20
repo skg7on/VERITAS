@@ -13,7 +13,6 @@
 # limitations under the License.
 
 add_library(veritas_analysis_pipeline
-  ProgramIr.cpp
   LocalAnalysisStage.cpp
 )
 

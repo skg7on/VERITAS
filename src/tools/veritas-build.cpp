@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "veritas/analysis/ProjectAnalysisRequest.h"
+#include "veritas/analysis/ProjectAnalyzer.h"
 #include "veritas/build/AnalysisManifest.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
@@ -176,6 +177,20 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
             << '\n'
             << "Diagnostic Manifest: "
             << (input->output_root / "manifest.json").string() << '\n';
+
+  // Run the full M1 -> M4 -> M5 -> M3 analysis and publish summaries.
+  veritas::analysis::ProjectAnalyzer analyzer;
+  auto result = analyzer.AnalyzeProject(
+      request, veritas::analysis::AnalysisConfig::Default());
+  if (!result.ok()) return result.status();
+
+  std::cout << "Analysis complete\n"
+            << "Published summaries: " << result->published_summary_ids.size()
+            << '\n'
+            << "CPG projection: " << result->projection_id << '\n'
+            << "CPG nodes: " << result->cpg_node_count << '\n'
+            << "CPG edges: " << result->cpg_edge_count << '\n'
+            << "Unknowns: " << result->unknowns.size() << '\n';
   return veritas::Status::Ok();
 }
 

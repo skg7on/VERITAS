@@ -169,6 +169,7 @@ add_subdirectory(src/core)
 add_subdirectory(src/build)
 add_subdirectory(src/summary)
 add_subdirectory(src/summarydb)
+add_subdirectory(src/cpg)
 add_subdirectory(src/frontend)
 add_subdirectory(src/analysis)
 

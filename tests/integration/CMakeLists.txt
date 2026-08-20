@@ -17,3 +17,4 @@
 add_subdirectory(build)
 add_subdirectory(summarydb)
 add_subdirectory(analysis)
+add_subdirectory(frontend)

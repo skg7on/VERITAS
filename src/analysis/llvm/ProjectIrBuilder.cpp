@@ -14,76 +14,164 @@
 
 #include "analysis/llvm/ProjectIrBuilder.h"
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include <clang/CodeGen/CodeGenAction.h>
-#include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendActions.h>
+#include <clang/Tooling/CompilationDatabase.h>
 #include <clang/Tooling/Tooling.h>
+#include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/Function.h>
-#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Linker/Linker.h>
+#include <llvm/Support/SHA256.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include "analysis/llvm/OriginMap.h"
+#include "veritas/build/CompileFlags.h"
 
 namespace veritas::analysis::llvm {
+namespace {
 
-ProjectIrBuilder::ProjectIrBuilder(::llvm::LLVMContext& context)
-    : context_(context) {}
+namespace fs = std::filesystem;
 
-ProjectIrBuilder::~ProjectIrBuilder() = default;
+// Frontend action that emits LLVM IR and captures the generated module before
+// the action is destroyed by ClangTool.
+class EmitModuleAction : public ::clang::EmitLLVMOnlyAction {
+ public:
+  EmitModuleAction(::llvm::LLVMContext& context,
+                   std::unique_ptr<::llvm::Module>* out)
+      : ::clang::EmitLLVMOnlyAction(&context), out_(out) {}
 
-bool ProjectIrBuilder::AddTranslationUnit(
-    const std::string& source_file,
-    const std::vector<std::string>& compiler_args) {
-  // Create a CodeGenAction to emit LLVM IR
-  auto action = std::make_unique<::clang::EmitLLVMOnlyAction>(&context_);
-
-  // Run the action using Clang tooling
-  if (!::clang::tooling::runToolOnCodeWithArgs(std::move(action),
-                                                source_file,
-                                                compiler_args)) {
-    last_error_ = "Failed to generate LLVM IR for translation unit";
-    return false;
+ protected:
+  void EndSourceFileAction() override {
+    ::clang::EmitLLVMOnlyAction::EndSourceFileAction();
+    *out_ = takeModule();
   }
 
-  // The module is now owned by the action and will be retrieved during linking
-  return true;
+ private:
+  std::unique_ptr<::llvm::Module>* out_;
+};
+
+class EmitModuleActionFactory
+    : public ::clang::tooling::FrontendActionFactory {
+ public:
+  EmitModuleActionFactory(::llvm::LLVMContext& context,
+                          std::unique_ptr<::llvm::Module>* out)
+      : context_(context), out_(out) {}
+
+  std::unique_ptr<::clang::FrontendAction> create() override {
+    return std::make_unique<EmitModuleAction>(context_, out_);
+  }
+
+ private:
+  ::llvm::LLVMContext& context_;
+  std::unique_ptr<::llvm::Module>* out_;
+};
+
+// Generate LLVM IR for one translation unit using the same ClangTool pattern as
+// ProjectAstExtractor.
+StatusOr<std::unique_ptr<::llvm::Module>> BuildTranslationUnitModule(
+    const build::TranslationUnitCommand& command,
+    const fs::path& project_root,
+    ::llvm::LLVMContext& context) {
+  const std::string working_dir =
+      (project_root / command.working_directory.relative_path).string();
+  const std::string source =
+      (project_root / command.source_path.relative_path).string();
+
+  const std::vector<std::string> arguments =
+      build::CompileFlags(command, project_root);
+
+  ::clang::tooling::FixedCompilationDatabase database(working_dir, arguments);
+  ::clang::tooling::ClangTool tool(database, {source});
+
+  std::unique_ptr<::llvm::Module> module;
+  EmitModuleActionFactory factory(context, &module);
+  if (tool.run(&factory) != 0) {
+    return Status::FailedPrecondition(
+        "LLVM IR generation failed for " + command.translation_unit_id);
+  }
+  if (!module) {
+    return Status::FailedPrecondition(
+        "Clang produced no module for " + command.translation_unit_id);
+  }
+  return module;
 }
 
-std::unique_ptr<::llvm::Module> ProjectIrBuilder::LinkAndBuild(
-    OriginMap& origin_map) {
-  if (modules_.empty()) {
-    last_error_ = "No translation units to link";
-    return nullptr;
+std::string ComputeModuleHash(const ::llvm::Module& module) {
+  std::string bytes;
+  ::llvm::raw_string_ostream stream(bytes);
+  ::llvm::WriteBitcodeToFile(module, stream);
+  stream.flush();
+
+  ::llvm::SHA256 hash;
+  hash.update(::llvm::ArrayRef<uint8_t>(
+      reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()));
+  return ::llvm::toHex(hash.final(), /*LowerCase=*/true);
+}
+
+}  // namespace
+
+veritas::StatusOr<pipeline::ProgramIr> ProjectIrBuilder::BuildProjectIr(
+    const build::AnalysisManifest& manifest) {
+  if (manifest.translation_units.empty()) {
+    return Status::FailedPrecondition("manifest has no translation units");
   }
 
-  // Start with the first module as the base
-  auto linked_module = std::move(modules_[0]);
-  ::llvm::Linker linker(*linked_module);
+  pipeline::ProgramIr program_ir;
+  ::llvm::LLVMContext& context = program_ir.GetContext();
 
-  // Link in all remaining modules
-  for (size_t i = 1; i < modules_.size(); ++i) {
-    if (linker.linkInModule(std::move(modules_[i]))) {
-      last_error_ = "Failed to link module " + std::to_string(i);
-      return nullptr;
+  std::vector<std::unique_ptr<::llvm::Module>> modules;
+  modules.reserve(manifest.translation_units.size());
+
+  for (const auto& command : manifest.translation_units) {
+    auto module =
+        BuildTranslationUnitModule(command, manifest.context.project_root,
+                                   context);
+    if (!module.ok()) {
+      return module.status();
+    }
+    modules.push_back(std::move(*module));
+  }
+
+  // Link every module into the first one.
+  auto linked = std::move(modules.front());
+  ::llvm::Linker linker(*linked);
+  for (std::size_t i = 1; i < modules.size(); ++i) {
+    if (linker.linkInModule(std::move(modules[i]))) {
+      return Status::FailedPrecondition(
+          "failed to link translation unit into whole-program module");
     }
   }
 
-  // Populate the origin map by iterating over all functions
-  for (auto& func : *linked_module) {
-    if (!func.isDeclaration()) {
-      // Generate the symbol ID from the function name and linkage
-      std::string symbol_id = func.getName().str();
-      if (func.hasInternalLinkage()) {
-        // For static functions, qualify with module identifier
-        symbol_id = linked_module->getModuleIdentifier() + "::" + symbol_id;
-      }
-      origin_map.RecordOrigin(&func, symbol_id);
+  // Normalize path-dependent fields before deriving any identity so the
+  // module hash and origin map are stable across checkout roots and temporary
+  // fixture directories (Clang records the source path and a tool-specific
+  // module identifier that vary per invocation).
+  linked->setModuleIdentifier("veritas.project");
+  linked->setSourceFileName("");
+
+  // Populate the origin map: a function's symbol ID is its (mangled) name,
+  // qualified with the module identifier when it has internal linkage so two
+  // file-local functions in different translation units do not collide.
+  OriginMap& origin_map = program_ir.mutable_origin_map();
+  for (auto& function : *linked) {
+    if (function.isDeclaration()) continue;
+    std::string symbol_id = function.getName().str();
+    if (function.hasInternalLinkage()) {
+      symbol_id = linked->getModuleIdentifier() + "::" + symbol_id;
     }
+    origin_map.RecordOrigin(&function, std::move(symbol_id));
   }
 
-  modules_.clear();
-  return linked_module;
+  program_ir.SetModuleHash(ComputeModuleHash(*linked));
+  program_ir.SetTranslationUnitCount(manifest.translation_units.size());
+  program_ir.SetModule(std::move(linked));
+
+  return program_ir;
 }
 
 }  // namespace veritas::analysis::llvm

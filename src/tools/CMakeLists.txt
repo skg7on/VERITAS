@@ -24,6 +24,9 @@ foreach(_veritas_cli veritas-build veritas-query veritas-diff veritas-explain)
   veritas_add_warnings(${_veritas_cli})
 endforeach()
 
-# veritas-build is the M1 project-analysis entry point and links the
-# project-ingestion library.
-target_link_libraries(veritas-build PRIVATE veritas_build)
+# veritas-build is the project-analysis entry point: it loads the M1 manifest,
+# writes the diagnostic manifest, then runs the analyzer.
+target_link_libraries(veritas-build PRIVATE veritas_analysis veritas_build)
+
+# veritas-query queries published CPG projections.
+target_link_libraries(veritas-query PRIVATE veritas_cpg veritas_summarydb)

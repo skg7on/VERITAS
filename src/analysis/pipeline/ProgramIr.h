@@ -17,7 +17,10 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#include "analysis/llvm/OriginMap.h"
 
 namespace llvm {
 class LLVMContext;
@@ -29,7 +32,9 @@ namespace veritas::analysis::pipeline {
 
 // ProgramIr owns the linked LLVM IR module and provides query methods for
 // analysis stages. It manages the LLVMContext lifetime and ensures the module
-// outlives all Function* references.
+// outlives all Function* references. It also carries the LLVM-to-VERITAS
+// origin map, the number of linked translation units, and a deterministic
+// module hash so downstream stages (M5, M6) can cite whole-program identity.
 class ProgramIr {
  public:
   ProgramIr();
@@ -63,9 +68,30 @@ class ProgramIr {
   // Returns the number of functions in the module.
   size_t GetFunctionCount() const;
 
+  // LLVM-to-VERITAS origin map. Populated by ProjectIrBuilder.
+  ::veritas::analysis::llvm::OriginMap& mutable_origin_map() {
+    return origin_map_;
+  }
+  const ::veritas::analysis::llvm::OriginMap& origin_map() const {
+    return origin_map_;
+  }
+
+  // Number of translation units linked into the module.
+  size_t translation_unit_count() const { return translation_unit_count_; }
+  void SetTranslationUnitCount(size_t count) {
+    translation_unit_count_ = count;
+  }
+
+  // Deterministic hash of the linked module's canonical bitcode.
+  std::string_view module_hash() const { return module_hash_; }
+  void SetModuleHash(std::string hash) { module_hash_ = std::move(hash); }
+
  private:
   std::unique_ptr<::llvm::LLVMContext> context_;
   std::unique_ptr<::llvm::Module> module_;
+  ::veritas::analysis::llvm::OriginMap origin_map_;
+  size_t translation_unit_count_ = 0;
+  std::string module_hash_;
 };
 
 }  // namespace veritas::analysis::pipeline
