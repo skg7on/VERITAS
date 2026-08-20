@@ -26,7 +26,7 @@
 
 **First Demo:** A `decode → memcpy(b->data, p->payload, p->len)` fixture showing upstream `validatePacket` change → one local summary recomputed → range component delta → seven dependent summaries invalidated → WPA finds unsafe flow → Evidence case built with flow, range facts, missing dominating check, unknown for `vendor_validate`, and proof obligation. No LLM required; provenance-backed semantic slices only.
 
-**Current State:** Design-phase repository. Four architecture documents (`docs/architecture/`), engineering-backbone spec, milestone specs M1–M12 (`docs/specs/milestones/`), implementation plans for M11/M12 (`docs/plans/`). No source code yet; `main` is clean awaiting M0 implementation.
+**Current State:** M0–M6 are implemented and tested. The standard `veritas-build analyze --project <dir>` runs M1 → M4 → M5 → M3 → M6 entirely in-process: Clang/LLVM local extraction → required in-process SVF → Summary IR → atomic summary+CPG publication, with the thin CPG queryable via `veritas-query`. M7–M12 (reverse-dep index, SCC WPA/Soufflé, provenance fact store, Evidence Builder, external IR/facts adapters) are not yet implemented. Architecture docs, the engineering-backbone spec, milestone specs M1–M12, and implementation plans for M0–M12 live under `docs/`.
 
 ---
 
