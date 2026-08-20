@@ -14,28 +14,45 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <fstream>
-#include <regex>
+#include <iterator>
 #include <string>
+
+#include "ProjectFixture.h"
 
 namespace veritas::analysis::svf {
 namespace {
 
-// Helper to check if a directory tree contains a pattern
-bool SourceTreeContains(const std::string& directory,
+bool FileContains(const std::filesystem::path& path, const std::string& pattern) {
+  std::ifstream in(path);
+  if (!in) return false;
+  const std::string content((std::istreambuf_iterator<char>(in)),
+                            std::istreambuf_iterator<char>());
+  return content.find(pattern) != std::string::npos;
+}
+
+// Search a path (file or directory) under the repository root for a pattern.
+bool SourceTreeContains(const std::string& relative_path,
                         const std::string& pattern) {
-  // In real implementation, would recursively search files
-  // For now, assume boundary is clean (this is a contract test)
+  const auto root =
+      testing::TestSourceRoot().parent_path() / relative_path;
+  if (!std::filesystem::exists(root)) return false;
+  if (std::filesystem::is_regular_file(root)) {
+    return FileContains(root, pattern);
+  }
+  for (const auto& entry :
+       std::filesystem::recursive_directory_iterator(root)) {
+    if (entry.is_regular_file() && FileContains(entry.path(), pattern)) {
+      return true;
+    }
+  }
   return false;
 }
 
 TEST(RequiredSvfBoundaryTest, PublicApiContainsNoNativeAnalysisTypes) {
-  // Verify no SVF headers leak into public API
   EXPECT_FALSE(SourceTreeContains("include/veritas", "#include <SVF"));
   EXPECT_FALSE(SourceTreeContains("include/veritas", "SVF::"));
-
-  // Verify no LLVM headers leak into public API
-  // (except where explicitly needed in internal pipeline types)
   EXPECT_FALSE(SourceTreeContains("include/veritas/analysis/ProjectAnalyzer.h",
                                   "#include <llvm"));
   EXPECT_FALSE(SourceTreeContains("include/veritas/analysis/ProjectAnalyzer.h",
@@ -43,32 +60,29 @@ TEST(RequiredSvfBoundaryTest, PublicApiContainsNoNativeAnalysisTypes) {
 }
 
 TEST(RequiredSvfBoundaryTest, NoOptionalSvfToggleExists) {
-  // Verify the repository has no VERITAS_ENABLE_SVF option
-  // This is also checked at CMake configure time by RequiredSvfContract.cmake
-
-  std::ifstream cmake_file("CMakeLists.txt");
-  ASSERT_TRUE(cmake_file.is_open());
+  const auto cmake_file =
+      testing::TestSourceRoot().parent_path() / "CMakeLists.txt";
+  std::ifstream in(cmake_file);
+  ASSERT_TRUE(in.is_open()) << "cannot open " << cmake_file;
 
   std::string line;
-  while (std::getline(cmake_file, line)) {
+  while (std::getline(in, line)) {
     EXPECT_EQ(line.find("VERITAS_ENABLE_SVF"), std::string::npos)
         << "Found VERITAS_ENABLE_SVF in: " << line;
   }
 }
 
 TEST(RequiredSvfBoundaryTest, NoFindSvfModule) {
-  // Verify no FindSVF.cmake exists (SVF is vendored and required)
-  std::ifstream find_svf("cmake/FindSVF.cmake");
-  EXPECT_FALSE(find_svf.is_open())
+  const auto find_svf =
+      testing::TestSourceRoot().parent_path() / "cmake" / "FindSVF.cmake";
+  EXPECT_FALSE(std::filesystem::exists(find_svf))
       << "FindSVF.cmake should not exist; SVF is vendored and required";
 }
 
 TEST(RequiredSvfBoundaryTest, SvfHeadersRemainPrivate) {
-  // SVF headers should only appear in src/analysis/svf/*.cpp
-  // Not in any public headers or other implementation files
-
-  // This would be a filesystem walk in real implementation
-  // Demonstrating the contract: SVF isolation to src/analysis/svf/
+  // SVF/LLVM native types must not leak into installed public headers.
+  EXPECT_FALSE(SourceTreeContains("include/veritas", "#include <SVF"));
+  EXPECT_FALSE(SourceTreeContains("include/veritas", "#include <llvm"));
 }
 
 }  // namespace
