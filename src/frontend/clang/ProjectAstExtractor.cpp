@@ -133,8 +133,10 @@ std::string GetTemplateIdentity(const ::clang::FunctionDecl& decl) {
     return result;
   }
 
-  if (const auto* spec = ::clang::dyn_cast<::clang::FunctionTemplateSpecializationInfo>(
-          decl.getTemplateSpecializationInfo())) {
+  // getTemplateSpecializationInfo() already returns the target type (or
+  // nullptr for a non-template function). LLVM's dyn_cast asserts on a null
+  // pointer, so use a plain null check instead of dyn_cast.
+  if (decl.getTemplateSpecializationInfo() != nullptr) {
     return "specialization";
   }
 
