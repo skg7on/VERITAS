@@ -24,6 +24,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "veritas/core/Status.h"
 
