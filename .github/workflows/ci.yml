@@ -79,7 +79,6 @@ jobs:
             libffi-dev \
             libgtest-dev \
             libprotobuf-dev \
-            librocksdb-dev \
             libsqlite3-dev \
             libtinfo-dev \
             libxml2-dev \
@@ -136,6 +135,54 @@ jobs:
         with:
           path: ${{ runner.temp }}/z3-install
           key: veritas-ubuntu-24.04-x86_64-z3-ddb49568d3520e99799e364fb22f35fc67d887b1-r1
+
+      - name: Restore RocksDB cache
+        id: rocksdb-cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/rocksdb-install
+          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r1
+
+      - name: Checkout RocksDB source
+        if: steps.rocksdb-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: facebook/rocksdb
+          ref: v9.11.1
+          path: rocksdb
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Ubuntu's librocksdb-dev ships a static library built without -fPIC,
+      # which cannot be linked into VERITAS's shared libraries. Build RocksDB
+      # from source with PIC enabled instead (mirrors the Z3/LLVM steps).
+      - name: Build and install RocksDB
+        if: steps.rocksdb-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S rocksdb -B "$RUNNER_TEMP/rocksdb-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/rocksdb-install" \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DWITH_TESTS=OFF \
+            -DWITH_TOOLS=OFF \
+            -DWITH_BENCHMARK_TOOLS=OFF \
+            -DWITH_GFLAGS=OFF
+          cmake --build "$RUNNER_TEMP/rocksdb-build" --target install --parallel $(nproc)
+          cmake -E remove_directory "$GITHUB_WORKSPACE/rocksdb"
+          cmake -E remove_directory "$RUNNER_TEMP/rocksdb-build"
+
+      - name: Validate RocksDB installation
+        run: |
+          test -f "$RUNNER_TEMP/rocksdb-install/include/rocksdb/db.h"
+          test -f "$RUNNER_TEMP/rocksdb-install/lib/librocksdb.a"
+          test -f "$RUNNER_TEMP/rocksdb-install/lib/cmake/rocksdb/RocksDBConfig.cmake"
+
+      - name: Save RocksDB cache
+        if: steps.rocksdb-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/rocksdb-install
+          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r1
 
       - name: Restore LLVM cache
         id: llvm-cache
@@ -213,6 +260,7 @@ jobs:
             -DCMAKE_CXX_COMPILER="$RUNNER_TEMP/llvm-install/bin/clang++" \
             -DLLVM_PROJECT_BUILD_DIR="$RUNNER_TEMP/llvm-install" \
             -DZ3_DIR="$RUNNER_TEMP/z3-install/lib/cmake/z3" \
+            -DRocksDB_DIR="$RUNNER_TEMP/rocksdb-install/lib/cmake/rocksdb" \
             -DVERITAS_BUILD_TESTS=ON \
             -DVERITAS_BUILD_TOOLS=ON
 
