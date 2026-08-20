@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_unit_test_support INTERFACE)
-target_link_libraries(veritas_unit_test_support INTERFACE
+# tests/unit/runtime/CMakeLists.txt
+#
+# Unit tests for veritas_runtime.
+
+add_executable(WorklistSchedulerTest WorklistSchedulerTest.cpp)
+target_link_libraries(WorklistSchedulerTest PRIVATE
+  veritas_runtime
   GTest::gtest_main
 )
-
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summary)
-add_subdirectory(summarydb)
-add_subdirectory(runtime)
-add_subdirectory(cpg)
-add_subdirectory(analysis)
+veritas_add_warnings(WorklistSchedulerTest)
+gtest_discover_tests(WorklistSchedulerTest DISCOVERY_TIMEOUT 60)
