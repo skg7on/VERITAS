@@ -22,6 +22,7 @@
 #include <WPA/Andersen.h>
 #include <Graphs/SVFG.h>
 #include <MSSA/SVFGBuilder.h>
+#include <Util/NodeIDAllocator.h>
 
 #include "analysis/pipeline/ProgramIr.h"
 
@@ -50,6 +51,11 @@ struct SvfCleanup final {
     if (module_set_built) {
       SVF::LLVMModuleSet::releaseLLVMModuleSet();
     }
+    // NodeIDAllocator is a process-wide singleton whose counters accumulate
+    // across sessions. Without resetting it, the next session's symbol count
+    // (totalSymNum) inflates past the fresh PAG's node count and SVFIRBuilder
+    // trips "not all node have been initialized!!!".
+    SVF::NodeIDAllocator::unset();
   }
 };
 
