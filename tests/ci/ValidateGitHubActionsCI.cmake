@@ -72,7 +72,7 @@ veritas_require_ci_literal(
 )
 veritas_require_ci_literal(
   "LLVM cache key"
-  "veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r1"
+  "veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r2"
 )
 veritas_require_ci_literal(
   "Z3 cache gate"
