@@ -47,13 +47,26 @@ endif()
 find_package(Protobuf REQUIRED)
 message(STATUS "VERITAS: Found Protobuf ${Protobuf_VERSION}")
 
-# Protobuf 7.x generated code (via ABSL_CHECK / ABSL_LOG) references Abseil
-# logging symbols directly. CMake's FindProtobuf module does not propagate
-# Protobuf's Abseil dependency onto `protobuf::libprotobuf`, so targets that
-# link generated .pb.cc files must link the Abseil log/check libraries
-# themselves (see src/summary/CMakeLists.txt).
-find_package(absl CONFIG REQUIRED)
-message(STATUS "VERITAS: Found Abseil (Protobuf transitive dependency)")
+# Protobuf 22.0+ (the upb-based rewrite) generates .pb.cc code that
+# references Abseil logging/checking symbols directly (ABSL_CHECK / ABSL_LOG).
+# CMake's FindProtobuf module does not propagate Protobuf's Abseil dependency
+# onto `protobuf::libprotobuf`, so targets that link generated .pb.cc files
+# must link the Abseil log/check libraries themselves (see
+# src/summary/CMakeLists.txt).
+#
+# Older Protobuf (3.x, e.g. Ubuntu 24.04's 3.21.12) does not reference Abseil,
+# so discover Abseil only when present rather than requiring it
+# unconditionally. Do NOT gate this on Protobuf_VERSION: FindProtobuf decodes
+# the GOOGLE_PROTOBUF_VERSION macro with the pre-22.0 scheme, so protobuf
+# 35.1 reports as "7.35.1", which would compare spuriously below any 22.0
+# threshold. src/summary/CMakeLists.txt links the absl targets only when they
+# exist, so the absence of Abseil is harmless for Protobuf 3.x.
+find_package(absl CONFIG QUIET)
+if(absl_FOUND)
+  message(STATUS "VERITAS: Found Abseil ${absl_VERSION} (Protobuf transitive dependency)")
+else()
+  message(STATUS "VERITAS: Abseil not found (not required for Protobuf 3.x)")
+endif()
 
 # -----------------------------------------------------------------------------
 # RocksDB — CAS object store backing the Summary IR.
