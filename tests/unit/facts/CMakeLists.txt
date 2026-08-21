@@ -12,16 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_unit_test_support INTERFACE)
-target_link_libraries(veritas_unit_test_support INTERFACE
+add_executable(FactSchemaTest FactSchemaTest.cpp)
+target_link_libraries(FactSchemaTest PRIVATE
+  veritas::facts
   GTest::gtest_main
 )
-
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summary)
-add_subdirectory(summarydb)
-add_subdirectory(runtime)
-add_subdirectory(cpg)
-add_subdirectory(analysis)
-add_subdirectory(facts)
+veritas_add_warnings(FactSchemaTest)
+gtest_discover_tests(FactSchemaTest DISCOVERY_TIMEOUT 60)
