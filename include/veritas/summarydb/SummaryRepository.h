@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "veritas/build/AnalysisManifest.h"
@@ -61,6 +62,12 @@ class SummaryRepository {
   // Retrieve the current summary for a function variant.
   veritas::StatusOr<summary::v1::FunctionSummary> GetCurrentSummary(
       const std::string& function_variant_id) const;
+
+  // Retrieve every current summary in one revision/build context, ordered by
+  // stable function-variant ID.
+  veritas::StatusOr<std::vector<summary::v1::FunctionSummary>>
+  ListCurrentSummaries(std::string_view revision_id,
+                       std::string_view build_variant_id) const;
 
   // Retrieve a specific summary by ID.
   veritas::StatusOr<summary::v1::FunctionSummary> GetSummary(

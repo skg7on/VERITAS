@@ -226,5 +226,55 @@ TEST_F(SummaryRepositoryTest, PublishProjectSummariesBindsAllAtomically) {
   }
 }
 
+TEST_F(SummaryRepositoryTest, ListsCurrentSummariesInFunctionVariantOrder) {
+  auto repo_result = SummaryRepository::Open(test_dir_.string());
+  ASSERT_TRUE(repo_result.ok());
+  auto repo = std::move(*repo_result);
+
+  PublicationContext context{
+      .revision_id = "rev:sha256:def",
+      .build_variant_id = "variant:sha256:ghi",
+      .function_variant_id = "funcvar:sha256:z",
+  };
+  SetupParentRows(context);
+
+  auto z = MakeSyntheticSummary();
+  z.mutable_identity()->set_function_variant_id("funcvar:sha256:z");
+  auto a = MakeSyntheticSummary();
+  a.mutable_identity()->set_function_variant_id("funcvar:sha256:a");
+  ASSERT_TRUE(repo->PublishProjectSummaries(
+      context.revision_id, context.build_variant_id, {z, a}).ok());
+
+  auto listed = repo->ListCurrentSummaries(
+      context.revision_id, context.build_variant_id);
+  ASSERT_TRUE(listed.ok()) << listed.status().message();
+  ASSERT_EQ(listed->size(), 2u);
+  EXPECT_EQ((*listed)[0].identity().function_variant_id(),
+            "funcvar:sha256:a");
+  EXPECT_EQ((*listed)[1].identity().function_variant_id(),
+            "funcvar:sha256:z");
+}
+
+TEST_F(SummaryRepositoryTest, ListCurrentSummariesIsolatesContext) {
+  auto repo_result = SummaryRepository::Open(test_dir_.string());
+  ASSERT_TRUE(repo_result.ok());
+  auto repo = std::move(*repo_result);
+
+  PublicationContext context{
+      .revision_id = "rev:sha256:def",
+      .build_variant_id = "variant:sha256:ghi",
+      .function_variant_id = "funcvar:sha256:jkl",
+  };
+  SetupParentRows(context);
+  ASSERT_TRUE(repo->PublishProjectSummaries(
+      context.revision_id, context.build_variant_id,
+      {MakeSyntheticSummary()}).ok());
+
+  auto listed = repo->ListCurrentSummaries(
+      "rev:sha256:other", context.build_variant_id);
+  ASSERT_TRUE(listed.ok()) << listed.status().message();
+  EXPECT_TRUE(listed->empty());
+}
+
 }  // namespace
 }  // namespace veritas::summarydb

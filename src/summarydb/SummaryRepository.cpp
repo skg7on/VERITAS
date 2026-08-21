@@ -355,6 +355,42 @@ SummaryRepository::GetCurrentSummary(
   return GetSummary(*summary_id_result);
 }
 
+veritas::StatusOr<std::vector<summary::v1::FunctionSummary>>
+SummaryRepository::ListCurrentSummaries(
+    std::string_view revision_id, std::string_view build_variant_id) const {
+  auto query_result = metadata_store_->Query(
+      "SELECT summary_id FROM summary_bindings "
+      "WHERE revision_id = ? AND build_variant_id = ? AND is_current = 1 "
+      "ORDER BY function_variant_id ASC",
+      {std::string(revision_id), std::string(build_variant_id)});
+  if (!query_result.ok()) return query_result.status();
+
+  std::vector<summary::v1::FunctionSummary> summaries;
+  summaries.reserve(query_result->size());
+  for (const auto& row : *query_result) {
+    if (row.size() != 1u) {
+      return veritas::Status::Internal(
+          "current summary query returned an unexpected column count");
+    }
+    auto summary_id = core::ParseStableId(row[0]);
+    if (!summary_id.ok()) return summary_id.status();
+    if (summary_id->kind != core::IdKind::kFunctionSummary) {
+      return veritas::Status::FailedPrecondition(
+          "current summary binding has a non-summary object ID");
+    }
+
+    auto summary = GetSummary(*summary_id);
+    if (!summary.ok()) return summary.status();
+    if (summary->identity().revision_id() != revision_id ||
+        summary->identity().build_variant_id() != build_variant_id) {
+      return veritas::Status::FailedPrecondition(
+          "current summary binding does not match requested context");
+    }
+    summaries.push_back(std::move(*summary));
+  }
+  return summaries;
+}
+
 veritas::Status SummaryRepository::PersistManifestContext(
     const build::AnalysisManifest& manifest) {
   return metadata_store_->PutManifestContext(manifest);
