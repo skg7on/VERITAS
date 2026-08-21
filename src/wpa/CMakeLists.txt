@@ -12,17 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_unit_test_support INTERFACE)
-target_link_libraries(veritas_unit_test_support INTERFACE
-  GTest::gtest_main
+add_library(veritas_wpa
+  CallGraph.cpp
+  SccGraph.cpp
 )
 
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summary)
-add_subdirectory(summarydb)
-add_subdirectory(runtime)
-add_subdirectory(cpg)
-add_subdirectory(analysis)
-add_subdirectory(facts)
-add_subdirectory(wpa)
+target_include_directories(veritas_wpa PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+target_link_libraries(veritas_wpa PUBLIC
+  veritas::core
+  veritas::facts
+  veritas::summary
+)
+
+target_compile_features(veritas_wpa PUBLIC cxx_std_20)
+veritas_add_warnings(veritas_wpa)
+
+add_library(veritas::wpa ALIAS veritas_wpa)

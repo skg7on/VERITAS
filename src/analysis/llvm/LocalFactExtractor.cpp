@@ -14,6 +14,9 @@
 
 #include "analysis/llvm/LocalFactExtractor.h"
 
+#include <span>
+#include <string>
+
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
@@ -22,6 +25,7 @@
 #include "analysis/llvm/OriginMap.h"
 #include "analysis/llvm/ValueFlowExtractor.h"
 #include "analysis/pipeline/ProgramIr.h"
+#include "veritas/core/Ids.h"
 
 namespace veritas::analysis::llvm {
 namespace {
@@ -45,12 +49,20 @@ v1::EffectKind ToEffectKind(MemoryAccessExtractor::AccessKind kind) {
 void ExtractCalls(const ::llvm::Function& function,
                   const OriginMap& origin_map,
                   summary::FunctionLocalFacts* facts) {
+  std::size_t call_ordinal = 0;
   for (const auto& block : function) {
     for (const auto& inst : block) {
       const auto* call = ::llvm::dyn_cast<::llvm::CallBase>(&inst);
       if (!call) continue;
 
       v1::Call fact;
+      std::string call_site_key = facts->function_variant_id;
+      call_site_key.push_back('\0');
+      call_site_key.append(std::to_string(call_ordinal++));
+      fact.set_call_site_anchor_id(core::ToString(core::MakeStableId(
+          core::IdKind::kCallSite,
+          std::as_bytes(
+              std::span(call_site_key.data(), call_site_key.size())))));
       if (const auto* callee = call->getCalledFunction()) {
         fact.set_callee_symbol(callee->getName().str());
         fact.set_epistemic(v1::EPISTEMIC_STATE_MUST);

@@ -105,6 +105,9 @@ TEST(LocalAnalysisStageTest, DirectCallCarriesResolvedFunctionVariantId) {
       add_call->resolved_callee_function_variant_id());
   ASSERT_TRUE(parsed.ok()) << parsed.status().message();
   EXPECT_EQ(parsed->kind, core::IdKind::kFunctionVariant);
+  auto call_site = core::ParseStableId(add_call->call_site_anchor_id());
+  ASSERT_TRUE(call_site.ok()) << call_site.status().message();
+  EXPECT_EQ(call_site->kind, core::IdKind::kCallSite);
 }
 
 }  // namespace
