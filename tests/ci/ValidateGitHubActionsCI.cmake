@@ -82,6 +82,15 @@ veritas_require_ci_literal(
   "LLVM cache gate"
   "steps.llvm-cache.outputs.cache-hit != 'true'"
 )
+veritas_require_ci_literal(
+  "RocksDB source pin"
+  "v9.11.1"
+)
+veritas_require_ci_literal(
+  "RocksDB cache gate"
+  "steps.rocksdb-cache.outputs.cache-hit != 'true'"
+)
+veritas_require_ci_literal("RocksDB RTTI" "-DUSE_RTTI=ON")
 veritas_require_ci_literal("LLVM RTTI" "-DLLVM_ENABLE_RTTI=ON")
 veritas_require_ci_literal("LLVM exceptions" "-DLLVM_ENABLE_EH=ON")
 veritas_require_ci_literal("LLVM shared library" "-DLLVM_BUILD_LLVM_DYLIB=ON")
@@ -108,10 +117,10 @@ string(
   "${VERITAS_CI_CONTENT}"
 )
 list(LENGTH VERITAS_ACTION_REFERENCES VERITAS_ACTION_REFERENCE_COUNT)
-if(NOT VERITAS_ACTION_REFERENCE_COUNT EQUAL 7)
+if(NOT VERITAS_ACTION_REFERENCE_COUNT EQUAL 10)
   message(
     FATAL_ERROR
-    "Expected seven pinned Action references, found ${VERITAS_ACTION_REFERENCE_COUNT}"
+    "Expected ten pinned Action references, found ${VERITAS_ACTION_REFERENCE_COUNT}"
   )
 endif()
 
