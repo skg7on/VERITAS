@@ -27,3 +27,16 @@ target_link_libraries(ManifestPersistenceTest PRIVATE
 )
 veritas_add_warnings(ManifestPersistenceTest)
 gtest_discover_tests(ManifestPersistenceTest DISCOVERY_TIMEOUT 60)
+
+add_executable(VeritasDiffTest VeritasDiffTest.cpp)
+target_link_libraries(VeritasDiffTest PRIVATE
+  veritas_summarydb
+  veritas::summary
+  GTest::gtest_main
+)
+target_compile_definitions(VeritasDiffTest PRIVATE
+  VERITAS_DIFF_BINARY="$<TARGET_FILE:veritas-diff>"
+)
+add_dependencies(VeritasDiffTest veritas-diff)
+veritas_add_warnings(VeritasDiffTest)
+gtest_discover_tests(VeritasDiffTest DISCOVERY_TIMEOUT 60)

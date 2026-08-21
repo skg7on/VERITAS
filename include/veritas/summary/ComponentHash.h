@@ -15,6 +15,7 @@
 #ifndef VERITAS_SUMMARY_COMPONENT_HASH_H_
 #define VERITAS_SUMMARY_COMPONENT_HASH_H_
 
+#include <cstdint>
 #include <vector>
 
 #include "veritas/core/Hash.h"

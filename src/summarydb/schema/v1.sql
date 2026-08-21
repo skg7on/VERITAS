@@ -234,3 +234,55 @@ CREATE TABLE IF NOT EXISTS current_cpg_projections (
   projection_id TEXT NOT NULL,
   PRIMARY KEY (revision_id, build_variant_id)
 );
+
+-- M7: Summary dependencies — append-only historical record of every
+-- consumer->producer component dependency ever published. Rows are never
+-- deleted; they remain explainable after the current index is replaced.
+CREATE TABLE IF NOT EXISTS summary_dependencies (
+  dependency_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  consumer_id TEXT NOT NULL,
+  consumer_component INTEGER NOT NULL,
+  producer_id TEXT NOT NULL,
+  producer_component INTEGER NOT NULL,
+  dependency_kind INTEGER NOT NULL,
+  sensitivity INTEGER NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_summary_dependencies_producer
+  ON summary_dependencies(producer_id, producer_component);
+
+-- M7: Reverse dependency index — the current (hot) lookup from a producer
+-- component to its consumers. Rows are replaced atomically per consumer when
+-- a summary republishes its dependencies.
+CREATE TABLE IF NOT EXISTS reverse_dependency_index (
+  consumer_id TEXT NOT NULL,
+  consumer_component INTEGER NOT NULL,
+  producer_id TEXT NOT NULL,
+  producer_component INTEGER NOT NULL,
+  sensitivity INTEGER NOT NULL,
+  PRIMARY KEY (consumer_id, consumer_component, producer_id, producer_component)
+);
+CREATE INDEX IF NOT EXISTS idx_reverse_dependency_producer
+  ON reverse_dependency_index(producer_id, producer_component);
+
+-- M7: Summary deltas — immutable record of a semantic/evidence delta between
+-- two summary revisions. Populated by the incremental scheduler (M8+); the
+-- schema is declared here so M7 tooling can reference it.
+CREATE TABLE IF NOT EXISTS summary_deltas (
+  delta_id TEXT PRIMARY KEY NOT NULL,
+  old_summary_id TEXT NOT NULL,
+  new_summary_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+
+-- M7: Component deltas — per-component hashes for each summary delta.
+CREATE TABLE IF NOT EXISTS component_deltas (
+  delta_id TEXT NOT NULL,
+  component_kind INTEGER NOT NULL,
+  old_semantic_hash TEXT NOT NULL,
+  new_semantic_hash TEXT NOT NULL,
+  old_evidence_hash TEXT NOT NULL,
+  new_evidence_hash TEXT NOT NULL,
+  PRIMARY KEY (delta_id, component_kind),
+  FOREIGN KEY (delta_id) REFERENCES summary_deltas(delta_id)
+);

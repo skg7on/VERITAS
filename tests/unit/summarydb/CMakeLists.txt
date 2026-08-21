@@ -40,3 +40,21 @@ target_link_libraries(SummaryRepositoryTest PRIVATE
 )
 veritas_add_warnings(SummaryRepositoryTest)
 gtest_discover_tests(SummaryRepositoryTest DISCOVERY_TIMEOUT 60)
+
+add_executable(SummaryDeltaTest SummaryDeltaTest.cpp)
+target_link_libraries(SummaryDeltaTest PRIVATE
+  veritas_summarydb
+  veritas::summary
+  GTest::gtest_main
+)
+veritas_add_warnings(SummaryDeltaTest)
+gtest_discover_tests(SummaryDeltaTest DISCOVERY_TIMEOUT 60)
+
+add_executable(DependencyIndexTest DependencyIndexTest.cpp)
+target_link_libraries(DependencyIndexTest PRIVATE
+  veritas_summarydb
+  veritas::summary
+  GTest::gtest_main
+)
+veritas_add_warnings(DependencyIndexTest)
+gtest_discover_tests(DependencyIndexTest DISCOVERY_TIMEOUT 60)

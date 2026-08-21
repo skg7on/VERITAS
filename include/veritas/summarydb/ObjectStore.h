@@ -16,7 +16,9 @@
 #define VERITAS_SUMMARYDB_OBJECT_STORE_H_
 
 #include <cstddef>
+#include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 

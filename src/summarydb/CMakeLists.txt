@@ -23,6 +23,8 @@ add_library(veritas_summarydb
   MetadataStore.cpp
   ObjectStoreRocksDb.cpp
   SummaryRepository.cpp
+  SummaryDelta.cpp
+  DependencyIndex.cpp
 )
 
 # Embed schema/v1.sql as a compile-time string so ApplySchema has a single

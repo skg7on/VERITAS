@@ -141,7 +141,7 @@ jobs:
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/rocksdb-install
-          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r1
+          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r2
 
       - name: Checkout RocksDB source
         if: steps.rocksdb-cache.outputs.cache-hit != 'true'
@@ -163,6 +163,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/rocksdb-install" \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DUSE_RTTI=ON \
             -DWITH_TESTS=OFF \
             -DWITH_TOOLS=OFF \
             -DWITH_BENCHMARK_TOOLS=OFF \
@@ -182,7 +183,7 @@ jobs:
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/rocksdb-install
-          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r1
+          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r2
 
       - name: Restore LLVM cache
         id: llvm-cache
