@@ -22,6 +22,7 @@
 #ifndef VERITAS_BUILD_COMPILEFLAGS_H_
 #define VERITAS_BUILD_COMPILEFLAGS_H_
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <vector>

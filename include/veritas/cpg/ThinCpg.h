@@ -15,7 +15,9 @@
 #ifndef VERITAS_CPG_THINCPG_H_
 #define VERITAS_CPG_THINCPG_H_
 
+#include <cstddef>
 #include <span>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
