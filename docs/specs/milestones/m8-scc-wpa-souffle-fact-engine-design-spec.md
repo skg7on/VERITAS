@@ -1,6 +1,6 @@
 # M8 SCC-Aware WPA and Souffle Fact Engine Design Spec
 
-**Status:** Approved for implementation
+**Status:** Implemented
 **Milestone:** M8
 **Issue:** `#11`
 **Depends on:** M7 scheduler, M6 thin CPG optional projection

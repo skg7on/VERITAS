@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# tests/integration/CMakeLists.txt
-
-add_subdirectory(build)
-add_subdirectory(summarydb)
-add_subdirectory(analysis)
-add_subdirectory(frontend)
-add_subdirectory(facts)
-add_subdirectory(wpa)
+add_executable(WpaEndToEndTest WpaEndToEndTest.cpp)
+target_link_libraries(WpaEndToEndTest PRIVATE
+  veritas::summarydb
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(WpaEndToEndTest)
+gtest_discover_tests(WpaEndToEndTest DISCOVERY_TIMEOUT 60)
