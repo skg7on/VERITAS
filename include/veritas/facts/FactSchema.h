@@ -56,21 +56,22 @@ StatusOr<std::string_view> FactRelationName(FactRelation relation);
 StatusOr<FactRelation> ParseFactRelation(std::string_view name);
 StatusOr<std::size_t> FactRelationArity(FactRelation relation);
 
-StatusOr<summary::v1::EpistemicState> WeakenPositiveEpistemic(
-    summary::v1::EpistemicState left,
-    summary::v1::EpistemicState right);
+StatusOr<summary::v1::EpistemicState>
+WeakenPositiveEpistemic(summary::v1::EpistemicState left,
+                        summary::v1::EpistemicState right);
 
-StatusOr<FactTuple> MakeBaseFact(
-    FactRelation relation, std::vector<std::string> columns,
-    summary::v1::EpistemicState epistemic, BaseFactOrigin origin);
+StatusOr<FactTuple> MakeBaseFact(FactRelation relation,
+                                 std::vector<std::string> columns,
+                                 summary::v1::EpistemicState epistemic,
+                                 BaseFactOrigin origin);
 
-StatusOr<FactTuple> MakeDerivedFact(
-    FactRelation relation, std::vector<std::string> columns,
-    summary::v1::EpistemicState epistemic, std::string rule_id,
-    std::vector<core::StableId> input_tuple_ids);
+StatusOr<FactTuple>
+MakeDerivedFact(FactRelation relation, std::vector<std::string> columns,
+                summary::v1::EpistemicState epistemic, std::string rule_id,
+                std::vector<core::StableId> input_tuple_ids);
 
-Status ValidateFactTuple(const FactTuple& tuple);
+Status ValidateFactTuple(const FactTuple &tuple);
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_FACT_SCHEMA_H_
+#endif // VERITAS_FACTS_FACT_SCHEMA_H_

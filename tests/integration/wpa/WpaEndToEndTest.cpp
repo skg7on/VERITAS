@@ -226,7 +226,7 @@ TEST_F(WpaEndToEndTest, PersistsFixpointAndSchedulesExternalChanges) {
   EXPECT_EQ(scheduled_targets, (std::set<core::StableId>{*a_scc, *b_scc}));
 
   auto internal_only = results->front();
-  internal_only.fixpoint_hash += ":internal-only-change";
+  internal_only.fixpoint_hash = std::string(64, 'd');
   auto change = state_repository.StoreState(context_, internal_only);
   ASSERT_TRUE(change.ok()) << change.status().message();
   EXPECT_EQ(*change, ExternalChange::kUnchanged);

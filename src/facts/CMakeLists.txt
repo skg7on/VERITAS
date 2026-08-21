@@ -14,6 +14,7 @@
 
 add_library(veritas_facts
   FactSchema.cpp
+  SummaryFactBuilder.cpp
   SouffleExporter.cpp
   SouffleRunner.cpp
 )

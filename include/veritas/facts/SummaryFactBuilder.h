@@ -12,29 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef VERITAS_WPA_WPA_COORDINATOR_H_
-#define VERITAS_WPA_WPA_COORDINATOR_H_
+#ifndef VERITAS_FACTS_SUMMARYFACTBUILDER_H_
+#define VERITAS_FACTS_SUMMARYFACTBUILDER_H_
 
+#include <span>
 #include <vector>
 
-#include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
-#include "veritas/runtime/WorklistScheduler.h"
+#include "veritas/facts/FactSchema.h"
 #include "veritas/summary/v1/summary.pb.h"
-#include "veritas/wpa/SccGraph.h"
-#include "veritas/wpa/SccStateRepository.h"
 
-namespace veritas::wpa {
+namespace veritas::facts {
 
-class WpaCoordinator {
-public:
-  static Status EnqueuePredecessorsIfChanged(
-      ExternalChange change, core::StableId changed_scc,
-      summary::v1::ComponentKind component_kind, const SccContext &context,
-      std::vector<core::StableId> triggering_delta_ids,
-      const SccGraph &scc_graph, runtime::WorklistScheduler *scheduler);
-};
+// Converts current summaries into the canonical five base relations. Positive
+// facts with unresolved or unavailable call targets, or unsupported states,
+// are intentionally omitted because they remain scoped uncertainty at the
+// call-graph boundary. Returns InvalidArgument for malformed summary/callee
+// identities or base columns.
+StatusOr<std::vector<FactTuple>>
+BuildBaseFacts(std::span<const summary::v1::FunctionSummary> summaries);
 
-} // namespace veritas::wpa
+} // namespace veritas::facts
 
-#endif // VERITAS_WPA_WPA_COORDINATOR_H_
+#endif // VERITAS_FACTS_SUMMARYFACTBUILDER_H_

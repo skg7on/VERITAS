@@ -50,23 +50,22 @@ enum class ExternalChange {
 };
 
 class SccStateRepository {
- public:
-  explicit SccStateRepository(summarydb::MetadataStore& metadata_store)
+public:
+  explicit SccStateRepository(summarydb::MetadataStore &metadata_store)
       : metadata_store_(metadata_store) {}
 
-  Status PublishGraph(const SccContext& context,
-                      const CallGraph& call_graph,
-                      const SccGraph& scc_graph);
-  StatusOr<std::optional<StoredSccState>> LoadState(
-      const SccContext& context, core::StableId scc_id,
-      summary::v1::ComponentKind component_kind) const;
-  StatusOr<ExternalChange> StoreState(const SccContext& context,
-                                      const SccResult& result);
+  Status PublishGraph(const SccContext &context, const CallGraph &call_graph,
+                      const SccGraph &scc_graph);
+  StatusOr<std::optional<StoredSccState>>
+  LoadState(const SccContext &context, core::StableId scc_id,
+            summary::v1::ComponentKind component_kind) const;
+  StatusOr<ExternalChange> StoreState(const SccContext &context,
+                                      const SccResult &result);
 
- private:
-  summarydb::MetadataStore& metadata_store_;
+private:
+  summarydb::MetadataStore &metadata_store_;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_SCC_STATE_REPOSITORY_H_
+#endif // VERITAS_WPA_SCC_STATE_REPOSITORY_H_

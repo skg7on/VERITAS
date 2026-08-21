@@ -95,13 +95,13 @@ void ProcessBlock(uint32_t state[8], const uint8_t block[64]) {
   state[7] += h;
 }
 
-}  // namespace
+} // namespace
 
 SHA256Digest ComputeSHA256(std::span<const std::byte> data) {
   uint32_t state[8];
   std::memcpy(state, kSHA256H0, sizeof(kSHA256H0));
 
-  const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data.data());
+  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(data.data());
   size_t len = data.size();
 
   size_t full_blocks = len / 64;
@@ -137,7 +137,7 @@ SHA256Digest ComputeSHA256(std::span<const std::byte> data) {
   return result;
 }
 
-std::string DigestToHex(const SHA256Digest& digest) {
+std::string DigestToHex(const SHA256Digest &digest) {
   std::ostringstream oss;
   oss << std::hex << std::setfill('0');
   for (auto byte : digest) {
@@ -156,14 +156,18 @@ std::optional<SHA256Digest> HexToDigest(std::string_view hex) {
     char high = hex[i * 2];
     char low = hex[i * 2 + 1];
 
-    if (!std::isxdigit(high) || !std::isxdigit(low)) {
+    if (!std::isxdigit(static_cast<unsigned char>(high)) ||
+        !std::isxdigit(static_cast<unsigned char>(low))) {
       return std::nullopt;
     }
 
     auto hex_to_nibble = [](char c) -> uint8_t {
-      if (c >= '0' && c <= '9') return c - '0';
-      if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-      if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+      if (c >= '0' && c <= '9')
+        return c - '0';
+      if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+      if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
       return 0;
     };
 
@@ -174,4 +178,4 @@ std::optional<SHA256Digest> HexToDigest(std::string_view hex) {
   return result;
 }
 
-}  // namespace veritas::core
+} // namespace veritas::core

@@ -223,7 +223,9 @@ class SccGraph {
 }  // namespace veritas::wpa
 ```
 
-Tarjan's algorithm is used with sorted vertices and sorted outgoing edges.
+Tarjan's algorithm is used with sorted vertices and sorted outgoing edges. Its
+DFS uses explicit frames rather than the native call stack, so repository-scale
+acyclic chains cannot overflow the process stack.
 Members and SCC adjacency lists are sorted by stable-ID text. The condensation
 graph is acyclic. Its reverse-topological order is callee-first: for `A -> B ->
 C`, the required order is `C, B, A`. Ties are resolved by SCC ID.
@@ -355,6 +357,12 @@ All inputs are canonically sorted and version tagged before SHA-256 hashing.
 An internal provenance or support change may change `fixpoint_hash` while
 leaving `externally_visible_hash` unchanged. In that case the new state is
 persisted, but no predecessor work is enqueued.
+
+In-memory cache reuse also compares successor `fixpoint_hash` values because a
+predecessor proof contains exact successor tuple IDs. This proof-dependency
+check does not change `input_hash`, which remains based on successor external
+hashes, and it does not enqueue persistent predecessor work when external
+semantics are unchanged.
 
 The first successful computation is externally changed because no prior state
 exists. A matching `input_hash` and converged prior state may be reused without
@@ -528,10 +536,34 @@ does not trust Souffle to create VERITAS IDs. It validates every row, applies
 the epistemic algebra, reconstructs one canonical immediate derivation using
 rule-specific joins, and then computes the derived stable tuple ID.
 
+Proof ranks are relative to the supplied base facts and validated derived-support
+boundary. A direct derivation has rank zero. A supplied derived-support tuple is
+treated as a rank-zero opaque boundary, and a transitive derivation has rank one
+plus the rank of its derived dependency.
+
 When multiple proofs exist, the canonical proof is selected by:
 
 1. direct rule before transitive rule;
-2. then lexicographically smallest ordered input tuple-ID sequence.
+2. then minimum finite rooted dependency rank;
+3. then lexicographically smallest ordered input tuple-ID sequence.
+
+Base calls, direct writes, and supplied support are indexed by source and
+semantic columns. Rooted ranks propagate through a priority work queue; once
+all lower-rank dependencies are fixed, the queue resolves canonical ties for a
+semantic key exactly once. Reconstruction does not rescan every fact for every
+key at every rank frontier.
+
+A semantic row fails provenance reconstruction only when it has no finite proof
+rank rooted in the supplied boundaries. This ordering guarantees a closed,
+acyclic proof forest without making tuple identity depend on hash-relaxation
+order.
+
+Reconstruction considers both positive epistemic states for every supplied
+semantic key. If a final `MAY` row needs an exact stronger `MUST` derivation as
+an intermediate witness, that stronger tuple is retained in the returned proof
+forest. These auxiliary tuples participate in `fixpoint_hash` and the M9
+provenance handoff, while externally visible rows and hashes join all tuples for
+one semantic key to the weakest positive state.
 
 This makes tuple identity independent of Souffle evaluation order. Failure to
 reconstruct a proof is `FailedPrecondition`; the row is never published without

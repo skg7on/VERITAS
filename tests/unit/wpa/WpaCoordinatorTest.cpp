@@ -23,8 +23,8 @@ namespace veritas::wpa {
 namespace {
 
 core::StableId Id(core::IdKind kind, std::string_view text) {
-  return core::MakeStableId(
-      kind, std::as_bytes(std::span(text.data(), text.size())));
+  return core::MakeStableId(kind,
+                            std::as_bytes(std::span(text.data(), text.size())));
 }
 
 TEST(WpaCoordinatorTest, ExternalChangeSchedulesEachPredecessorOnce) {
@@ -33,12 +33,13 @@ TEST(WpaCoordinatorTest, ExternalChangeSchedulesEachPredecessorOnce) {
   CallGraph call_graph;
   ASSERT_TRUE(call_graph.AddFunction(caller).ok());
   ASSERT_TRUE(call_graph.AddFunction(callee).ok());
-  ASSERT_TRUE(call_graph.AddCall(
-      {.caller = caller,
-       .callee = callee,
-       .call_site_anchor_id = "site",
-       .epistemic = summary::v1::EPISTEMIC_STATE_MUST,
-       .provenance_ref = "test"}).ok());
+  ASSERT_TRUE(call_graph
+                  .AddCall({.caller = caller,
+                            .callee = callee,
+                            .call_site_anchor_id = "site",
+                            .epistemic = summary::v1::EPISTEMIC_STATE_MUST,
+                            .provenance_ref = "test"})
+                  .ok());
   auto graph = SccGraph::Build(call_graph);
   ASSERT_TRUE(graph.ok());
   const auto caller_scc = *graph->SccForFunction(caller);
@@ -48,13 +49,15 @@ TEST(WpaCoordinatorTest, ExternalChangeSchedulesEachPredecessorOnce) {
   runtime::WorklistScheduler scheduler;
 
   ASSERT_TRUE(WpaCoordinator::EnqueuePredecessorsIfChanged(
-      ExternalChange::kChanged, callee_scc,
-      summary::v1::COMPONENT_KIND_MEMORY_EFFECTS, context, {delta_id}, *graph,
-      &scheduler).ok());
+                  ExternalChange::kChanged, callee_scc,
+                  summary::v1::COMPONENT_KIND_MEMORY_EFFECTS, context,
+                  {delta_id}, *graph, &scheduler)
+                  .ok());
   ASSERT_TRUE(WpaCoordinator::EnqueuePredecessorsIfChanged(
-      ExternalChange::kChanged, callee_scc,
-      summary::v1::COMPONENT_KIND_MEMORY_EFFECTS, context, {delta_id}, *graph,
-      &scheduler).ok());
+                  ExternalChange::kChanged, callee_scc,
+                  summary::v1::COMPONENT_KIND_MEMORY_EFFECTS, context,
+                  {delta_id}, *graph, &scheduler)
+                  .ok());
   EXPECT_EQ(scheduler.PendingCount(), 1u);
   const auto item = scheduler.PopNext();
   ASSERT_TRUE(item.has_value());
@@ -71,12 +74,13 @@ TEST(WpaCoordinatorTest, UnchangedExternalHashSchedulesNothing) {
   const auto scc_id = *graph->SccForFunction(function);
   runtime::WorklistScheduler scheduler;
   ASSERT_TRUE(WpaCoordinator::EnqueuePredecessorsIfChanged(
-      ExternalChange::kUnchanged, scc_id,
-      summary::v1::COMPONENT_KIND_MEMORY_EFFECTS,
-      {.revision_id = "rev", .build_variant_id = "bv"}, {}, *graph,
-      &scheduler).ok());
+                  ExternalChange::kUnchanged, scc_id,
+                  summary::v1::COMPONENT_KIND_MEMORY_EFFECTS,
+                  {.revision_id = "rev", .build_variant_id = "bv"}, {}, *graph,
+                  &scheduler)
+                  .ok());
   EXPECT_TRUE(scheduler.Empty());
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

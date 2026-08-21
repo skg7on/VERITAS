@@ -54,37 +54,40 @@ struct SccResult {
 };
 
 class FixpointEngine {
- public:
-  FixpointEngine(const CallGraph& call_graph, const SccGraph& scc_graph,
+public:
+  FixpointEngine(const CallGraph &call_graph, const SccGraph &scc_graph,
                  std::span<const summary::v1::FunctionSummary> summaries);
 
-  StatusOr<std::vector<SccResult>> ComputeAll(
-      summary::v1::ComponentKind component_kind,
-      FixpointBudget budget);
+  StatusOr<std::vector<SccResult>>
+  ComputeAll(summary::v1::ComponentKind component_kind, FixpointBudget budget);
 
   StatusOr<SccResult> Compute(core::StableId scc_id,
                               summary::v1::ComponentKind component_kind,
                               FixpointBudget budget);
 
- private:
+  std::span<const facts::FactTuple> BaseFacts() const { return base_facts_; }
+
+private:
   struct CacheEntry {
     SccResult result;
     std::size_t max_iterations;
+    std::vector<std::pair<core::StableId, std::string>>
+        successor_fixpoint_hashes;
   };
 
-  StatusOr<SccResult> Evaluate(
-      core::StableId scc_id,
-      summary::v1::ComponentKind component_kind,
-      FixpointBudget budget);
+  StatusOr<SccResult> Evaluate(core::StableId scc_id,
+                               summary::v1::ComponentKind component_kind,
+                               FixpointBudget budget);
 
-  const CallGraph& call_graph_;
-  const SccGraph& scc_graph_;
+  const CallGraph &call_graph_;
+  const SccGraph &scc_graph_;
   std::map<core::StableId, summary::v1::FunctionSummary> summaries_;
+  std::vector<facts::FactTuple> base_facts_;
   Status initialization_status_;
   std::map<std::pair<core::StableId, summary::v1::ComponentKind>, CacheEntry>
       cache_;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_FIXPOINT_ENGINE_H_
+#endif // VERITAS_WPA_FIXPOINT_ENGINE_H_

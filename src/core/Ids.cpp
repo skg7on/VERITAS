@@ -26,40 +26,40 @@ namespace {
 
 std::string_view IdKindToString(IdKind kind) {
   switch (kind) {
-    case IdKind::kRepository:
-      return "repo";
-    case IdKind::kRevision:
-      return "rev";
-    case IdKind::kBuildVariant:
-      return "bv";
-    case IdKind::kTranslationUnit:
-      return "tu";
-    case IdKind::kFunctionSymbol:
-      return "funcsym";
-    case IdKind::kFunctionVariant:
-      return "funcvar";
-    case IdKind::kFunctionBody:
-      return "funcbody";
-    case IdKind::kFunctionSummary:
-      return "summary";
-    case IdKind::kFact:
-      return "fact";
-    case IdKind::kScc:
-      return "scc";
-    case IdKind::kValueRef:
-      return "valref";
-    case IdKind::kMemoryRef:
-      return "memref";
-    case IdKind::kCallSite:
-      return "callsite";
-    case IdKind::kBasicBlockSummary:
-      return "bbsummary";
-    case IdKind::kCpgProjection:
-      return "cpgproj";
-    case IdKind::kCpgEdge:
-      return "edge";
-    case IdKind::kUnknownNode:
-      return "unknown";
+  case IdKind::kRepository:
+    return "repo";
+  case IdKind::kRevision:
+    return "rev";
+  case IdKind::kBuildVariant:
+    return "bv";
+  case IdKind::kTranslationUnit:
+    return "tu";
+  case IdKind::kFunctionSymbol:
+    return "funcsym";
+  case IdKind::kFunctionVariant:
+    return "funcvar";
+  case IdKind::kFunctionBody:
+    return "funcbody";
+  case IdKind::kFunctionSummary:
+    return "summary";
+  case IdKind::kFact:
+    return "fact";
+  case IdKind::kScc:
+    return "scc";
+  case IdKind::kValueRef:
+    return "valref";
+  case IdKind::kMemoryRef:
+    return "memref";
+  case IdKind::kCallSite:
+    return "callsite";
+  case IdKind::kBasicBlockSummary:
+    return "bbsummary";
+  case IdKind::kCpgProjection:
+    return "cpgproj";
+  case IdKind::kCpgEdge:
+    return "edge";
+  case IdKind::kUnknownNode:
+    return "unknown";
   }
   return "unknown";
 }
@@ -91,14 +91,14 @@ std::optional<IdKind> StringToIdKind(std::string_view str) {
   return std::nullopt;
 }
 
-}  // namespace
+} // namespace
 
 StableId MakeStableId(IdKind kind, std::span<const std::byte> canonical_bytes) {
   auto digest = ComputeSHA256(canonical_bytes);
   return StableId{kind, DigestToHex(digest)};
 }
 
-std::string ToString(const StableId& id) {
+std::string ToString(const StableId &id) {
   std::ostringstream oss;
   oss << IdKindToString(id.kind) << ":sha256:" << id.digest_hex;
   return oss.str();
@@ -132,8 +132,12 @@ StatusOr<StableId> ParseStableId(std::string_view text) {
   if (digest_str.size() != 64) {
     return Status::InvalidArgument("invalid digest length");
   }
+  const auto digest = HexToDigest(digest_str);
+  if (!digest.has_value() || DigestToHex(*digest) != digest_str) {
+    return Status::InvalidArgument("invalid SHA-256 digest");
+  }
 
   return StableId{*kind_opt, std::string(digest_str)};
 }
 
-}  // namespace veritas::core
+} // namespace veritas::core

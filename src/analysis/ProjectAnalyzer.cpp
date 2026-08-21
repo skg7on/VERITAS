@@ -18,10 +18,10 @@
 
 #include "analysis/cpg/CpgProjectionStage.h"
 #include "analysis/pipeline/LocalAnalysisStage.h"
-#include "cpg/CpgCanonicalizer.h"
 #include "analysis/svf/SvfAnalysisStage.h"
 #include "analysis/svf/SvfConfig.h"
 #include "analysis/svf/SvfMerge.h"
+#include "cpg/CpgCanonicalizer.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
 #include "veritas/core/Ids.h"
@@ -42,7 +42,7 @@ AnalysisConfig AnalysisConfig::Default() {
 
 namespace {
 
-svf::SvfConfig ToSvfConfig(const AnalysisConfig& config) {
+svf::SvfConfig ToSvfConfig(const AnalysisConfig &config) {
   return svf::SvfConfig{
       .pointer_analysis = svf::PointerAnalysisKind::kAndersenWaveDiff,
       .soft_analysis_budget = config.svf_soft_analysis_budget,
@@ -52,24 +52,28 @@ svf::SvfConfig ToSvfConfig(const AnalysisConfig& config) {
   };
 }
 
-}  // namespace
+} // namespace
 
 // ProjectAnalyzer::Impl holds the implementation details
 class ProjectAnalyzer::Impl {
- public:
+public:
   Impl() : svf_stage_(std::make_unique<svf::SvfAnalysisStage>()) {}
 
-  StatusOr<ProjectAnalysisResult> AnalyzeProject(
-      const ProjectAnalysisRequest& request, const AnalysisConfig& config) {
+  StatusOr<ProjectAnalysisResult>
+  AnalyzeProject(const ProjectAnalysisRequest &request,
+                 const AnalysisConfig &config) {
     // M1: resolve and load the project manifest.
     auto input = build::ResolveProjectInput(request);
-    if (!input.ok()) return input.status();
+    if (!input.ok())
+      return input.status();
     auto manifest = build::LoadProjectManifest(*input);
-    if (!manifest.ok()) return manifest.status();
+    if (!manifest.ok())
+      return manifest.status();
 
     // M4: build linked IR and extract local summary drafts.
     auto local = pipeline::RunLocalAnalysis(*manifest);
-    if (!local.ok()) return local.status();
+    if (!local.ok())
+      return local.status();
 
     // M5: run the required SVF stage over the live ProgramIr.
     svf::AnalyzerRunContext run_context{
@@ -79,25 +83,30 @@ class ProjectAnalyzer::Impl {
     };
     auto svf_result = svf_stage_->Analyze(local->program_ir, run_context,
                                           ToSvfConfig(config));
-    if (!svf_result.ok()) return svf_result.status();
+    if (!svf_result.ok())
+      return svf_result.status();
 
     // Merge SVF facts conservatively into the M4 drafts.
-    auto merged = svf::MergeSvfFacts(std::move(local->summary_drafts),
-                                     svf_result->facts,
-                                     local->program_ir.origin_map());
+    auto merged =
+        svf::MergeSvfFacts(std::move(local->summary_drafts), svf_result->facts,
+                           local->program_ir.origin_map());
 
     // M6: project the CPG from the live ProgramIr and completed summaries.
     auto revision_id = core::ParseStableId(manifest->context.revision_id);
-    auto build_variant_id = core::ParseStableId(manifest->context.build_variant_id);
-    if (!revision_id.ok()) return revision_id.status();
-    if (!build_variant_id.ok()) return build_variant_id.status();
+    auto build_variant_id =
+        core::ParseStableId(manifest->context.build_variant_id);
+    if (!revision_id.ok())
+      return revision_id.status();
+    if (!build_variant_id.ok())
+      return build_variant_id.status();
     auto graph = cpg::BuildThinCpg(cpg::CpgProjectionInput{
         .program_ir = local->program_ir,
         .completed_summaries = merged,
         .revision_id = *revision_id,
         .build_variant_id = *build_variant_id,
     });
-    if (!graph.ok()) return graph.status();
+    if (!graph.ok())
+      return graph.status();
 
     const std::string projection_id_str =
         core::ToString(::veritas::cpg::CpgCanonicalizer::ProjectionId(*graph));
@@ -107,12 +116,16 @@ class ProjectAnalyzer::Impl {
     // M2 + M3 + M6: persist the context and publish summaries + CPG atomically.
     auto coordinator =
         ProjectPublicationCoordinator::Open(input->output_root.string());
-    if (!coordinator.ok()) return coordinator.status();
+    if (!coordinator.ok())
+      return coordinator.status();
     auto persist = (*coordinator)->PersistManifestContext(*manifest);
-    if (!persist.ok()) return persist;
-    auto published = (*coordinator)->Publish(
-        CompletedProjectAnalysis{std::move(merged), std::move(*graph)});
-    if (!published.ok()) return published.status();
+    if (!persist.ok())
+      return persist;
+    auto published = (*coordinator)
+                         ->Publish(CompletedProjectAnalysis{std::move(merged),
+                                                            std::move(*graph)});
+    if (!published.ok())
+      return published.status();
 
     ProjectAnalysisResult result;
     result.projection_id = projection_id_str;
@@ -124,11 +137,11 @@ class ProjectAnalyzer::Impl {
             : AnalysisCompletion::kCompleteWithUnknowns;
     result.program_context_id = manifest->context.revision_id;
     result.published_summary_ids.reserve(published->size());
-    for (const auto& id : *published) {
+    for (const auto &id : *published) {
       result.published_summary_ids.push_back(core::ToString(id));
     }
     result.unknowns.reserve(svf_result->facts.unknowns.size());
-    for (const auto& unknown : svf_result->facts.unknowns) {
+    for (const auto &unknown : svf_result->facts.unknowns) {
       result.unknowns.push_back(
           UnknownFact{unknown.scope, unknown.reason, unknown.provenance});
     }
@@ -140,22 +153,22 @@ class ProjectAnalyzer::Impl {
     svf_stage_ = std::move(stage);
   }
 
- private:
+private:
   std::unique_ptr<svf::SvfAnalysisStage> svf_stage_;
 };
 
-ProjectAnalyzer::ProjectAnalyzer()
-    : impl_(std::make_unique<Impl>()) {}
+ProjectAnalyzer::ProjectAnalyzer() : impl_(std::make_unique<Impl>()) {}
 
 ProjectAnalyzer::~ProjectAnalyzer() = default;
 
-ProjectAnalyzer::ProjectAnalyzer(ProjectAnalyzer&&) noexcept = default;
+ProjectAnalyzer::ProjectAnalyzer(ProjectAnalyzer &&) noexcept = default;
 
-ProjectAnalyzer& ProjectAnalyzer::operator=(ProjectAnalyzer&&) noexcept =
-    default;
+ProjectAnalyzer &
+ProjectAnalyzer::operator=(ProjectAnalyzer &&) noexcept = default;
 
-StatusOr<ProjectAnalysisResult> ProjectAnalyzer::AnalyzeProject(
-    const ProjectAnalysisRequest& request, const AnalysisConfig& config) {
+StatusOr<ProjectAnalysisResult>
+ProjectAnalyzer::AnalyzeProject(const ProjectAnalysisRequest &request,
+                                const AnalysisConfig &config) {
   return impl_->AnalyzeProject(request, config);
 }
 
@@ -170,4 +183,4 @@ ProjectAnalyzer internal::ProjectAnalyzerTestFactory::Create(
   return ProjectAnalyzer(std::move(impl));
 }
 
-}  // namespace veritas::analysis
+} // namespace veritas::analysis

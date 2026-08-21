@@ -26,22 +26,22 @@
 namespace veritas::wpa {
 
 class SccGraph {
- public:
-  static StatusOr<SccGraph> Build(const CallGraph& call_graph);
+public:
+  static StatusOr<SccGraph> Build(const CallGraph &call_graph);
 
-  StatusOr<core::StableId> SccForFunction(
-      core::StableId function_variant_id) const;
-  StatusOr<std::span<const core::StableId>> Members(
-      core::StableId scc_id) const;
-  StatusOr<std::span<const core::StableId>> Predecessors(
-      core::StableId scc_id) const;
-  StatusOr<std::span<const core::StableId>> Successors(
-      core::StableId scc_id) const;
+  StatusOr<core::StableId>
+  SccForFunction(core::StableId function_variant_id) const;
+  StatusOr<std::span<const core::StableId>>
+  Members(core::StableId scc_id) const;
+  StatusOr<std::span<const core::StableId>>
+  Predecessors(core::StableId scc_id) const;
+  StatusOr<std::span<const core::StableId>>
+  Successors(core::StableId scc_id) const;
   std::span<const core::StableId> ReverseTopologicalOrder() const {
     return reverse_topological_order_;
   }
 
- private:
+private:
   std::map<core::StableId, core::StableId> function_to_scc_;
   std::map<core::StableId, std::vector<core::StableId>> members_;
   std::map<core::StableId, std::vector<core::StableId>> predecessors_;
@@ -49,6 +49,6 @@ class SccGraph {
   std::vector<core::StableId> reverse_topological_order_;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_SCC_GRAPH_H_
+#endif // VERITAS_WPA_SCC_GRAPH_H_

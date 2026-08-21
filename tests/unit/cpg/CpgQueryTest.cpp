@@ -17,7 +17,9 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <span>
 #include <string>
+#include <string_view>
 
 #include "cpg/CpgCanonicalizer.h"
 #include "veritas/cpg/CpgRepository.h"
@@ -26,9 +28,9 @@
 namespace veritas::cpg {
 namespace {
 
-core::StableId Id(core::IdKind kind, std::string hex) {
-  hex.resize(64, '0');
-  return core::StableId{kind, std::move(hex)};
+core::StableId Id(core::IdKind kind, std::string_view name) {
+  return core::MakeStableId(kind,
+                            std::as_bytes(std::span(name.data(), name.size())));
 }
 
 CpgNode ValueNode(std::string hex) {
@@ -36,7 +38,8 @@ CpgNode ValueNode(std::string hex) {
 }
 
 CpgNode FunctionNode(std::string hex) {
-  return CpgNode{Id(core::IdKind::kFunctionVariant, hex), NodeKind::kFunction, hex};
+  return CpgNode{Id(core::IdKind::kFunctionVariant, hex), NodeKind::kFunction,
+                 hex};
 }
 
 ThinCpg BuildFlowGraph() {
@@ -77,7 +80,7 @@ ThinCpg BuildFlowGraph() {
   return graph;
 }
 
-CpgQuery OpenQuery(const ThinCpg& graph) {
+CpgQuery OpenQuery(const ThinCpg &graph) {
   const auto path =
       std::filesystem::temp_directory_path() / "veritas_cpg_query_test.db";
   std::filesystem::remove(path);
@@ -96,21 +99,21 @@ CpgQuery OpenQuery(const ThinCpg& graph) {
 TEST(CpgQueryTest, DistinguishesNoPathFromTruncatedSearch) {
   CpgQuery query = OpenQuery(BuildFlowGraph());
 
-  auto no_path = query.GetValueFlow(Id(core::IdKind::kValueRef, "unconnected_a"),
-                                    Id(core::IdKind::kValueRef, "unconnected_b"),
-                                    QueryBudget{10, 100, 10});
+  auto no_path = query.GetValueFlow(
+      Id(core::IdKind::kValueRef, "unconnected_a"),
+      Id(core::IdKind::kValueRef, "unconnected_b"), QueryBudget{10, 100, 10});
   ASSERT_TRUE(no_path.ok());
   EXPECT_TRUE(no_path->items.empty());
   EXPECT_TRUE(no_path->truncation_reasons.empty());
 
-  auto truncated =
-      query.GetValueFlow(Id(core::IdKind::kValueRef, "start"),
-                         Id(core::IdKind::kValueRef, "end"),
-                         QueryBudget{2, 3, 1});
+  auto truncated = query.GetValueFlow(Id(core::IdKind::kValueRef, "start"),
+                                      Id(core::IdKind::kValueRef, "end"),
+                                      QueryBudget{2, 3, 1});
   ASSERT_TRUE(truncated.ok());
   bool has_max_depth = false;
   for (auto reason : truncated->truncation_reasons) {
-    if (reason == TruncationReason::kMaxDepth) has_max_depth = true;
+    if (reason == TruncationReason::kMaxDepth)
+      has_max_depth = true;
   }
   EXPECT_TRUE(has_max_depth);
 }
@@ -136,5 +139,5 @@ TEST(CpgQueryTest, ReportsCallees) {
   EXPECT_EQ((*callees)[0].node_id, Id(core::IdKind::kFunctionVariant, "f2"));
 }
 
-}  // namespace
-}  // namespace veritas::cpg
+} // namespace
+} // namespace veritas::cpg

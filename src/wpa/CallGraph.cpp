@@ -16,7 +16,10 @@
 
 #include <algorithm>
 #include <set>
+#include <string>
 #include <utility>
+
+#include "veritas/core/Hash.h"
 
 namespace veritas::wpa {
 namespace {
@@ -29,14 +32,34 @@ bool IsPositive(v1::EpistemicState epistemic) {
 }
 
 bool HasFunction(std::span<const core::StableId> functions,
-                 const core::StableId& function_id) {
+                 const core::StableId &function_id) {
   return std::binary_search(functions.begin(), functions.end(), function_id);
 }
 
-}  // namespace
+StatusOr<core::StableId> ParseFunctionVariantId(std::string_view text,
+                                                std::string_view context) {
+  auto id = core::ParseStableId(text);
+  if (!id.ok()) {
+    return Status::InvalidArgument(std::string(context) + ": " +
+                                   std::string(id.status().message()));
+  }
+  if (!core::HexToDigest(id->digest_hex).has_value()) {
+    return Status::InvalidArgument(std::string(context) +
+                                   ": invalid SHA-256 digest");
+  }
+  if (id->kind != core::IdKind::kFunctionVariant) {
+    return Status::InvalidArgument(std::string(context) +
+                                   ": expected a function-variant ID");
+  }
+  return *id;
+}
+
+} // namespace
 
 Status CallGraph::AddFunction(core::StableId function_variant_id) {
-  if (function_variant_id.kind != core::IdKind::kFunctionVariant) {
+  auto parsed = core::ParseStableId(core::ToString(function_variant_id));
+  if (!parsed.ok() || *parsed != function_variant_id ||
+      function_variant_id.kind != core::IdKind::kFunctionVariant) {
     return Status::InvalidArgument(
         "call graph vertices require function-variant IDs");
   }
@@ -63,22 +86,34 @@ Status CallGraph::AddCall(CallEdge edge) {
   }
   auto unknown_it = unknown_calls_.find(edge.caller);
   if (unknown_it != unknown_calls_.end() &&
-      std::ranges::any_of(unknown_it->second, [&](const auto& unknown) {
+      std::ranges::any_of(unknown_it->second, [&](const auto &unknown) {
         return unknown.call_site_anchor_id == edge.call_site_anchor_id;
       })) {
     return Status::InvalidArgument(
         "call site cannot be both resolved and unknown");
   }
 
-  auto& outgoing = outgoing_[edge.caller];
-  auto same_site = std::ranges::find_if(outgoing, [&](const CallEdge& existing) {
-    return existing.call_site_anchor_id == edge.call_site_anchor_id;
-  });
-  if (same_site != outgoing.end()) {
-    return *same_site == edge
+  auto &outgoing = outgoing_[edge.caller];
+  auto same_target =
+      std::ranges::find_if(outgoing, [&](const CallEdge &existing) {
+        return existing.call_site_anchor_id == edge.call_site_anchor_id &&
+               existing.callee == edge.callee;
+      });
+  if (same_target != outgoing.end()) {
+    return *same_target == edge
                ? Status::Ok()
                : Status::InvalidArgument(
-                     "conflicting call facts share one call site");
+                     "conflicting call facts share one call-site target");
+  }
+  const auto same_site =
+      std::ranges::find_if(outgoing, [&](const CallEdge &existing) {
+        return existing.call_site_anchor_id == edge.call_site_anchor_id;
+      });
+  if (same_site != outgoing.end() &&
+      (same_site->epistemic != v1::EPISTEMIC_STATE_MAY ||
+       edge.epistemic != v1::EPISTEMIC_STATE_MAY)) {
+    return Status::InvalidArgument(
+        "multiple call-site targets require MAY call facts");
   }
   outgoing.push_back(std::move(edge));
   std::ranges::sort(outgoing);
@@ -95,16 +130,16 @@ Status CallGraph::AddUnknownCall(UnknownCallEffect effect) {
   }
   auto outgoing_it = outgoing_.find(effect.caller);
   if (outgoing_it != outgoing_.end() &&
-      std::ranges::any_of(outgoing_it->second, [&](const auto& edge) {
+      std::ranges::any_of(outgoing_it->second, [&](const auto &edge) {
         return edge.call_site_anchor_id == effect.call_site_anchor_id;
       })) {
     return Status::InvalidArgument(
         "call site cannot be both resolved and unknown");
   }
 
-  auto& unknowns = unknown_calls_[effect.caller];
+  auto &unknowns = unknown_calls_[effect.caller];
   auto same_site =
-      std::ranges::find_if(unknowns, [&](const UnknownCallEffect& existing) {
+      std::ranges::find_if(unknowns, [&](const UnknownCallEffect &existing) {
         return existing.call_site_anchor_id == effect.call_site_anchor_id;
       });
   if (same_site != unknowns.end()) {
@@ -120,57 +155,58 @@ Status CallGraph::AddUnknownCall(UnknownCallEffect effect) {
 
 std::span<const CallEdge> CallGraph::Outgoing(core::StableId caller) const {
   auto it = outgoing_.find(caller);
-  if (it == outgoing_.end()) return {};
+  if (it == outgoing_.end())
+    return {};
   return it->second;
 }
 
-std::span<const UnknownCallEffect> CallGraph::UnknownCalls(
-    core::StableId caller) const {
+std::span<const UnknownCallEffect>
+CallGraph::UnknownCalls(core::StableId caller) const {
   auto it = unknown_calls_.find(caller);
-  if (it == unknown_calls_.end()) return {};
+  if (it == unknown_calls_.end())
+    return {};
   return it->second;
 }
 
-StatusOr<CallGraph> CallGraph::FromSummaries(
-    std::span<const v1::FunctionSummary> summaries) {
+StatusOr<CallGraph>
+CallGraph::FromSummaries(std::span<const v1::FunctionSummary> summaries) {
   struct SummaryRef {
     core::StableId function_id;
-    const v1::FunctionSummary* summary;
+    const v1::FunctionSummary *summary;
   };
 
   CallGraph graph;
   std::vector<SummaryRef> ordered;
   ordered.reserve(summaries.size());
   std::set<core::StableId> seen;
-  for (const auto& summary : summaries) {
-    auto function_id =
-        core::ParseStableId(summary.identity().function_variant_id());
-    if (!function_id.ok()) return function_id.status();
-    if (function_id->kind != core::IdKind::kFunctionVariant) {
-      return Status::InvalidArgument(
-          "summary identity is not a function-variant ID");
-    }
+  for (const auto &summary : summaries) {
+    auto function_id = ParseFunctionVariantId(
+        summary.identity().function_variant_id(), "invalid summary identity");
+    if (!function_id.ok())
+      return function_id.status();
     if (!seen.insert(*function_id).second) {
       return Status::InvalidArgument(
           "multiple current summaries share one function variant");
     }
     auto status = graph.AddFunction(*function_id);
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     ordered.push_back(SummaryRef{*function_id, &summary});
   }
   std::ranges::sort(ordered, {}, &SummaryRef::function_id);
 
-  for (const auto& entry : ordered) {
-    for (const auto& call : entry.summary->calls()) {
+  for (const auto &entry : ordered) {
+    for (const auto &call : entry.summary->calls()) {
       bool resolved = false;
       core::StableId callee;
       if (IsPositive(call.epistemic()) &&
           !call.resolved_callee_function_variant_id().empty()) {
-        auto parsed = core::ParseStableId(
-            call.resolved_callee_function_variant_id());
-        if (parsed.ok() &&
-            parsed->kind == core::IdKind::kFunctionVariant &&
-            HasFunction(graph.Functions(), *parsed)) {
+        auto parsed =
+            ParseFunctionVariantId(call.resolved_callee_function_variant_id(),
+                                   "invalid resolved callee identity");
+        if (!parsed.ok())
+          return parsed.status();
+        if (HasFunction(graph.Functions(), *parsed)) {
           callee = *parsed;
           resolved = true;
         }
@@ -187,15 +223,15 @@ StatusOr<CallGraph> CallGraph::FromSummaries(
       } else {
         status = graph.AddUnknownCall(
             UnknownCallEffect{.caller = entry.function_id,
-                              .call_site_anchor_id =
-                                  call.call_site_anchor_id(),
+                              .call_site_anchor_id = call.call_site_anchor_id(),
                               .callee_symbol = call.callee_symbol(),
                               .provenance_ref = call.provenance_ref()});
       }
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
   }
   return graph;
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

@@ -20,6 +20,14 @@ target_link_libraries(FactSchemaTest PRIVATE
 veritas_add_warnings(FactSchemaTest)
 gtest_discover_tests(FactSchemaTest DISCOVERY_TIMEOUT 60)
 
+add_executable(SummaryFactBuilderTest SummaryFactBuilderTest.cpp)
+target_link_libraries(SummaryFactBuilderTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(SummaryFactBuilderTest)
+gtest_discover_tests(SummaryFactBuilderTest DISCOVERY_TIMEOUT 60)
+
 add_executable(SouffleExporterTest SouffleExporterTest.cpp)
 target_link_libraries(SouffleExporterTest PRIVATE
   veritas::facts

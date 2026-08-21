@@ -304,6 +304,8 @@ CREATE TABLE IF NOT EXISTS wpa_scc_members (
   build_variant_id TEXT NOT NULL,
   function_variant_id TEXT NOT NULL,
   PRIMARY KEY (scc_id, revision_id, build_variant_id, function_variant_id),
+  FOREIGN KEY (scc_id, revision_id, build_variant_id)
+    REFERENCES wpa_sccs(scc_id, revision_id, build_variant_id),
   FOREIGN KEY (revision_id) REFERENCES revisions(revision_id),
   FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
 );
@@ -317,6 +319,10 @@ CREATE TABLE IF NOT EXISTS wpa_scc_edges (
   build_variant_id TEXT NOT NULL,
   epistemic INTEGER NOT NULL,
   PRIMARY KEY (caller_scc_id, callee_scc_id, revision_id, build_variant_id),
+  FOREIGN KEY (caller_scc_id, revision_id, build_variant_id)
+    REFERENCES wpa_sccs(scc_id, revision_id, build_variant_id),
+  FOREIGN KEY (callee_scc_id, revision_id, build_variant_id)
+    REFERENCES wpa_sccs(scc_id, revision_id, build_variant_id),
   FOREIGN KEY (revision_id) REFERENCES revisions(revision_id),
   FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
 );
@@ -335,6 +341,8 @@ CREATE TABLE IF NOT EXISTS wpa_component_states (
   status INTEGER NOT NULL,
   updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
   PRIMARY KEY (scc_id, revision_id, build_variant_id, component_kind),
+  FOREIGN KEY (scc_id, revision_id, build_variant_id)
+    REFERENCES wpa_sccs(scc_id, revision_id, build_variant_id),
   FOREIGN KEY (revision_id) REFERENCES revisions(revision_id),
   FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
 );

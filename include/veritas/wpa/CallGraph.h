@@ -34,7 +34,7 @@ struct CallEdge {
   summary::v1::EpistemicState epistemic;
   std::string provenance_ref;
 
-  auto operator<=>(const CallEdge&) const = default;
+  auto operator<=>(const CallEdge &) const = default;
 };
 
 struct UnknownCallEffect {
@@ -43,13 +43,13 @@ struct UnknownCallEffect {
   std::string callee_symbol;
   std::string provenance_ref;
 
-  auto operator<=>(const UnknownCallEffect&) const = default;
+  auto operator<=>(const UnknownCallEffect &) const = default;
 };
 
 class CallGraph {
- public:
-  static StatusOr<CallGraph> FromSummaries(
-      std::span<const summary::v1::FunctionSummary> summaries);
+public:
+  static StatusOr<CallGraph>
+  FromSummaries(std::span<const summary::v1::FunctionSummary> summaries);
 
   Status AddFunction(core::StableId function_variant_id);
   Status AddCall(CallEdge edge);
@@ -57,15 +57,14 @@ class CallGraph {
 
   std::span<const core::StableId> Functions() const { return functions_; }
   std::span<const CallEdge> Outgoing(core::StableId caller) const;
-  std::span<const UnknownCallEffect> UnknownCalls(
-      core::StableId caller) const;
+  std::span<const UnknownCallEffect> UnknownCalls(core::StableId caller) const;
 
- private:
+private:
   std::vector<core::StableId> functions_;
   std::map<core::StableId, std::vector<CallEdge>> outgoing_;
   std::map<core::StableId, std::vector<UnknownCallEffect>> unknown_calls_;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_CALL_GRAPH_H_
+#endif // VERITAS_WPA_CALL_GRAPH_H_

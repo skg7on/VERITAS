@@ -48,9 +48,8 @@ TEST(FactSchemaTest, DerivedTupleCarriesCanonicalImmediateInputs) {
   ASSERT_TRUE(write.ok());
 
   auto derived = MakeDerivedFact(
-      FactRelation::kMayWrite, {"A", "X"},
-      v1::EPISTEMIC_STATE_MUST, "m8.may_write.transitive.v1",
-      {write->tuple_id, call->tuple_id});
+      FactRelation::kMayWrite, {"A", "X"}, v1::EPISTEMIC_STATE_MUST,
+      "m8.may_write.transitive.v1", {write->tuple_id, call->tuple_id});
   ASSERT_TRUE(derived.ok()) << derived.status().message();
   EXPECT_EQ(derived->tuple_id.kind, core::IdKind::kFact);
   EXPECT_EQ(derived->rule_id, "m8.may_write.transitive.v1");
@@ -73,12 +72,14 @@ TEST(FactSchemaTest, RelationNamesAndAritiesAreStable) {
 }
 
 TEST(FactSchemaTest, RejectsWrongArityAndNonPositiveEpistemic) {
-  const BaseFactOrigin origin{
-      Id(core::IdKind::kFunctionSummary, "summary"), "site", "prov"};
+  const BaseFactOrigin origin{Id(core::IdKind::kFunctionSummary, "summary"),
+                              "site", "prov"};
   EXPECT_FALSE(MakeBaseFact(FactRelation::kDirectCall, {"A"},
-                            v1::EPISTEMIC_STATE_MUST, origin).ok());
+                            v1::EPISTEMIC_STATE_MUST, origin)
+                   .ok());
   EXPECT_FALSE(WeakenPositiveEpistemic(v1::EPISTEMIC_STATE_UNKNOWN,
-                                       v1::EPISTEMIC_STATE_MUST).ok());
+                                       v1::EPISTEMIC_STATE_MUST)
+                   .ok());
 }
 
 TEST(FactSchemaTest, DerivedTupleIdIgnoresInputInsertionOrder) {
@@ -97,13 +98,65 @@ TEST(FactSchemaTest, DerivedTupleIdIgnoresInputInsertionOrder) {
 }
 
 TEST(FactSchemaTest, RejectsControlCharactersAndWrongProvenanceShape) {
-  const BaseFactOrigin origin{
-      Id(core::IdKind::kFunctionSummary, "summary"), "site", "prov"};
+  const BaseFactOrigin origin{Id(core::IdKind::kFunctionSummary, "summary"),
+                              "site", "prov"};
   EXPECT_FALSE(MakeBaseFact(FactRelation::kDirectWrite, {"A", "X\nY"},
-                            v1::EPISTEMIC_STATE_MUST, origin).ok());
+                            v1::EPISTEMIC_STATE_MUST, origin)
+                   .ok());
   EXPECT_FALSE(MakeDerivedFact(FactRelation::kMayWrite, {"A", "X"},
-                               v1::EPISTEMIC_STATE_MAY, "", {}).ok());
+                               v1::EPISTEMIC_STATE_MAY, "", {})
+                   .ok());
 }
 
-}  // namespace
-}  // namespace veritas::facts
+TEST(FactSchemaTest, RejectsNonHexTupleOriginAndInputIds) {
+  FactTuple invalid_tuple{
+      .tuple_id = core::StableId{core::IdKind::kFact, std::string(64, 'g')},
+      .relation = FactRelation::kDirectCall,
+      .columns = {"A", "B"},
+      .epistemic = v1::EPISTEMIC_STATE_MUST,
+      .rule_id = {},
+      .input_tuple_ids = {}};
+  EXPECT_FALSE(ValidateFactTuple(invalid_tuple).ok());
+
+  const BaseFactOrigin invalid_origin{
+      core::StableId{core::IdKind::kFunctionSummary, std::string(64, 'g')},
+      "site", "prov"};
+  EXPECT_FALSE(MakeBaseFact(FactRelation::kDirectCall, {"A", "B"},
+                            v1::EPISTEMIC_STATE_MUST, invalid_origin)
+                   .ok());
+
+  const auto invalid_input =
+      core::StableId{core::IdKind::kFact, std::string(64, 'g')};
+  EXPECT_FALSE(MakeDerivedFact(FactRelation::kMayWrite, {"A", "X"},
+                               v1::EPISTEMIC_STATE_MUST,
+                               "m8.may_write.transitive.v1", {invalid_input})
+                   .ok());
+}
+
+TEST(FactSchemaTest, RejectsUppercaseDigestAliases) {
+  FactTuple invalid_tuple{
+      .tuple_id = core::StableId{core::IdKind::kFact, std::string(64, 'A')},
+      .relation = FactRelation::kDirectCall,
+      .columns = {"A", "B"},
+      .epistemic = v1::EPISTEMIC_STATE_MUST,
+      .rule_id = {},
+      .input_tuple_ids = {}};
+  EXPECT_FALSE(ValidateFactTuple(invalid_tuple).ok());
+
+  const BaseFactOrigin invalid_origin{
+      core::StableId{core::IdKind::kFunctionSummary, std::string(64, 'A')},
+      "site", "prov"};
+  EXPECT_FALSE(MakeBaseFact(FactRelation::kDirectCall, {"A", "B"},
+                            v1::EPISTEMIC_STATE_MUST, invalid_origin)
+                   .ok());
+
+  const auto invalid_input =
+      core::StableId{core::IdKind::kFact, std::string(64, 'A')};
+  EXPECT_FALSE(MakeDerivedFact(FactRelation::kMayWrite, {"A", "X"},
+                               v1::EPISTEMIC_STATE_MUST,
+                               "m8.may_write.transitive.v1", {invalid_input})
+                   .ok());
+}
+
+} // namespace
+} // namespace veritas::facts

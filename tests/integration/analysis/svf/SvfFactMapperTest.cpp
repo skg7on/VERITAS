@@ -20,34 +20,35 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 
+#include "ProjectFixture.h"
+#include "analysis/pipeline/LocalAnalysisStage.h"
 #include "analysis/pipeline/ProgramIr.h"
-#include "analysis/svf/SvfSession.h"
 #include "analysis/svf/SvfMerge.h"
+#include "analysis/svf/SvfSession.h"
+#include "veritas/analysis/ProjectAnalysisRequest.h"
+#include "veritas/build/ProjectInput.h"
+#include "veritas/build/ProjectManifestLoader.h"
 
 namespace veritas::analysis::svf {
 namespace {
 
 // Helper to build a fixture ProgramIr for testing
-std::unique_ptr<pipeline::ProgramIr> BuildFixtureProgramIr(
-    const std::string& fixture_name) {
+std::unique_ptr<pipeline::ProgramIr>
+BuildFixtureProgramIr(const std::string &fixture_name) {
   auto program_ir = std::make_unique<pipeline::ProgramIr>();
 
-  auto module = std::make_unique<::llvm::Module>(
-      fixture_name, program_ir->GetContext());
+  auto module =
+      std::make_unique<::llvm::Module>(fixture_name, program_ir->GetContext());
 
   // Create a simple function for testing
-  auto* func_type = ::llvm::FunctionType::get(
+  auto *func_type = ::llvm::FunctionType::get(
       ::llvm::Type::getInt32Ty(program_ir->GetContext()),
-      {::llvm::Type::getInt32Ty(program_ir->GetContext())},
-      false);
-  auto* func = ::llvm::Function::Create(
-      func_type,
-      ::llvm::Function::ExternalLinkage,
-      fixture_name,
-      module.get());
+      {::llvm::Type::getInt32Ty(program_ir->GetContext())}, false);
+  auto *func = ::llvm::Function::Create(
+      func_type, ::llvm::Function::ExternalLinkage, fixture_name, module.get());
 
-  auto* entry = ::llvm::BasicBlock::Create(
-      program_ir->GetContext(), "entry", func);
+  auto *entry =
+      ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry", func);
   ::llvm::IRBuilder<> builder(entry);
   builder.CreateRet(func->getArg(0));
 
@@ -56,7 +57,7 @@ std::unique_ptr<pipeline::ProgramIr> BuildFixtureProgramIr(
 }
 
 // Helper to analyze a fixture with SVF and map facts
-SvfMappingResult AnalyzeFixtureWithSvf(const std::string& fixture_name) {
+SvfMappingResult AnalyzeFixtureWithSvf(const std::string &fixture_name) {
   auto program_ir = BuildFixtureProgramIr(fixture_name);
 
   AnalyzerRunContext run_context{
@@ -67,10 +68,9 @@ SvfMappingResult AnalyzeFixtureWithSvf(const std::string& fixture_name) {
 
   SvfMappingResult result;
   auto status = RunWithSvfSession(
-      *program_ir, SvfConfig::Default(),
-      [&](const SvfSessionView& view) {
-        return MapSvfFacts(
-            *program_ir, view, run_context, SvfConfig::Default(), &result);
+      *program_ir, SvfConfig::Default(), [&](const SvfSessionView &view) {
+        return MapSvfFacts(*program_ir, view, run_context, SvfConfig::Default(),
+                           &result);
       });
 
   if (!status.ok()) {
@@ -92,7 +92,7 @@ TEST(SvfFactMapperTest, MapsParameterReturnFlow) {
   EXPECT_GT(result.facts.value_flows.size(), 0u);
 
   // All facts should have provenance
-  for (const auto& fact : result.facts.value_flows) {
+  for (const auto &fact : result.facts.value_flows) {
     EXPECT_FALSE(fact.provenance.empty());
   }
 }
@@ -114,13 +114,13 @@ TEST(SvfFactMapperTest, AttachesCompleteProvenance) {
   auto result = AnalyzeFixtureWithSvf("parameter_return");
 
   // All fact types should have provenance
-  for (const auto& fact : result.facts.value_flows) {
+  for (const auto &fact : result.facts.value_flows) {
     EXPECT_NE(fact.provenance.find("analyzer="), std::string::npos);
   }
-  for (const auto& fact : result.facts.aliases) {
+  for (const auto &fact : result.facts.aliases) {
     EXPECT_NE(fact.provenance.find("analyzer="), std::string::npos);
   }
-  for (const auto& fact : result.facts.unknowns) {
+  for (const auto &fact : result.facts.unknowns) {
     EXPECT_NE(fact.provenance.find("analyzer="), std::string::npos);
   }
 }
@@ -132,7 +132,7 @@ TEST(SvfFactMapperTest, UnmappedNodesCreateUnknownFacts) {
   if (result.completion == SvfMappingCompletion::kCompleteWithUnknowns) {
     EXPECT_GT(result.facts.unknowns.size(), 0u);
 
-    for (const auto& unknown : result.facts.unknowns) {
+    for (const auto &unknown : result.facts.unknowns) {
       EXPECT_FALSE(unknown.scope.empty());
       EXPECT_FALSE(unknown.reason.empty());
       EXPECT_FALSE(unknown.provenance.empty());
@@ -142,14 +142,13 @@ TEST(SvfFactMapperTest, UnmappedNodesCreateUnknownFacts) {
 
 TEST(SvfFactMapperTest, MergeResolvesExactSvfTargetName) {
   auto program_ir = BuildFixtureProgramIr("identity");
-  auto* identity = program_ir->GetFunction("identity");
+  auto *identity = program_ir->GetFunction("identity");
   ASSERT_NE(identity, nullptr);
-  program_ir->mutable_origin_map().RecordOrigin(
-      identity, "funcvar:sha256:identity");
+  program_ir->mutable_origin_map().RecordOrigin(identity,
+                                                "funcvar:sha256:identity");
 
   ::veritas::summary::v1::FunctionSummary draft;
-  draft.mutable_identity()->set_function_variant_id(
-      "funcvar:sha256:caller");
+  draft.mutable_identity()->set_function_variant_id("funcvar:sha256:caller");
   SvfFacts facts;
   facts.refined_calls.push_back(summary::CallFact{
       .callsite = {.name = "funcvar:sha256:caller:site"},
@@ -165,5 +164,69 @@ TEST(SvfFactMapperTest, MergeResolvesExactSvfTargetName) {
             "funcvar:sha256:identity");
 }
 
-}  // namespace
-}  // namespace veritas::analysis::svf
+TEST(SvfFactMapperTest, MergeAttributesRawSvfValuesThroughOriginMap) {
+  auto program_ir = BuildFixtureProgramIr("identity");
+  auto *identity = program_ir->GetFunction("identity");
+  ASSERT_NE(identity, nullptr);
+  const std::string function_id =
+      "funcvar:sha256:"
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  program_ir->mutable_origin_map().RecordOrigin(identity, function_id);
+
+  ::veritas::summary::v1::FunctionSummary draft;
+  draft.mutable_identity()->set_function_variant_id(function_id);
+  SvfFacts facts;
+  facts.value_flows.push_back(summary::ValueFlowFact{
+      .source = {.name = "identity:arg0"},
+      .destination = {.name = "identity:tmp"},
+      .provenance = "svf:test",
+  });
+  facts.aliases.push_back(summary::AliasFact{
+      .left = {.name = "identity:left"},
+      .right = {.name = "identity:right"},
+      .relationship = "MAY_ALIAS",
+      .provenance = "svf:test",
+  });
+
+  auto merged = MergeSvfFacts({draft}, facts, program_ir->origin_map());
+  ASSERT_EQ(merged.size(), 1u);
+  EXPECT_EQ(merged[0].value_flows_size(), 1);
+  EXPECT_EQ(merged[0].alias_facts_size(), 1);
+}
+
+TEST(SvfFactMapperTest, LocalAnalysisSvfFactsMergeIntoHashedOwnerSummary) {
+  const analysis::ProjectAnalysisRequest request{
+      .project_root = testing::FixtureProject("store_load"),
+      .output_root = {},
+  };
+  auto input = build::ResolveProjectInput(request);
+  ASSERT_TRUE(input.ok()) << input.status().message();
+  auto manifest = build::LoadProjectManifest(*input);
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+  auto local = pipeline::RunLocalAnalysis(*manifest);
+  ASSERT_TRUE(local.ok()) << local.status().message();
+  ASSERT_EQ(local->summary_drafts.size(), 1u);
+  const int original_flows = local->summary_drafts[0].value_flows_size();
+
+  AnalyzerRunContext run_context{
+      .analyzer_run_id = "test_run_local_pipeline",
+      .llvm_toolchain_identity = "llvm",
+      .program_module_hash = std::string(local->program_ir.module_hash()),
+  };
+  SvfMappingResult mapped;
+  auto status = RunWithSvfSession(
+      local->program_ir, SvfConfig::Default(), [&](const SvfSessionView &view) {
+        return MapSvfFacts(local->program_ir, view, run_context,
+                           SvfConfig::Default(), &mapped);
+      });
+  ASSERT_TRUE(status.ok()) << status.message();
+  ASSERT_FALSE(mapped.facts.value_flows.empty());
+
+  auto merged = MergeSvfFacts(std::move(local->summary_drafts), mapped.facts,
+                              local->program_ir.origin_map());
+  ASSERT_EQ(merged.size(), 1u);
+  EXPECT_GT(merged[0].value_flows_size(), original_flows);
+}
+
+} // namespace
+} // namespace veritas::analysis::svf

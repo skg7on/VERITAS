@@ -48,7 +48,7 @@
   const SvfFacts& facts, const llvm::OriginMap& origin_map)` resolves exact SVF
   target names without heuristic name matching.
 
-- [ ] **Step 1: Add the failing SCC identity test**
+- [x] **Step 1: Add the failing SCC identity test**
 
 Append this behavior test to `tests/unit/core/IdsTest.cpp`:
 
@@ -66,7 +66,7 @@ TEST(IdsTest, SccIdRoundTripsWithDedicatedPrefix) {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify the missing identity fails**
+- [x] **Step 2: Run the test and verify the missing identity fails**
 
 Run:
 
@@ -76,7 +76,7 @@ cmake --build --preset default --target IdsTest
 
 Expected: compilation fails because `IdKind::kScc` does not exist.
 
-- [ ] **Step 3: Add the SCC identity kind**
+- [x] **Step 3: Add the SCC identity kind**
 
 Add `kScc` immediately after `kFact` in `Ids.h`. Add both mappings in `Ids.cpp`:
 
@@ -89,7 +89,7 @@ case IdKind::kScc:
 {"scc", IdKind::kScc},
 ```
 
-- [ ] **Step 4: Run the SCC identity test and verify green**
+- [x] **Step 4: Run the SCC identity test and verify green**
 
 Run:
 
@@ -100,7 +100,7 @@ cmake --build --preset default --target IdsTest
 
 Expected: one test passes.
 
-- [ ] **Step 5: Add failing direct-call identity coverage**
+- [x] **Step 5: Add failing direct-call identity coverage**
 
 Append this test to `LocalAnalysisStageTest.cpp`; it uses the existing `smoke`
 fixture where `main` calls `add`:
@@ -149,7 +149,7 @@ EXPECT_EQ(merged[0].calls(0).resolved_callee_function_variant_id(),
           "funcvar:sha256:identity");
 ```
 
-- [ ] **Step 6: Run the extraction tests and verify red**
+- [x] **Step 6: Run the extraction tests and verify red**
 
 Run:
 
@@ -160,7 +160,7 @@ cmake --build --preset default --target local_analysis_stage_integration_test sv
 Expected: compilation fails because the generated `Call` API has no
 `resolved_callee_function_variant_id` accessor.
 
-- [ ] **Step 7: Add the Protobuf field and exact-name origin lookup**
+- [x] **Step 7: Add the Protobuf field and exact-name origin lookup**
 
 Add this field to `Call` without renumbering existing fields:
 
@@ -182,7 +182,7 @@ erases that exact name; `Clear` clears all three maps. Duplicate LLVM names with
 different stable IDs must not silently overwrite: erase the name entry so the
 lookup returns `nullopt` and WPA later emits a scoped unknown.
 
-- [ ] **Step 8: Populate resolved IDs in local and SVF call facts**
+- [x] **Step 8: Populate resolved IDs in local and SVF call facts**
 
 Pass `const OriginMap&` into the private `ExtractCalls` helper and set the field
 only on an exact stable lookup:
@@ -209,7 +209,7 @@ if (auto id = origin_map.GetSymbolIdByLlvmName(call.target.name)) {
 Update its `ProjectAnalyzer.cpp` call site to pass
 `local_result.program_ir.origin_map()` before the `ProgramIr` is destroyed.
 
-- [ ] **Step 9: Run all identity and extraction tests**
+- [x] **Step 9: Run all identity and extraction tests**
 
 Run:
 
@@ -220,7 +220,7 @@ ctest --test-dir build -R "IdsTest|LocalAnalysisStageTest|SvfFactMapperTest" --o
 
 Expected: all selected tests pass.
 
-- [ ] **Step 10: Commit Task 1**
+- [x] **Step 10: Commit Task 1**
 
 ```bash
 git add include/veritas/core/Ids.h src/core/Ids.cpp \
@@ -248,7 +248,7 @@ git commit -m "feat(summary): persist resolved call target identities"
 - Consumes: SQLite current bindings and immutable object-store summary bodies.
 - Guarantees: result order is ascending `function_variant_id`; every returned summary matches the requested revision/build context.
 
-- [ ] **Step 1: Add the failing ordered-enumeration test**
+- [x] **Step 1: Add the failing ordered-enumeration test**
 
 Add to `SummaryRepositoryTest.cpp`:
 
@@ -283,7 +283,7 @@ TEST_F(SummaryRepositoryTest, ListsCurrentSummariesInFunctionVariantOrder) {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify red**
+- [x] **Step 2: Run the test and verify red**
 
 Run:
 
@@ -293,7 +293,7 @@ cmake --build --preset default --target SummaryRepositoryTest
 
 Expected: compilation fails because `ListCurrentSummaries` does not exist.
 
-- [ ] **Step 3: Implement the bulk read**
+- [x] **Step 3: Implement the bulk read**
 
 Declare the exact interface from the approved spec. Query only the requested
 context and impose SQL ordering:
@@ -318,13 +318,13 @@ if (summary.identity().revision_id() != revision_id ||
 Return an empty vector for a valid context with no bindings. Propagate malformed
 IDs, object-store misses, and parse failures without partial results.
 
-- [ ] **Step 4: Add a context-isolation test**
+- [x] **Step 4: Add a context-isolation test**
 
 Publish one summary for the fixture context, call `ListCurrentSummaries` with a
 different revision string, and assert the result is successful and empty. This
 test catches a query that forgets the revision/build predicates.
 
-- [ ] **Step 5: Run the repository tests**
+- [x] **Step 5: Run the repository tests**
 
 ```bash
 cmake --build --preset default --target SummaryRepositoryTest
@@ -333,7 +333,7 @@ ctest --test-dir build -R SummaryRepositoryTest --output-on-failure
 
 Expected: all `SummaryRepositoryTest` cases pass.
 
-- [ ] **Step 6: Commit Task 2**
+- [x] **Step 6: Commit Task 2**
 
 ```bash
 git add include/veritas/summarydb/SummaryRepository.h \
@@ -361,7 +361,7 @@ git commit -m "feat(summarydb): list current summaries by analysis context"
 - Produces: `WeakenPositiveEpistemic`, `MakeBaseFact`, `MakeDerivedFact`, and `ValidateFactTuple`.
 - Consumes: `core::IdKind::kFact`, summary epistemic enums, canonical length-prefixed SHA-256 inputs.
 
-- [ ] **Step 1: Create the failing fact-schema test target**
+- [x] **Step 1: Create the failing fact-schema test target**
 
 Register a `FactSchemaTest` executable linked to `veritas::facts` and
 `GTest::gtest_main`. Add the new source/test subdirectories to their parent
@@ -400,7 +400,7 @@ TEST(FactSchemaTest, DerivedTupleCarriesCanonicalImmediateInputs) {
 The test-local `Id` helper converts a literal into bytes and calls
 `MakeStableId`; it must not reproduce `FactSchema` canonicalization.
 
-- [ ] **Step 2: Configure/build and verify red**
+- [x] **Step 2: Configure/build and verify red**
 
 Run:
 
@@ -412,7 +412,7 @@ cmake --build --preset default --target FactSchemaTest
 Expected: configuration or compilation fails because the facts library and API
 do not exist.
 
-- [ ] **Step 3: Define the public fact schema**
+- [x] **Step 3: Define the public fact schema**
 
 Use the exact approved relation set:
 
@@ -447,7 +447,7 @@ struct FactTuple {
 Declare the six functions listed in the Interfaces block. The arities are
 `2, 2, 2, 3, 2, 2, 2, 2` in enum order.
 
-- [ ] **Step 4: Implement validation and epistemic weakening**
+- [x] **Step 4: Implement validation and epistemic weakening**
 
 `WeakenPositiveEpistemic` accepts only `MUST` and `MAY`:
 
@@ -466,7 +466,7 @@ epistemic state, empty rule/inputs for base relations, and non-empty
 rule/inputs for derived relations. It rejects embedded tabs, CR, or LF in every
 column, rule ID, anchor, and provenance string.
 
-- [ ] **Step 5: Implement stable base and derived tuple IDs**
+- [x] **Step 5: Implement stable base and derived tuple IDs**
 
 Use one private length-prefix helper:
 
@@ -489,7 +489,7 @@ const auto bytes = std::as_bytes(std::span(canonical.data(), canonical.size()));
 return core::MakeStableId(core::IdKind::kFact, bytes);
 ```
 
-- [ ] **Step 6: Add arity, invalid-state, and insertion-order tests**
+- [x] **Step 6: Add arity, invalid-state, and insertion-order tests**
 
 Add separate tests that prove:
 
@@ -512,7 +512,7 @@ EXPECT_EQ(forward->tuple_id, reverse->tuple_id);
 Use literal expected relation names and arities; do not compute expected values
 with production helpers.
 
-- [ ] **Step 7: Run fact-schema tests**
+- [x] **Step 7: Run fact-schema tests**
 
 ```bash
 cmake --build --preset default --target FactSchemaTest
@@ -521,7 +521,7 @@ ctest --test-dir build -R FactSchemaTest --output-on-failure
 
 Expected: all fact schema tests pass.
 
-- [ ] **Step 8: Commit Task 3**
+- [x] **Step 8: Commit Task 3**
 
 ```bash
 git add CMakeLists.txt include/veritas/facts src/facts \
@@ -549,7 +549,7 @@ git commit -m "feat(facts): add stable tuple and epistemic model"
 - Consumes: current `FunctionSummary` values and positive `MUST`/`MAY` call facts.
 - Guarantees: `UNKNOWN`, unsupported, unresolved, and known-but-unavailable targets produce scoped unknown effects rather than graph edges.
 
-- [ ] **Step 1: Add the failing SCC tests and target**
+- [x] **Step 1: Add the failing SCC tests and target**
 
 Create the CMake targets and start `SccGraphTest.cpp` with these literal graph
 helpers (they deliberately do not reuse SCC production canonicalization):
@@ -617,7 +617,7 @@ TEST(SccGraphTest, AcyclicGraphOrdersCalleesBeforeCallers) {
 }
 ```
 
-- [ ] **Step 2: Configure/build and verify red**
+- [x] **Step 2: Configure/build and verify red**
 
 ```bash
 cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build
@@ -627,7 +627,7 @@ cmake --build --preset default --target SccGraphTest
 Expected: configuration or compilation fails because the WPA graph APIs do not
 exist.
 
-- [ ] **Step 3: Implement the call graph import boundary**
+- [x] **Step 3: Implement the call graph import boundary**
 
 Store functions, edges, and unknown markers in sorted vectors behind maps keyed
 by `core::ToString(id)`. `FromSummaries` follows this order:
@@ -645,51 +645,33 @@ by `core::ToString(id)`. `FromSummaries` follows this order:
 
 Do not fall back from a missing resolved ID to `callee_symbol` matching.
 
-- [ ] **Step 4: Implement deterministic Tarjan SCC construction**
+- [x] **Step 4: Implement deterministic Tarjan SCC construction**
 
-Use stable-ID text as the traversal key. The core recursion is:
+Use stable-ID text as the traversal key. Maintain explicit DFS frames containing
+the current vertex, sorted callees, and next-callee position. Assign Tarjan
+indices when pushing a frame; on frame completion, propagate lowlink to its
+parent and emit an SCC when `lowlink == index`. This preserves Tarjan traversal
+semantics without consuming one native stack frame per call-graph vertex.
 
 ```cpp
-void StrongConnect(const std::string& vertex) {
-  index[vertex] = next_index;
-  lowlink[vertex] = next_index++;
-  stack.push_back(vertex);
-  on_stack.insert(vertex);
-
-  for (const std::string& callee : SortedCallees(vertex)) {
-    if (!index.contains(callee)) {
-      StrongConnect(callee);
-      lowlink[vertex] = std::min(lowlink[vertex], lowlink[callee]);
-    } else if (on_stack.contains(callee)) {
-      lowlink[vertex] = std::min(lowlink[vertex], index[callee]);
-    }
-  }
-
-  if (lowlink[vertex] != index[vertex]) return;
-  std::vector<core::StableId> members;
-  for (;;) {
-    const std::string member = stack.back();
-    stack.pop_back();
-    on_stack.erase(member);
-    members.push_back(*core::ParseStableId(member));
-    if (member == vertex) break;
-  }
-  std::sort(members.begin(), members.end());
-  AddScc(std::move(members));
-}
+struct DfsFrame {
+  core::StableId vertex;
+  std::vector<core::StableId> sorted_callees;
+  std::size_t next_callee;
+};
 ```
 
 `AddScc` hashes `veritas.scc.v1` plus length-prefixed sorted member IDs with
 `IdKind::kScc`.
 
-- [ ] **Step 5: Implement deterministic reverse-topological order**
+- [x] **Step 5: Implement deterministic reverse-topological order**
 
 Collapse inter-SCC call edges. Start with SCCs whose successor count is zero,
 using a min-priority queue ordered by SCC ID. After popping a callee SCC,
 decrement each predecessor's remaining successor count and enqueue it at zero.
 The final vector must contain every SCC exactly once or return `Internal`.
 
-- [ ] **Step 6: Add unknown-call, self-recursion, and missing-ID tests**
+- [x] **Step 6: Add unknown-call, self-recursion, and missing-ID tests**
 
 Add independent behavior tests:
 
@@ -746,7 +728,7 @@ TEST(CallGraphTest, SummaryWithoutResolvedCalleeProducesScopedUnknown) {
 
 Assert real graph membership and adjacency; do not assert private Tarjan state.
 
-- [ ] **Step 7: Run all graph tests**
+- [x] **Step 7: Run all graph tests**
 
 ```bash
 cmake --build --preset default --target SccGraphTest
@@ -755,7 +737,7 @@ ctest --test-dir build -R SccGraphTest --output-on-failure
 
 Expected: all call-graph and SCC tests pass.
 
-- [ ] **Step 8: Commit Task 4**
+- [x] **Step 8: Commit Task 4**
 
 ```bash
 git add CMakeLists.txt include/veritas/wpa src/wpa \
@@ -782,7 +764,7 @@ git commit -m "feat(wpa): add deterministic call and SCC graphs"
 - Consumes: `CallGraph`, `SccGraph`, summaries, and `facts::FactTuple` constructors.
 - Guarantees: finite monotone joins, canonical proof selection, deterministic hashes, explicit approximation.
 
-- [ ] **Step 1: Add the failing three-function may-write test**
+- [x] **Step 1: Add the failing three-function may-write test**
 
 Create summaries `A`, `B`, and `C` with resolved `MUST` calls `A -> B`, `B -> C`
 and a direct `MUST` write to memory `X` in `C`:
@@ -805,7 +787,7 @@ TEST(FixpointEngineTest, DerivesMayWriteThroughThreeFunctionChain) {
 }
 ```
 
-- [ ] **Step 2: Build and verify red**
+- [x] **Step 2: Build and verify red**
 
 ```bash
 cmake --build --preset default --target FixpointEngineTest
@@ -814,7 +796,7 @@ cmake --build --preset default --target FixpointEngineTest
 Expected: configuration or compilation fails because the fixpoint APIs do not
 exist.
 
-- [ ] **Step 3: Implement the finite domain join**
+- [x] **Step 3: Implement the finite domain join**
 
 Use a map from semantic key to one canonical fact:
 
@@ -828,11 +810,11 @@ using FactDomain = std::map<std::vector<std::string>, DomainFact>;
 ```
 
 For a candidate with a new key, insert it. For an existing key, compute the
-weaker positive epistemic state. Among candidate proofs that produce the final
-state, retain the lexicographically smallest sorted input tuple-ID sequence.
-Return `true` only when the semantic state or canonical proof changes.
+weaker positive epistemic state. Return `true` only when the semantic state
+changes; proof selection happens after semantic convergence so provenance does
+not drive the finite lattice iteration.
 
-- [ ] **Step 4: Implement direct seeds and transfer rules**
+- [x] **Step 4: Implement direct seeds and transfer rules**
 
 Create base `DirectCall` tuples from positive call edges and base `DirectWrite`
 tuples from `EFFECT_KIND_WRITE` summary effects. Ignore reads for the M8
@@ -848,7 +830,7 @@ MayWrite(A,X)  <- DirectCall(A,B) + MayWrite(B,X)
 Each transfer calls `WeakenPositiveEpistemic` and `MakeDerivedFact` with the
 versioned rule ID from the spec.
 
-- [ ] **Step 5: Implement SCC evaluation and caching**
+- [x] **Step 5: Implement SCC evaluation and caching**
 
 `ComputeAll` walks `ReverseTopologicalOrder`. For every SCC:
 
@@ -867,7 +849,12 @@ ensures successor cache entries exist, then uses the same evaluator.
 Unsupported component kinds return `kUnsupported` and an empty fact vector
 without mutating the cache for supported domains.
 
-- [ ] **Step 6: Implement deterministic hashes**
+Cache reuse compares successor fixpoint hashes as a proof-dependency snapshot,
+while the persisted `input_hash` continues to use successor external hashes.
+This refreshes exact tuple-ID references without turning internal proof changes
+into persistent predecessor scheduling.
+
+- [x] **Step 6: Implement deterministic hashes**
 
 Compute:
 
@@ -884,14 +871,14 @@ Use length-prefixed fields and `DigestToHex`. Do not include iteration count,
 status timestamps, or hash-table order. On `kApproximated`, weaken every
 externally visible `MUST` fact to `MAY`, rebuild its derived tuple ID, then hash.
 
-- [ ] **Step 7: Add transitive-call and order tests**
+- [x] **Step 7: Add transitive-call and order tests**
 
 Add one test asserting `ReachableCall(A,C)` for `A -> B -> C`, and one asserting
 that `ComputeAll(CALLS)` returns SCC results in the exact `C, B, A` order. The
 expected order must come from hand-created fixture IDs, not from calling the
 engine's ordering helper twice.
 
-- [ ] **Step 8: Add recursion, weakening, and approximation tests**
+- [x] **Step 8: Add recursion, weakening, and approximation tests**
 
 Add separate tests proving:
 
@@ -906,7 +893,7 @@ reordered equivalent summaries yield identical facts and all three hashes
 For every test, name the mutation it catches: missing recursion loop, wrong
 epistemic join, ignored budget, or insertion-order dependence.
 
-- [ ] **Step 9: Run the fixpoint suite**
+- [x] **Step 9: Run the fixpoint suite**
 
 ```bash
 cmake --build --preset default --target FixpointEngineTest
@@ -915,7 +902,7 @@ ctest --test-dir build -R "SccGraphTest|FixpointEngineTest" --output-on-failure
 
 Expected: all graph and fixpoint tests pass.
 
-- [ ] **Step 10: Commit Task 5**
+- [x] **Step 10: Commit Task 5**
 
 ```bash
 git add include/veritas/wpa/FixpointDomain.h \
@@ -945,7 +932,7 @@ git commit -m "feat(wpa): derive transitive calls and may-write facts"
 - Produces: `WpaCoordinator::EnqueuePredecessorsIfChanged`.
 - Consumes: `MetadataStore`, `CallGraph`, `SccGraph`, `SccResult`, M7 `WorkItem`, and `WorklistScheduler`.
 
-- [ ] **Step 1: Add the failing schema/state test**
+- [x] **Step 1: Add the failing schema/state test**
 
 Create a temporary `MetadataStore`, apply the schema, store one converged state,
 and reload every field:
@@ -973,7 +960,7 @@ TEST_F(SccStateRepositoryTest, PersistsAndReloadsAllConvergenceFields) {
 }
 ```
 
-- [ ] **Step 2: Configure/build and verify red**
+- [x] **Step 2: Configure/build and verify red**
 
 ```bash
 cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build
@@ -983,7 +970,7 @@ cmake --build --preset default --target SccStateRepositoryTest
 Expected: compilation fails because the repository API and tables do not
 exist.
 
-- [ ] **Step 3: Add the four SCC tables**
+- [x] **Step 3: Add the four SCC tables**
 
 Append the exact columns from design section 10 to `schema/v1.sql`. Use integer
 columns for epistemic/component/status values and text for stable IDs/hashes.
@@ -999,7 +986,7 @@ CREATE INDEX IF NOT EXISTS idx_wpa_scc_edges_callee
 Reference `revisions` and `build_variants` with foreign keys. Do not cascade
 deletes into historical summary or M7 dependency tables.
 
-- [ ] **Step 4: Implement transactional topology publication**
+- [x] **Step 4: Implement transactional topology publication**
 
 `PublishGraph(context, call_graph, scc_graph)` begins one metadata transaction,
 deletes only topology rows for the exact revision/build context, inserts SCCs
@@ -1007,7 +994,7 @@ and sorted members, and inserts each inter-SCC caller/callee edge once. If
 multiple call edges collapse to one SCC edge, persist `MAY` when any contributing
 edge is `MAY`; otherwise persist `MUST`. Roll back on every early return.
 
-- [ ] **Step 5: Implement state load/store and external-change detection**
+- [x] **Step 5: Implement state load/store and external-change detection**
 
 `LoadState` returns `std::optional<StoredSccState>`. `StoreState` reads the prior
 external hash inside the same transaction, upserts all fields, commits, then
@@ -1024,14 +1011,14 @@ return !previous.has_value() ||
 A changed input/fixpoint hash with the same external hash is stored and returns
 `kUnchanged`.
 
-- [ ] **Step 6: Add the internal-only-change test**
+- [x] **Step 6: Add the internal-only-change test**
 
 Store `("input-a", "fixpoint-a", "external")`, then store
 `("input-b", "fixpoint-b", "external")`. Assert the second result is
 `kUnchanged` and the reloaded row contains the `b` hashes. This catches both
 lost updates and accidental propagation on fixpoint-only changes.
 
-- [ ] **Step 7: Add the failing scheduler handoff tests**
+- [x] **Step 7: Add the failing scheduler handoff tests**
 
 Create `WpaCoordinatorTest.cpp` with a two-SCC caller/callee graph:
 
@@ -1060,14 +1047,14 @@ TEST(WpaCoordinatorTest, UnchangedExternalHashSchedulesNothing) {
 }
 ```
 
-- [ ] **Step 8: Implement the M7 handoff**
+- [x] **Step 8: Implement the M7 handoff**
 
 For every sorted predecessor, construct the exact `WorkItem` from design
 section 11. Preserve incoming delta IDs and let `WorklistScheduler::Enqueue`
 perform semantic-key deduplication. Return `InvalidArgument` for a null
 scheduler and propagate `NotFound` from `SccGraph::Predecessors`.
 
-- [ ] **Step 9: Run persistence and scheduler tests**
+- [x] **Step 9: Run persistence and scheduler tests**
 
 ```bash
 cmake --build --preset default --target SccStateRepositoryTest WpaCoordinatorTest
@@ -1076,7 +1063,7 @@ ctest --test-dir build -R "SccStateRepositoryTest|WpaCoordinatorTest|WorklistSch
 
 Expected: all selected tests pass.
 
-- [ ] **Step 10: Commit Task 6**
+- [x] **Step 10: Commit Task 6**
 
 ```bash
 git add src/summarydb/schema/v1.sql \
@@ -1104,7 +1091,7 @@ git commit -m "feat(wpa): persist SCC state and schedule external changes"
 - Consumes: validated base tuples plus semantic `ReachableCall.csv` and `MayWrite.csv` rows.
 - Guarantees: deterministic TSV order/escaping, all-or-nothing import, canonical immediate derivation reconstruction.
 
-- [ ] **Step 1: Add the failing deterministic-export test**
+- [x] **Step 1: Add the failing deterministic-export test**
 
 Use a unique temporary directory and real `FactTuple` values:
 
@@ -1131,7 +1118,7 @@ from literals and `core::ToString` only. Add one tuple for every documented
 base relation and assert the corresponding file exists with the correct field
 count.
 
-- [ ] **Step 2: Build and verify red**
+- [x] **Step 2: Build and verify red**
 
 ```bash
 cmake --build --preset default --target SouffleExporterTest
@@ -1139,7 +1126,7 @@ cmake --build --preset default --target SouffleExporterTest
 
 Expected: compilation fails because `SouffleExporter` does not exist.
 
-- [ ] **Step 3: Implement base relation export**
+- [x] **Step 3: Implement base relation export**
 
 Validate every tuple before opening output files. Group only base relations,
 sort each group by tuple ID, and write these exact filenames:
@@ -1158,7 +1145,7 @@ temporary files first; rename all files into place only after every write and
 close succeeds. On any error, remove only the temporary files created by this
 call and leave prior complete relation files unchanged.
 
-- [ ] **Step 4: Add the failing derived-provenance test**
+- [x] **Step 4: Add the failing derived-provenance test**
 
 Write semantic result rows for a chain `A -> B -> C` and direct write `C -> X`:
 
@@ -1186,7 +1173,7 @@ EXPECT_EQ(a_writes_x.input_tuple_ids.size(), 2u);
 EXPECT_EQ(a_writes_x.tuple_id.kind, core::IdKind::kFact);
 ```
 
-- [ ] **Step 5: Run the provenance test and verify red**
+- [x] **Step 5: Run the provenance test and verify red**
 
 ```bash
 cmake --build --preset default --target SouffleExporterTest
@@ -1196,7 +1183,7 @@ cmake --build --preset default --target SouffleExporterTest
 
 Expected: the new test fails because derived import is not implemented.
 
-- [ ] **Step 6: Implement semantic-row parsing and weakening**
+- [x] **Step 6: Implement semantic-row parsing and weakening**
 
 Parse exactly three tab-separated fields per derived row. Report relation name
 and one-based line number for malformed arity, unsupported epistemic integers,
@@ -1207,10 +1194,11 @@ proofs without changing VERITAS semantics.
 Read every file and validate every row into temporary in-memory structures
 before producing the first returned `FactTuple`.
 
-- [ ] **Step 7: Implement canonical proof reconstruction**
+- [x] **Step 7: Implement canonical proof reconstruction**
 
-Memoize reconstruction by `(relation, columns, epistemic)` and track an active
-set to break recursive proof cycles. Enumerate candidates:
+Memoize reconstruction by `(relation, columns, epistemic)` and assign finite
+rooted proof ranks from direct facts and validated derived-support boundaries.
+Enumerate candidates:
 
 ```text
 ReachableCall(A,B):
@@ -1223,11 +1211,23 @@ MayWrite(A,X):
 ```
 
 Apply `WeakenPositiveEpistemic` and retain candidates matching the final grouped
-epistemic state. Choose direct before transitive, then lexicographically
-smallest sorted input tuple-ID vector. Call `MakeDerivedFact` with the selected
-rule and inputs. Return `FailedPrecondition` if no acyclic proof exists.
+epistemic state. Choose direct before transitive, then minimum finite rooted
+rank, then the lexicographically smallest sorted input tuple-ID vector. Call
+`MakeDerivedFact` with the selected rule and inputs. Return
+`FailedPrecondition` only if no finite rooted proof exists.
 
-- [ ] **Step 8: Add malformed-row and canonical-multiple-proof tests**
+Index calls by caller, writes by semantic columns, and derived support by
+relation/columns. Register reverse dependency edges once, seed direct/support
+proofs in a priority queue, and propagate rooted ranks through that queue. The
+queue order is `(rank, semantic key, ordered inputs, rule)` so all lower-rank
+dependencies are fixed before canonical tie-breaking finalizes a key.
+
+Consider both `MUST` and `MAY` proofs for each supplied semantic key. Return the
+transitive closure of the selected final proofs, including any stronger
+auxiliary tuple needed to root a weaker recursive proof. Hash auxiliary support
+in `fixpoint_hash`, but join by semantic key before computing the external hash.
+
+- [x] **Step 8: Add malformed-row and canonical-multiple-proof tests**
 
 Add independent tests that:
 
@@ -1237,7 +1237,7 @@ Add independent tests that:
   proof regardless of base/result row order;
 - a recursive semantic row with no direct seed fails provenance reconstruction.
 
-- [ ] **Step 9: Run fact-boundary tests**
+- [x] **Step 9: Run fact-boundary tests**
 
 ```bash
 cmake --build --preset default --target FactSchemaTest SouffleExporterTest
@@ -1246,7 +1246,7 @@ ctest --test-dir build -R "FactSchemaTest|SouffleExporterTest" --output-on-failu
 
 Expected: all fact model/export/import tests pass without a Souffle installation.
 
-- [ ] **Step 10: Commit Task 7**
+- [x] **Step 10: Commit Task 7**
 
 ```bash
 git add include/veritas/facts/SouffleExporter.h \
@@ -1277,7 +1277,7 @@ git commit -m "feat(facts): add deterministic Souffle relation boundary"
 - Consumes: relation files from Task 7 and `LLVMSupport` process execution.
 - Guarantees: missing/disabled Souffle is a supported configuration; process failure cannot update SQLite state.
 
-- [ ] **Step 1: Add explicit optional dependency discovery**
+- [x] **Step 1: Add explicit optional dependency discovery**
 
 Add this option beside the existing build options:
 
@@ -1305,7 +1305,7 @@ endif()
 
 Print the option and availability in the top-level configuration summary.
 
-- [ ] **Step 2: Add the failing runner test target**
+- [x] **Step 2: Add the failing runner test target**
 
 Register `SouffleRunnerTest` unconditionally. Pass numeric availability and the
 discovered path only to the test target:
@@ -1330,7 +1330,7 @@ When available, export the `A -> B -> C`, `C writes X` base fixture, run both
 rules, import results, and compare semantic `(relation, columns, epistemic)`
 sets against `FixpointEngine` output.
 
-- [ ] **Step 3: Build and verify red or explicit skip precondition**
+- [x] **Step 3: Build and verify red or explicit skip precondition**
 
 ```bash
 cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build
@@ -1341,7 +1341,7 @@ Expected: compilation fails because `SouffleRunner` and rule files do not exist.
 On this development machine, the eventual runtime test will skip because
 Souffle is absent; the build itself must still succeed.
 
-- [ ] **Step 4: Implement the process runner**
+- [x] **Step 4: Implement the process runner**
 
 Use `llvm::sys::ExecuteAndWait` with an argument vector, never a shell string:
 
@@ -1359,7 +1359,7 @@ directories. Create the output directory when absent. Return `Internal` with
 the exit code/error when execution fails. Link `veritas_facts` privately to
 `LLVMSupport`; no LLVM type appears in the public header.
 
-- [ ] **Step 5: Add the reachability rule**
+- [x] **Step 5: Add the reachability rule**
 
 After the full license header, define:
 
@@ -1382,7 +1382,7 @@ ReachableCall(a, c, out) :-
   Weaken(edge, fact, out).
 ```
 
-- [ ] **Step 6: Add the memory-effects rule**
+- [x] **Step 6: Add the memory-effects rule**
 
 Repeat the same `Weaken` relation and `DirectCall` declaration, then define:
 
@@ -1399,7 +1399,7 @@ MayWrite(f, x, out) :-
   Weaken(edge, fact, out).
 ```
 
-- [ ] **Step 7: Run the optional-runner and mandatory C++ tests**
+- [x] **Step 7: Run the optional-runner and mandatory C++ tests**
 
 ```bash
 cmake --build --preset default --target SouffleRunnerTest FixpointEngineTest SouffleExporterTest
@@ -1409,7 +1409,7 @@ ctest --test-dir build -R "SouffleRunnerTest|FixpointEngineTest|SouffleExporterT
 Expected locally: mandatory C++ tests pass and `SouffleRunnerTest` reports one
 explicit skip. If the executable is installed, the comparison test passes.
 
-- [ ] **Step 8: Verify an explicitly disabled build**
+- [x] **Step 8: Verify an explicitly disabled build**
 
 Configure a separate generated tree so the primary task build remains intact:
 
@@ -1425,7 +1425,7 @@ ctest --test-dir build-souffle-off \
 Expected: configure/build/tests pass without Souffle headers, libraries, or
 executable.
 
-- [ ] **Step 9: Commit Task 8**
+- [x] **Step 9: Commit Task 8**
 
 ```bash
 git add CMakeLists.txt cmake/Dependencies.cmake \
@@ -1451,7 +1451,7 @@ git commit -m "feat(facts): add optional Souffle rule execution"
 - Produces: one integration test proving the complete C++ M8 path without Souffle.
 - Produces: updated project/milestone status only after the acceptance test passes.
 
-- [ ] **Step 1: Add the failing end-to-end test target**
+- [x] **Step 1: Add the failing end-to-end test target**
 
 Build three synthetic summaries in reverse input order:
 
@@ -1476,7 +1476,7 @@ auto results = engine.ComputeAll(v1::COMPONENT_KIND_MEMORY_EFFECTS,
 Assert `MayWrite(A,X)` is `MUST`, its tuple has rule/input provenance, and A's
 unknown marker is scoped only to A.
 
-- [ ] **Step 2: Extend the test through persistence and M7 propagation**
+- [x] **Step 2: Extend the test through persistence and M7 propagation**
 
 Use `SccStateRepository(repository->metadata_store())` to publish topology and
 store each result. For the first publication, pass every `kChanged` result to
@@ -1484,7 +1484,7 @@ store each result. For the first publication, pass every `kChanged` result to
 deduplicated. Store a second result with a changed fixpoint hash and identical
 external hash; assert no new predecessor item is added.
 
-- [ ] **Step 3: Build/run and fix only integration defects**
+- [x] **Step 3: Build/run and fix only integration defects**
 
 ```bash
 cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build
@@ -1496,7 +1496,7 @@ Expected: pass. If it fails, fix the owning production unit and rerun both its
 unit target and this integration target; do not duplicate production logic in
 the test.
 
-- [ ] **Step 4: Update milestone status after green**
+- [x] **Step 4: Update milestone status after green**
 
 Change the M8 spec status from `Approved for implementation` to `Implemented`.
 Update `CLAUDE.md` Current State to state that M0-M8 are implemented and that
@@ -1504,7 +1504,7 @@ M9-M12 remain. Mention deterministic SCC/fixpoint, persisted SCC hashes, M7
 external-change propagation, and optional Souffle relation execution; do not
 claim Souffle was executed on a machine where it is absent.
 
-- [ ] **Step 5: Run M8 acceptance tests**
+- [x] **Step 5: Run M8 acceptance tests**
 
 ```bash
 cmake --build --preset default --target \
@@ -1518,7 +1518,7 @@ ctest --test-dir build \
 Expected: every mandatory test passes; only the executable Souffle comparison
 may be explicitly skipped when unavailable.
 
-- [ ] **Step 6: Commit Task 9**
+- [x] **Step 6: Commit Task 9**
 
 ```bash
 git add tests/integration/CMakeLists.txt tests/integration/wpa CLAUDE.md \
@@ -1534,7 +1534,7 @@ git commit -m "test(wpa): verify M8 end-to-end acceptance"
 - Verify all M8-modified files against `main`.
 - Do not add generated build trees or Souffle execution artifacts.
 
-- [ ] **Step 1: Verify the task branch diff**
+- [x] **Step 1: Verify the task branch diff**
 
 ```bash
 git status --short
@@ -1545,7 +1545,7 @@ git diff main...HEAD --check
 Expected: only M8 source, tests, build files, and approved documentation appear;
 no whitespace errors or generated artifacts appear.
 
-- [ ] **Step 2: Verify license headers**
+- [x] **Step 2: Verify license headers**
 
 Run the repository policy check:
 
@@ -1563,7 +1563,10 @@ test -z "$missing" || { printf 'missing license header:\n%s\n' "$missing" >&2; e
 
 Expected: no missing headers.
 
-- [ ] **Step 3: Run a clean canonical build**
+Result: every M8-touched source file has the required header. The repository-wide
+check still reports five unchanged `frontend_features` fixture files from `main`.
+
+- [x] **Step 3: Run a clean canonical build**
 
 From the task worktree only:
 
@@ -1577,7 +1580,7 @@ cmake --build --preset default
 Expected: zero build errors. Record warnings accurately; duplicate Homebrew
 GoogleTest linker warnings are baseline warnings, not M8 regressions.
 
-- [ ] **Step 4: Run the complete test suite**
+- [x] **Step 4: Run the complete test suite**
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -1586,7 +1589,7 @@ ctest --test-dir build --output-on-failure
 Expected: 100% of registered tests pass. An unavailable Souffle executable may
 produce an explicit GTest skip, not a failed or absent C++ WPA test.
 
-- [ ] **Step 5: Re-run the explicitly disabled Souffle build**
+- [x] **Step 5: Re-run the explicitly disabled Souffle build**
 
 ```bash
 cmake -S . -B build-souffle-off -G Ninja \
@@ -1599,14 +1602,14 @@ ctest --test-dir build-souffle-off \
 
 Expected: all selected mandatory tests pass.
 
-- [ ] **Step 6: Request code review and resolve findings**
+- [x] **Step 6: Request code review and resolve findings**
 
 Review the full branch diff for spec compliance, correctness, error handling,
 test quality, and scope. For every accepted finding, write or identify the
 failing regression test, verify red, apply the minimum fix, and rerun the owning
 suite. Then repeat Steps 1-5.
 
-- [ ] **Step 7: Verify clean committed states**
+- [x] **Step 7: Verify clean committed states**
 
 ```bash
 git status --porcelain

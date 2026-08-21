@@ -26,20 +26,18 @@ namespace veritas::summarydb {
 namespace {
 
 class SummaryRepositoryTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
-    test_dir_ = std::filesystem::temp_directory_path() /
-                "veritas_summary_repo_test";
+    test_dir_ =
+        std::filesystem::temp_directory_path() / "veritas_summary_repo_test";
     std::filesystem::remove_all(test_dir_);
     std::filesystem::create_directories(test_dir_);
   }
 
-  void TearDown() override {
-    std::filesystem::remove_all(test_dir_);
-  }
+  void TearDown() override { std::filesystem::remove_all(test_dir_); }
 
   // Helper to insert parent rows required for foreign key constraints
-  void SetupParentRows(const PublicationContext& context) {
+  void SetupParentRows(const PublicationContext &context) {
     auto metadata_result = MetadataStore::Open(test_dir_ / "metadata.db");
     ASSERT_TRUE(metadata_result.ok());
     auto metadata = std::move(*metadata_result);
@@ -60,9 +58,11 @@ class SummaryRepositoryTest : public ::testing::Test {
 
     // Insert build variant
     auto variant_status = metadata.Execute(
-        "INSERT OR IGNORE INTO build_variants (build_variant_id, target_triple, "
+        "INSERT OR IGNORE INTO build_variants (build_variant_id, "
+        "target_triple, "
         "compiler_id, compiler_version, compile_options_hash, macro_set_hash, "
-        "include_closure_hash, type_layout_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "include_closure_hash, type_layout_hash) VALUES (?, ?, ?, ?, ?, ?, ?, "
+        "?)",
         {context.build_variant_id, "arm64-apple-darwin", "clang", "17.0.6",
          "hash1", "hash2", "hash3", "hash4"});
     ASSERT_TRUE(variant_status.ok());
@@ -74,18 +74,18 @@ class SummaryRepositoryTest : public ::testing::Test {
 summary::v1::FunctionSummary MakeSyntheticSummary(int64_t range_max = 1024) {
   summary::v1::FunctionSummary summary;
 
-  auto* header = summary.mutable_header();
+  auto *header = summary.mutable_header();
   header->set_schema_version("summary.v1");
   header->set_creation_epoch_ms(1234567890);
 
-  auto* identity = summary.mutable_identity();
+  auto *identity = summary.mutable_identity();
   identity->set_repository_id("repo:sha256:abc");
   identity->set_revision_id("rev:sha256:def");
   identity->set_build_variant_id("variant:sha256:ghi");
   identity->set_function_variant_id("funcvar:sha256:jkl");
   identity->set_function_body_id("funcbody:sha256:mno");
 
-  auto* range = summary.add_range_facts();
+  auto *range = summary.add_range_facts();
   range->set_variable("buffer_size");
   range->set_min_value(0);
   range->set_max_value(range_max);
@@ -109,7 +109,8 @@ TEST_F(SummaryRepositoryTest, PublishAndRetrieveSummary) {
   SetupParentRows(context);
 
   auto publish_result = repo->PublishSummary(summary, context);
-  ASSERT_TRUE(publish_result.ok()) << "Error: " << publish_result.status().message();
+  ASSERT_TRUE(publish_result.ok())
+      << "Error: " << publish_result.status().message();
 
   auto summary_id = *publish_result;
 
@@ -118,7 +119,8 @@ TEST_F(SummaryRepositoryTest, PublishAndRetrieveSummary) {
   ASSERT_TRUE(get_result.ok()) << get_result.status().message();
 
   auto retrieved = *get_result;
-  EXPECT_EQ(retrieved.header().schema_version(), summary.header().schema_version());
+  EXPECT_EQ(retrieved.header().schema_version(),
+            summary.header().schema_version());
   ASSERT_EQ(retrieved.range_facts_size(), 1);
   EXPECT_EQ(retrieved.range_facts(0).variable(), "buffer_size");
   EXPECT_EQ(retrieved.range_facts(0).max_value(), 1024);
@@ -184,7 +186,8 @@ TEST_F(SummaryRepositoryTest, NewerSummaryReplacesCurrentBinding) {
   EXPECT_EQ(historical->range_facts(0).max_value(), 1024);
 }
 
-TEST_F(SummaryRepositoryTest, GetCurrentSummaryReturnsNotFoundForUnknownVariant) {
+TEST_F(SummaryRepositoryTest,
+       GetCurrentSummaryReturnsNotFoundForUnknownVariant) {
   auto repo_result = SummaryRepository::Open(test_dir_.string());
   ASSERT_TRUE(repo_result.ok());
   auto repo = std::move(*repo_result);
@@ -221,7 +224,7 @@ TEST_F(SummaryRepositoryTest, PublishProjectSummariesBindsAllAtomically) {
   auto second_current = repo->GetCurrentSummary("funcvar:sha256:second");
   ASSERT_TRUE(first_current.ok());
   ASSERT_TRUE(second_current.ok());
-  for (const auto& id : *result) {
+  for (const auto &id : *result) {
     EXPECT_TRUE(repo->GetSummary(id).ok());
   }
 }
@@ -242,17 +245,16 @@ TEST_F(SummaryRepositoryTest, ListsCurrentSummariesInFunctionVariantOrder) {
   z.mutable_identity()->set_function_variant_id("funcvar:sha256:z");
   auto a = MakeSyntheticSummary();
   a.mutable_identity()->set_function_variant_id("funcvar:sha256:a");
-  ASSERT_TRUE(repo->PublishProjectSummaries(
-      context.revision_id, context.build_variant_id, {z, a}).ok());
+  ASSERT_TRUE(repo->PublishProjectSummaries(context.revision_id,
+                                            context.build_variant_id, {z, a})
+                  .ok());
 
-  auto listed = repo->ListCurrentSummaries(
-      context.revision_id, context.build_variant_id);
+  auto listed =
+      repo->ListCurrentSummaries(context.revision_id, context.build_variant_id);
   ASSERT_TRUE(listed.ok()) << listed.status().message();
   ASSERT_EQ(listed->size(), 2u);
-  EXPECT_EQ((*listed)[0].identity().function_variant_id(),
-            "funcvar:sha256:a");
-  EXPECT_EQ((*listed)[1].identity().function_variant_id(),
-            "funcvar:sha256:z");
+  EXPECT_EQ((*listed)[0].identity().function_variant_id(), "funcvar:sha256:a");
+  EXPECT_EQ((*listed)[1].identity().function_variant_id(), "funcvar:sha256:z");
 }
 
 TEST_F(SummaryRepositoryTest, ListCurrentSummariesIsolatesContext) {
@@ -266,15 +268,47 @@ TEST_F(SummaryRepositoryTest, ListCurrentSummariesIsolatesContext) {
       .function_variant_id = "funcvar:sha256:jkl",
   };
   SetupParentRows(context);
-  ASSERT_TRUE(repo->PublishProjectSummaries(
-      context.revision_id, context.build_variant_id,
-      {MakeSyntheticSummary()}).ok());
+  ASSERT_TRUE(repo->PublishProjectSummaries(context.revision_id,
+                                            context.build_variant_id,
+                                            {MakeSyntheticSummary()})
+                  .ok());
 
-  auto listed = repo->ListCurrentSummaries(
-      "rev:sha256:other", context.build_variant_id);
+  auto listed =
+      repo->ListCurrentSummaries("rev:sha256:other", context.build_variant_id);
   ASSERT_TRUE(listed.ok()) << listed.status().message();
   EXPECT_TRUE(listed->empty());
 }
 
-}  // namespace
-}  // namespace veritas::summarydb
+TEST_F(SummaryRepositoryTest,
+       ListCurrentSummariesRejectsBindingIdentityMismatch) {
+  auto repo_result = SummaryRepository::Open(test_dir_.string());
+  ASSERT_TRUE(repo_result.ok());
+  auto repo = std::move(*repo_result);
+  PublicationContext context{
+      .revision_id = "rev:sha256:def",
+      .build_variant_id = "variant:sha256:ghi",
+      .function_variant_id = "funcvar:sha256:jkl",
+  };
+  SetupParentRows(context);
+  ASSERT_TRUE(repo->PublishProjectSummaries(context.revision_id,
+                                            context.build_variant_id,
+                                            {MakeSyntheticSummary()})
+                  .ok());
+  auto metadata = MetadataStore::Open(test_dir_ / "metadata.db");
+  ASSERT_TRUE(metadata.ok());
+  ASSERT_TRUE(
+      metadata
+          ->Execute("UPDATE summary_bindings SET function_variant_id = ? WHERE "
+                    "revision_id = ? AND build_variant_id = ?",
+                    {"funcvar:sha256:corrupt", context.revision_id,
+                     context.build_variant_id})
+          .ok());
+
+  auto listed =
+      repo->ListCurrentSummaries(context.revision_id, context.build_variant_id);
+  ASSERT_FALSE(listed.ok());
+  EXPECT_EQ(listed.status().code(), StatusCode::kFailedPrecondition);
+}
+
+} // namespace
+} // namespace veritas::summarydb

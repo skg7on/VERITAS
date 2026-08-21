@@ -28,7 +28,7 @@ std::filesystem::path TempDbPath() {
 }
 
 class MetadataStoreTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     db_path_ = TempDbPath();
     std::filesystem::remove(db_path_);
@@ -39,7 +39,7 @@ class MetadataStoreTest : public ::testing::Test {
   std::filesystem::path db_path_;
 };
 
-}  // namespace
+} // namespace
 
 TEST_F(MetadataStoreTest, AppliesSchemaToFreshDatabase) {
   auto store = MetadataStore::Open(db_path_);
@@ -202,4 +202,72 @@ TEST_F(MetadataStoreTest, PutAnalyzerRunReturnsId) {
   auto result = store.value().PutAnalyzerRun(row);
   ASSERT_TRUE(result.ok());
   EXPECT_GT(result.value(), 0);
+}
+
+TEST_F(MetadataStoreTest, FailedCommitKeepsTransactionActiveUntilRollback) {
+  auto store = MetadataStore::Open(db_path_);
+  ASSERT_TRUE(store.ok());
+  ASSERT_TRUE(
+      store->Execute("CREATE TABLE parent(id TEXT PRIMARY KEY)", {}).ok());
+  ASSERT_TRUE(
+      store
+          ->Execute("CREATE TABLE child(parent_id TEXT, FOREIGN KEY(parent_id) "
+                    "REFERENCES parent(id) DEFERRABLE INITIALLY DEFERRED)",
+                    {})
+          .ok());
+  ASSERT_TRUE(store->BeginTransaction().ok());
+  ASSERT_TRUE(
+      store->Execute("INSERT INTO child(parent_id) VALUES('missing')", {})
+          .ok());
+
+  EXPECT_FALSE(store->CommitTransaction().ok());
+  EXPECT_EQ(store->BeginTransaction().code(),
+            veritas::StatusCode::kFailedPrecondition);
+  EXPECT_TRUE(store->RollbackTransaction().ok());
+  EXPECT_TRUE(store->BeginTransaction().ok());
+  EXPECT_TRUE(store->RollbackTransaction().ok());
+}
+
+TEST_F(MetadataStoreTest,
+       FailedCommitAfterSQLiteAutoRollbackResynchronizesTransactionState) {
+  auto store = MetadataStore::Open(db_path_);
+  ASSERT_TRUE(store.ok());
+  ASSERT_TRUE(
+      store->Execute("CREATE TABLE unique_values(value TEXT PRIMARY KEY)", {})
+          .ok());
+  ASSERT_TRUE(store->BeginTransaction().ok());
+  ASSERT_TRUE(
+      store->Execute("INSERT INTO unique_values(value) VALUES('duplicate')", {})
+          .ok());
+  ASSERT_FALSE(store
+                   ->Execute("INSERT OR ROLLBACK INTO unique_values(value) "
+                             "VALUES('duplicate')",
+                             {})
+                   .ok());
+
+  EXPECT_FALSE(store->CommitTransaction().ok());
+  EXPECT_TRUE(store->BeginTransaction().ok());
+  EXPECT_TRUE(store->RollbackTransaction().ok());
+}
+
+TEST_F(MetadataStoreTest,
+       FailedRollbackAfterSQLiteAutoRollbackResynchronizesTransactionState) {
+  auto store = MetadataStore::Open(db_path_);
+  ASSERT_TRUE(store.ok());
+  ASSERT_TRUE(
+      store->Execute("CREATE TABLE unique_values(value TEXT PRIMARY KEY)", {})
+          .ok());
+  ASSERT_TRUE(store->BeginTransaction().ok());
+  ASSERT_TRUE(
+      store->Execute("INSERT INTO unique_values(value) VALUES('duplicate')", {})
+          .ok());
+  ASSERT_FALSE(store
+                   ->Execute("INSERT OR ROLLBACK INTO unique_values(value) "
+                             "VALUES('duplicate')",
+                             {})
+                   .ok());
+
+  EXPECT_FALSE(store->RollbackTransaction().ok());
+  EXPECT_TRUE(store->BeginTransaction().ok());
+  EXPECT_TRUE(store->RollbackTransaction().ok());
 }

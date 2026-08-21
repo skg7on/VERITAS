@@ -14,33 +14,11 @@
 
 #include "veritas/wpa/FixpointDomain.h"
 
-#include <algorithm>
 #include <utility>
 
 namespace veritas::wpa {
-namespace {
 
-bool CandidateProofPrecedes(const facts::FactTuple& candidate,
-                            const facts::FactTuple& current) {
-  const bool candidate_is_direct =
-      candidate.rule_id.find(".direct.") != std::string::npos;
-  const bool current_is_direct =
-      current.rule_id.find(".direct.") != std::string::npos;
-  if (candidate_is_direct != current_is_direct) return candidate_is_direct;
-  if (candidate.input_tuple_ids != current.input_tuple_ids) {
-    return std::lexicographical_compare(
-        candidate.input_tuple_ids.begin(), candidate.input_tuple_ids.end(),
-        current.input_tuple_ids.begin(), current.input_tuple_ids.end());
-  }
-  if (candidate.rule_id != current.rule_id) {
-    return candidate.rule_id < current.rule_id;
-  }
-  return candidate.tuple_id < current.tuple_id;
-}
-
-}  // namespace
-
-std::vector<std::string> FactSemanticKey(const facts::FactTuple& tuple) {
+std::vector<std::string> FactSemanticKey(const facts::FactTuple &tuple) {
   std::vector<std::string> key;
   key.reserve(tuple.columns.size() + 1u);
   key.push_back(std::to_string(static_cast<int>(tuple.relation)));
@@ -48,12 +26,13 @@ std::vector<std::string> FactSemanticKey(const facts::FactTuple& tuple) {
   return key;
 }
 
-StatusOr<bool> JoinFact(facts::FactTuple candidate, FactDomain* domain) {
+StatusOr<bool> JoinFact(facts::FactTuple candidate, FactDomain *domain) {
   if (domain == nullptr) {
     return Status::InvalidArgument("fact domain must not be null");
   }
   auto validation = facts::ValidateFactTuple(candidate);
-  if (!validation.ok()) return validation;
+  if (!validation.ok())
+    return validation;
 
   auto key = FactSemanticKey(candidate);
   auto existing = domain->find(key);
@@ -63,17 +42,15 @@ StatusOr<bool> JoinFact(facts::FactTuple candidate, FactDomain* domain) {
     return true;
   }
 
-  auto weakened = facts::WeakenPositiveEpistemic(
-      existing->second.epistemic, candidate.epistemic);
-  if (!weakened.ok()) return weakened.status();
+  auto weakened = facts::WeakenPositiveEpistemic(existing->second.epistemic,
+                                                 candidate.epistemic);
+  if (!weakened.ok())
+    return weakened.status();
   if (*weakened != existing->second.epistemic) {
     existing->second = DomainFact{candidate.epistemic, std::move(candidate)};
     return true;
   }
-  if (candidate.epistemic != existing->second.epistemic) return false;
-  if (!CandidateProofPrecedes(candidate, existing->second.tuple)) return false;
-  existing->second = DomainFact{candidate.epistemic, std::move(candidate)};
-  return true;
+  return false;
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

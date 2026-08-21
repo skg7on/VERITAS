@@ -32,6 +32,15 @@ public:
   static StatusOr<std::vector<FactTuple>>
   ReadDerivedRelations(const std::filesystem::path &directory,
                        std::span<const FactTuple> base_facts);
+
+  // Rebuilds a closed, deterministic proof forest for the supplied derived
+  // semantic rows. The result includes stronger auxiliary tuples when a weak
+  // final row depends on them. Returns InvalidArgument for unsupported or
+  // malformed rows and FailedPrecondition when no acyclic proof exists.
+  static StatusOr<std::vector<FactTuple>>
+  ReconstructCanonicalProofs(std::span<const FactTuple> base_facts,
+                             std::span<const FactTuple> derived_semantics,
+                             std::span<const FactTuple> derived_support = {});
 };
 
 } // namespace veritas::facts

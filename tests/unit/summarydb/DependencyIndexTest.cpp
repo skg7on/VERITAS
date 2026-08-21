@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -29,10 +30,10 @@ namespace {
 
 using summary::v1::ComponentKind;
 
-// A valid 64-hex-char summary ID, unique per character, so IDs round-trip
-// through ParseStableId (which enforces a 64-char digest).
 core::StableId SummaryId(char c) {
-  return core::StableId{core::IdKind::kFunctionSummary, std::string(64, c)};
+  return core::MakeStableId(
+      core::IdKind::kFunctionSummary,
+      std::as_bytes(std::span<const char>(&c, static_cast<std::size_t>(1))));
 }
 
 DependencyEdge MakeEdge(char consumer, ComponentKind consumer_component,
@@ -75,15 +76,13 @@ ComponentDelta EvidenceDelta(ComponentKind kind) {
 }
 
 class DependencyIndexTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
-    db_path_ = std::filesystem::temp_directory_path() /
-               ("veritas_dep_index_" +
-                std::to_string(::getpid()) + "_" +
-                ::testing::UnitTest::GetInstance()
-                    ->current_test_info()
-                    ->name() +
-                ".db");
+    db_path_ =
+        std::filesystem::temp_directory_path() /
+        ("veritas_dep_index_" + std::to_string(::getpid()) + "_" +
+         ::testing::UnitTest::GetInstance()->current_test_info()->name() +
+         ".db");
     std::filesystem::remove(db_path_);
 
     auto store = MetadataStore::Open(db_path_);
@@ -118,8 +117,8 @@ TEST_F(DependencyIndexTest, UsersOfReturnsOnlyConsumersOfProducerComponent) {
                                 Sensitivity::kSemantic)})
                   .ok());
 
-  auto range_users =
-      index_->UsersOf(SummaryId('v'), ComponentKind::COMPONENT_KIND_RANGE_FACTS);
+  auto range_users = index_->UsersOf(SummaryId('v'),
+                                     ComponentKind::COMPONENT_KIND_RANGE_FACTS);
   ASSERT_TRUE(range_users.ok()) << range_users.status().message();
   ASSERT_EQ(range_users->size(), 1u);
   EXPECT_EQ((*range_users)[0].consumer_id, SummaryId('d'));
@@ -151,13 +150,13 @@ TEST_F(DependencyIndexTest, RepublishRemovesStaleHotRows) {
                                 Sensitivity::kSemantic)})
                   .ok());
 
-  auto old_users =
-      index_->UsersOf(SummaryId('v'), ComponentKind::COMPONENT_KIND_RANGE_FACTS);
+  auto old_users = index_->UsersOf(SummaryId('v'),
+                                   ComponentKind::COMPONENT_KIND_RANGE_FACTS);
   ASSERT_TRUE(old_users.ok());
   EXPECT_TRUE(old_users->empty());
 
-  auto new_users =
-      index_->UsersOf(SummaryId('w'), ComponentKind::COMPONENT_KIND_RANGE_FACTS);
+  auto new_users = index_->UsersOf(SummaryId('w'),
+                                   ComponentKind::COMPONENT_KIND_RANGE_FACTS);
   ASSERT_TRUE(new_users.ok());
   ASSERT_EQ(new_users->size(), 1u);
   EXPECT_EQ((*new_users)[0].consumer_id, SummaryId('d'));
@@ -250,14 +249,14 @@ TEST_F(DependencyIndexTest, EvidenceOnlyDeltaFollowsEvidenceEdgesOnly) {
 TEST_F(DependencyIndexTest, ImpactBudgetTruncatesExplicitly) {
   // Five consumers depend on validate.range; cap the impact set at two.
   for (char c = 'a'; c <= 'e'; ++c) {
-    ASSERT_TRUE(index_
-                    ->ReplaceCurrentDependencies(
-                        SummaryId(c),
-                        {MakeEdge(c, ComponentKind::COMPONENT_KIND_VALUE_FLOW,
-                                  'v',
-                                  ComponentKind::COMPONENT_KIND_RANGE_FACTS,
-                                  Sensitivity::kSemantic)})
-                    .ok());
+    ASSERT_TRUE(
+        index_
+            ->ReplaceCurrentDependencies(
+                SummaryId(c),
+                {MakeEdge(c, ComponentKind::COMPONENT_KIND_VALUE_FLOW, 'v',
+                          ComponentKind::COMPONENT_KIND_RANGE_FACTS,
+                          Sensitivity::kSemantic)})
+            .ok());
   }
 
   SummaryDelta delta;
@@ -274,5 +273,5 @@ TEST_F(DependencyIndexTest, ImpactBudgetTruncatesExplicitly) {
   EXPECT_LE(impact->consumers.size(), 2u);
 }
 
-}  // namespace
-}  // namespace veritas::summarydb
+} // namespace
+} // namespace veritas::summarydb

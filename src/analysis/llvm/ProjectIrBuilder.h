@@ -17,9 +17,22 @@
 
 #include "analysis/pipeline/ProgramIr.h"
 #include "veritas/build/AnalysisManifest.h"
+#include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 
+namespace llvm {
+class Function;
+}
+
 namespace veritas::analysis::llvm {
+
+namespace detail {
+
+core::StableId FunctionSymbolId(const ::llvm::Function &function,
+                                const build::TranslationUnitCommand &command,
+                                const build::ProgramContext &context);
+
+} // namespace detail
 
 // ProjectIrBuilder generates LLVM IR for every translation unit in an M1
 // manifest, links the modules into a single whole-program module, computes a
@@ -28,14 +41,14 @@ namespace veritas::analysis::llvm {
 // The result is a move-only ProgramIr that owns the linked module and its
 // LLVMContext. No native pointer escapes into persisted identity.
 class ProjectIrBuilder {
- public:
+public:
   ProjectIrBuilder() = default;
   ~ProjectIrBuilder() = default;
 
-  veritas::StatusOr<pipeline::ProgramIr> BuildProjectIr(
-      const build::AnalysisManifest& manifest);
+  veritas::StatusOr<pipeline::ProgramIr>
+  BuildProjectIr(const build::AnalysisManifest &manifest);
 };
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm
 
-#endif  // VERITAS_ANALYSIS_LLVM_PROJECTIRBUILDER_H_
+#endif // VERITAS_ANALYSIS_LLVM_PROJECTIRBUILDER_H_

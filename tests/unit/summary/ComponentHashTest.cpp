@@ -26,18 +26,18 @@ namespace {
 v1::FunctionSummary MakeSyntheticSummaryWithRange(int64_t min, int64_t max) {
   v1::FunctionSummary summary;
 
-  auto* header = summary.mutable_header();
+  auto *header = summary.mutable_header();
   header->set_schema_version("summary.v1");
   header->set_creation_epoch_ms(1234567890);
 
-  auto* identity = summary.mutable_identity();
+  auto *identity = summary.mutable_identity();
   identity->set_repository_id("repo:sha256:abc");
   identity->set_revision_id("rev:sha256:def");
   identity->set_build_variant_id("variant:sha256:ghi");
   identity->set_function_variant_id("funcvar:sha256:jkl");
   identity->set_function_body_id("funcbody:sha256:mno");
 
-  auto* range = summary.add_range_facts();
+  auto *range = summary.add_range_facts();
   range->set_variable("buffer_size");
   range->set_min_value(min);
   range->set_max_value(max);
@@ -48,21 +48,21 @@ v1::FunctionSummary MakeSyntheticSummaryWithRange(int64_t min, int64_t max) {
 }
 
 // Helper to create a synthetic summary with a call.
-v1::FunctionSummary MakeSyntheticSummaryWithCall(const std::string& callee) {
+v1::FunctionSummary MakeSyntheticSummaryWithCall(const std::string &callee) {
   v1::FunctionSummary summary;
 
-  auto* header = summary.mutable_header();
+  auto *header = summary.mutable_header();
   header->set_schema_version("summary.v1");
   header->set_creation_epoch_ms(1234567890);
 
-  auto* identity = summary.mutable_identity();
+  auto *identity = summary.mutable_identity();
   identity->set_repository_id("repo:sha256:abc");
   identity->set_revision_id("rev:sha256:def");
   identity->set_build_variant_id("variant:sha256:ghi");
   identity->set_function_variant_id("funcvar:sha256:jkl");
   identity->set_function_body_id("funcbody:sha256:mno");
 
-  auto* call = summary.add_calls();
+  auto *call = summary.add_calls();
   call->set_callee_symbol(callee);
   call->set_call_site_anchor_id("anchor:1");
   call->set_epistemic(v1::EPISTEMIC_STATE_MUST);
@@ -108,7 +108,8 @@ TEST(ComponentHashTest, ProvenanceChangeChangesOnlyEvidenceHash) {
     if (digests_before[i].kind == v1::COMPONENT_KIND_RANGE_FACTS) {
       // Semantic hash should not change
       EXPECT_EQ(digests_before[i].semantic_hash, digests_after[i].semantic_hash)
-          << "Range semantic hash should not change when only provenance changes";
+          << "Range semantic hash should not change when only provenance "
+             "changes";
 
       // Evidence hash should change
       EXPECT_NE(digests_before[i].evidence_hash, digests_after[i].evidence_hash)
@@ -136,6 +137,24 @@ TEST(ComponentHashTest, CallChangeChangesOnlyCallDigest) {
   }
 }
 
+TEST(ComponentHashTest, ResolvedCallTargetChangesCallSemanticDigest) {
+  auto before = MakeSyntheticSummaryWithCall("indirect");
+  auto after = before;
+  before.mutable_calls(0)->set_resolved_callee_function_variant_id(
+      "funcvar:sha256:"
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  after.mutable_calls(0)->set_resolved_callee_function_variant_id(
+      "funcvar:sha256:"
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+  const auto before_digest =
+      ComputeComponentDigest(v1::COMPONENT_KIND_CALLS, before);
+  const auto after_digest =
+      ComputeComponentDigest(v1::COMPONENT_KIND_CALLS, after);
+
+  EXPECT_NE(before_digest.semantic_hash, after_digest.semantic_hash);
+}
+
 TEST(ComponentHashTest, IdenticalSummariesProduceIdenticalDigests) {
   auto summary1 = MakeSyntheticSummaryWithRange(0, 1024);
   auto summary2 = MakeSyntheticSummaryWithRange(0, 1024);
@@ -158,7 +177,7 @@ TEST(ComponentHashTest, ItemCountReflectsComponentSize) {
 
   auto digests = ComputeComponentDigests(summary);
 
-  for (const auto& digest : digests) {
+  for (const auto &digest : digests) {
     if (digest.kind == v1::COMPONENT_KIND_RANGE_FACTS) {
       EXPECT_EQ(digest.item_count, 2) << "Should have 2 range facts";
     }
@@ -189,5 +208,5 @@ TEST(FunctionSummaryTest, DifferentSummariesProduceDifferentIds) {
   EXPECT_NE(*id1, *id2);
 }
 
-}  // namespace
-}  // namespace veritas::summary
+} // namespace
+} // namespace veritas::summary

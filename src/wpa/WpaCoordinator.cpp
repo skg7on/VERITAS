@@ -20,16 +20,18 @@ namespace veritas::wpa {
 
 Status WpaCoordinator::EnqueuePredecessorsIfChanged(
     ExternalChange change, core::StableId changed_scc,
-    summary::v1::ComponentKind component_kind, const SccContext& context,
-    std::vector<core::StableId> triggering_delta_ids,
-    const SccGraph& scc_graph, runtime::WorklistScheduler* scheduler) {
+    summary::v1::ComponentKind component_kind, const SccContext &context,
+    std::vector<core::StableId> triggering_delta_ids, const SccGraph &scc_graph,
+    runtime::WorklistScheduler *scheduler) {
   if (scheduler == nullptr) {
     return Status::InvalidArgument("WPA scheduler must not be null");
   }
-  if (change == ExternalChange::kUnchanged) return Status::Ok();
+  if (change == ExternalChange::kUnchanged)
+    return Status::Ok();
   auto predecessors = scc_graph.Predecessors(std::move(changed_scc));
-  if (!predecessors.ok()) return predecessors.status();
-  for (const auto& predecessor : *predecessors) {
+  if (!predecessors.ok())
+    return predecessors.status();
+  for (const auto &predecessor : *predecessors) {
     scheduler->Enqueue(runtime::WorkItem{
         .kind = runtime::WorkItemKind::kWpaComponent,
         .target_id = predecessor,
@@ -42,4 +44,4 @@ Status WpaCoordinator::EnqueuePredecessorsIfChanged(
   return Status::Ok();
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

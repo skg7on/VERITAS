@@ -23,10 +23,12 @@
 #include <fstream>
 #include <map>
 #include <optional>
+#include <queue>
 #include <set>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <tuple>
 #include <utility>
 
 namespace veritas::facts {
@@ -192,135 +194,279 @@ Status ReadDerivedFile(
 struct ProofCandidate {
   std::string_view rule_id;
   std::vector<core::StableId> inputs;
+  std::size_t rank = 0;
+};
+
+struct DeferredProofCandidate {
+  SemanticKey target;
+  std::string_view rule_id;
+  core::StableId base_input;
+};
+
+struct QueuedProofCandidate {
+  SemanticKey target;
+  ProofCandidate proof;
+};
+
+struct QueuedProofCandidateGreater {
+  bool operator()(const QueuedProofCandidate &left,
+                  const QueuedProofCandidate &right) const {
+    return std::tie(left.proof.rank, left.target, left.proof.inputs,
+                    left.proof.rule_id) >
+           std::tie(right.proof.rank, right.target, right.proof.inputs,
+                    right.proof.rule_id);
+  }
 };
 
 class ProofReconstructor {
 public:
   ProofReconstructor(
       std::span<const FactTuple> base_facts,
-      const std::map<SemanticColumnsKey, summary::v1::EpistemicState> &rows)
-      : base_facts_(base_facts), rows_(rows) {}
+      const std::map<SemanticColumnsKey, summary::v1::EpistemicState> &rows,
+      std::span<const FactTuple> derived_support = {})
+      : base_facts_(base_facts), rows_(rows),
+        derived_support_(derived_support) {}
 
   StatusOr<std::optional<FactTuple>> Reconstruct(const SemanticKey &key) {
-    if (auto found = memo_.find(key); found != memo_.end()) {
-      return std::optional<FactTuple>{found->second};
-    }
-    if (!active_.insert(key).second)
+    auto built = BuildProofs();
+    if (!built.ok())
+      return built;
+    auto found = memo_.find(key);
+    if (found == memo_.end())
       return std::optional<FactTuple>{};
+    return std::optional<FactTuple>{found->second};
+  }
 
-    std::vector<ProofCandidate> direct;
-    std::vector<ProofCandidate> transitive;
-    auto candidates = key.relation == FactRelation::kReachableCall
-                          ? ReachableCandidates(key, &direct, &transitive)
-                          : MayWriteCandidates(key, &direct, &transitive);
-    if (!candidates.ok()) {
-      active_.erase(key);
-      return candidates;
+  StatusOr<std::vector<FactTuple>>
+  Closure(std::span<const SemanticKey> targets) {
+    auto built = BuildProofs();
+    if (!built.ok())
+      return built;
+
+    std::map<core::StableId, const FactTuple *> proofs_by_id;
+    for (const auto &[key, fact] : memo_) {
+      static_cast<void>(key);
+      proofs_by_id.emplace(fact.tuple_id, &fact);
     }
-    auto &selected_kind = direct.empty() ? transitive : direct;
-    if (selected_kind.empty()) {
-      active_.erase(key);
-      return std::optional<FactTuple>{};
+
+    std::set<core::StableId> selected;
+    std::vector<core::StableId> pending;
+    for (const auto &target : targets) {
+      auto found = memo_.find(target);
+      if (found == memo_.end())
+        continue;
+      if (selected.insert(found->second.tuple_id).second)
+        pending.push_back(found->second.tuple_id);
     }
-    std::ranges::sort(selected_kind, {}, &ProofCandidate::inputs);
-    auto derived = MakeDerivedFact(key.relation, key.columns, key.epistemic,
-                                   std::string(selected_kind.front().rule_id),
-                                   selected_kind.front().inputs);
-    active_.erase(key);
-    if (!derived.ok())
-      return derived.status();
-    auto [it, inserted] = memo_.emplace(key, std::move(*derived));
-    return std::optional<FactTuple>{it->second};
+    while (!pending.empty()) {
+      const auto tuple_id = pending.back();
+      pending.pop_back();
+      const auto proof = proofs_by_id.find(tuple_id);
+      if (proof == proofs_by_id.end())
+        continue;
+      for (const auto &input : proof->second->input_tuple_ids) {
+        if (proofs_by_id.contains(input) && selected.insert(input).second)
+          pending.push_back(input);
+      }
+    }
+
+    std::vector<FactTuple> closure;
+    closure.reserve(selected.size());
+    for (const auto &tuple_id : selected)
+      closure.push_back(*proofs_by_id.find(tuple_id)->second);
+    return closure;
   }
 
 private:
-  Status ReachableCandidates(const SemanticKey &key,
-                             std::vector<ProofCandidate> *direct,
-                             std::vector<ProofCandidate> *transitive) {
-    for (const auto &fact : base_facts_) {
-      if (fact.relation != FactRelation::kDirectCall ||
-          fact.columns[0] != key.columns[0]) {
-        continue;
-      }
-      if (fact.columns[1] == key.columns[1] &&
-          fact.epistemic == key.epistemic) {
-        direct->push_back(
-            {.rule_id = "m8.reachable.direct.v1", .inputs = {fact.tuple_id}});
-      }
-      SemanticColumnsKey sub_columns{
-          .relation = FactRelation::kReachableCall,
-          .columns = {fact.columns[1], key.columns[1]}};
-      auto sub_state = rows_.find(sub_columns);
-      if (sub_state == rows_.end())
-        continue;
-      SemanticKey sub_key{.relation = sub_columns.relation,
-                          .columns = sub_columns.columns,
-                          .epistemic = sub_state->second};
-      auto subproof = Reconstruct(sub_key);
-      if (!subproof.ok())
-        return subproof.status();
-      if (!subproof->has_value())
-        continue;
-      auto epistemic =
-          WeakenPositiveEpistemic(fact.epistemic, (*subproof)->epistemic);
-      if (!epistemic.ok())
-        return epistemic.status();
-      if (*epistemic != key.epistemic)
-        continue;
-      std::vector<core::StableId> inputs{fact.tuple_id, (*subproof)->tuple_id};
-      std::ranges::sort(inputs);
-      transitive->push_back({.rule_id = "m8.reachable.transitive.v1",
-                             .inputs = std::move(inputs)});
+  Status BuildProofs() {
+    if (built_)
+      return Status::Ok();
+
+    constexpr std::array positive_states{summary::v1::EPISTEMIC_STATE_MUST,
+                                         summary::v1::EPISTEMIC_STATE_MAY};
+    std::set<SemanticKey> proof_keys;
+    for (const auto &[columns, final_epistemic] : rows_) {
+      static_cast<void>(final_epistemic);
+      for (const auto epistemic : positive_states)
+        proof_keys.insert({columns.relation, columns.columns, epistemic});
     }
+
+    std::map<std::string, std::vector<const FactTuple *>> calls_by_source;
+    std::map<std::vector<std::string>, std::vector<const FactTuple *>>
+        writes_by_columns;
+    for (const auto &fact : base_facts_) {
+      if (fact.relation == FactRelation::kDirectCall)
+        calls_by_source[fact.columns[0]].push_back(&fact);
+      if (fact.relation == FactRelation::kDirectWrite)
+        writes_by_columns[fact.columns].push_back(&fact);
+    }
+    std::map<SemanticColumnsKey, std::vector<const FactTuple *>>
+        support_by_columns;
+    for (const auto &support : derived_support_) {
+      support_by_columns[{support.relation, support.columns}].push_back(
+          &support);
+    }
+
+    std::priority_queue<QueuedProofCandidate, std::vector<QueuedProofCandidate>,
+                        QueuedProofCandidateGreater>
+        ready;
+    auto enqueue = [&](const SemanticKey &target, std::string_view rule_id,
+                       std::vector<core::StableId> inputs, std::size_t rank) {
+      std::ranges::sort(inputs);
+      ready.push({target, {rule_id, std::move(inputs), rank}});
+    };
+
+    std::map<SemanticKey, std::vector<DeferredProofCandidate>> dependents;
+    for (const auto &key : proof_keys) {
+      if (key.relation == FactRelation::kMayWrite) {
+        auto writes = writes_by_columns.find(key.columns);
+        if (writes != writes_by_columns.end()) {
+          for (const auto *write : writes->second) {
+            if (write->epistemic == key.epistemic) {
+              enqueue(key, "m8.may_write.direct.v1", {write->tuple_id}, 0u);
+            }
+          }
+        }
+      }
+
+      auto calls = calls_by_source.find(key.columns[0]);
+      if (calls == calls_by_source.end())
+        continue;
+      for (const auto *call : calls->second) {
+        const std::string_view direct_rule =
+            key.relation == FactRelation::kReachableCall
+                ? "m8.reachable.direct.v1"
+                : "m8.may_write.direct.v1";
+        if (key.relation == FactRelation::kReachableCall &&
+            call->columns[1] == key.columns[1] &&
+            call->epistemic == key.epistemic) {
+          enqueue(key, direct_rule, {call->tuple_id}, 0u);
+        }
+
+        SemanticColumnsKey sub_columns{
+            .relation = key.relation,
+            .columns = {call->columns[1], key.columns[1]}};
+        const std::string_view transitive_rule =
+            key.relation == FactRelation::kReachableCall
+                ? "m8.reachable.transitive.v1"
+                : "m8.may_write.transitive.v1";
+        auto supports = support_by_columns.find(sub_columns);
+        if (supports != support_by_columns.end()) {
+          for (const auto *support : supports->second) {
+            auto epistemic =
+                WeakenPositiveEpistemic(call->epistemic, support->epistemic);
+            if (!epistemic.ok())
+              return epistemic.status();
+            if (*epistemic == key.epistemic) {
+              enqueue(key, transitive_rule, {call->tuple_id, support->tuple_id},
+                      1u);
+            }
+          }
+        }
+        if (rows_.contains(sub_columns)) {
+          for (const auto sub_epistemic : positive_states) {
+            SemanticKey sub_key{.relation = sub_columns.relation,
+                                .columns = sub_columns.columns,
+                                .epistemic = sub_epistemic};
+            auto epistemic =
+                WeakenPositiveEpistemic(call->epistemic, sub_epistemic);
+            if (!epistemic.ok())
+              return epistemic.status();
+            if (*epistemic == key.epistemic && proof_keys.contains(sub_key)) {
+              dependents[sub_key].push_back(
+                  {key, transitive_rule, call->tuple_id});
+            }
+          }
+        }
+      }
+    }
+
+    while (!ready.empty()) {
+      QueuedProofCandidate candidate = ready.top();
+      ready.pop();
+      if (memo_.contains(candidate.target))
+        continue;
+      auto derived = MakeDerivedFact(
+          candidate.target.relation, candidate.target.columns,
+          candidate.target.epistemic, std::string(candidate.proof.rule_id),
+          candidate.proof.inputs);
+      if (!derived.ok())
+        return derived.status();
+      auto [position, inserted] =
+          memo_.emplace(candidate.target, std::move(*derived));
+      if (!inserted)
+        continue;
+      auto dependent = dependents.find(candidate.target);
+      if (dependent == dependents.end())
+        continue;
+      for (const auto &next : dependent->second) {
+        enqueue(next.target, next.rule_id,
+                {next.base_input, position->second.tuple_id},
+                candidate.proof.rank + 1u);
+      }
+    }
+
+    auto closure = ValidateClosure();
+    if (!closure.ok())
+      return closure;
+    built_ = true;
     return Status::Ok();
   }
 
-  Status MayWriteCandidates(const SemanticKey &key,
-                            std::vector<ProofCandidate> *direct,
-                            std::vector<ProofCandidate> *transitive) {
-    for (const auto &fact : base_facts_) {
-      if (fact.relation == FactRelation::kDirectWrite &&
-          fact.columns == key.columns && fact.epistemic == key.epistemic) {
-        direct->push_back(
-            {.rule_id = "m8.may_write.direct.v1", .inputs = {fact.tuple_id}});
+  Status ValidateClosure() const {
+    std::set<core::StableId> available;
+    for (const auto &fact : base_facts_)
+      available.insert(fact.tuple_id);
+    for (const auto &fact : derived_support_)
+      available.insert(fact.tuple_id);
+    for (const auto &[key, fact] : memo_) {
+      static_cast<void>(key);
+      available.insert(fact.tuple_id);
+    }
+    for (const auto &[key, fact] : memo_) {
+      static_cast<void>(key);
+      if (std::ranges::any_of(fact.input_tuple_ids, [&](const auto &input) {
+            return !available.contains(input);
+          })) {
+        return Status::FailedPrecondition(
+            "canonical provenance proof has unavailable immediate input");
       }
-      if (fact.relation != FactRelation::kDirectCall ||
-          fact.columns[0] != key.columns[0]) {
-        continue;
-      }
-      SemanticColumnsKey sub_columns{
-          .relation = FactRelation::kMayWrite,
-          .columns = {fact.columns[1], key.columns[1]}};
-      auto sub_state = rows_.find(sub_columns);
-      if (sub_state == rows_.end())
-        continue;
-      SemanticKey sub_key{.relation = sub_columns.relation,
-                          .columns = sub_columns.columns,
-                          .epistemic = sub_state->second};
-      auto subproof = Reconstruct(sub_key);
-      if (!subproof.ok())
-        return subproof.status();
-      if (!subproof->has_value())
-        continue;
-      auto epistemic =
-          WeakenPositiveEpistemic(fact.epistemic, (*subproof)->epistemic);
-      if (!epistemic.ok())
-        return epistemic.status();
-      if (*epistemic != key.epistemic)
-        continue;
-      std::vector<core::StableId> inputs{fact.tuple_id, (*subproof)->tuple_id};
-      std::ranges::sort(inputs);
-      transitive->push_back({.rule_id = "m8.may_write.transitive.v1",
-                             .inputs = std::move(inputs)});
     }
     return Status::Ok();
   }
 
   std::span<const FactTuple> base_facts_;
   const std::map<SemanticColumnsKey, summary::v1::EpistemicState> &rows_;
+  std::span<const FactTuple> derived_support_;
   std::map<SemanticKey, FactTuple> memo_;
-  std::set<SemanticKey> active_;
+  bool built_ = false;
 };
+
+StatusOr<std::vector<FactTuple>> ReconstructRows(
+    std::span<const FactTuple> base_facts,
+    const std::map<SemanticColumnsKey, summary::v1::EpistemicState> &rows) {
+  ProofReconstructor reconstructor(base_facts, rows);
+  std::vector<SemanticKey> targets;
+  targets.reserve(rows.size());
+  for (const auto &[columns, epistemic] : rows) {
+    SemanticKey key{.relation = columns.relation,
+                    .columns = columns.columns,
+                    .epistemic = epistemic};
+    auto proof = reconstructor.Reconstruct(key);
+    if (!proof.ok())
+      return proof.status();
+    if (!proof->has_value()) {
+      auto relation_name = FactRelationName(columns.relation);
+      if (!relation_name.ok())
+        return relation_name.status();
+      return Status::FailedPrecondition(
+          "no acyclic provenance proof for " + std::string(*relation_name) +
+          "(" + columns.columns[0] + ", " + columns.columns[1] + ")");
+    }
+    targets.push_back(std::move(key));
+  }
+  return reconstructor.Closure(targets);
+}
 
 } // namespace
 
@@ -461,9 +607,65 @@ SouffleExporter::ReadDerivedRelations(const std::filesystem::path &directory,
   if (!status.ok())
     return status;
 
-  ProofReconstructor reconstructor(base_facts, rows);
-  std::vector<FactTuple> derived;
-  derived.reserve(rows.size());
+  return ReconstructRows(base_facts, rows);
+}
+
+StatusOr<std::vector<FactTuple>> SouffleExporter::ReconstructCanonicalProofs(
+    std::span<const FactTuple> base_facts,
+    std::span<const FactTuple> derived_semantics,
+    std::span<const FactTuple> derived_support) {
+  std::map<std::string, const FactTuple *> tuples_by_id;
+  for (const auto &fact : base_facts) {
+    auto valid = ValidateFactTuple(fact);
+    if (!valid.ok())
+      return valid;
+    if (!IsBaseRelation(fact.relation)) {
+      return Status::InvalidArgument(
+          "canonical proof reconstruction requires base facts");
+    }
+    auto [position, inserted] =
+        tuples_by_id.emplace(core::ToString(fact.tuple_id), &fact);
+    if (!inserted && !SameTuple(*position->second, fact)) {
+      return Status::InvalidArgument("conflicting duplicate fact tuple ID");
+    }
+  }
+  for (const auto &fact : derived_support) {
+    auto valid = ValidateFactTuple(fact);
+    if (!valid.ok())
+      return valid;
+    if (fact.relation != FactRelation::kReachableCall &&
+        fact.relation != FactRelation::kMayWrite) {
+      return Status::InvalidArgument(
+          "canonical proof support requires a derived M8 relation");
+    }
+    auto [position, inserted] =
+        tuples_by_id.emplace(core::ToString(fact.tuple_id), &fact);
+    if (!inserted && !SameTuple(*position->second, fact)) {
+      return Status::InvalidArgument("conflicting duplicate fact tuple ID");
+    }
+  }
+  std::map<SemanticColumnsKey, summary::v1::EpistemicState> rows;
+  for (const auto &fact : derived_semantics) {
+    auto valid = ValidateFactTuple(fact);
+    if (!valid.ok())
+      return valid;
+    if (fact.relation != FactRelation::kReachableCall &&
+        fact.relation != FactRelation::kMayWrite) {
+      return Status::InvalidArgument(
+          "canonical proof reconstruction requires a derived M8 relation");
+    }
+    SemanticColumnsKey key{.relation = fact.relation, .columns = fact.columns};
+    auto [position, inserted] = rows.emplace(std::move(key), fact.epistemic);
+    if (!inserted) {
+      auto weakened = WeakenPositiveEpistemic(position->second, fact.epistemic);
+      if (!weakened.ok())
+        return weakened.status();
+      position->second = *weakened;
+    }
+  }
+  ProofReconstructor reconstructor(base_facts, rows, derived_support);
+  std::vector<SemanticKey> targets;
+  targets.reserve(rows.size());
   for (const auto &[columns, epistemic] : rows) {
     SemanticKey key{.relation = columns.relation,
                     .columns = columns.columns,
@@ -479,10 +681,9 @@ SouffleExporter::ReadDerivedRelations(const std::filesystem::path &directory,
           "no acyclic provenance proof for " + std::string(*relation_name) +
           "(" + columns.columns[0] + ", " + columns.columns[1] + ")");
     }
-    derived.push_back(std::move(**proof));
+    targets.push_back(std::move(key));
   }
-  std::ranges::sort(derived, {}, &FactTuple::tuple_id);
-  return derived;
+  return reconstructor.Closure(targets);
 }
 
 } // namespace veritas::facts

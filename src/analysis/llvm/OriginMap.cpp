@@ -18,12 +18,13 @@
 
 namespace veritas::analysis::llvm {
 
-void OriginMap::RecordOrigin(::llvm::Function* func, std::string symbol_id) {
+void OriginMap::RecordOrigin(::llvm::Function *func, std::string symbol_id) {
   const std::string llvm_name = func->getName().str();
   func_to_symbol_[func] = symbol_id;
   symbol_to_func_[symbol_id] = func;
 
-  if (ambiguous_names_.contains(llvm_name)) return;
+  if (ambiguous_names_.contains(llvm_name))
+    return;
   auto [name_it, inserted] = name_to_symbol_.emplace(llvm_name, symbol_id);
   if (!inserted && name_it->second != symbol_id) {
     name_to_symbol_.erase(name_it);
@@ -31,8 +32,8 @@ void OriginMap::RecordOrigin(::llvm::Function* func, std::string symbol_id) {
   }
 }
 
-std::optional<std::string> OriginMap::GetSymbolId(
-    const ::llvm::Function* func) const {
+std::optional<std::string>
+OriginMap::GetSymbolId(const ::llvm::Function *func) const {
   auto it = func_to_symbol_.find(func);
   if (it == func_to_symbol_.end()) {
     return std::nullopt;
@@ -40,14 +41,15 @@ std::optional<std::string> OriginMap::GetSymbolId(
   return it->second;
 }
 
-std::optional<std::string> OriginMap::GetSymbolIdByLlvmName(
-    std::string_view llvm_name) const {
+std::optional<std::string>
+OriginMap::GetSymbolIdByLlvmName(std::string_view llvm_name) const {
   auto it = name_to_symbol_.find(std::string(llvm_name));
-  if (it == name_to_symbol_.end()) return std::nullopt;
+  if (it == name_to_symbol_.end())
+    return std::nullopt;
   return it->second;
 }
 
-::llvm::Function* OriginMap::GetFunction(const std::string& symbol_id) const {
+::llvm::Function *OriginMap::GetFunction(const std::string &symbol_id) const {
   auto it = symbol_to_func_.find(symbol_id);
   if (it == symbol_to_func_.end()) {
     return nullptr;
@@ -55,7 +57,7 @@ std::optional<std::string> OriginMap::GetSymbolIdByLlvmName(
   return it->second;
 }
 
-void OriginMap::RemoveFunction(const ::llvm::Function* func) {
+void OriginMap::RemoveFunction(const ::llvm::Function *func) {
   auto it = func_to_symbol_.find(func);
   if (it != func_to_symbol_.end()) {
     const std::string llvm_name = func->getName().str();
@@ -75,4 +77,4 @@ void OriginMap::Clear() {
   ambiguous_names_.clear();
 }
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm

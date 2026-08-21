@@ -31,9 +31,9 @@ struct DomainFact {
 
 using FactDomain = std::map<std::vector<std::string>, DomainFact>;
 
-std::vector<std::string> FactSemanticKey(const facts::FactTuple& tuple);
-StatusOr<bool> JoinFact(facts::FactTuple candidate, FactDomain* domain);
+std::vector<std::string> FactSemanticKey(const facts::FactTuple &tuple);
+StatusOr<bool> JoinFact(facts::FactTuple candidate, FactDomain *domain);
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_FIXPOINT_DOMAIN_H_
+#endif // VERITAS_WPA_FIXPOINT_DOMAIN_H_

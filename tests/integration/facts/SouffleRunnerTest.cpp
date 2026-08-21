@@ -14,6 +14,7 @@
 
 #include "veritas/facts/SouffleRunner.h"
 #include "veritas/facts/SouffleExporter.h"
+#include "veritas/facts/SummaryFactBuilder.h"
 
 #include <compare>
 #include <cstdint>
@@ -28,7 +29,6 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
-#include "veritas/summary/FunctionSummary.h"
 #include "veritas/wpa/CallGraph.h"
 #include "veritas/wpa/FixpointEngine.h"
 #include "veritas/wpa/SccGraph.h"
@@ -67,38 +67,6 @@ void AddWrite(v1::FunctionSummary *function, std::string memory) {
   effect->set_location(std::move(memory));
   effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   effect->set_provenance_ref("test:write");
-}
-
-StatusOr<std::vector<FactTuple>>
-MakeBaseFacts(std::span<const v1::FunctionSummary> summaries) {
-  std::vector<FactTuple> facts;
-  for (const auto &function_summary : summaries) {
-    auto summary_id = summary::ComputeFunctionSummaryId(function_summary);
-    if (!summary_id.ok())
-      return summary_id.status();
-    const std::string caller =
-        function_summary.identity().function_variant_id();
-    for (const auto &call : function_summary.calls()) {
-      auto fact = MakeBaseFact(
-          FactRelation::kDirectCall,
-          {caller, call.resolved_callee_function_variant_id()},
-          call.epistemic(),
-          {*summary_id, call.call_site_anchor_id(), call.provenance_ref()});
-      if (!fact.ok())
-        return fact.status();
-      facts.push_back(std::move(*fact));
-    }
-    for (const auto &effect : function_summary.memory_effects()) {
-      auto fact = MakeBaseFact(
-          FactRelation::kDirectWrite, {caller, effect.location()},
-          effect.epistemic(),
-          {*summary_id, effect.location(), effect.provenance_ref()});
-      if (!fact.ok())
-        return fact.status();
-      facts.push_back(std::move(*fact));
-    }
-  }
-  return facts;
 }
 
 struct SemanticFact {
@@ -173,7 +141,7 @@ TEST(SouffleRunnerTest, MatchesCppFixpointSemantics) {
                                           {.max_iterations = 32});
   ASSERT_TRUE(call_results.ok()) << call_results.status().message();
   ASSERT_TRUE(memory_results.ok()) << memory_results.status().message();
-  auto base_facts = MakeBaseFacts(summaries);
+  auto base_facts = BuildBaseFacts(summaries);
   ASSERT_TRUE(base_facts.ok()) << base_facts.status().message();
 
   const auto test_dir =

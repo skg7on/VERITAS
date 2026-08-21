@@ -20,6 +20,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -43,6 +45,19 @@ FactTuple BaseFact(FactRelation relation, std::vector<std::string> columns,
                             {.function_summary_id = SummaryId("summary"),
                              .anchor = std::string(anchor),
                              .provenance_ref = "test"});
+  EXPECT_TRUE(tuple.ok()) << tuple.status().message();
+  return std::move(*tuple);
+}
+
+FactTuple BaseFactWithOrigin(FactRelation relation,
+                             std::vector<std::string> columns,
+                             std::string anchor) {
+  auto tuple = MakeBaseFact(
+      relation, std::move(columns), summary::v1::EPISTEMIC_STATE_MUST,
+      {.function_summary_id =
+           core::StableId{core::IdKind::kFunctionSummary, std::string(64, 'a')},
+       .anchor = std::move(anchor),
+       .provenance_ref = "p"});
   EXPECT_TRUE(tuple.ok()) << tuple.status().message();
   return std::move(*tuple);
 }
@@ -269,6 +284,200 @@ TEST_F(SouffleExporterTest, RejectsRecursiveProofWithoutDirectSeed) {
   ASSERT_FALSE(imported.ok());
   EXPECT_NE(imported.status().message().find("no acyclic provenance proof"),
             std::string::npos);
+}
+
+TEST_F(SouffleExporterTest, CyclicAlternateProofUsesMinimumRootedRank) {
+  const auto zero_b = BaseFact(FactRelation::kDirectCall, {"0", "B"}, "0:B");
+  const auto b_a = BaseFact(FactRelation::kDirectCall, {"B", "A"}, "B:A");
+  const auto a_b = BaseFact(FactRelation::kDirectCall, {"A", "B"}, "A:B");
+  const auto c_z = BaseFact(FactRelation::kDirectCall, {"C", "Z"}, "C:Z");
+  const auto d_z = BaseFact(FactRelation::kDirectCall, {"D", "Z"}, "D:Z");
+  auto c_reachable = MakeDerivedFact(FactRelation::kReachableCall, {"C", "Z"},
+                                     summary::v1::EPISTEMIC_STATE_MUST,
+                                     "m8.reachable.direct.v1", {c_z.tuple_id});
+  auto d_reachable = MakeDerivedFact(FactRelation::kReachableCall, {"D", "Z"},
+                                     summary::v1::EPISTEMIC_STATE_MUST,
+                                     "m8.reachable.direct.v1", {d_z.tuple_id});
+  ASSERT_TRUE(c_reachable.ok());
+  ASSERT_TRUE(d_reachable.ok());
+
+  std::optional<FactTuple> b_c;
+  std::optional<FactTuple> a_d;
+  std::optional<FactTuple> b_reachable;
+  std::vector<core::StableId> expected_a_inputs;
+  for (int attempt = 0; attempt < 10000 && !a_d.has_value(); ++attempt) {
+    auto candidate_b_c = BaseFact(FactRelation::kDirectCall, {"B", "C"},
+                                  "B:C:" + std::to_string(attempt));
+    auto candidate_a_d = BaseFact(FactRelation::kDirectCall, {"A", "D"},
+                                  "A:D:" + std::to_string(attempt));
+    const auto b_frontier =
+        SortedIds({candidate_b_c.tuple_id, c_reachable->tuple_id});
+    const auto a_frontier =
+        SortedIds({candidate_a_d.tuple_id, d_reachable->tuple_id});
+    if (!(b_frontier < a_frontier))
+      continue;
+    auto candidate_b_reachable =
+        MakeDerivedFact(FactRelation::kReachableCall, {"B", "Z"},
+                        summary::v1::EPISTEMIC_STATE_MUST,
+                        "m8.reachable.transitive.v1", b_frontier);
+    ASSERT_TRUE(candidate_b_reachable.ok());
+    const auto through_b =
+        SortedIds({a_b.tuple_id, candidate_b_reachable->tuple_id});
+    if (!(through_b < a_frontier))
+      continue;
+    b_c = std::move(candidate_b_c);
+    a_d = std::move(candidate_a_d);
+    b_reachable = std::move(*candidate_b_reachable);
+    expected_a_inputs = a_frontier;
+  }
+  ASSERT_TRUE(b_c.has_value());
+  ASSERT_TRUE(a_d.has_value());
+  ASSERT_TRUE(b_reachable.has_value());
+
+  const std::vector base_facts{zero_b, b_a, *b_c, a_b, *a_d, c_z, d_z};
+  WriteFile(test_dir_ / "ReachableCall.csv",
+            "0\tZ\t1\nA\tZ\t1\nB\tZ\t1\nC\tZ\t1\nD\tZ\t1\n");
+  WriteFile(test_dir_ / "MayWrite.csv", "");
+
+  auto imported = SouffleExporter::ReadDerivedRelations(test_dir_, base_facts);
+  ASSERT_TRUE(imported.ok()) << imported.status().message();
+  const FactTuple *a_reaches_z =
+      Find(*imported, FactRelation::kReachableCall, {"A", "Z"});
+  ASSERT_NE(a_reaches_z, nullptr);
+  EXPECT_EQ(a_reaches_z->input_tuple_ids, expected_a_inputs);
+
+  std::set<core::StableId> available_ids;
+  for (const auto &fact : base_facts)
+    available_ids.insert(fact.tuple_id);
+  for (const auto &fact : *imported)
+    available_ids.insert(fact.tuple_id);
+  for (const auto &fact : *imported) {
+    for (const auto &input_id : fact.input_tuple_ids) {
+      EXPECT_TRUE(available_ids.contains(input_id));
+    }
+  }
+}
+
+TEST_F(SouffleExporterTest,
+       ShorterRootedProofPrecedesLexicographicallySmallerLongerProof) {
+  const auto a_b = BaseFact(FactRelation::kDirectCall, {"A", "B"}, "A:B");
+  const auto c_z = BaseFact(FactRelation::kDirectCall, {"C", "Z"}, "C:Z");
+  const auto d_z = BaseFact(FactRelation::kDirectCall, {"D", "Z"}, "D:Z");
+  auto c_reachable = MakeDerivedFact(FactRelation::kReachableCall, {"C", "Z"},
+                                     summary::v1::EPISTEMIC_STATE_MUST,
+                                     "m8.reachable.direct.v1", {c_z.tuple_id});
+  auto d_reachable = MakeDerivedFact(FactRelation::kReachableCall, {"D", "Z"},
+                                     summary::v1::EPISTEMIC_STATE_MUST,
+                                     "m8.reachable.direct.v1", {d_z.tuple_id});
+  ASSERT_TRUE(c_reachable.ok());
+  ASSERT_TRUE(d_reachable.ok());
+
+  std::optional<FactTuple> b_c;
+  std::optional<FactTuple> a_d;
+  std::vector<core::StableId> expected_a_inputs;
+  for (int attempt = 0; attempt < 100000 && !a_d.has_value(); ++attempt) {
+    auto candidate_b_c = BaseFact(FactRelation::kDirectCall, {"B", "C"},
+                                  "B:C:" + std::to_string(attempt));
+    auto candidate_a_d = BaseFact(FactRelation::kDirectCall, {"A", "D"},
+                                  "A:D:" + std::to_string(attempt));
+    const auto b_frontier =
+        SortedIds({candidate_b_c.tuple_id, c_reachable->tuple_id});
+    const auto a_frontier =
+        SortedIds({candidate_a_d.tuple_id, d_reachable->tuple_id});
+    if (!(a_frontier < b_frontier))
+      continue;
+    auto candidate_b_reachable =
+        MakeDerivedFact(FactRelation::kReachableCall, {"B", "Z"},
+                        summary::v1::EPISTEMIC_STATE_MUST,
+                        "m8.reachable.transitive.v1", b_frontier);
+    ASSERT_TRUE(candidate_b_reachable.ok());
+    const auto through_b =
+        SortedIds({a_b.tuple_id, candidate_b_reachable->tuple_id});
+    if (!(through_b < a_frontier))
+      continue;
+    b_c = std::move(candidate_b_c);
+    a_d = std::move(candidate_a_d);
+    expected_a_inputs = a_frontier;
+  }
+  ASSERT_TRUE(b_c.has_value());
+  ASSERT_TRUE(a_d.has_value());
+
+  const std::vector base_facts{a_b, *b_c, *a_d, c_z, d_z};
+  WriteFile(test_dir_ / "ReachableCall.csv",
+            "A\tZ\t1\nB\tZ\t1\nC\tZ\t1\nD\tZ\t1\n");
+  WriteFile(test_dir_ / "MayWrite.csv", "");
+
+  auto imported = SouffleExporter::ReadDerivedRelations(test_dir_, base_facts);
+  ASSERT_TRUE(imported.ok()) << imported.status().message();
+  const FactTuple *a_reaches_z =
+      Find(*imported, FactRelation::kReachableCall, {"A", "Z"});
+  ASSERT_NE(a_reaches_z, nullptr);
+  EXPECT_EQ(a_reaches_z->input_tuple_ids, expected_a_inputs);
+}
+
+TEST_F(SouffleExporterTest, CyclicAlternativesStillProduceClosedProofForest) {
+  const std::vector base_facts{
+      BaseFactWithOrigin(FactRelation::kDirectWrite, {"A", "X"}, "w75821-A"),
+      BaseFactWithOrigin(FactRelation::kDirectCall, {"A", "C"}, "e75821-A-C"),
+      BaseFactWithOrigin(FactRelation::kDirectCall, {"A", "D"}, "e75821-A-D"),
+      BaseFactWithOrigin(FactRelation::kDirectCall, {"B", "A"}, "e75821-B-A"),
+      BaseFactWithOrigin(FactRelation::kDirectCall, {"C", "B"}, "e75821-C-B"),
+      BaseFactWithOrigin(FactRelation::kDirectCall, {"C", "E"}, "e75821-C-E"),
+      BaseFactWithOrigin(FactRelation::kDirectCall, {"D", "A"}, "e75821-D-A"),
+      BaseFactWithOrigin(FactRelation::kDirectCall, {"D", "C"}, "e75821-D-C"),
+      BaseFactWithOrigin(FactRelation::kDirectCall, {"E", "A"}, "e75821-E-A"),
+      BaseFactWithOrigin(FactRelation::kDirectCall, {"E", "D"}, "e75821-E-D"),
+  };
+  WriteFile(test_dir_ / "ReachableCall.csv", "");
+  WriteFile(test_dir_ / "MayWrite.csv",
+            "A\tX\t1\nB\tX\t1\nC\tX\t1\nD\tX\t1\nE\tX\t1\n");
+
+  auto imported = SouffleExporter::ReadDerivedRelations(test_dir_, base_facts);
+  ASSERT_TRUE(imported.ok()) << imported.status().message();
+  ASSERT_EQ(imported->size(), 5u);
+  std::set<core::StableId> available_ids;
+  for (const auto &fact : base_facts)
+    available_ids.insert(fact.tuple_id);
+  for (const auto &fact : *imported)
+    available_ids.insert(fact.tuple_id);
+  for (const auto &fact : *imported) {
+    for (const auto &input : fact.input_tuple_ids)
+      EXPECT_TRUE(available_ids.contains(input));
+  }
+}
+
+TEST_F(SouffleExporterTest, ReconstructsLongSparseProofChain) {
+  constexpr std::size_t kFunctionCount = 512;
+  std::vector<std::string> functions;
+  functions.reserve(kFunctionCount);
+  for (std::size_t index = 0; index < kFunctionCount; ++index)
+    functions.push_back("F" + std::to_string(index));
+
+  std::vector<FactTuple> base_facts;
+  base_facts.reserve(kFunctionCount);
+  for (std::size_t index = 1; index < functions.size(); ++index) {
+    base_facts.push_back(BaseFact(FactRelation::kDirectCall,
+                                  {functions[index - 1], functions[index]},
+                                  "call:" + std::to_string(index)));
+  }
+  base_facts.push_back(
+      BaseFact(FactRelation::kDirectWrite, {functions.back(), "X"}, "write:X"));
+
+  std::vector<FactTuple> semantics;
+  semantics.reserve(kFunctionCount);
+  for (const auto &function : functions) {
+    auto semantic = MakeDerivedFact(FactRelation::kMayWrite, {function, "X"},
+                                    summary::v1::EPISTEMIC_STATE_MUST,
+                                    "test.semantic.placeholder.v1",
+                                    {base_facts.back().tuple_id});
+    ASSERT_TRUE(semantic.ok()) << semantic.status().message();
+    semantics.push_back(std::move(*semantic));
+  }
+
+  auto reconstructed =
+      SouffleExporter::ReconstructCanonicalProofs(base_facts, semantics);
+  ASSERT_TRUE(reconstructed.ok()) << reconstructed.status().message();
+  EXPECT_EQ(reconstructed->size(), kFunctionCount);
 }
 
 } // namespace

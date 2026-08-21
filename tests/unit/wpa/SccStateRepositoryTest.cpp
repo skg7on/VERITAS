@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 
 #include <gtest/gtest.h>
@@ -25,13 +26,14 @@ namespace veritas::wpa {
 namespace {
 
 core::StableId FunctionId(std::string_view text) {
-  return core::MakeStableId(
-      core::IdKind::kFunctionVariant,
-      std::as_bytes(std::span(text.data(), text.size())));
+  return core::MakeStableId(core::IdKind::kFunctionVariant,
+                            std::as_bytes(std::span(text.data(), text.size())));
 }
 
+std::string Hash(char digit) { return std::string(64, digit); }
+
 class SccStateRepositoryTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     directory_ = std::filesystem::temp_directory_path() /
                  "veritas_scc_state_repository_test";
@@ -41,20 +43,29 @@ class SccStateRepositoryTest : public ::testing::Test {
     ASSERT_TRUE(opened.ok()) << opened.status().message();
     store_ = std::make_unique<summarydb::MetadataStore>(std::move(*opened));
     ASSERT_TRUE(store_->ApplySchema().ok());
-    ASSERT_TRUE(store_->Execute(
-        "INSERT INTO repositories(repository_id, vcs_kind, vcs_revision, "
-        "source_tree_hash) VALUES(?, ?, ?, ?)",
-        {"repo:test", "git", "r", "tree"}).ok());
-    ASSERT_TRUE(store_->Execute(
-        "INSERT INTO revisions(revision_id, repository_id, vcs_revision) "
-        "VALUES(?, ?, ?)",
-        {context_.revision_id, "repo:test", "r"}).ok());
-    ASSERT_TRUE(store_->Execute(
-        "INSERT INTO build_variants(build_variant_id, target_triple, "
-        "compiler_id, compiler_version, compile_options_hash, macro_set_hash, "
-        "include_closure_hash, type_layout_hash) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-        {context_.build_variant_id, "arm64", "clang", "24", "a", "b", "c",
-         "d"}).ok());
+    ASSERT_TRUE(store_
+                    ->Execute("INSERT INTO repositories(repository_id, "
+                              "vcs_kind, vcs_revision, "
+                              "source_tree_hash) VALUES(?, ?, ?, ?)",
+                              {"repo:test", "git", "r", "tree"})
+                    .ok());
+    ASSERT_TRUE(store_
+                    ->Execute("INSERT INTO revisions(revision_id, "
+                              "repository_id, vcs_revision) "
+                              "VALUES(?, ?, ?)",
+                              {context_.revision_id, "repo:test", "r"})
+                    .ok());
+    ASSERT_TRUE(
+        store_
+            ->Execute(
+                "INSERT INTO build_variants(build_variant_id, target_triple, "
+                "compiler_id, compiler_version, compile_options_hash, "
+                "macro_set_hash, "
+                "include_closure_hash, type_layout_hash) VALUES(?, ?, ?, ?, ?, "
+                "?, ?, ?)",
+                {context_.build_variant_id, "arm64", "clang", "24", "a", "b",
+                 "c", "d"})
+            .ok());
     repository_ = std::make_unique<SccStateRepository>(*store_);
 
     ASSERT_TRUE(call_graph_.AddFunction(FunctionId("A")).ok());
@@ -80,8 +91,7 @@ class SccStateRepositoryTest : public ::testing::Test {
   }
 
   std::filesystem::path directory_;
-  SccContext context_{.revision_id = "rev:test",
-                      .build_variant_id = "bv:test"};
+  SccContext context_{.revision_id = "rev:test", .build_variant_id = "bv:test"};
   std::unique_ptr<summarydb::MetadataStore> store_;
   std::unique_ptr<SccStateRepository> repository_;
   CallGraph call_graph_;
@@ -90,41 +100,134 @@ class SccStateRepositoryTest : public ::testing::Test {
 };
 
 TEST_F(SccStateRepositoryTest, PersistsAndReloadsAllConvergenceFields) {
-  ASSERT_TRUE(repository_->PublishGraph(context_, call_graph_, *scc_graph_).ok());
-  const SccResult result =
-      Result("input-a", "fixpoint-a", "external-a", 3);
+  ASSERT_TRUE(
+      repository_->PublishGraph(context_, call_graph_, *scc_graph_).ok());
+  const SccResult result = Result(Hash('a'), Hash('b'), Hash('c'), 3);
   auto change = repository_->StoreState(context_, result);
   ASSERT_TRUE(change.ok()) << change.status().message();
   EXPECT_EQ(*change, ExternalChange::kChanged);
 
-  auto loaded = repository_->LoadState(
-      context_, result.scc_id, result.component_kind);
+  auto loaded =
+      repository_->LoadState(context_, result.scc_id, result.component_kind);
   ASSERT_TRUE(loaded.ok());
   ASSERT_TRUE(loaded->has_value());
-  EXPECT_EQ((*loaded)->input_hash, "input-a");
-  EXPECT_EQ((*loaded)->fixpoint_hash, "fixpoint-a");
-  EXPECT_EQ((*loaded)->externally_visible_hash, "external-a");
+  EXPECT_EQ((*loaded)->input_hash, Hash('a'));
+  EXPECT_EQ((*loaded)->fixpoint_hash, Hash('b'));
+  EXPECT_EQ((*loaded)->externally_visible_hash, Hash('c'));
   EXPECT_EQ((*loaded)->iteration_count, 3u);
   EXPECT_EQ((*loaded)->status, SccStatus::kConverged);
 }
 
 TEST_F(SccStateRepositoryTest, InternalOnlyChangeDoesNotPropagate) {
-  ASSERT_TRUE(repository_->PublishGraph(context_, call_graph_, *scc_graph_).ok());
+  ASSERT_TRUE(
+      repository_->PublishGraph(context_, call_graph_, *scc_graph_).ok());
   auto initial_change = repository_->StoreState(
-      context_, Result("input-a", "fixpoint-a", "external", 1));
+      context_, Result(Hash('a'), Hash('b'), Hash('c'), 1));
   ASSERT_TRUE(initial_change.ok()) << initial_change.status().message();
   ASSERT_EQ(*initial_change, ExternalChange::kChanged);
   auto change = repository_->StoreState(
-      context_, Result("input-b", "fixpoint-b", "external", 2));
+      context_, Result(Hash('d'), Hash('e'), Hash('c'), 2));
   ASSERT_TRUE(change.ok());
   EXPECT_EQ(*change, ExternalChange::kUnchanged);
   auto loaded = repository_->LoadState(
       context_, scc_id_, summary::v1::COMPONENT_KIND_MEMORY_EFFECTS);
   ASSERT_TRUE(loaded.ok());
   ASSERT_TRUE(loaded->has_value());
-  EXPECT_EQ((*loaded)->input_hash, "input-b");
-  EXPECT_EQ((*loaded)->fixpoint_hash, "fixpoint-b");
+  EXPECT_EQ((*loaded)->input_hash, Hash('d'));
+  EXPECT_EQ((*loaded)->fixpoint_hash, Hash('e'));
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+TEST_F(SccStateRepositoryTest,
+       RepublishingUnchangedGraphPreservesConvergenceState) {
+  ASSERT_TRUE(
+      repository_->PublishGraph(context_, call_graph_, *scc_graph_).ok());
+  const SccResult result = Result(Hash('a'), Hash('b'), Hash('c'), 1);
+  auto initial_change = repository_->StoreState(context_, result);
+  ASSERT_TRUE(initial_change.ok()) << initial_change.status().message();
+  ASSERT_EQ(*initial_change, ExternalChange::kChanged);
+
+  ASSERT_TRUE(
+      repository_->PublishGraph(context_, call_graph_, *scc_graph_).ok());
+  auto repeated_change = repository_->StoreState(context_, result);
+  ASSERT_TRUE(repeated_change.ok()) << repeated_change.status().message();
+  EXPECT_EQ(*repeated_change, ExternalChange::kUnchanged);
+}
+
+TEST_F(SccStateRepositoryTest, RejectsStateOutsidePublishedTopology) {
+  auto change = repository_->StoreState(
+      context_, Result(Hash('a'), Hash('b'), Hash('c'), 1));
+  ASSERT_FALSE(change.ok());
+  EXPECT_EQ(change.status().code(), StatusCode::kNotFound);
+}
+
+TEST_F(SccStateRepositoryTest, RejectsUnsupportedOrMalformedResults) {
+  ASSERT_TRUE(
+      repository_->PublishGraph(context_, call_graph_, *scc_graph_).ok());
+  auto unsupported = Result(Hash('a'), Hash('b'), Hash('c'), 1);
+  unsupported.status = SccStatus::kUnsupported;
+  EXPECT_EQ(repository_->StoreState(context_, unsupported).status().code(),
+            StatusCode::kInvalidArgument);
+  auto malformed = Result("", Hash('b'), Hash('c'), 1);
+  EXPECT_EQ(repository_->StoreState(context_, malformed).status().code(),
+            StatusCode::kInvalidArgument);
+}
+
+TEST_F(SccStateRepositoryTest, RejectsHashesThatAreNotLowercaseSha256Hex) {
+  ASSERT_TRUE(
+      repository_->PublishGraph(context_, call_graph_, *scc_graph_).ok());
+
+  auto short_input = Result(Hash('a'), Hash('b'), Hash('c'), 1);
+  short_input.input_hash.pop_back();
+  EXPECT_EQ(repository_->StoreState(context_, short_input).status().code(),
+            StatusCode::kInvalidArgument);
+
+  auto long_input = Result(Hash('a'), Hash('b'), Hash('c'), 1);
+  long_input.input_hash.push_back('a');
+  EXPECT_EQ(repository_->StoreState(context_, long_input).status().code(),
+            StatusCode::kInvalidArgument);
+
+  auto uppercase_fixpoint = Result(Hash('a'), Hash('A'), Hash('c'), 1);
+  EXPECT_EQ(
+      repository_->StoreState(context_, uppercase_fixpoint).status().code(),
+      StatusCode::kInvalidArgument);
+
+  auto non_hex_external = Result(Hash('a'), Hash('b'), Hash('g'), 1);
+  EXPECT_EQ(repository_->StoreState(context_, non_hex_external).status().code(),
+            StatusCode::kInvalidArgument);
+}
+
+TEST_F(SccStateRepositoryTest, CommitFailureRollsBackAndLeavesStoreUsable) {
+  ASSERT_TRUE(
+      repository_->PublishGraph(context_, call_graph_, *scc_graph_).ok());
+  ASSERT_TRUE(
+      store_->Execute("CREATE TABLE commit_parent(id TEXT PRIMARY KEY)", {})
+          .ok());
+  ASSERT_TRUE(
+      store_
+          ->Execute(
+              "CREATE TABLE commit_child(parent_id TEXT, FOREIGN "
+              "KEY(parent_id) "
+              "REFERENCES commit_parent(id) DEFERRABLE INITIALLY DEFERRED)",
+              {})
+          .ok());
+  ASSERT_TRUE(store_
+                  ->Execute("CREATE TRIGGER fail_wpa_commit AFTER INSERT ON "
+                            "wpa_component_states "
+                            "BEGIN INSERT INTO commit_child(parent_id) "
+                            "VALUES('missing'); END",
+                            {})
+                  .ok());
+
+  auto change = repository_->StoreState(
+      context_, Result(Hash('a'), Hash('b'), Hash('c'), 1));
+  ASSERT_FALSE(change.ok());
+  EXPECT_TRUE(store_->BeginTransaction().ok());
+  EXPECT_TRUE(store_->RollbackTransaction().ok());
+  auto loaded = repository_->LoadState(
+      context_, scc_id_, summary::v1::COMPONENT_KIND_MEMORY_EFFECTS);
+  ASSERT_TRUE(loaded.ok());
+  EXPECT_FALSE(loaded->has_value());
+}
+
+} // namespace
+} // namespace veritas::wpa
