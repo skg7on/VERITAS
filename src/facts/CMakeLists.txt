@@ -15,16 +15,23 @@
 add_library(veritas_facts
   FactSchema.cpp
   SouffleExporter.cpp
+  SouffleRunner.cpp
 )
 
 target_include_directories(veritas_facts PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
+target_include_directories(veritas_facts SYSTEM PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+)
 
 target_link_libraries(veritas_facts PUBLIC
   veritas::core
   veritas::summary
+)
+target_link_libraries(veritas_facts PRIVATE
+  LLVMSupport
 )
 
 target_compile_features(veritas_facts PUBLIC cxx_std_20)

@@ -12,10 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# tests/integration/CMakeLists.txt
-
-add_subdirectory(build)
-add_subdirectory(summarydb)
-add_subdirectory(analysis)
-add_subdirectory(frontend)
-add_subdirectory(facts)
+add_executable(SouffleRunnerTest SouffleRunnerTest.cpp)
+target_link_libraries(SouffleRunnerTest PRIVATE
+  veritas::facts
+  veritas::wpa
+  GTest::gtest_main
+)
+target_compile_definitions(SouffleRunnerTest PRIVATE
+  VERITAS_HAS_SOUFFLE=$<BOOL:${VERITAS_HAS_SOUFFLE}>
+  VERITAS_SOUFFLE_EXECUTABLE="${VERITAS_SOUFFLE_EXECUTABLE}"
+  VERITAS_FACT_RULE_DIR="${PROJECT_SOURCE_DIR}/src/facts/rules"
+)
+veritas_add_warnings(SouffleRunnerTest)
+gtest_discover_tests(SouffleRunnerTest DISCOVERY_TIMEOUT 60)
