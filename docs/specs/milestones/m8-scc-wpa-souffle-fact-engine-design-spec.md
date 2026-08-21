@@ -209,10 +209,14 @@ class SccGraph {
  public:
   static StatusOr<SccGraph> Build(const CallGraph& call_graph);
 
-  core::StableId SccForFunction(core::StableId function_variant_id) const;
-  std::span<const core::StableId> Members(core::StableId scc_id) const;
-  std::span<const core::StableId> Predecessors(core::StableId scc_id) const;
-  std::span<const core::StableId> Successors(core::StableId scc_id) const;
+  StatusOr<core::StableId> SccForFunction(
+      core::StableId function_variant_id) const;
+  StatusOr<std::span<const core::StableId>> Members(
+      core::StableId scc_id) const;
+  StatusOr<std::span<const core::StableId>> Predecessors(
+      core::StableId scc_id) const;
+  StatusOr<std::span<const core::StableId>> Successors(
+      core::StableId scc_id) const;
   std::span<const core::StableId> ReverseTopologicalOrder() const;
 };
 
@@ -303,6 +307,10 @@ class FixpointEngine {
   FixpointEngine(const CallGraph& call_graph, const SccGraph& scc_graph,
                  std::span<const summary::v1::FunctionSummary> summaries);
 
+  StatusOr<std::vector<SccResult>> ComputeAll(
+      summary::v1::ComponentKind component_kind,
+      FixpointBudget budget);
+
   StatusOr<SccResult> Compute(
       core::StableId scc_id,
       summary::v1::ComponentKind component_kind,
@@ -311,6 +319,10 @@ class FixpointEngine {
 
 }  // namespace veritas::wpa
 ```
+
+`ComputeAll` evaluates SCCs in `ReverseTopologicalOrder` and returns results in
+that same order. `Compute` evaluates the requested SCC after ensuring all of its
+successor results are available in the engine cache.
 
 The engine processes members in stable-ID order. Acyclic single-member SCCs
 without a self-edge require one evaluation. Recursive SCCs iterate until the
