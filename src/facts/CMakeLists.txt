@@ -14,6 +14,7 @@
 
 add_library(veritas_facts
   FactSchema.cpp
+  SouffleExporter.cpp
 )
 
 target_include_directories(veritas_facts PUBLIC
