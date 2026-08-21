@@ -15,6 +15,7 @@
 #include "veritas/summarydb/ObjectStore.h"
 
 #include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <span>
 #include <string>
