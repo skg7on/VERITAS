@@ -16,7 +16,9 @@ add_library(veritas_wpa
   CallGraph.cpp
   FixpointDomain.cpp
   FixpointEngine.cpp
+  SccStateRepository.cpp
   SccGraph.cpp
+  WpaCoordinator.cpp
 )
 
 target_include_directories(veritas_wpa PUBLIC
@@ -27,7 +29,9 @@ target_include_directories(veritas_wpa PUBLIC
 target_link_libraries(veritas_wpa PUBLIC
   veritas::core
   veritas::facts
+  veritas::runtime
   veritas::summary
+  veritas::summarydb
 )
 
 target_compile_features(veritas_wpa PUBLIC cxx_std_20)

@@ -27,3 +27,19 @@ target_link_libraries(FixpointEngineTest PRIVATE
 )
 veritas_add_warnings(FixpointEngineTest)
 gtest_discover_tests(FixpointEngineTest DISCOVERY_TIMEOUT 60)
+
+add_executable(SccStateRepositoryTest SccStateRepositoryTest.cpp)
+target_link_libraries(SccStateRepositoryTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(SccStateRepositoryTest)
+gtest_discover_tests(SccStateRepositoryTest DISCOVERY_TIMEOUT 60)
+
+add_executable(WpaCoordinatorTest WpaCoordinatorTest.cpp)
+target_link_libraries(WpaCoordinatorTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(WpaCoordinatorTest)
+gtest_discover_tests(WpaCoordinatorTest DISCOVERY_TIMEOUT 60)
