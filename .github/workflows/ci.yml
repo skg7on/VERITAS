@@ -141,7 +141,7 @@ jobs:
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/rocksdb-install
-          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r2
+          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r3
 
       - name: Checkout RocksDB source
         if: steps.rocksdb-cache.outputs.cache-hit != 'true'
@@ -156,6 +156,12 @@ jobs:
       # Ubuntu's librocksdb-dev ships a static library built without -fPIC,
       # which cannot be linked into VERITAS's shared libraries. Build RocksDB
       # from source with PIC enabled instead (mirrors the Z3/LLVM steps).
+      #
+      # RocksDB's CMake defaults PORTABLE=0, which compiles with -march=native.
+      # The resulting static library is then cached and restored on other
+      # runners whose CPUs may not implement every instruction from the build
+      # host, producing SIGILL ("Illegal instruction") in anything that links
+      # RocksDB. Pin PORTABLE=1 so the cached artifact is CPU-baseline-safe.
       - name: Build and install RocksDB
         if: steps.rocksdb-cache.outputs.cache-hit != 'true'
         run: |
@@ -163,6 +169,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/rocksdb-install" \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DPORTABLE=1 \
             -DUSE_RTTI=ON \
             -DWITH_TESTS=OFF \
             -DWITH_TOOLS=OFF \
@@ -183,7 +190,7 @@ jobs:
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/rocksdb-install
-          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r2
+          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r3
 
       - name: Restore LLVM cache
         id: llvm-cache
