@@ -67,3 +67,15 @@ TEST(IdsTest, EmptyBytesProduceValidId) {
   EXPECT_FALSE(text.empty());
   EXPECT_TRUE(ParseStableId(text).ok());
 }
+
+TEST(IdsTest, SccIdRoundTripsWithDedicatedPrefix) {
+  const std::vector<std::byte> data = {std::byte{0x53}, std::byte{0x43},
+                                       std::byte{0x43}};
+  const auto id = MakeStableId(IdKind::kScc, data);
+  const std::string text = ToString(id);
+
+  EXPECT_EQ(text.rfind("scc:sha256:", 0), 0u);
+  auto parsed = ParseStableId(text);
+  ASSERT_TRUE(parsed.ok()) << parsed.status().message();
+  EXPECT_EQ(*parsed, id);
+}

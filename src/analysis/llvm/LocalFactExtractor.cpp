@@ -43,6 +43,7 @@ v1::EffectKind ToEffectKind(MemoryAccessExtractor::AccessKind kind) {
 // Emit a direct call, or an unknown call plus an explicit UnknownFact for an
 // unresolved indirect target. Local facts never expand callees.
 void ExtractCalls(const ::llvm::Function& function,
+                  const OriginMap& origin_map,
                   summary::FunctionLocalFacts* facts) {
   for (const auto& block : function) {
     for (const auto& inst : block) {
@@ -53,6 +54,9 @@ void ExtractCalls(const ::llvm::Function& function,
       if (const auto* callee = call->getCalledFunction()) {
         fact.set_callee_symbol(callee->getName().str());
         fact.set_epistemic(v1::EPISTEMIC_STATE_MUST);
+        if (auto id = origin_map.GetSymbolId(callee)) {
+          fact.set_resolved_callee_function_variant_id(*id);
+        }
       } else {
         fact.set_callee_symbol("<unknown>");
         fact.set_epistemic(v1::EPISTEMIC_STATE_UNKNOWN);
@@ -134,7 +138,7 @@ LocalFactExtractor::Extract(pipeline::ProgramIr& program_ir) const {
     // so the function variant is the function symbol.
     facts.function_variant_id = facts.function_symbol_id;
 
-    ExtractCalls(function, &facts);
+    ExtractCalls(function, origin_map, &facts);
     ExtractMemoryEffects(function, memory_extractor, &facts);
     ExtractValueFlows(function, flow_extractor, &facts);
     ExtractUnknowns(function, &facts);

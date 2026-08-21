@@ -44,6 +44,8 @@ std::string_view IdKindToString(IdKind kind) {
       return "summary";
     case IdKind::kFact:
       return "fact";
+    case IdKind::kScc:
+      return "scc";
     case IdKind::kValueRef:
       return "valref";
     case IdKind::kMemoryRef:
@@ -73,6 +75,7 @@ std::optional<IdKind> StringToIdKind(std::string_view str) {
       {"funcbody", IdKind::kFunctionBody},
       {"summary", IdKind::kFunctionSummary},
       {"fact", IdKind::kFact},
+      {"scc", IdKind::kScc},
       {"valref", IdKind::kValueRef},
       {"memref", IdKind::kMemoryRef},
       {"callsite", IdKind::kCallSite},

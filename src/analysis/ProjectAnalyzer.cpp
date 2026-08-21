@@ -83,7 +83,8 @@ class ProjectAnalyzer::Impl {
 
     // Merge SVF facts conservatively into the M4 drafts.
     auto merged = svf::MergeSvfFacts(std::move(local->summary_drafts),
-                                     svf_result->facts);
+                                     svf_result->facts,
+                                     local->program_ir.origin_map());
 
     // M6: project the CPG from the live ProgramIr and completed summaries.
     auto revision_id = core::ParseStableId(manifest->context.revision_id);

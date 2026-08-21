@@ -92,6 +92,7 @@ message Call {
   string call_site_anchor_id = 2;
   EpistemicState epistemic = 3;
   string provenance_ref = 4;
+  string resolved_callee_function_variant_id = 5;
 }
 
 // MemoryEffect — read, write, or unknown effect on memory.

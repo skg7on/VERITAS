@@ -47,6 +47,7 @@ enum class IdKind {
   kFunctionBody,
   kFunctionSummary,
   kFact,
+  kScc,
   // CPG (M6) identities
   kValueRef,
   kMemoryRef,

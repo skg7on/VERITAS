@@ -19,8 +19,16 @@
 namespace veritas::analysis::llvm {
 
 void OriginMap::RecordOrigin(::llvm::Function* func, std::string symbol_id) {
+  const std::string llvm_name = func->getName().str();
   func_to_symbol_[func] = symbol_id;
   symbol_to_func_[symbol_id] = func;
+
+  if (ambiguous_names_.contains(llvm_name)) return;
+  auto [name_it, inserted] = name_to_symbol_.emplace(llvm_name, symbol_id);
+  if (!inserted && name_it->second != symbol_id) {
+    name_to_symbol_.erase(name_it);
+    ambiguous_names_.insert(llvm_name);
+  }
 }
 
 std::optional<std::string> OriginMap::GetSymbolId(
@@ -29,6 +37,13 @@ std::optional<std::string> OriginMap::GetSymbolId(
   if (it == func_to_symbol_.end()) {
     return std::nullopt;
   }
+  return it->second;
+}
+
+std::optional<std::string> OriginMap::GetSymbolIdByLlvmName(
+    std::string_view llvm_name) const {
+  auto it = name_to_symbol_.find(std::string(llvm_name));
+  if (it == name_to_symbol_.end()) return std::nullopt;
   return it->second;
 }
 
@@ -43,6 +58,11 @@ std::optional<std::string> OriginMap::GetSymbolId(
 void OriginMap::RemoveFunction(const ::llvm::Function* func) {
   auto it = func_to_symbol_.find(func);
   if (it != func_to_symbol_.end()) {
+    const std::string llvm_name = func->getName().str();
+    auto name_it = name_to_symbol_.find(llvm_name);
+    if (name_it != name_to_symbol_.end() && name_it->second == it->second) {
+      name_to_symbol_.erase(name_it);
+    }
     symbol_to_func_.erase(it->second);
     func_to_symbol_.erase(it);
   }
@@ -51,6 +71,8 @@ void OriginMap::RemoveFunction(const ::llvm::Function* func) {
 void OriginMap::Clear() {
   func_to_symbol_.clear();
   symbol_to_func_.clear();
+  name_to_symbol_.clear();
+  ambiguous_names_.clear();
 }
 
 }  // namespace veritas::analysis::llvm

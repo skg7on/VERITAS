@@ -17,7 +17,9 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace llvm {
 class Function;
@@ -26,9 +28,9 @@ class Function;
 namespace veritas::analysis::llvm {
 
 // OriginMap tracks the bidirectional relationship between LLVM Function
-// instances and their FunctionSymbolID. It survives LLVM IR transformations
-// that preserve function identity (inlining destroys the mapping for the
-// inlined callee, but not the caller).
+// instances and their stable function identity. It survives LLVM IR
+// transformations that preserve function identity (inlining destroys the
+// mapping for the inlined callee, but not the caller).
 class OriginMap {
  public:
   OriginMap() = default;
@@ -48,6 +50,11 @@ class OriginMap {
   // function is not tracked.
   std::optional<std::string> GetSymbolId(const ::llvm::Function* func) const;
 
+  // Looks up a symbol ID by the exact LLVM function name. Ambiguous names are
+  // deliberately unresolved so downstream analysis can preserve uncertainty.
+  std::optional<std::string> GetSymbolIdByLlvmName(
+      std::string_view llvm_name) const;
+
   // Looks up the LLVM function for a given symbol ID. Returns nullptr if the
   // symbol is not tracked.
   ::llvm::Function* GetFunction(const std::string& symbol_id) const;
@@ -65,6 +72,8 @@ class OriginMap {
  private:
   std::unordered_map<const ::llvm::Function*, std::string> func_to_symbol_;
   std::unordered_map<std::string, ::llvm::Function*> symbol_to_func_;
+  std::unordered_map<std::string, std::string> name_to_symbol_;
+  std::unordered_set<std::string> ambiguous_names_;
 };
 
 }  // namespace veritas::analysis::llvm

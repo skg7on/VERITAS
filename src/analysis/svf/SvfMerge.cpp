@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "analysis/llvm/OriginMap.h"
 #include "analysis/svf/SvfFactMapper.h"
 
 namespace veritas::analysis::svf {
@@ -48,7 +49,8 @@ v1::EpistemicState CallEpistemic(const std::string& kind) {
 }  // namespace
 
 std::vector<v1::FunctionSummary> MergeSvfFacts(
-    std::vector<v1::FunctionSummary> drafts, const SvfFacts& facts) {
+    std::vector<v1::FunctionSummary> drafts, const SvfFacts& facts,
+    const ::veritas::analysis::llvm::OriginMap& origin_map) {
   // The placeholder SVF facts do not yet carry owning-function identity; value
   // names are LLVM names. Attribute each interprocedural fact to the draft
   // whose function name appears in one of its endpoints; append unknowns to
@@ -99,6 +101,9 @@ std::vector<v1::FunctionSummary> MergeSvfFacts(
       out->set_call_site_anchor_id(call.callsite.name);
       out->set_epistemic(CallEpistemic(call.call_kind));
       out->set_provenance_ref(call.provenance);
+      if (auto id = origin_map.GetSymbolIdByLlvmName(call.target.name)) {
+        out->set_resolved_callee_function_variant_id(*id);
+      }
     }
 
     for (const auto& unknown : facts.unknowns) {

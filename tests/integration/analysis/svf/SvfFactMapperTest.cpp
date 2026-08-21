@@ -22,6 +22,7 @@
 
 #include "analysis/pipeline/ProgramIr.h"
 #include "analysis/svf/SvfSession.h"
+#include "analysis/svf/SvfMerge.h"
 
 namespace veritas::analysis::svf {
 namespace {
@@ -137,6 +138,31 @@ TEST(SvfFactMapperTest, UnmappedNodesCreateUnknownFacts) {
       EXPECT_FALSE(unknown.provenance.empty());
     }
   }
+}
+
+TEST(SvfFactMapperTest, MergeResolvesExactSvfTargetName) {
+  auto program_ir = BuildFixtureProgramIr("identity");
+  auto* identity = program_ir->GetFunction("identity");
+  ASSERT_NE(identity, nullptr);
+  program_ir->mutable_origin_map().RecordOrigin(
+      identity, "funcvar:sha256:identity");
+
+  ::veritas::summary::v1::FunctionSummary draft;
+  draft.mutable_identity()->set_function_variant_id(
+      "funcvar:sha256:caller");
+  SvfFacts facts;
+  facts.refined_calls.push_back(summary::CallFact{
+      .callsite = {.name = "funcvar:sha256:caller:site"},
+      .target = {.name = "identity"},
+      .call_kind = "MAY_CALL",
+      .provenance = "svf:test",
+  });
+
+  auto merged = MergeSvfFacts({draft}, facts, program_ir->origin_map());
+  ASSERT_EQ(merged.size(), 1u);
+  ASSERT_EQ(merged[0].calls_size(), 1);
+  EXPECT_EQ(merged[0].calls(0).resolved_callee_function_variant_id(),
+            "funcvar:sha256:identity");
 }
 
 }  // namespace

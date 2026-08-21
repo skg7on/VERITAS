@@ -23,12 +23,21 @@ namespace veritas::analysis::svf {
 
 struct SvfFacts;
 
+}  // namespace veritas::analysis::svf
+
+namespace veritas::analysis::llvm {
+class OriginMap;
+}  // namespace veritas::analysis::llvm
+
+namespace veritas::analysis::svf {
+
 // Merge SVF-mapped facts into M4 summary drafts. M4 MUST facts are never
 // erased; SVF value-flow, alias, memory-effect, call, and unknown facts augment
 // the matching draft. Unknowns are never dropped. Returns the merged drafts.
 std::vector<::veritas::summary::v1::FunctionSummary> MergeSvfFacts(
     std::vector<::veritas::summary::v1::FunctionSummary> drafts,
-    const SvfFacts& svf_facts);
+    const SvfFacts& svf_facts,
+    const ::veritas::analysis::llvm::OriginMap& origin_map);
 
 }  // namespace veritas::analysis::svf
 

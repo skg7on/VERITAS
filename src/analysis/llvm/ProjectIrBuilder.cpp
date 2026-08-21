@@ -15,6 +15,7 @@
 #include "analysis/llvm/ProjectIrBuilder.h"
 
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -31,6 +32,7 @@
 
 #include "analysis/llvm/OriginMap.h"
 #include "veritas/build/CompileFlags.h"
+#include "veritas/core/Ids.h"
 
 namespace veritas::analysis::llvm {
 namespace {
@@ -154,17 +156,22 @@ veritas::StatusOr<pipeline::ProgramIr> ProjectIrBuilder::BuildProjectIr(
   linked->setModuleIdentifier("veritas.project");
   linked->setSourceFileName("");
 
-  // Populate the origin map: a function's symbol ID is its (mangled) name,
-  // qualified with the module identifier when it has internal linkage so two
-  // file-local functions in different translation units do not collide.
+  // Populate the origin map with stable function-variant IDs. The canonical
+  // symbol key is the mangled name, qualified with the module identifier for
+  // internal linkage so file-local functions do not collide.
   OriginMap& origin_map = program_ir.mutable_origin_map();
   for (auto& function : *linked) {
     if (function.isDeclaration()) continue;
-    std::string symbol_id = function.getName().str();
+    std::string symbol_key = function.getName().str();
     if (function.hasInternalLinkage()) {
-      symbol_id = linked->getModuleIdentifier() + "::" + symbol_id;
+      symbol_key = linked->getModuleIdentifier() + "::" + symbol_key;
     }
-    origin_map.RecordOrigin(&function, std::move(symbol_id));
+    const auto symbol_bytes =
+        std::as_bytes(std::span(symbol_key.data(), symbol_key.size()));
+    origin_map.RecordOrigin(
+        &function,
+        core::ToString(core::MakeStableId(core::IdKind::kFunctionVariant,
+                                          symbol_bytes)));
   }
 
   program_ir.SetModuleHash(ComputeModuleHash(*linked));

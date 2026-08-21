@@ -22,6 +22,7 @@
 #include "veritas/analysis/ProjectAnalysisRequest.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
+#include "veritas/core/Ids.h"
 
 namespace veritas::analysis::pipeline {
 namespace {
@@ -83,6 +84,27 @@ TEST(LocalAnalysisStageTest, IdenticalInputsProduceDeterministicDrafts) {
     EXPECT_EQ(first->summary_drafts[i].SerializeAsString(),
               second->summary_drafts[i].SerializeAsString());
   }
+}
+
+TEST(LocalAnalysisStageTest, DirectCallCarriesResolvedFunctionVariantId) {
+  auto manifest = LoadFixtureManifest("smoke");
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+  auto result = RunLocalAnalysis(*manifest);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+
+  const summary::v1::Call* add_call = nullptr;
+  for (const auto& draft : result->summary_drafts) {
+    for (const auto& call : draft.calls()) {
+      if (call.callee_symbol().find("add") != std::string::npos) {
+        add_call = &call;
+      }
+    }
+  }
+  ASSERT_NE(add_call, nullptr);
+  auto parsed = core::ParseStableId(
+      add_call->resolved_callee_function_variant_id());
+  ASSERT_TRUE(parsed.ok()) << parsed.status().message();
+  EXPECT_EQ(parsed->kind, core::IdKind::kFunctionVariant);
 }
 
 }  // namespace
