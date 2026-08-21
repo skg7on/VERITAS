@@ -19,3 +19,11 @@ target_link_libraries(SccGraphTest PRIVATE
 )
 veritas_add_warnings(SccGraphTest)
 gtest_discover_tests(SccGraphTest DISCOVERY_TIMEOUT 60)
+
+add_executable(FixpointEngineTest FixpointEngineTest.cpp)
+target_link_libraries(FixpointEngineTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(FixpointEngineTest)
+gtest_discover_tests(FixpointEngineTest DISCOVERY_TIMEOUT 60)
