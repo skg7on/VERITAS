@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(SemanticTypesTest SemanticTypesTest.cpp)
-target_link_libraries(SemanticTypesTest PRIVATE
-  veritas_analysis_semantic
-  GTest::gtest_main
+add_library(veritas_analysis_semantic STATIC
+  SemanticTypes.cpp
 )
-veritas_add_warnings(SemanticTypesTest)
-gtest_discover_tests(SemanticTypesTest DISCOVERY_TIMEOUT 60)
 
-add_subdirectory(svf)
+target_include_directories(veritas_analysis_semantic
+  PUBLIC
+    "${PROJECT_SOURCE_DIR}/include"
+)
+
+target_link_libraries(veritas_analysis_semantic
+  PUBLIC
+    veritas_core
+)

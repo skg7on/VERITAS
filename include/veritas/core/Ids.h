@@ -48,6 +48,10 @@ enum class IdKind {
   kFunctionSummary,
   kFact,
   kScc,
+  // M8R semantic/run identities
+  kAnalysisRun,
+  kAbstractObject,
+  kModel,
   // CPG (M6) identities
   kValueRef,
   kMemoryRef,

@@ -1,0 +1,180 @@
+{
+  "schema_version": "relations.v2",
+  "relations": [
+    {
+      "name": "FunctionMap",
+      "ownership": "edb",
+      "columns": [
+        {"name": "function_id", "domain": "function_id"},
+        {"name": "function_stable_id", "domain": "string"}
+      ]
+    },
+    {
+      "name": "ValueMap",
+      "ownership": "edb",
+      "columns": [
+        {"name": "value_id", "domain": "value_id"},
+        {"name": "value_stable_id", "domain": "string"}
+      ]
+    },
+    {
+      "name": "MemoryMap",
+      "ownership": "edb",
+      "columns": [
+        {"name": "memory_id", "domain": "memory_id"},
+        {"name": "memory_stable_id", "domain": "string"}
+      ]
+    },
+    {
+      "name": "CallSiteMap",
+      "ownership": "edb",
+      "columns": [
+        {"name": "call_site_id", "domain": "call_site_id"},
+        {"name": "call_site_stable_id", "domain": "string"}
+      ]
+    },
+    {
+      "name": "FactMap",
+      "ownership": "edb",
+      "columns": [
+        {"name": "fact_id", "domain": "fact_id"},
+        {"name": "fact_stable_id", "domain": "string"}
+      ]
+    },
+    {
+      "name": "DirectCall",
+      "ownership": "edb",
+      "columns": [
+        {"name": "call_site_id", "domain": "call_site_id"},
+        {"name": "caller_id", "domain": "function_id"},
+        {"name": "callee_id", "domain": "function_id"},
+        {"name": "dispatch", "domain": "dispatch_kind"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "MUST_NOT", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "UnknownCall",
+      "ownership": "edb",
+      "columns": [
+        {"name": "call_site_id", "domain": "call_site_id"},
+        {"name": "caller_id", "domain": "function_id"},
+        {"name": "reason", "domain": "string"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MAY", "UNKNOWN"]
+    },
+    {
+      "name": "DirectRead",
+      "ownership": "edb",
+      "columns": [
+        {"name": "function_id", "domain": "function_id"},
+        {"name": "memory_id", "domain": "memory_id"},
+        {"name": "range_kind", "domain": "byte_range_kind"},
+        {"name": "offset", "domain": "int64"},
+        {"name": "size", "domain": "uint64"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "MUST_NOT", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "DirectWrite",
+      "ownership": "edb",
+      "columns": [
+        {"name": "function_id", "domain": "function_id"},
+        {"name": "memory_id", "domain": "memory_id"},
+        {"name": "range_kind", "domain": "byte_range_kind"},
+        {"name": "offset", "domain": "int64"},
+        {"name": "size", "domain": "uint64"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "MUST_NOT", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "Alias",
+      "ownership": "edb",
+      "columns": [
+        {"name": "left_memory_id", "domain": "memory_id"},
+        {"name": "right_memory_id", "domain": "memory_id"},
+        {"name": "alias_kind", "domain": "alias_kind"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "MUST_NOT", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "LocalFlow",
+      "ownership": "edb",
+      "columns": [
+        {"name": "function_id", "domain": "function_id"},
+        {"name": "source_id", "domain": "value_id"},
+        {"name": "destination_id", "domain": "value_id"},
+        {"name": "flow_kind", "domain": "string"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "ParameterFlow",
+      "ownership": "edb",
+      "columns": [
+        {"name": "call_site_id", "domain": "call_site_id"},
+        {"name": "actual_id", "domain": "value_id"},
+        {"name": "formal_id", "domain": "value_id"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "ReturnFlow",
+      "ownership": "edb",
+      "columns": [
+        {"name": "call_site_id", "domain": "call_site_id"},
+        {"name": "return_id", "domain": "value_id"},
+        {"name": "result_id", "domain": "value_id"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "ModeledEffect",
+      "ownership": "edb",
+      "columns": [
+        {"name": "model_id", "domain": "model_id"},
+        {"name": "function_id", "domain": "function_id"},
+        {"name": "effect_kind", "domain": "string"},
+        {"name": "subject_id", "domain": "string"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "ASSUMED"]
+    },
+    {
+      "name": "UnsupportedFeature",
+      "ownership": "edb",
+      "columns": [
+        {"name": "node_id", "domain": "string"},
+        {"name": "feature_kind", "domain": "string"},
+        {"name": "soundness_policy", "domain": "string"}
+      ]
+    },
+    {
+      "name": "ReachableCall",
+      "ownership": "idb",
+      "columns": [
+        {"name": "source_id", "domain": "function_id"},
+        {"name": "target_id", "domain": "function_id"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "MayWrite",
+      "ownership": "idb",
+      "columns": [
+        {"name": "function_id", "domain": "function_id"},
+        {"name": "memory_id", "domain": "memory_id"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "INFERRED", "ASSUMED", "UNKNOWN"]
+    }
+  ]
+}
