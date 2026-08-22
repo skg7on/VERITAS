@@ -422,13 +422,10 @@ CREATE TABLE analysis_configurations (
 );
 
 CREATE TABLE engine_toolchains (
-    engine_toolchain_identity           TEXT PRIMARY KEY,
-    engine_identity                     TEXT NOT NULL,
-    install_provenance_manifest_digest  TEXT NOT NULL,
-    source_revision                     TEXT NOT NULL,
-    executable_digest                   TEXT NOT NULL,
-    generated_bundle_digest             TEXT NOT NULL,
-    generated_toolchain_provenance_hash TEXT NOT NULL
+    engine_toolchain_identity      TEXT PRIMARY KEY,
+    engine_identity                TEXT NOT NULL,
+    canonical_provenance_payload   BLOB NOT NULL,
+    canonical_provenance_hash      TEXT NOT NULL
 );
 
 CREATE TABLE analysis_runs (
@@ -449,13 +446,25 @@ CREATE TABLE analysis_runs (
 );
 ```
 
-Every manifest field above participates in `AnalysisRunID`. Before a production
-run is created, VERITAS parses the configured Souffle install-provenance
-manifest, requires version 2.5 and source revision
-`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable,
-and rejects a digest mismatch. `EngineToolchainIdentity` includes the verified
-manifest digest, source revision, executable digest, generated-bundle digest,
-and generator/compiler/link toolchain provenance.
+Every manifest field above participates in `AnalysisRunID`.
+`EngineToolchainIdentity` is the hash of `engine_identity` plus the canonical
+engine-specific provenance payload. An `analysis_runs.engine_identity` must
+match the referenced toolchain record's engine identity. The validator applies
+a tagged union rule:
+
+* `souffle` requires the configured install-provenance manifest and its digest,
+  version 2.5 source revision
+  `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, the configured executable digest
+  verified against that manifest, the generated-bundle digest, and
+  generator/compiler/link toolchain provenance;
+* C++ conformance and `cpp-emergency` require the exact C++ build identity and
+  reject a payload that claims or reuses Souffle provenance;
+* a future engine must define and validate its own canonical payload before it
+  can create a run.
+
+Thus every engine has exact provenance without fabricating another engine's
+fields. `canonical_provenance_hash` must match the stored payload before an
+`AnalysisRun` or component record may reference it.
 
 Examples of config fields:
 
@@ -1389,7 +1398,9 @@ separately qualified upgrade retires the upstream ARM concurrency issue.
 C++ consumes the same byte-identical engine-neutral logical component input
 only as a CI conformance oracle or explicitly selected `cpp-emergency` engine.
 There is no automatic fallback, and the two executions have distinct valid
-envelopes and `RunId` values.
+envelopes and `RunId` values. A C++ envelope records the exact C++ build
+identity in its engine-specific provenance payload and never reuses or
+impersonates the verified Souffle payload.
 
 ## 17.1 Base Relations
 

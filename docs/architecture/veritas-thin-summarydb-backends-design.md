@@ -611,14 +611,17 @@ Full syntax and semantics are in `veritas-evidence-ir-design.md` §30–33.
 
 An `AnalysisRun` manifest includes revision and build variant; summary and
 relation schemas; rule and model bundles; SVF and WPA configurations; engine
-identity; and exact engine/toolchain identity. Before production execution,
-VERITAS parses the configured Souffle install-provenance manifest, requires
-Souffle 2.5 source revision
+identity; and exact engine/toolchain identity. Every engine toolchain record has
+a required canonical engine-specific provenance payload and hash. Before
+production Souffle execution, VERITAS parses the configured install-provenance
+manifest, requires version 2.5 source revision
 `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable,
-and verifies that digest against the manifest. `EngineToolchainIdentity`
-includes the verified manifest identity/content digest, source revision,
-executable digest, generated-bundle digest, and generator/compiler/link
-toolchain provenance. All run-manifest fields participate in `RunId`.
+and verifies that digest against the manifest. The Souffle payload includes the
+verified manifest identity/content digest, source revision, executable digest,
+generated-bundle digest, and generator/compiler/link toolchain provenance. A
+C++ conformance or `cpp-emergency` payload instead requires the exact C++ build
+identity and cannot claim, reuse, or impersonate Souffle provenance. All
+run-manifest fields participate in `RunId`.
 
 Each component record retains `LogicalInputHash`, `FixpointHash`,
 `ExternalHash`, status, diagnostics, rooted input IDs, and the immutable result

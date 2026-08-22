@@ -612,15 +612,18 @@ history. Partial output is never mixed with old facts.
 # 10. Compiled Souffle Production Engine
 
 For recursive interprocedural queries, the normal production engine is compiled
-Souffle. Before execution, the adapter parses the configured install-provenance
-manifest, requires Souffle 2.5 at exact source revision
-`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable,
-and rejects any mismatch with the manifest's recorded executable digest.
-`EngineToolchainIdentity` includes the verified manifest identity/content
-digest, source revision, executable digest, generated rule-bundle digest, and
-generator/compiler/link toolchain provenance. Generated programs use one
-evaluation thread until a separately qualified upgrade retires the upstream
-ARM concurrency issue.
+Souffle. Every engine toolchain record has a canonical engine-specific
+provenance payload and hash. Before Souffle execution, the adapter parses the
+configured install-provenance manifest, requires version 2.5 at exact source
+revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured
+executable, and rejects any mismatch with the manifest's recorded executable
+digest. The Souffle `EngineToolchainIdentity` payload includes the verified
+manifest identity/content digest, source revision, executable digest, generated
+rule-bundle digest, and generator/compiler/link toolchain provenance. A C++
+conformance or `cpp-emergency` record instead requires the exact C++ build
+identity; it cannot claim, reuse, or impersonate Souffle provenance. Generated
+Souffle programs use one evaluation thread until a separately qualified upgrade
+retires the upstream ARM concurrency issue.
 
 Datalog remains a natural execution form:
 

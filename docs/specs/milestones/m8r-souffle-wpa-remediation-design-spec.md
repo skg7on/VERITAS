@@ -63,15 +63,19 @@ legacy/unknown semantics to a V2 WPA run, but it cannot fabricate V2 precision.
 
 Every run manifest identifies the revision, build variant, summary and relation
 schemas, rule and model bundles, SVF and WPA configurations, engine, and exact
-engine/toolchain identity. Before any production execution, VERITAS parses the
-configured Souffle install-provenance manifest, requires Souffle 2.5 at exact
-source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured
-executable, and rejects any mismatch with the executable digest recorded by the
-manifest. `EngineToolchainIdentity` canonically includes the verified manifest
-identity/content digest, source revision, executable digest, generated-bundle
-digest, and generator/compiler/link toolchain provenance. Until a separately
-qualified upgrade retires the upstream ARM concurrency issue, generated
-programs run with one evaluation thread.
+engine/toolchain identity. Every `EngineToolchainIdentity` covers the engine
+identity plus a required canonical engine-specific provenance payload and hash.
+For production Souffle, VERITAS parses the configured install-provenance
+manifest, requires Souffle 2.5 at exact source revision
+`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable,
+and rejects any mismatch with the executable digest recorded by the manifest.
+The Souffle payload includes the verified manifest identity/content digest,
+source revision, executable digest, generated-bundle digest, and
+generator/compiler/link toolchain provenance. A C++ conformance or
+`cpp-emergency` payload instead records the exact C++ build identity and cannot
+claim, reuse, or impersonate Souffle provenance. Until a separately qualified
+upgrade retires the upstream ARM concurrency issue, generated Souffle programs
+run with one evaluation thread.
 
 Stable IDs are durable. Typed unsigned dense IDs are assigned per run for hot
 joins and never escape their `AnalysisRun`. Missing mappings, duplicate dense

@@ -28,7 +28,7 @@
 - The first storage stack is RocksDB for immutable objects and SQLite for metadata.
 - Function Summary IR is the durable WPA contract; typed `relations.v2` rows and dense IDs are run-local execution projections.
 - Compiled Souffle is the required normal production recursive-WPA engine after M8R.4; C++ consumes the same byte-identical `WpaLogicalComponentInput` only for conformance or explicit `cpp-emergency` use, under a distinct valid envelope and `RunId`.
-- Before production execution, VERITAS parses the configured Souffle install-provenance manifest, requires version 2.5 at source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable, and verifies it against the manifest; manifest, executable, generated-bundle, and generator/compiler/link provenance form `EngineToolchainIdentity`.
+- Every engine toolchain record has a required canonical engine-specific provenance payload/hash. Before production Souffle execution, VERITAS parses the configured install-provenance manifest, requires version 2.5 at source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable, and verifies it against the manifest; its payload includes manifest, executable, generated-bundle, and generator/compiler/link provenance. C++ conformance/`cpp-emergency` instead records exact C++ build identity and never reuses or impersonates Souffle provenance.
 - Automatic engine fallback is forbidden. Failed components publish no replacement and retain the last successful result only as stale history.
 - Component reuse is content-addressed by engine-neutral logical input plus exact executor/toolchain identity.
 - Every derived fact has a generic deterministic finite witness rooted in stable input fact IDs.
@@ -71,7 +71,7 @@ The source architecture says "Build a VERITAS CPG, but keep it thin." This docum
 | M8R.2 | SVF and Memory Refinement | Native `summary.v2`, indirect calls, collision-free abstract memory | M8R.1 |
 | M8R.3 | Relational WPA Projection | Engine-neutral SCC input, `relations.v2`, rooted witnesses | M8R.2 |
 | M8R.4 | Production Souffle WPA | Required compiled engine, exact provenance, atomic failure/reuse | M8R.3 |
-| M8R.5 | Qualification and M9 Handoff | Conformance corpus, `AnalysisFactBatch`, Fact Bus, ten-test entry gate | M8R.4 |
+| M8R.5 | Qualification and M9 Handoff | Conformance corpus, `AnalysisFactBatch`, Fact Bus, ten-criterion entry gate | M8R.4 |
 | M9 | Provenance-aware fact store and explain API | Run/fact/witness/diagnostic persistence and `veritas-explain` | M8R.5 gate |
 | M10A | Recursive domain expansion | `MayRead`, `GlobalFlow`, `UnknownEffect`, `SoundnessCoverage` | M9 |
 | M10B | Evidence Builder input APIs and first demo | EIR-ready slices over M9 facts and M10A relations | M6, M9, M10A |
