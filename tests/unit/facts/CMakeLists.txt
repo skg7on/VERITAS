@@ -36,6 +36,22 @@ target_link_libraries(AnalysisFactTest PRIVATE
 veritas_add_warnings(AnalysisFactTest)
 gtest_discover_tests(AnalysisFactTest DISCOVERY_TIMEOUT 60)
 
+add_executable(DenseIdMapTest DenseIdMapTest.cpp)
+target_link_libraries(DenseIdMapTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(DenseIdMapTest)
+gtest_discover_tests(DenseIdMapTest DISCOVERY_TIMEOUT 60)
+
+add_executable(LegacyFactAdapterTest LegacyFactAdapterTest.cpp)
+target_link_libraries(LegacyFactAdapterTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(LegacyFactAdapterTest)
+gtest_discover_tests(LegacyFactAdapterTest DISCOVERY_TIMEOUT 60)
+
 add_executable(FactSchemaTest FactSchemaTest.cpp)
 target_link_libraries(FactSchemaTest PRIVATE
   veritas::facts

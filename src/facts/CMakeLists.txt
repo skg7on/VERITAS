@@ -16,6 +16,7 @@ add_library(veritas_facts
   AnalysisRun.cpp
   AnalysisFact.cpp
   RelationSchema.cpp
+  LegacyFactAdapter.cpp
   FactSchema.cpp
   SummaryFactBuilder.cpp
   SouffleExporter.cpp
