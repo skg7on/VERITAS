@@ -14,6 +14,8 @@
 
 add_library(veritas_facts
   AnalysisRun.cpp
+  AnalysisFact.cpp
+  RelationSchema.cpp
   FactSchema.cpp
   SummaryFactBuilder.cpp
   SouffleExporter.cpp
@@ -31,6 +33,7 @@ target_include_directories(veritas_facts SYSTEM PRIVATE
 target_link_libraries(veritas_facts PUBLIC
   veritas::core
   veritas::summary
+  veritas_analysis_semantic
 )
 target_link_libraries(veritas_facts PRIVATE
   LLVMSupport

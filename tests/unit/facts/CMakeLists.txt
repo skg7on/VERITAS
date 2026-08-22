@@ -20,6 +20,22 @@ target_link_libraries(AnalysisRunTest PRIVATE
 veritas_add_warnings(AnalysisRunTest)
 gtest_discover_tests(AnalysisRunTest DISCOVERY_TIMEOUT 60)
 
+add_executable(RelationSchemaTest RelationSchemaTest.cpp)
+target_link_libraries(RelationSchemaTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(RelationSchemaTest)
+gtest_discover_tests(RelationSchemaTest DISCOVERY_TIMEOUT 60)
+
+add_executable(AnalysisFactTest AnalysisFactTest.cpp)
+target_link_libraries(AnalysisFactTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(AnalysisFactTest)
+gtest_discover_tests(AnalysisFactTest DISCOVERY_TIMEOUT 60)
+
 add_executable(FactSchemaTest FactSchemaTest.cpp)
 target_link_libraries(FactSchemaTest PRIVATE
   veritas::facts
