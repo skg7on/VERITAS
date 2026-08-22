@@ -12,6 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+add_executable(AnalysisRunTest AnalysisRunTest.cpp)
+target_link_libraries(AnalysisRunTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(AnalysisRunTest)
+gtest_discover_tests(AnalysisRunTest DISCOVERY_TIMEOUT 60)
+
 add_executable(FactSchemaTest FactSchemaTest.cpp)
 target_link_libraries(FactSchemaTest PRIVATE
   veritas::facts

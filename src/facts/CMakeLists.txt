@@ -13,6 +13,7 @@
 # limitations under the License.
 
 add_library(veritas_facts
+  AnalysisRun.cpp
   FactSchema.cpp
   SummaryFactBuilder.cpp
   SouffleExporter.cpp
