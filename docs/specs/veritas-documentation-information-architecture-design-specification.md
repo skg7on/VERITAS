@@ -26,8 +26,9 @@ historical decisions.
    project-name prefixes inside ordered architecture paths.
 7. Repository indexes are the primary navigation surface; prose references are
    updated to the canonical paths.
-8. Historical GitHub prose remains historically accurate. Only references to
-   current documents are migrated.
+8. Historical GitHub prose remains historically accurate. Only eligible open
+   issue references to current documents are migrated; closed and merged
+   records retain their original paths and revisions.
 
 ## 3. Target Hierarchy
 
@@ -171,22 +172,24 @@ sources of truth.
 
 ## 8. GitHub Reference Migration
 
-The following issue descriptions contain current-document references and are
-in scope: `#3` through `#13`, `#20`, `#21`, and `#61`.
+This binding final scope supersedes the original broader GitHub selection.
+Only the descriptions of open issues `#12`, `#13`, `#20`, `#21`, and `#61`
+receive or retain canonical migrated-document links. Each migrated link uses
+the migration commit SHA rather than `main` or a task branch, making it
+resolvable immediately after the branch is pushed and durable if branches are
+later deleted or documents move again.
 
-The following pull-request descriptions contain current-document references
-and are in scope: `#1`, `#2`, `#18`, `#19`, `#24`, `#27`, `#36`, and `#42`.
+Closed issues `#3` through `#11` and merged pull requests `#1`, `#2`, `#18`,
+`#19`, `#24`, `#27`, `#36`, and `#42` are historical records. Their original
+paths and link revisions are preserved. Open PR `#63` has no
+migrated-document path and remains unchanged.
 
-The migration preserves prose labels and edits only path targets or literal
-current paths. Historical statements such as PR #19's record of deleting the
-old monolithic architecture file remain unchanged because rewriting them would
-falsify history.
-
-GitHub links use the migration commit SHA rather than `main` or a task branch.
-This makes every migrated link resolvable immediately after the branch is
-pushed and keeps it valid if branches are later deleted or documents move
-again. No issue-discussion comments or PR review comments currently contain
-in-scope paths.
+No issue-discussion comments or PR review comments are in scope. For every
+record, preserve titles, labels, states, checklist state, surrounding prose,
+and all other body content outside the eligible immutable-link migration. In
+particular, PR #19's historical description of deleting the old monolithic
+architecture file remains unchanged because rewriting it would falsify
+history.
 
 ## 9. Verification
 
@@ -202,8 +205,11 @@ The migration is complete only when all of these checks pass:
 5. Internal Markdown links resolve to tracked files and local anchors.
 6. `git diff --check` reports no whitespace errors.
 7. The clean build and complete CTest suite satisfy repository pre-push policy.
-8. Each edited GitHub issue and PR body contains the expected migration-commit
-   URL, and each URL resolves through the GitHub contents API.
+8. Only open issue descriptions `#12`, `#13`, `#20`, `#21`, and `#61` contain
+   the expected immutable migration-commit URLs, and each URL resolves through
+   the GitHub contents API. Closed issues `#3` through `#11`, merged PRs `#1`,
+   `#2`, `#18`, `#19`, `#24`, `#27`, `#36`, and `#42`, and open PR `#63` retain
+   their original paths, revisions, and bodies.
 9. The primary checkout remains clean on `main`; the task worktree is clean on
    its dedicated branch after commit.
 

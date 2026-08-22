@@ -13,6 +13,16 @@ repository and overrides the default output paths of the `superpowers` skills.
 | Project/tooling plans | `docs/plans/topic-slug-implementation-plan.md` |
 | Milestone plans | `docs/plans/milestones/mNN-or-mNNsuffix-topic-slug-implementation-plan.md` |
 
+The patterns above govern newly created documents. The following retained
+canonical filename classes are approved exceptions for existing documents and
+MUST remain at their canonical paths; do not rename them solely to conform to
+the new-document patterns:
+
+- Cross-cutting design specifications:
+  `docs/specs/*-design-specification.md`
+- Formal specifications: `docs/specs/*-formal-specification.md`
+- Project milestone roadmaps: `docs/plans/*-milestone-roadmap.md`
+
 ## Rules for Skill-Generated Documents
 
 The `superpowers:brainstorming` and `superpowers:writing-plans` skills SHALL

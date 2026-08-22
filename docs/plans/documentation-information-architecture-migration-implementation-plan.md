@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move VERITAS architecture, milestone design-specification, and implementation-plan documents into the approved ordered hierarchy and migrate every current repository and GitHub reference.
+**Goal:** Move VERITAS architecture, milestone design-specification, and implementation-plan documents into the approved ordered hierarchy, migrate every current repository reference, and retain canonical immutable GitHub links only in the eligible open issue descriptions.
 
 **Architecture:** Preserve the top-level `docs/specs/` and `docs/plans/` taxonomy, add parallel milestone subtrees, and use one explicit old-to-new mapping for filesystem moves and reference rewriting. Commit the complete local migration before updating GitHub so remote links can use one permanent commit SHA.
 
@@ -19,8 +19,8 @@
 - Milestone specs and plans use parallel `docs/specs/milestones/` and `docs/plans/milestones/` subtrees.
 - The migration changes paths and navigation only; technical requirements and historical decisions do not change.
 - No compatibility stubs remain at old paths.
-- Historical GitHub prose remains historically accurate; only current-document references are migrated.
-- GitHub document links use the final migration commit SHA, never `main` or the task branch.
+- The binding final GitHub scope supersedes the original broader selection: only open issues `#12`, `#13`, `#20`, `#21`, and `#61` receive or retain canonical immutable links; closed issues and merged PRs remain historical records.
+- Eligible GitHub document links use the final migration commit SHA, never `main` or the task branch; historical records retain their original revisions.
 - The primary checkout stays clean on `main`; every write, build, test, commit, push, and PR operation occurs in the linked task worktree.
 
 ---
@@ -400,14 +400,15 @@ Expected: branch push and PR creation succeed.
 
 **Files:**
 
-- External update: issue descriptions `#3`–`#13`, `#20`, `#21`, and `#61`
-- External update: PR descriptions `#1`, `#2`, `#18`, `#19`, `#24`, `#27`, `#36`, and `#42`
-- Preserve: all issue/PR comments and intentionally historical PR #19 monolith references
+- External update: open issue descriptions `#12`, `#13`, `#20`, `#21`, and `#61`
+- Preserve unchanged: closed issue descriptions `#3`–`#11` and merged PR descriptions `#1`, `#2`, `#18`, `#19`, `#24`, `#27`, `#36`, and `#42`, including their original paths and revisions
+- Preserve unchanged: open PR `#63`, which has no migrated-document path
+- Preserve: comments, titles, labels, states, checklist state, surrounding prose, and PR #19's intentionally historical monolith wording
 
 **Interfaces:**
 
 - Consumes: the pushed migration commit SHA and the old-to-new tables in specification Sections 4–6
-- Produces: GitHub descriptions whose current-document references resolve to immutable migrated files
+- Produces: only the five eligible open-issue descriptions with current-document references resolving to immutable migrated files
 
 - [ ] **Step 1: Capture the immutable link revision**
 
@@ -421,22 +422,27 @@ test "$REMOTE_MIGRATION_COMMIT" = "$MIGRATION_COMMIT"
 
 Expected: the commit is reachable from the pushed remote branch.
 
-- [ ] **Step 2: Update the selected descriptions**
+- [ ] **Step 2: Update only the eligible open-issue descriptions**
 
-For each selected issue or PR body:
+The binding final scope supersedes the original broader issue/PR selection.
+For each eligible open issue body (`#12`, `#13`, `#20`, `#21`, and `#61`) only:
 
 1. Replace every current old path using the exact mapping in specification
    Sections 4–6.
 2. For Markdown links to a migrated document, replace the existing
    `blob/main/` or prior commit revision with
    `blob/$MIGRATION_COMMIT/`.
-3. Preserve link labels, checklist state, surrounding prose, and historical
-   paths that are not current-document references.
+3. Preserve link labels, checklist state, surrounding prose, and all other
+   body content.
 4. PATCH only when the resulting body differs.
 
+Do not fetch, PATCH, or otherwise target closed issues `#3`–`#11`, merged PRs
+`#1`, `#2`, `#18`, `#19`, `#24`, `#27`, `#36`, and `#42`, or open PR `#63`.
+They are outside this rerunnable migration operation and retain their original
+paths and revisions.
+
 Use this exact zsh update, which applies the specification mapping to only the
-selected descriptions and uses GitHub's issue endpoint for both issues and
-PRs:
+five eligible open-issue descriptions:
 
 ```zsh
 MIGRATION_COMMIT="$(git rev-parse HEAD)"
@@ -476,7 +482,7 @@ DOC_PATH_MOVES=(
   docs/plans/m11-external-ir-adapter-implementation-plan.md docs/plans/milestones/m11-external-ir-adapter-implementation-plan.md
   docs/plans/m12-external-facts-importer-implementation-plan.md docs/plans/milestones/m12-external-facts-importer-implementation-plan.md
 )
-REMOTE_BODY_NUMBERS=(3 4 5 6 7 8 9 10 11 12 13 20 21 61 1 2 18 19 24 27 36 42)
+REMOTE_BODY_NUMBERS=(12 13 20 21 61)
 for REMOTE_BODY_NUMBER in $REMOTE_BODY_NUMBERS; do
   CURRENT_REMOTE_BODY="$(gh api "repos/skg7on/VERITAS/issues/$REMOTE_BODY_NUMBER" --jq .body)"
   UPDATED_REMOTE_BODY="$CURRENT_REMOTE_BODY"
@@ -490,25 +496,30 @@ for REMOTE_BODY_NUMBER in $REMOTE_BODY_NUMBERS; do
 done
 ```
 
-Expected: every selected body reports a successful update; no unselected body
-changes.
+Expected: only an eligible body that differs is updated; the operation never
+targets a closed issue, merged PR, or PR #63.
 
-- [ ] **Step 3: Verify remote descriptions and link targets**
+- [ ] **Step 3: Verify eligible immutable links**
 
-Fetch all selected bodies and verify:
+Fetch only the five eligible open-issue bodies and verify:
 
 ```text
 - no current old path remains;
 - every migrated Markdown URL uses the migration commit SHA;
 - every docs path after /blob/$MIGRATION_COMMIT/ exists in that commit;
-- PR #19 still describes its historical monolith deletion accurately.
 ```
+
+Closed issues `#3`–`#11`, merged PRs `#1`, `#2`, `#18`, `#19`, `#24`, `#27`,
+`#36`, and `#42`, and open PR `#63` are deliberately excluded from this
+rerunnable verification operation; their original paths, revisions, comments,
+titles, labels, states, checklist state, and surrounding prose remain
+unchanged. This includes PR #19's historical monolith wording.
 
 Resolve every unique migrated URL target with this self-contained check:
 
 ```zsh
 MIGRATION_COMMIT="$(git rev-parse HEAD)"
-REMOTE_BODY_NUMBERS=(3 4 5 6 7 8 9 10 11 12 13 20 21 61 1 2 18 19 24 27 36 42)
+REMOTE_BODY_NUMBERS=(12 13 20 21 61)
 for REMOTE_BODY_NUMBER in $REMOTE_BODY_NUMBERS; do
   gh api "repos/skg7on/VERITAS/issues/$REMOTE_BODY_NUMBER" --jq .body
 done | perl -nle 'while (m{https://github\.com/skg7on/VERITAS/blob/[0-9a-f]+/(docs/[^)[:space:]]+\.md)}g) { print $1 }' | sort -u | while IFS= read -r CANONICAL_DOC_PATH; do
