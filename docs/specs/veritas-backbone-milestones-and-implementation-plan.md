@@ -71,7 +71,7 @@ The source architecture says "Build a VERITAS CPG, but keep it thin." This docum
 | M8R.2 | SVF and Memory Refinement | Native `summary.v2`, indirect calls, collision-free abstract memory | M8R.1 |
 | M8R.3 | Relational WPA Projection | Engine-neutral SCC input, `relations.v2`, rooted witnesses | M8R.2 |
 | M8R.4 | Production Souffle WPA | Required compiled engine, exact provenance, atomic failure/reuse | M8R.3 |
-| M8R.5 | Qualification and M9 Handoff | Conformance corpus, `AnalysisFactBatch`, Fact Bus, ten-criterion entry gate | M8R.4 |
+| M8R.5 | Qualification and M9 Handoff | Conformance corpus, `AnalysisFactBatch`, Fact Bus, ten-criterion entry gate with exact expected test-name membership per criterion | M8R.4 |
 | M9 | Provenance-aware fact store and explain API | Run/fact/witness/diagnostic persistence and `veritas-explain` | M8R.5 gate |
 | M10A | Recursive domain expansion | `MayRead`, `GlobalFlow`, `UnknownEffect`, `SoundnessCoverage` | M9 |
 | M10B | Evidence Builder input APIs and first demo | EIR-ready slices over M9 facts and M10A relations | M6, M9, M10A |
