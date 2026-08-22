@@ -53,7 +53,7 @@ The remediation introduces three linked contracts:
 ```text
 summary.v2      durable normalized function semantics
 relations.v2    typed run-local WPA execution relations
-wpa-run.v1      reproducible execution manifest and status
+wpa-run.v1      immutable execution manifest plus separately mutable lifecycle state
 ```
 
 Existing `summary.v1` artifacts remain byte-immutable and readable. Native
@@ -111,8 +111,9 @@ component publishes only facts owned by its current SCC.
 `LogicalInputHash` covers canonical semantic input but excludes revision,
 `RunId`, engine identity, and tuple order. `FixpointHash` covers the complete
 canonical result and selected witnesses. `ExternalHash` covers only
-predecessor-visible semantics, so witness-only change does not schedule
-predecessors.
+predecessor-visible semantics, so a witness-only change may alter
+`FixpointHash` but not canonical fact/root IDs or `ExternalHash` and does not
+schedule predecessors.
 
 Successful immutable component results may be reused across revisions only
 under the content-addressed key:
@@ -150,6 +151,9 @@ fact IDs, canonical facts, witnesses, and diagnostics. The Fact Bus rejects
 expected/completed mismatch or an unrooted witness leaf. Multi-sink delivery is
 idempotent at least once by canonical `(RunId, BatchId)` identity, records
 per-sink progress, and permits retry without duplicate logical publication.
+Canonical facts retain their witness-independent `MakeFact` IDs across the
+handoff; M9 persists separate `(RunId, FactID)` occurrence and witness bindings
+and never re-identifies them.
 
 # 6. Ordered remediation gates
 
@@ -202,6 +206,12 @@ assertion is not permission to start M9.
 The gate implementation must record the exact expected test-name set behind
 each label and compare it with executed JUnit membership. Labels alone are not
 delivery evidence.
+
+The implementation plan's
+[Task 16](../../superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md#task-16-build-the-differential-determinism-migration-failure-and-performance-corpus)
+defines the executable corpus and per-label membership authority; its
+[Task 18](../../superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md#task-18-synchronize-architecturemilestones-and-enforce-the-m9-entry-gate)
+enforces the documentation and M9-entry synchronization.
 
 # 8. Delivery record (to be completed by implementation)
 

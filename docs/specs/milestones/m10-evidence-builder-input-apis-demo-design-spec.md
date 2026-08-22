@@ -95,7 +95,10 @@ class EvidenceQueryService {
   StatusOr<std::vector<facts::Fact>> GetAliases(core::StableId memory_ref) const;
   StatusOr<std::vector<facts::Fact>> GetUnknowns(core::StableId scope_ref) const;
   StatusOr<std::vector<facts::Fact>> GetDominatingChecks(core::StableId callsite_ref) const;
-  StatusOr<facts::ProvenanceGraph> Explain(core::StableId fact_id, facts::ExplainBudget budget) const;
+  StatusOr<facts::ProvenanceGraph> Explain(
+      core::StableId run_id,
+      core::StableId fact_id,
+      facts::ExplainBudget budget) const;
 };
 }
 ```

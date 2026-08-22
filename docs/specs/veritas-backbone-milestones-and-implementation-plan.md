@@ -4,7 +4,7 @@
 
 **Goal:** Break the VERITAS engineering backbone into small, testable milestones, each with a design spec and implementation plan.
 
-**Architecture:** VERITAS owns the complete project-analysis workflow from one project directory: compilation-database ingestion, Clang AST traversal, LLVM IR generation/linking, required in-process SVF analysis, durable Function Summary IR publication, persistence, incremental invalidation, run-local WPA projection, provenance, and Evidence Builder APIs. Pinned SVF owns V1 points-to/alias/SVFG and indirect-call truth; compiled Souffle owns normal production recursive WPA; C++ is a conformance oracle or explicitly selected emergency engine. Third-party types remain behind private stages and never become public artifact-input contracts.
+**Architecture:** VERITAS owns the complete analysis workflow. The current pre-M11 Tier-1 route starts at one project directory and performs compilation-database ingestion plus Clang AST/LLVM IR generation. M11 adds mutually exclusive Tier-2 `.bc`/`.ll` module acquisition. Both routes continue through required in-process SVF, durable Function Summary IR publication, persistence, incremental invalidation, run-local WPA projection, provenance, and Evidence Builder APIs. Pinned SVF owns V1 points-to/alias/SVFG and indirect-call truth; compiled Souffle owns normal production recursive WPA; C++ is a conformance oracle or explicitly selected emergency engine. Third-party types remain behind private stages and never bypass VERITAS analysis.
 
 **Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22+, Clang LibTooling and CodeGen, SVF commit `18fb5650600530a54f0afc22f4df1a10b03d3c02`, Z3, Protobuf, RocksDB, SQLite, compiled Souffle 2.5 source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47` with verified executable/toolchain provenance, GoogleTest, and Python helper scripts for golden fixture checks.
 
@@ -22,8 +22,9 @@
 - LLM or heuristic output is not a verified fact.
 - The persistent VERITAS CPG is function- and object-centric; instruction-level detail is generated or cached on demand.
 - The first language target is C/C++ through Clang and LLVM.
-- The only public source input is `veritas-build analyze --project <directory>`, where `<directory>/compile_commands.json` exists.
-- VERITAS owns AST parsing, LLVM IR generation/linking, and SVF invocation; public workflows do not accept manifests, bitcode, LLVM modules, or SVF artifacts.
+- `veritas-build analyze --project <directory>` is the only public source input and the current pre-M11 contract; `<directory>/compile_commands.json` must exist.
+- M11 adds mutually exclusive `veritas-build analyze --bitcode <.bc|.ll|directory>` as a Tier-2 module-acquisition input. It skips only Clang CodeGen and then uses the same VERITAS-owned local extraction, required SVF, Summary IR, WPA, and provenance pipeline; it never accepts an SVF artifact or analysis result.
+- M12 external facts are non-authoritative terminal observations and never become Summary IR or recursive-WPA inputs.
 - SVF is required, lives at `third_party/SVF`, and is pinned to `18fb5650600530a54f0afc22f4df1a10b03d3c02`; no SVF-disabled standard build exists.
 - The first storage stack is RocksDB for immutable objects and SQLite for metadata.
 - Function Summary IR is the durable WPA contract; typed `relations.v2` rows and dense IDs are run-local execution projections.
@@ -31,6 +32,7 @@
 - Every engine toolchain record has a required canonical engine-specific provenance payload/hash. Before production Souffle execution, VERITAS parses the configured install-provenance manifest, requires version 2.5 at source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable, and verifies it against the manifest; its payload includes manifest, executable, generated-bundle, and generator/compiler/link provenance. C++ conformance/`cpp-emergency` instead records exact C++ build identity and never reuses or impersonates Souffle provenance.
 - Automatic engine fallback is forbidden. Failed components publish no replacement and retain the last successful result only as stale history.
 - Component reuse is content-addressed by engine-neutral logical input plus exact executor/toolchain identity.
+- Canonical `FactID` hashes only `relations.v2`, relation name, typed stable semantic cells, and epistemic value; revision/build/run/engine/dense/tuple/rule/witness/provenance context is stored separately and never re-identifies an incoming Fact Bus fact.
 - Every derived fact has a generic deterministic finite witness rooted in stable input fact IDs.
 - `AnalysisFactBatch` is the only M9 input and must prove expected/completed component equality, rooted-input closure, and idempotent Fact Bus delivery.
 - M9 starts only after all ten M8R executable gates pass without missing, extra, disabled, skipped, failed, or errored tests.
@@ -44,7 +46,7 @@ The backbone should not reimplement mature static-analysis infrastructure unless
 | Area | Reuse | VERITAS Owns | Rationale |
 | --- | --- | --- | --- |
 | C/C++ parsing, AST, macros, source locations, compilation database | Clang 22 LibTooling | Project-level orchestration, stable extraction adapters, and source anchors | VERITAS calls `FrontendAction`s itself from the project compilation database. |
-| LLVM IR, SSA, MemorySSA, alias hooks, dominators, range-ish local facts | LLVM 22 libraries | In-process IR generation/linking, private `ProgramIr`, and normalization into Summary IR | VERITAS owns module construction and lifetime instead of accepting external IR artifacts. |
+| LLVM IR, SSA, MemorySSA, alias hooks, dominators, range-ish local facts | LLVM 22 libraries | Tier-1 in-process IR generation/linking, M11 Tier-2 module acquisition, private `ProgramIr`, and normalization into Summary IR | Both input tiers remain behind VERITAS-owned module verification, lifetime, extraction, and identity boundaries. |
 | Pointer/value-flow, VFG, and AndersenWaveDiff analysis | Required pinned SVF Git submodule | Direct library invocation, stable value IDs, component hashes, lifecycle cleanup, and uncertainty mapping | SVF supplies mature analysis while VERITAS owns its input module, execution, and outputs. |
 | Recursive relations and transitive WPA facts | Souffle | Fact schemas, tuple IDs, provenance capture, publication | Souffle is designed as a Datalog tool for static analysis; VERITAS should add provenance and epistemic policy around it. |
 | CPG concepts and schema vocabulary | Joern CPG/spec | Thin persistent VERITAS CPG projection | The architecture wants CPG benefits without storing a full instruction-level universal graph for every repo. |
@@ -102,7 +104,11 @@ Detailed milestone design specs live under `docs/specs/milestones/`:
 | M10A | Detailed recursive-domain-expansion spec required before implementation |
 | M10B | `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` |
 
-Executable per-milestone implementation plans live under `docs/plans/`.
+Historical per-milestone implementation plans live under `docs/plans/`. The
+M8R executable plan is
+`docs/superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md`;
+M10A still requires its detailed plan, and M13's independently approved
+research plan is outside the M9-M12 critical path.
 
 ---
 
@@ -1209,10 +1215,16 @@ budgeted explanation. Raw `FactTuple` vectors are not an M9 input.
 The fact store separates:
 
 ```text
-FactID: exact fact in one program context with provenance
-semantic_fact_hash: cross-revision semantic equivalence without revision/provenance
-provenance_id: derivation node root
+FactID: hash(relations.v2, relation name, typed stable semantic cells, epistemic)
+(RunId, FactID): occurrence/history/current binding
+WitnessID: selected or alternative derivation bound to one (RunId, FactID)
 ```
+
+Revision/build/run/engine identity, dense IDs, tuple order, producer, scope,
+rule, witness, provenance, and derivation are excluded from `FactID`. M9
+validates and persists incoming Fact Bus IDs rather than re-identifying them.
+The same semantic row may have different witnesses in different runs while
+retaining one canonical fact/root identity.
 
 Epistemic propagation must be conservative. Inferred or assumed inputs cannot silently produce verified `MUST` facts.
 
@@ -1256,9 +1268,12 @@ class FactStore {
 
 class ProvenanceStore {
  public:
-  veritas::Status PutNode(ProvenanceNode node);
-  veritas::Status PutEdge(ProvenanceEdge edge);
-  veritas::StatusOr<ProvenanceGraph> Explain(core::StableId provenance_id, ExplainBudget budget) const;
+  veritas::Status PutWitness(FactWitness witness);
+  veritas::Status PutEdge(FactWitnessEdge edge);
+  veritas::StatusOr<ProvenanceGraph> Explain(
+      core::StableId run_id,
+      core::StableId fact_id,
+      ExplainBudget budget) const;
 };
 }
 ```
@@ -1266,16 +1281,16 @@ class ProvenanceStore {
 CLI contract:
 
 ```text
-veritas-explain fact <fact_id> --max-depth 5 --max-nodes 100
+veritas-explain fact <fact_id> --run <run_id> --max-depth 5 --max-nodes 100
 ```
 
 ## Implementation Plan
 
 - [ ] Write Protobuf fact/provenance messages.
-- [ ] Add SQLite fact and provenance tables.
+- [ ] Add SQLite canonical-fact, run-fact-binding, and witness tables.
 - [ ] Write epistemic join tests for MUST, MAY, UNKNOWN, ASSUMED, and INFERRED inputs.
 - [ ] Implement `JoinEpistemic`.
-- [ ] Implement fact publication with current fact replacement.
+- [ ] Implement fact publication without re-identifying incoming facts; replace only current run bindings.
 - [ ] Reject expected/completed component mismatch and unrooted witness leaves.
 - [ ] Make `(RunId, BatchId)` delivery idempotent across partial multi-sink retry.
 - [ ] Preserve incomplete-run diagnostics and the previous success as stale history.
@@ -1296,7 +1311,8 @@ MAY + sound rule -> MAY
 INFERRED input remains INFERRED unless verifier result is present
 ASSUMED input appears in explanation
 explain budget truncates graph with explicit truncation marker
-same semantic fact with different provenance has distinct FactID
+same semantic row with different witness has the same FactID and distinct witness/run bindings
+witness-only change may alter FixpointHash but not canonical fact/root IDs or ExternalHash
 ```
 
 ## Exit Criteria

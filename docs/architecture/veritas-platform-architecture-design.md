@@ -738,6 +738,16 @@ New readers:
 
 Implementers:
 
-* Milestone specs under `docs/specs/milestones/` (m1 … m12) refine sections of this architecture.
-* Implementation plans under `docs/plans/` (m1 … m12) drive the concrete build order.
-* The engineering-backbone spec at `docs/specs/veritas-engineering-backbone-design-specification.md` is the connective spec between this document and the milestone-level detail.
+* Historical and normal milestone specs live under `docs/specs/milestones/`;
+  their available implementation plans live under `docs/plans/`.
+* M8R uses the canonical
+  [`M8R bridge spec`](../specs/milestones/m8r-souffle-wpa-remediation-design-spec.md)
+  and
+  [`remediation implementation plan`](../superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md).
+* M10A's detailed design and implementation plan are still pending. M13 is the
+  separately approved, benchmark-gated research scope in the
+  [architecture refinement design](../superpowers/specs/2026-08-22-souffle-wpa-architecture-refinement-design.md#m13--benchmark-gated-pta-research)
+  and remains independent of the M9-M12 critical path.
+* The
+  [engineering-backbone spec](../specs/veritas-engineering-backbone-design-specification.md)
+  connects this document to milestone-level detail.

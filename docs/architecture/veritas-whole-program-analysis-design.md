@@ -590,7 +590,7 @@ ExternalHash      predecessor-visible semantic results only
 
 Revision, `RunId`, engine identity, and tuple order do not enter the logical or
 external hashes. A witness-only change may alter `FixpointHash` without changing
-`ExternalHash`, so predecessors are not scheduled.
+canonical fact/root IDs or `ExternalHash`, so predecessors are not scheduled.
 
 A prior successful immutable component may be reused across revisions only by
 `(LogicalInputHash, EngineToolchainIdentity)`. Lookup revalidates content,
@@ -625,15 +625,51 @@ identity; it cannot claim, reuse, or impersonate Souffle provenance. Generated
 Souffle programs use one evaluation thread until a separately qualified upgrade
 retires the upstream ARM concurrency issue.
 
-Datalog remains a natural execution form:
+Datalog remains a natural execution form over the exact typed
+`relations.v2` EDB:
 
 ```text
-MayWrite(f,x) :- DirectWrite(f,x).
-MayWrite(f,x) :- Call(f,g), MayWrite(g,x).
-
-ReachableCall(f,g) :- DirectCall(f,g).
-ReachableCall(f,h) :- DirectCall(f,g), ReachableCall(g,h).
+DirectCall(CallSiteId, CallerId, CalleeId, DispatchKind, Epistemic)
+UnknownCall(CallSiteId, CallerId, ReasonId, Epistemic)
+DirectRead(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
+DirectWrite(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
+Alias(MemoryId, MemoryId, AliasKind, Epistemic)
+LocalFlow(FunctionId, SourceId, DestinationId, FlowKind, Epistemic)
+ParameterFlow(CallSiteId, ActualId, FormalId, Epistemic)
+ReturnFlow(CallSiteId, ReturnId, ResultId, Epistemic)
+ModeledEffect(ModelId, FunctionId, EffectKind, SubjectId, Epistemic)
+UnsupportedFeature(NodeId, FeatureKind, SoundnessPolicy)
+SupportReachableCall(SourceId, TargetId, Epistemic)
+SupportMayWrite(FunctionId, MemoryId, Epistemic)
 ```
+
+The support relations are EDB-only projections of successor results. The first
+IDB rules preserve the exact three-column result signatures:
+
+```souffle
+.decl ReachableCall(source:FunctionId, target:FunctionId, epistemic:Epistemic)
+.decl MayWrite(function:FunctionId, memory:MemoryId, epistemic:Epistemic)
+
+ReachableCall(f, g, e) :- DirectCall(_, f, g, _, e).
+ReachableCall(f, h, e) :-
+    DirectCall(_, f, g, _, e1), ReachableCall(g, h, e2),
+    WeakenEpistemic(e1, e2, e).
+ReachableCall(f, h, e) :-
+    DirectCall(_, f, g, _, e1), SupportReachableCall(g, h, e2),
+    WeakenEpistemic(e1, e2, e).
+
+MayWrite(f, m, e) :- DirectWrite(f, m, _, _, _, e).
+MayWrite(f, m, e) :-
+    DirectCall(_, f, g, _, e1), MayWrite(g, m, e2),
+    WeakenEpistemic(e1, e2, e).
+MayWrite(f, m, e) :-
+    DirectCall(_, f, g, _, e1), SupportMayWrite(g, m, e2),
+    WeakenEpistemic(e1, e2, e).
+```
+
+`DirectWrite` retains `RangeKind`, signed `Offset`, and unsigned `Size`; the
+three-column `MayWrite(function, memory, epistemic)` abstraction deliberately
+consumes and ignores that range payload rather than shortening the EDB row.
 
 Rules and boundaries:
 
@@ -711,7 +747,7 @@ getRanges(V)
 getStateTransitions(F)
 getDominatorFacts(F)
 getUnknownsIn(F)
-explainFact(FactID)
+explainFact(RunId, FactID)
 getEvidenceSlice(Claim)
 ```
 

@@ -52,7 +52,8 @@ The producer and Fact Bus must prove before M9 persistence:
 * expected and completed component sets are identical;
 * every witness is finite, acyclic, and closed over published facts and the
   declared rooted-input set;
-* all facts and witnesses belong to the same run manifest;
+* every run-fact binding and witness belongs to the declared run manifest and
+  references a published canonical `FactID`;
 * batch identity is canonical and multi-sink delivery is idempotent at least
   once under `(RunId, BatchId)`;
 * partial fan-out is recorded per sink and retry cannot duplicate logical
@@ -65,36 +66,41 @@ not M9 inputs.
 
 # 3. Fact Identity
 
-Two hashes are required:
+`FactID` is the witness-independent canonical identity already assigned by
+`MakeFact` at the `relations.v2` boundary. Its domain-separated hash contains
+exactly:
 
 ```text
-FactID:
-    exact fact in one revision/build/analyzer/provenance context
-
-semantic_fact_hash:
-    fact equivalence across revisions without revision or provenance
+relations.v2
+relation name
+typed stable semantic cells
+epistemic value
 ```
 
-`FactID` includes:
+It excludes revision, build variant, analyzer/run/engine identity, producer,
+dense IDs, tuple order, rule identity, witness selection, provenance, and
+other occurrence metadata. Equivalent semantic rows therefore retain the same
+`FactID` across revisions and executions. M9 validates the supplied ID against
+the canonical `AnalysisFact` bytes and never re-identifies a Fact Bus fact.
+
+Occurrence, history, and explanation context are separate bindings:
 
 ```text
-revision_id
-build_variant_id
-predicate_kind
-canonical predicate
-subject
-epistemic
-producer
-analyzer_run_id
-analysis_run_id
-scope
-provenance_hash
+RunFactBinding {
+    RunId
+    FactID
+    producer_kind
+    analyzer_run_id
+    scope
+    selected_witness_id
+    is_current
+}
 ```
 
-`analysis_run_id` binds revision, build variant, summary/relation schemas,
-rule/model bundles, SVF/WPA configurations, engine identity, and exact
+`analysis_run_id` still binds revision, build variant, summary/relation
+schemas, rule/model bundles, SVF/WPA configurations, engine identity, and exact
 engine/toolchain identity. Production Souffle and C++ conformance/emergency
-runs are always distinct.
+runs are distinct even when they bind the same canonical facts.
 
 ---
 
@@ -103,28 +109,29 @@ runs are always distinct.
 Logical row:
 
 ```text
-Fact {
+AnalysisFact {
     fact_id
-    semantic_fact_hash
-    revision_id
-    build_variant_id
-    predicate_kind
-    predicate_canonical
-    subject_kind
-    subject_id
+    relation_schema_version       // relations.v2
+    relation_name
+    typed_stable_semantic_cells
     epistemic
+}
+
+RunFactBinding {
+    analysis_run_id
+    fact_id
     confidence
     producer_kind
     analyzer_run_id
-    analysis_run_id
     scope_kind
     scope_id
-    provenance_id
+    selected_witness_id
     is_current
 }
 ```
 
-Current fact replacement is metadata mutation. Historical facts remain readable.
+Current occurrence replacement mutates only the run/history binding. Canonical
+facts and prior bindings remain readable.
 
 Batch publication is atomic: either the complete validated batch becomes
 visible or no new run facts do. An incomplete/failed run retains diagnostics
@@ -135,7 +142,8 @@ with it.
 
 # 5. Provenance Model
 
-Provenance is the generic rooted witness DAG selected by the M8R canonicalizer:
+Provenance is the generic rooted witness DAG selected by the M8R canonicalizer
+for one `(RunId, FactID)` occurrence:
 
 ```text
 input fact or summary component
@@ -146,8 +154,11 @@ input fact or summary component
 Node:
 
 ```text
-ProvenanceNode {
-    provenance_id
+FactWitness {
+    analysis_run_id
+    output_fact_id
+    witness_id
+    selected                  // one selected; alternatives may be retained
     producer_kind
     producer_id
     rule_id
@@ -155,22 +166,26 @@ ProvenanceNode {
     analyzer_run_id
     source_anchor_id
     summary_id
-    fact_id
     description
 }
 ```
 
-`explainFact` reads this persisted witness. It never re-runs C++ or Souffle and
-does not reconstruct relation-specific joins.
+The selected and alternative witnesses are separate records keyed to the same
+stable output `FactID`; a different derivation never creates a new fact. The
+run binding chooses the selected witness for its occurrence. `explainFact`
+reads these persisted records. It never re-runs C++ or Souffle and does not
+reconstruct relation-specific joins.
 
 Edge:
 
 ```text
-ProvenanceEdge {
-    output_provenance_id
+FactWitnessEdge {
+    analysis_run_id
+    output_fact_id
+    witness_id
     input_kind
     input_id
-    input_role
+    input_ordinal
 }
 ```
 
@@ -212,10 +227,11 @@ is distinct from `UNKNOWN_ALIAS`, an unknown epistemic state, or no row.
 namespace veritas::facts {
 class ProvenanceStore {
  public:
-  Status PutNode(ProvenanceNode node);
-  Status PutEdge(ProvenanceEdge edge);
+  Status PutWitness(FactWitness witness);
+  Status PutEdge(FactWitnessEdge edge);
   StatusOr<ProvenanceGraph> Explain(
-      core::StableId provenance_id,
+      core::StableId run_id,
+      core::StableId fact_id,
       ExplainBudget budget) const;
 };
 }
@@ -238,7 +254,7 @@ If truncated, the explanation graph must include an explicit truncation marker.
 # 8. CLI Contract
 
 ```bash
-veritas-explain fact <fact_id> --max-depth 5 --max-nodes 100
+veritas-explain fact <fact_id> --run <run_id> --max-depth 5 --max-nodes 100
 ```
 
 Output sections:
@@ -263,8 +279,8 @@ Truncation notice, if any
 Required tests:
 
 ```text
-same semantic predicate with different provenance -> distinct FactID
-semantic_fact_hash matches across equivalent revisions
+same semantic row with different witness -> same FactID and distinct witness/run bindings
+witness-only change may alter FixpointHash but leaves canonical fact/root IDs and ExternalHash unchanged
 MAY input produces MAY derived fact
 INFERRED input cannot become MUST
 ASSUMED input appears in explanation

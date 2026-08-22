@@ -108,7 +108,7 @@ Storage-specific invariants layered on the platform's P1–P8:
 | S4 | Each summary component has an independent semantic hash and an independent evidence hash. | Evidence-only churn does not invalidate analysis; semantic churn does. |
 | S5 | The dependency index is keyed by `(producer_id, component)`, not by object. | Component-precise invalidation. |
 | S6 | Historical rows are retained; the "current" binding is a swap, not a delete. | Time-travel and provenance replay. |
-| S7 | Cross-run identities depend only on stable inputs: source revision, build variant, analyzer config, canonical body hash. | Reproducibility across hosts. |
+| S7 | Durable program, function, body, and summary identities depend only on their declared stable semantic inputs; lifecycle status and timestamps are never identity inputs. | Reproducibility across hosts without conflating immutable content with run state. |
 | S8 | Backends implement the contracts in §9; no caller depends on a specific backend. | Backend swappability. |
 | S9 | Writes are transactional at the boundary of one milestone-scoped operation (publish-summary, put-fact, index-rebuild). | Crash safety. |
 | S10 | Function Summary IR is the durable WPA boundary; `relations.v2`, dense IDs, and engine-native tuples are run-local projections. | Portable, replayable derivations. |
@@ -360,7 +360,7 @@ getStateTransitions(F)
 getDependencySet(F)
 getImpactSet(Change)
 
-explainFact(FactID)
+explainFact(RunId, FactID)
 getEvidenceSlice(Claim)
 ```
 
@@ -399,14 +399,14 @@ class MetadataStore {
   // …
 };
 
-// Normalized derived-fact tuples with dual FactID (analyzer-scoped) and
-// semantic_fact_hash (cross-revision equivalence).
+// Canonical witness-independent relations.v2 facts plus separate run bindings.
 class FactStore {
  public:
   virtual ~FactStore() = default;
-  virtual Status           PutFacts(absl::Span<const Fact>, ProvenanceRef) = 0;
+  virtual Status           PutCanonicalFacts(absl::Span<const AnalysisFact>) = 0;
+  virtual Status           PutRunBindings(absl::Span<const RunFactBinding>) = 0;
   virtual StatusOr<Rows>   Query(FactQuery) const = 0;
-  virtual StatusOr<Explain> Explain(FactID, ExplainBudget) const = 0;
+  virtual StatusOr<Explain> Explain(RunId, FactID, ExplainBudget) const = 0;
 };
 
 // CPG adjacency indexes for graph queries.
@@ -457,7 +457,7 @@ The V1 stack maps each layer to the backend that fits best. Every layer has at l
 | --- | --- | --- | --- |
 | Object Store | **RocksDB** | high-throughput ordered KV, compaction-friendly for millions of small immutable blobs, put-if-absent trivially maps to `Merge`. | LMDB (mmap-based, smaller footprint); filesystem CAS (`objects/ab/cdef…` layout) for read-only distribution; S3-compatible for distributed CAS. |
 | Metadata Store | **SQLite** | zero-ops embedded relational store, ACID transactions, indexes and joins for the binding tables. | PostgreSQL for team-scale / multi-writer deployments; DuckDB when read-analytics dominates. |
-| Fact Store | **SQLite** | shares transactions with metadata; joins on `FactID` / `semantic_fact_hash` are inexpensive at the tuple scale of a single project. | PostgreSQL for team-scale; Parquet + DuckDB for offline analytics passes; ClickHouse for very large fact volumes. |
+| Fact Store | **SQLite** | shares transactions with metadata; joins on canonical `FactID` and `(RunId, FactID)` occurrence bindings are inexpensive at the tuple scale of a single project. | PostgreSQL for team-scale; Parquet + DuckDB for offline analytics passes; ClickHouse for very large fact volumes. |
 | Graph Index | **SQLite adjacency indexes + in-memory graph** | in-memory for hot traversals within a run; SQLite persistence keyed by `ProjectionID` for cross-run reload. | Kùzu / other embedded property-graph engines; Neo4j for large multi-user deployments (see §9.5). |
 | Dependency Index | **SQLite** | small, transactional, joinable with metadata; sensitivity tags fit clean rows. | PostgreSQL for team-scale; Redis for hot lookups if latency becomes critical. |
 | Evidence Cache | **RocksDB** | large blobs, high write throughput on Evidence rebuilds, canonical hash key. | S3-compatible object store for shared team caches. |
@@ -567,7 +567,8 @@ SemanticDelta {
     changed_summaries:    map<FunctionVariantID, ComponentDelta>
     added_facts:          set<FactID>
     removed_facts:        set<FactID>
-    changed_facts:        set<FactID>            (same semantic_fact_hash, new FactID)
+    changed_fact_bindings: set<(RunId, FactID)>  (occurrence/current binding changed)
+    changed_witnesses:    set<(RunId, FactID)>   (semantic fact identity unchanged)
     unknown_resolved:     set<UnknownID>
     unknowns_introduced:  set<UnknownID>
 }
@@ -586,24 +587,34 @@ unclosed proofs, and selects one deterministic proof independently of engine
 tuple order. Relation-specific reconstruction and Souffle-native tuple identity
 are not durable provenance contracts.
 
-The Provenance Store persists the selected witness as a DAG:
+The Provenance Store persists selected and optional alternative witnesses as
+DAGs keyed to a canonical fact occurrence:
 
 ```text
-ProvenanceNode {
-    node_id:   FactID | SourceAnchorID | AnalyzerRunID | RuleID | AssumptionID
+FactWitness {
+    key:       (RunId, FactID, WitnessID)
+    selected:  bool
     kind:      base | derived | assumption | inferred | verified
 }
 
-ProvenanceEdge {
-    consumer:   ProvenanceNode
-    producer:   ProvenanceNode
-    rule:       string       (e.g. "parameter-return propagation")
+FactWitnessEdge {
+    output:      (RunId, FactID, WitnessID)
+    input:       FactID | SourceAnchorID | AnalyzerRunID | AssumptionID
+    input_ordinal: unsigned
+    rule:        RuleID
 }
 ```
 
-`Explain(FactID, ExplainBudget)` returns a finite provenance subgraph. Truncation, if any, is explicit — the returned subgraph carries a `truncated: bool` and a `TruncationReason`.
+`Explain(RunId, FactID, ExplainBudget)` returns the selected finite provenance
+subgraph for that occurrence. Truncation, if any, is explicit — the returned
+subgraph carries a `truncated: bool` and a `TruncationReason`.
 
-Cross-revision equivalence uses `semantic_fact_hash`; per-revision identity uses `FactID`. The same predicate under different provenance intentionally produces different `FactID`s, because the "reason a thing is true" is part of what makes it a distinct fact.
+`FactID` is the domain-separated hash of `relations.v2`, relation name, typed
+stable semantic cells, and epistemic value. Revision, build, run, engine,
+dense IDs, tuple order, rule, witness, and provenance are excluded. The same
+semantic row with a different witness therefore has the same `FactID` and
+distinct `(RunId, FactID)` occurrence/witness bindings. M9 validates and
+persists incoming Fact Bus IDs; it never replaces them with store-local IDs.
 
 Full syntax and semantics are in `veritas-evidence-ir-design.md` §30–33.
 
@@ -620,13 +631,15 @@ and verifies that digest against the manifest. The Souffle payload includes the
 verified manifest identity/content digest, source revision, executable digest,
 generated-bundle digest, and generator/compiler/link toolchain provenance. A
 C++ conformance or `cpp-emergency` payload instead requires the exact C++ build
-identity and cannot claim, reuse, or impersonate Souffle provenance. All
-run-manifest fields participate in `RunId`.
+identity and cannot claim, reuse, or impersonate Souffle provenance. Only the
+immutable manifest fields listed above participate in `RunId`; lifecycle
+status, timestamps, and diagnostics do not.
 
 Each component record retains `LogicalInputHash`, `FixpointHash`,
 `ExternalHash`, status, diagnostics, rooted input IDs, and the immutable result
-reference. Witness-only change may change `FixpointHash` but not `ExternalHash`;
-only an external semantic change schedules predecessor consumers.
+reference. Witness-only change may change `FixpointHash` but not canonical
+fact/root IDs or `ExternalHash`; only an external semantic change schedules
+predecessor consumers.
 
 ## 12.2 M9 handoff and idempotency
 
@@ -727,7 +740,7 @@ getObjectCapacity(dst)
 findDominatingChecks(memcpy)
 getCallPath(entry, memcpy)
 getRelevantSummaries(path)
-explainFact(fact_id)
+explainFact(run_id, fact_id)
 ```
 
 The Evidence Builder assembles the answers into an `EvidenceCase`. See `veritas-evidence-ir-design.md` for the full IR.

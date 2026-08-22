@@ -20,10 +20,11 @@ This document turns the high-level SummaryDB architecture into an engineering de
 The backbone is the subsystem that makes VERITAS scalable before any LLM reviewer is introduced:
 
 ```text
-project directory containing compile_commands.json
-    -> VERITAS Build Intelligence
-    -> VERITAS-owned Clang AST and LLVM IR construction
-    -> required in-process SVF analysis
+Tier 1: project directory containing compile_commands.json (current/pre-M11)
+    -> VERITAS Build Intelligence and owned Clang AST/LLVM IR construction
+M11 Tier 2: .bc/.ll file or directory
+    -> VERITAS-owned bitcode module acquisition
+both -> required in-process SVF analysis
     -> stable function identities
     -> immutable function summaries
     -> semantic component hashes
@@ -93,7 +94,7 @@ The backbone MUST preserve these invariants.
 | B7 | Epistemic state and confidence are separate. | `MAY` is not low confidence, and `INFERRED` is not verified. |
 | B8 | Publication is atomic at metadata bindings, not object mutation. | Readers must never observe a half-written summary revision. |
 | B9 | Deterministic analysis is reproducible for the same inputs. | Enables stable hashes, diffing, and regression analysis. |
-| B10 | The only public source input is a project directory containing `compile_commands.json`; VERITAS owns AST, IR, and SVF execution. | Prevents external preprocessing artifacts from becoming public contracts or reproducibility gaps. |
+| B10 | `--project <directory>` is the only public source input and the current pre-M11 contract. M11 adds mutually exclusive `--bitcode <.bc\|.ll\|directory>` as a Tier-2 module-acquisition input; both routes continue through VERITAS-owned local extraction, SVF, Summary IR, WPA, and provenance. No route accepts an SVF artifact or bypasses analysis. M12 external facts are non-authoritative terminal observations. | Preserves owned analysis and reproducibility while admitting controlled module input without confusing it with source or third-party analysis output. |
 | B11 | Function Summary IR is durable; `relations.v2` and typed dense IDs are run-local. | Preserve one stable WPA contract. |
 | B12 | Compiled Souffle is the normal recursive owner; C++ is conformance or explicitly selected emergency only. | Prevent semantic split and silent fallback. |
 | B13 | Every published derived fact has a generic deterministic finite rooted witness. | Engine-neutral explanation. |
@@ -105,7 +106,7 @@ The backbone MUST preserve these invariants.
 # 4. Logical Architecture
 
 ```text
-                Project Directory + Build Config
+        Tier 1 Project + Build Config | M11 Tier 2 Bitcode Modules
                               |
                               v
                       Build Intelligence
@@ -195,7 +196,7 @@ VERITAS uses multiple IDs because "the function" has multiple meanings.
 | `FunctionSummaryID` | Exact immutable summary content. | All consumers and revisions with identical analysis output. | Any summary component payload or summary metadata changes. |
 | `AnalyzerRunID` | Analyzer binary/config/schema identity. | All facts emitted by one configured analyzer run. | Analyzer version, schema version, or analysis config changes. |
 | `AnalysisRunID` | Exact WPA execution manifest and envelope identity. | Never merged across incompatible or engine-distinct runs. | Revision, build variant, summary/relation schema, rule/model bundle, SVF/WPA configuration, engine, or exact toolchain identity changes. |
-| `FactID` | Exact derived or observed fact in one program context and analysis run. | Rebuilds of the same revision/build/analyzer/run context. | Program context, analysis run, predicate, epistemic state, scope, producer, or derivation changes. |
+| `FactID` | Witness-independent canonical `relations.v2` semantic row. | Revisions, builds, runs, engines, and derivations with identical typed stable semantic cells and epistemic value. | Relation schema/name, typed stable semantic cell, or epistemic value changes. |
 
 ## 5.1 Hash Format
 
@@ -402,8 +403,11 @@ Source anchors are for diagnostics and Evidence IR display. They are not identit
 content-addressed result reuse may reference the same immutable result from
 multiple analysis runs, but it never merges their manifests or history.
 
-Summary and fact identity MUST include enough analyzer and WPA metadata to
-avoid silently mixing incompatible outputs.
+Summary identities and run-fact bindings MUST retain enough analyzer and WPA
+metadata to avoid silently mixing incompatible outputs. Canonical `FactID`
+itself remains run- and witness-independent under §15.3. `AnalyzerRunID` hashes
+analyzer binary/config/schema identity; its `started_at` lifecycle field is not
+an identity input.
 
 ```sql
 CREATE TABLE analyzer_runs (
@@ -428,7 +432,7 @@ CREATE TABLE engine_toolchains (
     canonical_provenance_hash      TEXT NOT NULL
 );
 
-CREATE TABLE analysis_runs (
+CREATE TABLE analysis_run_manifests (
     analysis_run_id          TEXT PRIMARY KEY,
     revision_id              TEXT NOT NULL REFERENCES revisions(revision_id),
     build_variant_id         TEXT NOT NULL REFERENCES build_variants(build_variant_id),
@@ -439,18 +443,27 @@ CREATE TABLE analysis_runs (
     svf_configuration_hash   TEXT NOT NULL,
     wpa_configuration_hash   TEXT NOT NULL,
     engine_identity          TEXT NOT NULL,
-    engine_toolchain_identity TEXT NOT NULL REFERENCES engine_toolchains(engine_toolchain_identity),
+    engine_toolchain_identity TEXT NOT NULL REFERENCES engine_toolchains(engine_toolchain_identity)
+);
+
+CREATE TABLE analysis_run_state (
+    analysis_run_id          TEXT PRIMARY KEY REFERENCES analysis_run_manifests(analysis_run_id),
     status                   TEXT NOT NULL,
     started_at               INTEGER NOT NULL,
-    completed_at             INTEGER
+    completed_at             INTEGER,
+    diagnostics_object_ref   TEXT
 );
 ```
 
-Every manifest field above participates in `AnalysisRunID`.
+`AnalysisRunID` hashes only the immutable `AnalysisRunManifest` fields:
+revision, build variant, summary/relation schemas, rule/model bundles, SVF/WPA
+configurations, engine identity, and exact engine/toolchain identity. Mutable
+lifecycle status, timestamps, diagnostics, retry count, and progress never
+participate in `AnalysisRunID`; they live in `analysis_run_state`.
 `EngineToolchainIdentity` is the hash of `engine_identity` plus the canonical
-engine-specific provenance payload. An `analysis_runs.engine_identity` must
-match the referenced toolchain record's engine identity. The validator applies
-a tagged union rule:
+engine-specific provenance payload. An
+`analysis_run_manifests.engine_identity` must match the referenced toolchain
+record's engine identity. The validator applies a tagged union rule:
 
 * `souffle` requires the configured install-provenance manifest and its digest,
   version 2.5 source revision
@@ -464,7 +477,7 @@ a tagged union rule:
 
 Thus every engine has exact provenance without fabricating another engine's
 fields. `canonical_provenance_hash` must match the stored payload before an
-`AnalysisRun` or component record may reference it.
+`AnalysisRunManifest` or component record may reference it.
 
 Examples of config fields:
 
@@ -1036,7 +1049,7 @@ calls remain explicit and never fan out to the entire program.
 
 ```sql
 CREATE TABLE wpa_sccs (
-    analysis_run_id        TEXT NOT NULL REFERENCES analysis_runs(analysis_run_id),
+    analysis_run_id        TEXT NOT NULL REFERENCES analysis_run_manifests(analysis_run_id),
     scc_id                 TEXT NOT NULL,
     call_graph_hash        TEXT NOT NULL,
     member_hash            TEXT NOT NULL,
@@ -1175,7 +1188,8 @@ old_external_hash != new_external_hash
 `LogicalInputHash` covers canonical semantic inputs but excludes revision,
 `RunId`, engine identity, and tuple order. `FixpointHash` covers canonical results
 and selected witnesses. `ExternalHash` covers predecessor-visible semantics
-only. A witness-only change therefore does not schedule predecessors.
+only. A witness-only change may alter `FixpointHash` but not canonical
+fact/root IDs or `ExternalHash`, and therefore does not schedule predecessors.
 
 Successful immutable components may be reused across revisions only by
 `(LogicalInputHash, EngineToolchainIdentity)`, after content, schema, bundle,
@@ -1202,61 +1216,57 @@ The fact engine materializes global semantic facts from local summaries and SCC 
 | Lock | `may_hold(F, L)` |
 | Unknown | `unknown_external_call(F, Site)` |
 
-## 15.2 Fact Table
+## 15.2 Canonical Facts and Run Bindings
 
 ```sql
-CREATE TABLE facts (
+CREATE TABLE analysis_facts (
     fact_id                TEXT PRIMARY KEY,
-    revision_id            TEXT NOT NULL REFERENCES revisions(revision_id),
-    build_variant_id       TEXT NOT NULL REFERENCES build_variants(build_variant_id),
-    predicate_kind         TEXT NOT NULL,
-    predicate_canonical    TEXT NOT NULL,
-    subject_kind           TEXT NOT NULL,
-    subject_id             TEXT NOT NULL,
-    epistemic              TEXT NOT NULL,
+    relation_schema_version TEXT NOT NULL,
+    relation_name          TEXT NOT NULL,
+    typed_semantic_cells   BLOB NOT NULL,
+    epistemic              TEXT NOT NULL
+);
+
+CREATE TABLE run_fact_bindings (
+    analysis_run_id        TEXT NOT NULL REFERENCES analysis_run_manifests(analysis_run_id),
+    fact_id                TEXT NOT NULL REFERENCES analysis_facts(fact_id),
     confidence             TEXT NOT NULL,
     producer_kind          TEXT NOT NULL,
     analyzer_run_id        TEXT REFERENCES analyzer_runs(analyzer_run_id),
     scope_kind             TEXT,
     scope_id               TEXT,
-    provenance_id          TEXT NOT NULL,
+    selected_witness_id    TEXT,
     is_current             INTEGER NOT NULL,
-    created_at             INTEGER NOT NULL
+    created_at             INTEGER NOT NULL,
+    PRIMARY KEY(analysis_run_id, fact_id)
 );
 
-CREATE INDEX idx_facts_subject
-    ON facts(revision_id, build_variant_id, subject_kind, subject_id);
-
-CREATE INDEX idx_facts_predicate
-    ON facts(revision_id, build_variant_id, predicate_kind);
-
-CREATE UNIQUE INDEX idx_facts_current_unique
-    ON facts(revision_id, build_variant_id, predicate_kind, predicate_canonical, subject_kind, subject_id)
-    WHERE is_current = 1;
+CREATE INDEX idx_analysis_facts_relation
+    ON analysis_facts(relation_schema_version, relation_name);
 ```
 
-`predicate_canonical` may be a compact binary blob in production. Text is shown for readability.
+`typed_semantic_cells` is the canonical typed stable-cell encoding supplied by
+the Fact Bus. Subject indexes may project selected schema columns, but they do
+not redefine identity. Current/history state, producer, confidence, scope,
+timestamps, and witness selection belong only to `run_fact_bindings`.
 
 ## 15.3 Fact Identity
 
-`FactID` is computed from:
+`MakeFact` computes `FactID` from exactly:
 
 ```text
-revision_id
-build_variant_id
-predicate_kind
-canonical predicate
-subject
+relations.v2
+relation name
+typed stable semantic cells
 epistemic
-producer
-analyzer_run_id
-scope
-provenance hash
 ```
 
-For derived facts, including provenance in the hash ensures that the same predicate derived by a different proof path is distinguishable when explanation matters.
-
-V1 SHOULD also store `semantic_fact_hash` without revision and provenance for cross-revision equivalence checks and semantic fact deduplication.
+Revision, build, analyzer/run/engine identity, dense IDs, tuple order, producer,
+scope, rule, witness, provenance, and derivation do not participate. The store
+revalidates the incoming ID against these bytes and never re-identifies an
+`AnalysisFact`. The same semantic row derived by another proof path keeps the
+same `FactID`; `(RunId, FactID)` and its selected/alternative witness records
+preserve occurrence and explanation history.
 
 ---
 
@@ -1286,8 +1296,11 @@ What epistemic assumptions were required?
 ## 16.2 Provenance Tables
 
 ```sql
-CREATE TABLE provenance_nodes (
-    provenance_id          TEXT PRIMARY KEY,
+CREATE TABLE fact_witnesses (
+    analysis_run_id        TEXT NOT NULL REFERENCES analysis_run_manifests(analysis_run_id),
+    fact_id                TEXT NOT NULL REFERENCES analysis_facts(fact_id),
+    witness_id             TEXT NOT NULL,
+    selected               INTEGER NOT NULL,
     producer_kind          TEXT NOT NULL,
     producer_id            TEXT NOT NULL,
     rule_id                TEXT,
@@ -1295,21 +1308,29 @@ CREATE TABLE provenance_nodes (
     analyzer_run_id        TEXT REFERENCES analyzer_runs(analyzer_run_id),
     source_anchor_id       TEXT REFERENCES source_anchors(source_anchor_id),
     summary_id             TEXT REFERENCES summary_objects(function_summary_id),
-    fact_id                TEXT,
-    description            TEXT
+    description            TEXT,
+    PRIMARY KEY(analysis_run_id, fact_id, witness_id)
 );
 
-CREATE TABLE provenance_edges (
-    output_provenance_id   TEXT NOT NULL REFERENCES provenance_nodes(provenance_id),
+CREATE TABLE fact_witness_edges (
+    analysis_run_id        TEXT NOT NULL,
+    output_fact_id         TEXT NOT NULL,
+    witness_id             TEXT NOT NULL,
     input_kind             TEXT NOT NULL,
     input_id               TEXT NOT NULL,
-    input_role             TEXT NOT NULL,
-    PRIMARY KEY(output_provenance_id, input_kind, input_id, input_role)
+    input_ordinal          INTEGER NOT NULL,
+    PRIMARY KEY(analysis_run_id, output_fact_id, witness_id, input_ordinal),
+    FOREIGN KEY(analysis_run_id, output_fact_id, witness_id)
+        REFERENCES fact_witnesses(analysis_run_id, fact_id, witness_id)
 );
 
-CREATE INDEX idx_provenance_edges_input
-    ON provenance_edges(input_kind, input_id);
+CREATE INDEX idx_fact_witness_edges_input
+    ON fact_witness_edges(input_kind, input_id);
 ```
+
+Each `(RunId, FactID)` has one selected witness and may retain alternatives.
+Changing that selection may alter `FixpointHash`, but it never changes the
+canonical fact/root IDs or `ExternalHash`.
 
 Input kinds include:
 
@@ -1356,7 +1377,7 @@ An LLM-created hypothesis can be stored as `INFERRED`, but it cannot produce a `
 
 ## 16.4 Explain API
 
-`explainFact(fact_id)` returns:
+`explainFact(run_id, fact_id)` returns:
 
 ```text
 Fact
@@ -1405,34 +1426,54 @@ impersonates the verified Souffle payload.
 ## 17.1 Base Relations
 
 These typed relations are a `relations.v2` run-local projection from durable
-Function Summary IR, not a durable platform IR. Examples:
+Function Summary IR, not a durable platform IR. The live EDB signatures are:
 
 ```text
-DirectCall(caller, callee, epistemic).
-DirectWrite(function, memory_object, epistemic).
-DirectRead(function, memory_object, epistemic).
-LocalFlow(src_value, dst_value, function, epistemic).
-SummaryFlow(src_value, dst_value, function, epistemic).
-MayAlias(memory_a, memory_b, epistemic).
+DirectCall(CallSiteId, CallerId, CalleeId, DispatchKind, Epistemic)
+UnknownCall(CallSiteId, CallerId, ReasonId, Epistemic)
+DirectRead(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
+DirectWrite(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
+Alias(MemoryId, MemoryId, AliasKind, Epistemic)
+LocalFlow(FunctionId, SourceId, DestinationId, FlowKind, Epistemic)
+ParameterFlow(CallSiteId, ActualId, FormalId, Epistemic)
+ReturnFlow(CallSiteId, ReturnId, ResultId, Epistemic)
+ModeledEffect(ModelId, FunctionId, EffectKind, SubjectId, Epistemic)
+UnsupportedFeature(NodeId, FeatureKind, SoundnessPolicy)
+SupportReachableCall(SourceId, TargetId, Epistemic)
+SupportMayWrite(FunctionId, MemoryId, Epistemic)
 ```
+
+The last two relations are EDB-only successor support. `RangeKind`, signed
+`Offset`, and unsigned `Size` are lossless payloads; rules may ignore those
+payload columns only when the derived relation intentionally abstracts range.
 
 ## 17.2 Derived Relations
 
-```text
-ReachableCall(f, g) :-
-    DirectCall(f, g, _).
+```souffle
+.decl ReachableCall(source:FunctionId, target:FunctionId, epistemic:Epistemic)
+.decl MayWrite(function:FunctionId, memory:MemoryId, epistemic:Epistemic)
 
-ReachableCall(f, h) :-
-    DirectCall(f, g, _),
-    ReachableCall(g, h).
+ReachableCall(f, g, e) :- DirectCall(_, f, g, _, e).
+ReachableCall(f, h, e) :-
+    DirectCall(_, f, g, _, e1), ReachableCall(g, h, e2),
+    WeakenEpistemic(e1, e2, e).
+ReachableCall(f, h, e) :-
+    DirectCall(_, f, g, _, e1), SupportReachableCall(g, h, e2),
+    WeakenEpistemic(e1, e2, e).
 
-MayWrite(f, m) :-
-    DirectWrite(f, m, _).
-
-MayWrite(f, m) :-
-    DirectCall(f, g, _),
-    MayWrite(g, m).
+MayWrite(f, m, e) :- DirectWrite(f, m, _, _, _, e).
+MayWrite(f, m, e) :-
+    DirectCall(_, f, g, _, e1), MayWrite(g, m, e2),
+    WeakenEpistemic(e1, e2, e).
+MayWrite(f, m, e) :-
+    DirectCall(_, f, g, _, e1), SupportMayWrite(g, m, e2),
+    WeakenEpistemic(e1, e2, e).
 ```
+
+Both IDBs have exactly three columns: `(source, target, epistemic)` for
+`ReachableCall` and `(function, memory, epistemic)` for `MayWrite`. The
+`MayWrite` base rule consumes `DirectWrite`'s full six-column row while
+deliberately abstracting its range payload.
 
 ## 17.3 Provenance Capture
 
@@ -1559,9 +1600,9 @@ getDerivedFacts(subject_id, predicate_kind) -> Fact[]
 ## 19.4 Provenance API
 
 ```text
-explainFact(fact_id, budget) -> ProvenanceGraph
+explainFact(run_id, fact_id, budget) -> ProvenanceGraph
 explainSummaryComponent(summary_id, component_kind, budget) -> ProvenanceGraph
-getFactInputs(fact_id) -> InputRef[]
+getFactInputs(run_id, fact_id) -> InputRef[]
 ```
 
 ## 19.5 Evidence Builder API
@@ -1582,13 +1623,31 @@ These APIs are semantic. They should not expose SQL, RocksDB keys, or graph stor
 
 # 20. Initial CLI Workflow
 
-The first command-line workflow should prove that the backbone works without an LLM or user-managed compiler-analysis preprocessing.
+The current pre-M11 command-line workflow proves the backbone without an LLM
+or user-managed compiler-analysis preprocessing:
 
 ```bash
 veritas-build analyze --project <project-directory>
 ```
 
-`<project-directory>/compile_commands.json` is mandatory. Build Intelligence, Clang AST extraction, LLVM IR generation/linking, required in-process SVF analysis, and summary publication execute as internal stages of this one command. A diagnostic manifest or cached IR may be emitted under `.veritas`, but neither is a public input to a later command.
+`<project-directory>/compile_commands.json` is mandatory. Build Intelligence,
+Clang AST extraction, LLVM IR generation/linking, required in-process SVF
+analysis, and summary publication execute as internal stages of this command.
+A diagnostic manifest or cached IR may be emitted under `.veritas`, but neither
+is a public input to a later command.
+
+M11 adds the mutually exclusive module-input form:
+
+```bash
+veritas-build analyze --bitcode <file.bc|file.ll|directory>
+```
+
+It enters at VERITAS-owned module acquisition (skipping only Clang CodeGen),
+then runs the same local extraction, required SVF, Summary IR, WPA, and
+provenance pipeline. It never accepts an SVF artifact or a third-party analysis
+result. M12's separate external-facts import remains non-authoritative and
+terminal: imported observations do not become Summary IR or recursive-WPA
+inputs.
 
 Expected output:
 
@@ -1626,7 +1685,7 @@ Evidence cases stale:                 7
 ```
 
 ```bash
-veritas-explain fact <fact_id>
+veritas-explain fact <fact_id> --run <run_id>
 ```
 
 Expected output:
