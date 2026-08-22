@@ -553,7 +553,7 @@ veritas-query writes    <global>
 veritas-query evidence  overflow  <sink>
 
 veritas-diff  <rev-a>  <rev-b>
-veritas-explain fact <fact-id>
+veritas-explain fact <fact-id> --run <run-id>
 ```
 
 Contracts:
@@ -561,6 +561,10 @@ Contracts:
 * `--project` and `--bitcode` are **mutually exclusive** (exactly one is required).
 * External ingestion lives on `veritas-build import` rather than a separate tool; it can be split later if the surface grows.
 * All read commands take the current published SummaryDB revision by default and accept `--at <rev>` for historical queries.
+* Fact explanation requires `--run <run-id>`. Canonical `FactID` may be shared
+  across runs while its selected witness is occurrence-specific; the current
+  revision or `--at <rev>` cannot disambiguate build, configuration, engine,
+  or witness selection.
 
 Sample output from `veritas-build analyze`:
 

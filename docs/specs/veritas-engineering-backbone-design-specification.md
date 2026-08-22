@@ -106,30 +106,49 @@ The backbone MUST preserve these invariants.
 # 4. Logical Architecture
 
 ```text
-        Tier 1 Project + Build Config | M11 Tier 2 Bitcode Modules
-                              |
-                              v
-                      Build Intelligence
-                              |
-                              v
-                Typed In-Memory Project Context
-                              |
-                              v
-              +---------------+----------------+
-              |                                |
-              v                                v
-      Clang Semantic Frontend           LLVM Analysis Frontend
-              |                                |
-              +---------------+----------------+
-                              |
-                              v
-                   Required In-Process SVF
-                              |
-                              v
-                     Local Summary Builder
-                              |
-                              v
-               Immutable Function Summary IR v2
+Tier 1: project + build config
+              |
+              v
+      Build Intelligence
+              |
+              v
+   Typed Project Context
+      |               |
+      |               +--> Clang Semantic Frontend
+      |                         |
+      |                         +--------------------------+
+      |                          Tier-1 AST semantic inputs |
+      v                                                    |
+CodeGenIrSource                                            |
+(LLVM CodeGen + link)                                      |
+      |                                                    |
+      +---------------------+                              |
+                            |                              |
+Tier 2: .bc/.ll file or directory                          |
+      |                                                    |
+      v                                                    |
+BitcodeIrSource                                            |
+(verify + load + link + OriginMap; skips Clang/CodeGen)    |
+      |                                                    |
+      +---------------------+                              |
+                            v                              |
+             ProgramIrSource::Build boundary               |
+                            |                              |
+                            v                              |
+                    Private ProgramIr                      |
+                            |                              |
+                            v                              |
+              Shared LLVM Local Extraction                 |
+                            |                              |
+                            v                              |
+                Required In-Process SVF                    |
+                            |                              |
+                            +------------------------------+
+                            v
+                  Local Summary Builder
+                            |
+                            v
+             Immutable Function Summary IR v2
                               |
                               v
       +------------------- SummaryDB --------------------+
@@ -167,6 +186,13 @@ The backbone MUST preserve these invariants.
                             v
                   Query API / Evidence Builder
 ```
+
+Only Tier 1 produces the AST semantic-input branch. `CodeGenIrSource` and
+`BitcodeIrSource` both implement the `ProgramIrSource::Build` boundary and
+produce the private `ProgramIr`; Tier 2 never traverses Clang or CodeGen. LLVM
+local extraction and required in-process SVF are shared after that boundary,
+and the summary builder combines their facts with Tier-1 AST semantics when
+present.
 
 V1 can use:
 
