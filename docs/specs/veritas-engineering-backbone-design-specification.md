@@ -194,7 +194,8 @@ VERITAS uses multiple IDs because "the function" has multiple meanings.
 | `FunctionBodyID` | Normalized function body for one revision/build. | Formatting and nonsemantic source edits. | AST/IR semantic body changes. |
 | `FunctionSummaryID` | Exact immutable summary content. | All consumers and revisions with identical analysis output. | Any summary component payload or summary metadata changes. |
 | `AnalyzerRunID` | Analyzer binary/config/schema identity. | All facts emitted by one configured analyzer run. | Analyzer version, schema version, or analysis config changes. |
-| `FactID` | Exact derived or observed fact in one program context. | Rebuilds of the same revision/build/analyzer context. | Program context, predicate, epistemic state, scope, producer, or derivation changes. |
+| `AnalysisRunID` | Exact WPA execution manifest and envelope identity. | Never merged across incompatible or engine-distinct runs. | Revision, build variant, summary/relation schema, rule/model bundle, SVF/WPA configuration, engine, or exact toolchain identity changes. |
+| `FactID` | Exact derived or observed fact in one program context and analysis run. | Rebuilds of the same revision/build/analyzer/run context. | Program context, analysis run, predicate, epistemic state, scope, producer, or derivation changes. |
 
 ## 5.1 Hash Format
 
@@ -210,6 +211,7 @@ Examples:
 funcsym:sha256:...
 funcvar:sha256:...
 summary:sha256:...
+analysis_run:sha256:...
 fact:sha256:...
 ```
 
@@ -393,9 +395,15 @@ Source anchors are for diagnostics and Evidence IR display. They are not identit
 
 ---
 
-# 7. Analyzer Runs and Schema Versioning
+# 7. Analyzer Runs, Analysis Runs, and Schema Versioning
 
-Summary and fact identity MUST include enough analyzer metadata to avoid silently mixing incompatible outputs.
+`AnalyzerRunID` identifies local extraction and Summary IR production.
+`AnalysisRunID` identifies a whole WPA execution envelope. They are distinct:
+content-addressed result reuse may reference the same immutable result from
+multiple analysis runs, but it never merges their manifests or history.
+
+Summary and fact identity MUST include enough analyzer and WPA metadata to
+avoid silently mixing incompatible outputs.
 
 ```sql
 CREATE TABLE analyzer_runs (
@@ -412,7 +420,42 @@ CREATE TABLE analysis_configurations (
     config_hash            TEXT PRIMARY KEY,
     serialized_config      BLOB NOT NULL
 );
+
+CREATE TABLE engine_toolchains (
+    engine_toolchain_identity           TEXT PRIMARY KEY,
+    engine_identity                     TEXT NOT NULL,
+    install_provenance_manifest_digest  TEXT NOT NULL,
+    source_revision                     TEXT NOT NULL,
+    executable_digest                   TEXT NOT NULL,
+    generated_bundle_digest             TEXT NOT NULL,
+    generated_toolchain_provenance_hash TEXT NOT NULL
+);
+
+CREATE TABLE analysis_runs (
+    analysis_run_id          TEXT PRIMARY KEY,
+    revision_id              TEXT NOT NULL REFERENCES revisions(revision_id),
+    build_variant_id         TEXT NOT NULL REFERENCES build_variants(build_variant_id),
+    summary_schema_version   TEXT NOT NULL,
+    relation_schema_version  TEXT NOT NULL,
+    rule_bundle_version      TEXT NOT NULL,
+    model_bundle_version     TEXT NOT NULL,
+    svf_configuration_hash   TEXT NOT NULL,
+    wpa_configuration_hash   TEXT NOT NULL,
+    engine_identity          TEXT NOT NULL,
+    engine_toolchain_identity TEXT NOT NULL REFERENCES engine_toolchains(engine_toolchain_identity),
+    status                   TEXT NOT NULL,
+    started_at               INTEGER NOT NULL,
+    completed_at             INTEGER
+);
 ```
+
+Every manifest field above participates in `AnalysisRunID`. Before a production
+run is created, VERITAS parses the configured Souffle install-provenance
+manifest, requires version 2.5 and source revision
+`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable,
+and rejects a digest mismatch. `EngineToolchainIdentity` includes the verified
+manifest digest, source revision, executable digest, generated-bundle digest,
+and generator/compiler/link toolchain provenance.
 
 Examples of config fields:
 
@@ -984,38 +1027,61 @@ calls remain explicit and never fan out to the entire program.
 
 ```sql
 CREATE TABLE wpa_sccs (
-    scc_id                 TEXT PRIMARY KEY,
-    revision_id            TEXT NOT NULL REFERENCES revisions(revision_id),
-    build_variant_id       TEXT NOT NULL REFERENCES build_variants(build_variant_id),
+    analysis_run_id        TEXT NOT NULL REFERENCES analysis_runs(analysis_run_id),
+    scc_id                 TEXT NOT NULL,
     call_graph_hash        TEXT NOT NULL,
     member_hash            TEXT NOT NULL,
-    externally_visible_hash TEXT NOT NULL,
-    created_at             INTEGER NOT NULL
+    created_at             INTEGER NOT NULL,
+    PRIMARY KEY(analysis_run_id, scc_id)
 );
 
 CREATE TABLE wpa_scc_members (
-    scc_id                 TEXT NOT NULL REFERENCES wpa_sccs(scc_id),
+    analysis_run_id        TEXT NOT NULL,
+    scc_id                 TEXT NOT NULL,
     function_variant_id    TEXT NOT NULL REFERENCES function_variants(function_variant_id),
-    PRIMARY KEY(scc_id, function_variant_id)
+    PRIMARY KEY(analysis_run_id, scc_id, function_variant_id),
+    FOREIGN KEY(analysis_run_id, scc_id)
+        REFERENCES wpa_sccs(analysis_run_id, scc_id)
 );
 
 CREATE TABLE wpa_scc_edges (
-    from_scc_id            TEXT NOT NULL REFERENCES wpa_sccs(scc_id),
-    to_scc_id              TEXT NOT NULL REFERENCES wpa_sccs(scc_id),
+    analysis_run_id        TEXT NOT NULL,
+    from_scc_id            TEXT NOT NULL,
+    to_scc_id              TEXT NOT NULL,
     edge_kind              TEXT NOT NULL,
     epistemic              TEXT NOT NULL,
-    PRIMARY KEY(from_scc_id, to_scc_id, edge_kind)
+    PRIMARY KEY(analysis_run_id, from_scc_id, to_scc_id, edge_kind),
+    FOREIGN KEY(analysis_run_id, from_scc_id)
+        REFERENCES wpa_sccs(analysis_run_id, scc_id),
+    FOREIGN KEY(analysis_run_id, to_scc_id)
+        REFERENCES wpa_sccs(analysis_run_id, scc_id)
 );
 
 CREATE TABLE wpa_scc_component_state (
-    scc_id                 TEXT NOT NULL REFERENCES wpa_sccs(scc_id),
+    analysis_run_id        TEXT NOT NULL,
+    scc_id                 TEXT NOT NULL,
     component_kind         TEXT NOT NULL,
-    fixpoint_hash          TEXT NOT NULL,
-    iteration_count        INTEGER NOT NULL,
+    logical_input_hash     TEXT NOT NULL,
+    fixpoint_hash          TEXT,
+    external_hash          TEXT,
+    engine_toolchain_identity TEXT NOT NULL REFERENCES engine_toolchains(engine_toolchain_identity),
+    result_object_ref      TEXT,
+    iteration_count        INTEGER,
     status                 TEXT NOT NULL,
-    PRIMARY KEY(scc_id, component_kind)
+    diagnostics_object_ref TEXT,
+    completed_at           INTEGER,
+    PRIMARY KEY(analysis_run_id, scc_id, component_kind),
+    FOREIGN KEY(analysis_run_id, scc_id)
+        REFERENCES wpa_sccs(analysis_run_id, scc_id)
 );
 ```
+
+The component row's toolchain identity must equal its `AnalysisRun` manifest.
+A successful row requires `fixpoint_hash`, `external_hash`, and an immutable
+`result_object_ref`. Pending or failed rows leave those successful-result
+fields null and retain status/diagnostics, so they cannot replace a prior
+success. Cache reuse creates a new per-run component row that references the
+validated immutable result object; it never reuses or merges another run's row.
 
 ## 14.2 SCC Construction
 
@@ -1313,9 +1379,10 @@ Evidence IR should cite facts and provenance IDs rather than copying every deriv
 # 17. Datalog Integration
 
 Compiled Souffle is the required normal production recursive engine after
-M8R.4. The supported toolchain is Souffle 2.5 source revision
-`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`; its verified executable digest and
-generated bundle/toolchain provenance participate in
+M8R.4. Before execution, the adapter applies §7's configured-manifest and
+executable-digest verification for Souffle 2.5 source revision
+`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`. The verified manifest, executable,
+generated bundle, and generator/compiler/link provenance form
 `EngineToolchainIdentity`. Generated programs use one evaluation thread until a
 separately qualified upgrade retires the upstream ARM concurrency issue.
 
@@ -1770,9 +1837,11 @@ A buffer-overflow fixture can produce all data needed for an EIR-L1 case without
 
 These should be resolved before implementation begins.
 
-| Decision | Default for V1 |
+| Decision | Approved contract/default |
 | --- | --- |
-| Protobuf schema package names | `veritas.ir.summary.v1`, `veritas.ir.fact.v1` |
+| Summary schema compatibility | Existing `summary.v1` artifacts remain immutable/readable; native reanalysis and new publication emit `summary.v2` only |
+| WPA contract versions | `relations.v2` execution projection and `wpa-run.v1` manifest |
+| M9 fact schema version | Defined by the M9 persistence implementation/specification; this design does not invent an additional fact-version name |
 | Metadata store | SQLite |
 | CAS store | RocksDB |
 | Hash algorithm | SHA-256 |

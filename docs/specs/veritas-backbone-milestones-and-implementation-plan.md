@@ -28,6 +28,7 @@
 - The first storage stack is RocksDB for immutable objects and SQLite for metadata.
 - Function Summary IR is the durable WPA contract; typed `relations.v2` rows and dense IDs are run-local execution projections.
 - Compiled Souffle is the required normal production recursive-WPA engine after M8R.4; C++ consumes the same byte-identical `WpaLogicalComponentInput` only for conformance or explicit `cpp-emergency` use, under a distinct valid envelope and `RunId`.
+- Before production execution, VERITAS parses the configured Souffle install-provenance manifest, requires version 2.5 at source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable, and verifies it against the manifest; manifest, executable, generated-bundle, and generator/compiler/link provenance form `EngineToolchainIdentity`.
 - Automatic engine fallback is forbidden. Failed components publish no replacement and retain the last successful result only as stale history.
 - Component reuse is content-addressed by engine-neutral logical input plus exact executor/toolchain identity.
 - Every derived fact has a generic deterministic finite witness rooted in stable input fact IDs.
@@ -74,11 +75,15 @@ The source architecture says "Build a VERITAS CPG, but keep it thin." This docum
 | M9 | Provenance-aware fact store and explain API | Run/fact/witness/diagnostic persistence and `veritas-explain` | M8R.5 gate |
 | M10A | Recursive domain expansion | `MayRead`, `GlobalFlow`, `UnknownEffect`, `SoundnessCoverage` | M9 |
 | M10B | Evidence Builder input APIs and first demo | EIR-ready slices over M9 facts and M10A relations | M6, M9, M10A |
-| M11 | External IR adapter | External bitcode/textual IR through the same summary boundary | M10B |
-| M12 | External facts importer | Provenance-tagged non-authoritative imported facts | M11 |
+| M11 | External IR adapter | External bitcode/textual IR through the same summary boundary | M5 |
+| M12 | External facts importer | Provenance-tagged non-authoritative imported facts | M9 |
 | M13 | Benchmark-gated PTA research | Independent Souffle-native PTA comparison against pinned SVF | independent of M9-M12 |
 
 Each milestone should merge independently. Every milestone has tests and a small user-visible CLI behavior.
+
+M11 and M12 remain chronologically placed after M10B, but chronology is not a
+functional dependency: M11 reuses the M5 local/SVF pipeline, while M12 requires
+the M9 fact and provenance stores.
 
 Detailed milestone design specs live under `docs/specs/milestones/`:
 
@@ -1177,9 +1182,10 @@ The five gates deliver, in order:
    `relations.v2`, successor support, and generic finite rooted witnesses using
    an injective semantic-key codec;
 4. compiled Souffle production recursion, pinned to version 2.5 source revision
-   `5682a9f12e2668ecdd26348fe63cc508bc0fcf47` with verified executable and
-   generated-toolchain provenance, plus C++ conformance/explicit emergency only,
-   no automatic fallback, content-addressed reuse, and failure atomicity;
+   `5682a9f12e2668ecdd26348fe63cc508bc0fcf47` with configured install-manifest
+   parsing, executable-digest verification, and generated-toolchain provenance,
+   plus C++ conformance/explicit emergency only, no automatic fallback,
+   content-addressed reuse, and failure atomicity;
 5. differential/failure/performance qualification and the complete, rooted,
    idempotently delivered `AnalysisFactBatch`/Fact Bus handoff.
 

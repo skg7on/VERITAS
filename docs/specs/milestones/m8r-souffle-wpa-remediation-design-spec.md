@@ -56,13 +56,22 @@ relations.v2    typed run-local WPA execution relations
 wpa-run.v1      reproducible execution manifest and status
 ```
 
+Existing `summary.v1` artifacts remain byte-immutable and readable. Native
+reanalysis never rewrites or republishes V1 bytes; after M8R.2 it emits
+`summary.v2` only. A tagged V1 compatibility projection may supply explicit
+legacy/unknown semantics to a V2 WPA run, but it cannot fabricate V2 precision.
+
 Every run manifest identifies the revision, build variant, summary and relation
 schemas, rule and model bundles, SVF and WPA configurations, engine, and exact
-engine/toolchain identity. The qualified production toolchain is Souffle 2.5 at
-source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47` and records the
-verified executable digest plus generated bundle/toolchain provenance. Until a
-separately qualified upgrade retires the upstream ARM concurrency issue,
-generated programs run with one evaluation thread.
+engine/toolchain identity. Before any production execution, VERITAS parses the
+configured Souffle install-provenance manifest, requires Souffle 2.5 at exact
+source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured
+executable, and rejects any mismatch with the executable digest recorded by the
+manifest. `EngineToolchainIdentity` canonically includes the verified manifest
+identity/content digest, source revision, executable digest, generated-bundle
+digest, and generator/compiler/link toolchain provenance. Until a separately
+qualified upgrade retires the upstream ARM concurrency issue, generated
+programs run with one evaluation thread.
 
 Stable IDs are durable. Typed unsigned dense IDs are assigned per run for hot
 joins and never escape their `AnalysisRun`. Missing mappings, duplicate dense
@@ -142,7 +151,7 @@ per-sink progress, and permits retry without duplicate logical publication.
 
 | Gate | Required result | Completion condition |
 | --- | --- | --- |
-| M8R.1 Semantic Fact Contract | `AnalysisRun`, relation registry, typed semantic values, stable/dense mapping, complete uncertainty, V1 adapters | Every supported value round-trips; identities do not collide; supported M8 fixtures remain semantically equivalent. |
+| M8R.1 Semantic Fact Contract | `AnalysisRun`, relation registry, typed semantic values, stable/dense mapping, complete uncertainty, V1 adapters | Every supported value round-trips; identities do not collide; existing `summary.v1` artifacts remain immutable/readable; supported M8 fixtures remain semantically equivalent. |
 | M8R.2 SVF and Memory Refinement | normalized indirect/virtual/callback targets, abstract objects/paths/ranges, alias kinds, models, native `summary.v2` | Stable `MAY` targets enter the graph; unknowns remain explicit; placeholders are not durable identity. |
 | M8R.3 Relational WPA Projection | summary-to-EDB materializer, SCC inputs/support, manifests, `ReachableCall`/`MayWrite`, generic witnesses, matched engine inputs | Both engines consume byte-identical logical input and supported M8 semantics agree with finite rooted witnesses. |
 | M8R.4 Production Souffle WPA | required compiled Souffle, exact provenance, production executor, incremental reuse/failure state, explicit emergency mode | Standard analysis uses Souffle; missing/incompatible Souffle fails; C++ is never selected implicitly. |
@@ -153,8 +162,9 @@ per-sink progress, and permits retry without duplicate logical publication.
 M9 may begin only after a production-Souffle build proves all ten executable
 criteria:
 
-1. `summary.v2` preserves dispatch, abstract memory, alias kind, uncertainty,
-   and provenance inputs.
+1. Existing `summary.v1` artifacts remain immutable and readable; native
+   reanalysis emits only `summary.v2`, which preserves dispatch, abstract
+   memory, alias kind, uncertainty, and provenance inputs.
 2. SVF indirect-call candidates participate in the summary call graph.
 3. Distinct unnamed values and allocations retain distinct stable identities.
 4. `relations.v2` uses typed schemas and run-local dense IDs.

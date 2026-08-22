@@ -471,7 +471,7 @@ An in-memory implementation of every adapter is required. It exists for two reas
 1. **Testing.** Unit and integration tests must be able to construct a full SummaryDB in memory without touching disk.
 2. **Ephemeral / distributed workers.** A worker producing summaries for a shard can hold its intermediate metadata in memory and flush results to the shared object store; only the metadata authority runs a durable metadata backend.
 
-The in-memory backend enforces the same invariants (S1–S10) as the durable backends.
+The in-memory backend enforces the same invariants (S1–S12) as the durable backends.
 
 ## 9.4 Serialization
 
@@ -611,10 +611,14 @@ Full syntax and semantics are in `veritas-evidence-ir-design.md` §30–33.
 
 An `AnalysisRun` manifest includes revision and build variant; summary and
 relation schemas; rule and model bundles; SVF and WPA configurations; engine
-identity; and exact engine/toolchain identity. For production Souffle, the
-toolchain identity includes Souffle 2.5 source revision
-`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, the verified executable digest,
-and generated bundle/toolchain provenance. All fields participate in `RunId`.
+identity; and exact engine/toolchain identity. Before production execution,
+VERITAS parses the configured Souffle install-provenance manifest, requires
+Souffle 2.5 source revision
+`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable,
+and verifies that digest against the manifest. `EngineToolchainIdentity`
+includes the verified manifest identity/content digest, source revision,
+executable digest, generated-bundle digest, and generator/compiler/link
+toolchain provenance. All run-manifest fields participate in `RunId`.
 
 Each component record retains `LogicalInputHash`, `FixpointHash`,
 `ExternalHash`, status, diagnostics, rooted input IDs, and the immutable result

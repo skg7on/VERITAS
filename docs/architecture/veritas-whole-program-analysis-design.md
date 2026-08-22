@@ -612,11 +612,15 @@ history. Partial output is never mixed with old facts.
 # 10. Compiled Souffle Production Engine
 
 For recursive interprocedural queries, the normal production engine is compiled
-Souffle. The supported toolchain pins Souffle 2.5 at exact source revision
-`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`; its verified executable digest and
-generated rule-bundle/toolchain provenance are part of
-`EngineToolchainIdentity`. Generated programs use one evaluation thread until a
-separately qualified upgrade retires the upstream ARM concurrency issue.
+Souffle. Before execution, the adapter parses the configured install-provenance
+manifest, requires Souffle 2.5 at exact source revision
+`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable,
+and rejects any mismatch with the manifest's recorded executable digest.
+`EngineToolchainIdentity` includes the verified manifest identity/content
+digest, source revision, executable digest, generated rule-bundle digest, and
+generator/compiler/link toolchain provenance. Generated programs use one
+evaluation thread until a separately qualified upgrade retires the upstream
+ARM concurrency issue.
 
 Datalog remains a natural execution form:
 
