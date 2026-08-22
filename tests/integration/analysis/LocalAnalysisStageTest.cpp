@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <llvm/IR/Function.h>
+#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 
 #include <set>
@@ -58,6 +59,20 @@ TEST(LocalAnalysisStageTest, BuildsLinkedProgramIrAndSummaryDrafts) {
     EXPECT_FALSE(draft.identity().function_variant_id().empty());
     EXPECT_FALSE(draft.identity().revision_id().empty());
   }
+}
+
+TEST(LocalAnalysisStageTest, ContextRetainsValueNames) {
+  auto manifest = LoadFixtureManifest("store_load");
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+
+  auto result = RunLocalAnalysis(*manifest);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+
+  // Clang's driver emits `-discard-value-names` when built against a
+  // non-asserts LLVM, which would leave this context unable to parse the
+  // textual IR (extapi.bc) that SVF loads into it. VERITAS must re-assert the
+  // retain-names invariant after codegen, independent of the LLVM build.
+  EXPECT_FALSE(result->program_ir.GetContext().shouldDiscardValueNames());
 }
 
 TEST(LocalAnalysisStageTest, ExtractsMemoryEffectsAndValueFlows) {
