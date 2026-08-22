@@ -16,14 +16,17 @@
 - Function Summary IR is the durable WPA contract; detailed relation rows are run-local projections.
 - Pinned SVF remains authoritative for V1 Andersen points-to results, aliases, SVFG flow, and indirect-call candidates.
 - Compiled Soufflé is the default and required production recursive-WPA engine.
-- The supported production toolchain pins Soufflé release `2.5` (`5682a9f`) and runs generated programs with one evaluation thread until the upstream ARM concurrency issue is retired by a separately qualified upgrade.
+- The supported production toolchain pins Soufflé release `2.5` at full source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, verifies an install provenance manifest and executable digest, records that provenance in engine/toolchain identity, and runs generated programs with one evaluation thread until the upstream ARM concurrency issue is retired by a separately qualified upgrade.
 - C++ is a differential oracle and explicit `cpp-emergency` engine; automatic fallback is forbidden.
+- Conformance materializes one canonical engine-neutral logical component input, then derives distinct Soufflé and C++ execution envelopes and `RunId` values from it.
 - Stable identities and typed dense IDs are separate; dense IDs never escape one `AnalysisRun`.
 - Semantic values and epistemic state remain independent, including `NO_ALIAS + MUST`.
 - Unknown and negative information is represented explicitly and is never omitted merely because it is not positive.
 - Every published derived fact has a finite rooted witness selected independently of engine tuple order.
 - A failed component publishes no new result; a previous success is retained only as stale history.
-- `RunId` includes revision, build variant, summary schema, relation schema, rule bundle, model bundle, SVF configuration, WPA configuration, and engine identity.
+- `RunId` includes revision, build variant, summary schema, relation schema, rule bundle, model bundle, SVF configuration, WPA configuration, engine identity, and exact engine/toolchain identity.
+- Cross-revision component reuse is content-addressed by engine-neutral logical input plus exact executor/toolchain provenance; each run records its own result reference and run histories are never merged.
+- Fact Bus batches carry expected/completed component metadata and rooted input IDs; sink delivery is idempotent at least once by canonical batch identity.
 - M9 work starts only after the qualification task at the end of this plan passes.
 
 ## Scope Decomposition
@@ -61,6 +64,7 @@ M9 persistence, M10A domain expansion, M10B Evidence APIs, M11, M12, and M13 eac
 
 - Produces: `IdKind::kAnalysisRun`, `IdKind::kAbstractObject`, and `IdKind::kModel`.
 - Produces: `semantic::EpistemicState`, `AliasKind`, `DispatchKind`, `AbstractObjectKind`, `AccessPathSegment`, `ByteRange`, `AbstractObject`, and `MemoryLocation`.
+- Produces: `ByteRangeKind::kKnown` and `ByteRangeKind::kUnknown` for lossless relation projection.
 - Produces: `Status Validate(const AbstractObject&)` and `Status Validate(const MemoryLocation&)`.
 - Consumed by: Tasks 2–12.
 
@@ -90,6 +94,12 @@ TEST(SemanticTypesTest, UnknownByteRangeIsExplicit) {
   EXPECT_FALSE(range.offset.has_value());
   EXPECT_FALSE(range.size.has_value());
   EXPECT_TRUE(Validate(range).ok());
+}
+
+TEST(SemanticTypesTest, UnknownRangeDiffersFromKnownZeroRange) {
+  EXPECT_NE(ByteRange::Unknown(), ByteRange::Known(0, 0));
+  EXPECT_EQ(RelationRangeKind(ByteRange::Unknown()), ByteRangeKind::kUnknown);
+  EXPECT_EQ(RelationRangeKind(ByteRange::Known(0, 0)), ByteRangeKind::kKnown);
 }
 ```
 
@@ -145,6 +155,8 @@ enum class AbstractObjectKind : std::uint8_t {
   kLegacyOpaque,
 };
 
+enum class ByteRangeKind : std::uint8_t { kKnown, kUnknown };
+
 struct AliasObservation {
   AliasKind kind;
   EpistemicState epistemic;
@@ -163,6 +175,9 @@ struct ByteRange {
   std::optional<std::int64_t> offset;
   std::optional<std::uint64_t> size;
   static ByteRange Unknown() { return {}; }
+  static ByteRange Known(std::int64_t offset, std::uint64_t size) {
+    return {.offset = offset, .size = size};
+  }
   auto operator<=>(const ByteRange&) const = default;
 };
 
@@ -218,7 +233,7 @@ git commit -m "feat: add typed semantic identities"
 **Interfaces:**
 
 - Consumes: `core::IdKind::kAnalysisRun` from Task 1.
-- Produces: `facts::EngineIdentity`, `AnalysisRunDescriptor`, and immutable `AnalysisRunManifest`.
+- Produces: `facts::EngineIdentity`, engine-neutral `AnalysisRunSemanticDescriptor`, `AnalysisRunDescriptor`, and immutable `AnalysisRunManifest`.
 - Produces: `StatusOr<AnalysisRunManifest> MakeAnalysisRun(AnalysisRunDescriptor)`.
 - Consumed by: materialization, execution, persistence, and publication in Tasks 10–17.
 
@@ -240,6 +255,10 @@ TEST(AnalysisRunTest, EveryDescriptorFieldChangesRunId) {
 
   changed = base;
   changed.model_bundle_version = "models.v2";
+  EXPECT_NE(MakeAnalysisRun(changed)->run_id, base_id);
+
+  changed = base;
+  changed.engine_toolchain_identity = "souffle-2.5+other-build";
   EXPECT_NE(MakeAnalysisRun(changed)->run_id, base_id);
 }
 
@@ -270,8 +289,7 @@ enum class EngineIdentity : std::uint8_t {
   kCppEmergency,
 };
 
-struct AnalysisRunDescriptor {
-  core::StableId revision_id;
+struct AnalysisRunSemanticDescriptor {
   core::StableId build_variant_id;
   std::string summary_schema_version;
   std::string relation_schema_version;
@@ -279,7 +297,12 @@ struct AnalysisRunDescriptor {
   std::string model_bundle_version;
   std::string svf_configuration_hash;
   std::string wpa_configuration_hash;
+};
+
+struct AnalysisRunDescriptor : AnalysisRunSemanticDescriptor {
+  core::StableId revision_id;
   EngineIdentity engine;
+  std::string engine_toolchain_identity;
 };
 
 struct AnalysisRunManifest : AnalysisRunDescriptor {
@@ -289,7 +312,7 @@ struct AnalysisRunManifest : AnalysisRunDescriptor {
 StatusOr<AnalysisRunManifest> MakeAnalysisRun(AnalysisRunDescriptor descriptor);
 ```
 
-Canonicalize with length-prefixed fields beginning with `veritas.wpa-run.v1`; validate the revision/build ID kinds, non-empty version strings, lowercase 64-character configuration hashes, and recognized engine value before deriving `run_id`.
+Canonicalize with length-prefixed fields beginning with `veritas.wpa-run.v1`; validate the revision/build ID kinds, non-empty version/toolchain strings, lowercase 64-character configuration hashes, and recognized engine value before deriving `run_id`. `AnalysisRunSemanticDescriptor` is the engine-neutral subset used by Task 10; `revision_id`, `engine`, and `engine_toolchain_identity` belong only to the execution envelope and run identity.
 
 - [ ] **Step 4: Run focused tests**
 
@@ -360,6 +383,16 @@ TEST(RelationSchemaTest, RejectsCrossDomainDenseId) {
                     DispatchKind::kDirect, EpistemicState::kMust}};
   EXPECT_FALSE(ValidateExecutionRow(row).ok());
 }
+
+TEST(RelationSchemaTest, DirectReadPreservesUnknownRangeTag) {
+  auto row = DirectReadExecutionRow(
+      FunctionId{1}, MemoryId{2}, ByteRange::Unknown(),
+      EpistemicState::kMay);
+  ASSERT_TRUE(ValidateExecutionRow(row).ok());
+  EXPECT_EQ(row.cells[2], ByteRangeKind::kUnknown);
+  EXPECT_EQ(row.cells[3], std::int64_t{0});
+  EXPECT_EQ(row.cells[4], std::uint64_t{0});
+}
 ```
 
 - [ ] **Step 2: Build and confirm the tests fail**
@@ -410,12 +443,14 @@ enum class RelationId : std::uint16_t {
 using SemanticCellValue =
     std::variant<core::StableId, std::int64_t, std::uint64_t, std::string,
                  semantic::DispatchKind, semantic::AliasKind,
+                 semantic::ByteRangeKind,
                  semantic::EpistemicState>;
 
 using ExecutionCellValue =
     std::variant<FunctionId, ValueId, MemoryId, CallSiteId, FactId,
                  std::int64_t, std::uint64_t, std::string,
                  semantic::DispatchKind, semantic::AliasKind,
+                 semantic::ByteRangeKind,
                  semantic::EpistemicState>;
 
 struct SemanticRow {
@@ -436,7 +471,7 @@ struct AnalysisFact {
 
 `MakeFact` validates stable-ID kinds through `RelationsV2()`, serializes `relations.v2`, relation name, typed stable semantic cells, and epistemic value, then derives a `kFact` ID. It must not include dense IDs, engine identity, tuple order, rule ID, or witness edges. `ValidateExecutionRow` separately checks each dense-ID domain for the run-local execution projection.
 
-Add every relation and column listed in design sections 7 and 11 to `logic/schema/relations.v2.json`; mark EDB/IDB ownership and allowed epistemic values explicitly.
+Add every relation and column listed in design sections 7 and 11 to `logic/schema/relations.v2.json`; mark EDB/IDB ownership and allowed epistemic values explicitly. `DirectRead` and `DirectWrite` contain `RangeKind`, signed `Offset`, and unsigned `Size`: `KNOWN` consumes both payload cells, while `UNKNOWN` requires canonical zeros that are ignored. Reject half-known ranges and non-canonical unknown payloads so a known zero range never collapses into unknown.
 
 - [ ] **Step 4: Run schema and fact tests**
 
@@ -1180,7 +1215,7 @@ class ModelBundle {
 };
 ```
 
-The TSV has exactly five tab-separated fields: model ID seed, exact symbol, effect kind, subject, epistemic. The manifest has one line `model_bundle_version=models.v1`. Reject duplicate model IDs, unknown enum strings, control characters, and unsorted rows. Compute the content hash from the version plus canonical TSV bytes and place that hash in every WPA `InputHash`.
+The TSV has exactly five tab-separated fields: model ID seed, exact symbol, effect kind, subject, epistemic. The manifest has one line `model_bundle_version=models.v1`. Reject duplicate model IDs, unknown enum strings, control characters, and unsorted rows. Compute the content hash from the version plus canonical TSV bytes and place that hash in every WPA `LogicalInputHash`.
 
 Merge local V2 facts, normalized SVF facts, models, unknowns, and dependencies by stable owning function ID. Recompute deterministic component digests after the merge. Update CPG projection to read V2 stable IDs and semantic alias kinds. Publish summaries and CPG atomically through version-neutral SummaryDB APIs.
 
@@ -1233,9 +1268,9 @@ git commit -m "feat: publish modeled Function Summary IR v2"
 
 **Interfaces:**
 
-- Consumes: `AnalysisRunManifest`, `SummaryArtifact`, `CallGraph`, `SccGraph`, V2 relations, dense maps, model rows, and successor `AnalysisFact` support.
-- Produces: `WpaComponentKind`, `StableIdMappings`, `RootedInputFact`, and immutable `WpaComponentInput`.
-- Produces: `WpaInputMaterializer::Build(request)` with deterministic stable-to-dense maps and `InputHash`.
+- Consumes: the semantic fields of `AnalysisRunManifest`, `SummaryArtifact`, `CallGraph`, `SccGraph`, V2 relations, dense maps, model rows, and successor `AnalysisFact` support.
+- Produces: `WpaComponentKind`, `StableIdMappings`, `RootedInputFact`, and immutable engine-neutral `WpaLogicalComponentInput`.
+- Produces: `WpaInputMaterializer::Build(request)` with deterministic stable-to-dense maps and `LogicalInputHash`.
 - Extends: `CallGraph::FromSummaries` to accept V2 indirect/MAY targets and tagged V1 compatibility artifacts.
 - Consumed by: both evaluators and orchestration Tasks 12–15.
 
@@ -1303,19 +1338,18 @@ struct RootedInputFact {
   std::string provenance_ref;
 };
 
-struct WpaComponentInput {
-  facts::AnalysisRunManifest run;
+struct WpaLogicalComponentInput {
   core::StableId scc_id;
   WpaComponentKind component;
   StableIdMappings mappings;
   std::vector<facts::ExecutionRow> edb;
   std::vector<RootedInputFact> local_roots;
   std::vector<RootedInputFact> successor_roots;
-  std::string input_hash;
+  std::string logical_input_hash;
 };
 
 struct WpaMaterializationRequest {
-  facts::AnalysisRunManifest run;
+  facts::AnalysisRunSemanticDescriptor semantics;
   core::StableId scc_id;
   WpaComponentKind component;
   std::span<const summary::SummaryArtifact> summaries;
@@ -1324,7 +1358,7 @@ struct WpaMaterializationRequest {
 };
 ```
 
-Add `SupportReachableCall` and `SupportMayWrite` to the registry as EDB-only relations. Emit `FunctionMap`, `ValueMap`, `MemoryMap`, `CallSiteMap`, and `FactMap` execution relations from the dual-identity maps so evaluators can reconstruct semantic keys without leaking dense IDs. Collect stable identities first, sort and build each dense map, then convert semantic rows to execution rows. Compute `InputHash` from the run manifest, component, SCC members, canonical stable semantic EDB, model hash, and successor external fact IDs—not from dense numbers or iteration order.
+Add `SupportReachableCall` and `SupportMayWrite` to the registry as EDB-only relations. Emit `FunctionMap`, `ValueMap`, `MemoryMap`, `CallSiteMap`, and `FactMap` execution relations from the dual-identity maps so evaluators can reconstruct semantic keys without leaking dense IDs. Collect stable identities first, sort and build each dense map, then convert semantic rows to execution rows. Compute `LogicalInputHash` from the relation, rule, model, and semantic configuration versions; component; SCC members; canonical stable semantic EDB; canonical mappings; model hash; and successor external fact IDs. Exclude revision, `RunId`, engine identity, dense-number assignment accidents, and iteration order. Serialize this engine-neutral object once; Task 13 wraps the same bytes in executor-specific manifests.
 
 `CallGraph::FromSummaries` accepts `SummaryArtifact` values. Native V2 calls with stable resolved targets and epistemic `MUST`, `MAY`, `INFERRED`, or `ASSUMED` become edges according to bundle policy. Empty/unknown targets remain scoped unknown-call effects and never become all-functions fanout.
 
@@ -1435,7 +1469,7 @@ struct RawWpaEvaluation {
 struct WpaComponentResult {
   core::StableId scc_id;
   WpaComponentKind component;
-  std::string input_hash;
+  std::string logical_input_hash;
   std::string fixpoint_hash;
   std::string external_hash;
   std::vector<facts::AnalysisFact> facts;
@@ -1473,12 +1507,15 @@ git commit -m "feat: canonicalize generic WPA witnesses"
 
 - Create: `logic/schema/relations.v2.dl`
 - Create: `logic/common/epistemic.dl`
+- Create: `logic/common/semantic_key.dl`
 - Create: `logic/reachability/reachability.v2.dl`
 - Create: `logic/reachability/bundle.manifest`
 - Create: `logic/memory_effects/may_write.v2.dl`
 - Create: `logic/memory_effects/bundle.manifest`
 - Create: `include/veritas/facts/RelationIo.h`
 - Create: `src/facts/RelationIo.cpp`
+- Create: `include/veritas/facts/SemanticKeyCodec.h`
+- Create: `src/facts/SemanticKeyCodec.cpp`
 - Create: `include/veritas/wpa/CppRuleEvaluator.h`
 - Create: `src/wpa/CppRuleEvaluator.cpp`
 - Modify: `include/veritas/facts/SouffleExporter.h`
@@ -1489,6 +1526,7 @@ git commit -m "feat: canonicalize generic WPA witnesses"
 - Modify: `src/wpa/CMakeLists.txt`
 - Create: `tests/unit/wpa/CppRuleEvaluatorTest.cpp`
 - Create: `tests/unit/facts/RelationIoTest.cpp`
+- Create: `tests/unit/facts/SemanticKeyCodecTest.cpp`
 - Modify: `tests/unit/facts/SouffleExporterTest.cpp`
 - Modify: `tests/unit/wpa/FixpointEngineTest.cpp`
 - Modify: `tests/unit/facts/CMakeLists.txt`
@@ -1497,7 +1535,7 @@ git commit -m "feat: canonicalize generic WPA witnesses"
 
 **Interfaces:**
 
-- Consumes: exactly one `WpaComponentInput` logical relation set.
+- Consumes: exactly one engine-neutral `WpaLogicalComponentInput` relation set.
 - Produces: `CppRuleEvaluator::Evaluate(input) -> RawWpaEvaluation`.
 - Produces: typed relation I/O for all V2 EDB, result, and witness relations.
 - Keeps: `FixpointEngine` as a temporary compatibility wrapper that materializes input, invokes `CppRuleEvaluator`, and calls the generic canonicalizer.
@@ -1527,6 +1565,13 @@ TEST(RelationIoTest, RejectsWrongColumnDomainAndUnexpectedOutput) {
   EXPECT_FALSE(ReadRawEvaluation(DirectoryWithMemoryIdInFunctionColumn()).ok());
   EXPECT_FALSE(ReadRawEvaluation(DirectoryWithUnknownRelation()).ok());
 }
+
+TEST(SemanticKeyCodecTest, AdversarialFieldsRemainInjective) {
+  EXPECT_NE(EncodeFields({"a", "bc"}), EncodeFields({"ab", "c"}));
+  EXPECT_NE(EncodeFields({"", ":1:|"}), EncodeFields({":1:", "|"}));
+  EXPECT_EQ(DecodeFields(EncodeFields({"λ", "01", ""})),
+            (std::vector<std::string>{"λ", "01", ""}));
+}
 ```
 
 - [ ] **Step 2: Build and confirm golden tests fail**
@@ -1534,7 +1579,7 @@ TEST(RelationIoTest, RejectsWrongColumnDomainAndUnexpectedOutput) {
 Run:
 
 ```bash
-cmake --build --preset default --target CppRuleEvaluatorTest RelationIoTest FixpointEngineTest SouffleExporterTest
+cmake --build --preset default --target CppRuleEvaluatorTest RelationIoTest SemanticKeyCodecTest FixpointEngineTest SouffleExporterTest
 ```
 
 Expected: compilation fails because V2 rule evaluation and typed relation I/O are absent.
@@ -1544,6 +1589,7 @@ Expected: compilation fails because V2 rule evaluation and typed relation I/O ar
 ```souffle
 .include "../schema/relations.v2.dl"
 .include "../common/epistemic.dl"
+.include "../common/semantic_key.dl"
 
 .decl ReachableCall(source:FunctionId, target:FunctionId,
                     epistemic:Epistemic)
@@ -1561,23 +1607,34 @@ ReachableCall(f, h, e) :-
   WeakenEpistemic(e1, e2, e).
 ```
 
-`epistemic.dl` defines the finite `WeakenEpistemic(left, right, result)` relation for every state admitted by the bundle contract. Add corresponding immediate `Witness` rules for every direct, local-transitive, and successor-support derivation. Encode semantic keys with Soufflé's `cat` over relation name, stable strings joined through the mapping relations, cells, and epistemic state. The may-write bundle follows the same pattern with `DirectWrite`, `DirectCall`, `SupportMayWrite`, and `MayWrite`.
+`semantic_key.dl` declares the pinned Soufflé 2.5 stateful functor ABI:
+
+```souffle
+.functor veritas_key_field_symbol_v1(value:symbol):symbol stateful
+.functor veritas_key_field_number_v1(value:number):symbol stateful
+.functor veritas_key_field_unsigned_v1(value:unsigned):symbol stateful
+```
+
+`SouffleSemanticKeyFunctor.cpp` exports those exact C-linkage names with signature `souffle::RamDomain name(souffle::SymbolTable*, souffle::RecordTable*, souffle::RamDomain)`. Each adapter decodes its typed argument, calls `SemanticKeyCodec` to emit one type-tagged length-prefixed UTF-8 field, and interns the result through the supplied symbol table. The implementations are pure and reentrant. Nested `cat` may join only these self-delimiting encoded fields after an encoded `veritas.semantic-key.v1` prefix and relation name; concatenating raw cells or delimiters is forbidden.
+
+`epistemic.dl` defines the finite `WeakenEpistemic(left, right, result)` relation for every state admitted by the bundle contract. Add corresponding immediate `Witness` rules for every direct, local-transitive, and successor-support derivation. `SemanticKeyCodecTest` covers empty cells, delimiter-like text, Unicode, digit-prefixed symbols, signed numbers, and unsigned bounds without requiring Soufflé. Task 13 adds the stateful adapter and mandatory generated-program comparison. The may-write bundle follows the same pattern with `DirectWrite`, `DirectCall`, `SupportMayWrite`, and `MayWrite`.
 
 - [ ] **Step 4: Implement the C++ logical evaluator and typed I/O**
 
 ```cpp
 class CppRuleEvaluator {
  public:
-  StatusOr<RawWpaEvaluation> Evaluate(const WpaComponentInput& input) const;
+  StatusOr<RawWpaEvaluation>
+  Evaluate(const WpaLogicalComponentInput& input) const;
 };
 
 class RelationIo {
  public:
   static Status WriteInput(const std::filesystem::path& directory,
-                           const WpaComponentInput& input);
+                           const WpaLogicalComponentInput& input);
   static StatusOr<RawWpaEvaluation>
   ReadOutput(const std::filesystem::path& directory,
-             const WpaComponentInput& input);
+             const WpaLogicalComponentInput& input);
 };
 ```
 
@@ -1588,9 +1645,10 @@ Implement the same direct/transitive/support joins and epistemic weakening as th
 Run:
 
 ```bash
-cmake --build --preset default --target CppRuleEvaluatorTest RelationIoTest FixpointEngineTest SouffleExporterTest SouffleRunnerTest
+cmake --build --preset default --target CppRuleEvaluatorTest RelationIoTest SemanticKeyCodecTest FixpointEngineTest SouffleExporterTest SouffleRunnerTest
 ./build/bin/CppRuleEvaluatorTest
 ./build/bin/RelationIoTest
+./build/bin/SemanticKeyCodecTest
 ./build/bin/FixpointEngineTest
 ./build/bin/SouffleExporterTest
 ./build/bin/SouffleRunnerTest
@@ -1601,7 +1659,7 @@ Expected: C++ and existing M8 semantic goldens pass. `SouffleRunnerTest` runs ru
 - [ ] **Step 6: Commit M8R.3**
 
 ```bash
-git add logic/schema/relations.v2.dl logic/common/epistemic.dl logic/reachability/reachability.v2.dl logic/reachability/bundle.manifest logic/memory_effects/may_write.v2.dl logic/memory_effects/bundle.manifest include/veritas/facts/RelationIo.h src/facts/RelationIo.cpp include/veritas/wpa/CppRuleEvaluator.h src/wpa/CppRuleEvaluator.cpp include/veritas/facts/SouffleExporter.h src/facts/SouffleExporter.cpp include/veritas/wpa/FixpointEngine.h src/wpa/FixpointEngine.cpp src/facts/CMakeLists.txt src/wpa/CMakeLists.txt tests/unit/wpa/CppRuleEvaluatorTest.cpp tests/unit/facts/RelationIoTest.cpp tests/unit/facts/SouffleExporterTest.cpp tests/unit/wpa/FixpointEngineTest.cpp tests/unit/facts/CMakeLists.txt tests/unit/wpa/CMakeLists.txt tests/integration/facts/SouffleRunnerTest.cpp
+git add logic/schema/relations.v2.dl logic/common/epistemic.dl logic/common/semantic_key.dl logic/reachability/reachability.v2.dl logic/reachability/bundle.manifest logic/memory_effects/may_write.v2.dl logic/memory_effects/bundle.manifest include/veritas/facts/RelationIo.h src/facts/RelationIo.cpp include/veritas/facts/SemanticKeyCodec.h src/facts/SemanticKeyCodec.cpp include/veritas/wpa/CppRuleEvaluator.h src/wpa/CppRuleEvaluator.cpp include/veritas/facts/SouffleExporter.h src/facts/SouffleExporter.cpp include/veritas/wpa/FixpointEngine.h src/wpa/FixpointEngine.cpp src/facts/CMakeLists.txt src/wpa/CMakeLists.txt tests/unit/wpa/CppRuleEvaluatorTest.cpp tests/unit/facts/RelationIoTest.cpp tests/unit/facts/SemanticKeyCodecTest.cpp tests/unit/facts/SouffleExporterTest.cpp tests/unit/wpa/FixpointEngineTest.cpp tests/unit/facts/CMakeLists.txt tests/unit/wpa/CMakeLists.txt tests/integration/facts/SouffleRunnerTest.cpp
 git commit -m "feat: add V2 WPA rule bundles and oracle"
 ```
 
@@ -1622,10 +1680,13 @@ git commit -m "feat: add V2 WPA rule bundles and oracle"
 - Create: `src/wpa/SouffleWpaExecutor.cpp`
 - Create: `src/wpa/CppConformanceExecutor.cpp`
 - Create: `src/wpa/SouffleWorkerMain.cpp`
+- Create: `src/facts/SouffleSemanticKeyFunctor.cpp`
+- Modify: `src/facts/CMakeLists.txt`
 - Modify: `src/wpa/CMakeLists.txt`
 - Create: `tests/unit/wpa/WpaExecutorTest.cpp`
 - Create: `tests/integration/wpa/SouffleWpaExecutorTest.cpp`
 - Create: `tests/integration/wpa/WpaExecutorConformanceTest.cpp`
+- Create: `tests/integration/facts/SemanticKeyFunctorTest.cpp`
 - Modify: `tests/unit/wpa/CMakeLists.txt`
 - Modify: `tests/integration/wpa/CMakeLists.txt`
 
@@ -1659,9 +1720,16 @@ TEST(SouffleWpaExecutorTest, TimeoutReturnsFailureWithoutOutput) {
 }
 
 TEST(WpaExecutorConformanceTest, EnginesProduceSameCanonicalFacts) {
-  auto input = RecursiveReachabilityInput();
-  auto souffle = RunAndCanonicalize(SouffleExecutor(), input);
-  auto cpp = RunAndCanonicalize(CppOracle(), input);
+  auto logical = RecursiveReachabilityLogicalInput();
+  const auto logical_bytes = SerializeCanonical(*logical);
+  auto souffle_input = EnvelopeFor(*logical, SouffleManifest());
+  auto cpp_input = EnvelopeFor(*logical, CppConformanceManifest());
+  ASSERT_NE(souffle_input.run.run_id, cpp_input.run.run_id);
+  EXPECT_EQ(SerializeCanonical(souffle_input.logical), logical_bytes);
+  EXPECT_EQ(SerializeCanonical(cpp_input.logical), logical_bytes);
+  EXPECT_EQ(souffle_input.logical.mappings, cpp_input.logical.mappings);
+  auto souffle = RunAndCanonicalize(SouffleExecutor(), souffle_input);
+  auto cpp = RunAndCanonicalize(CppOracle(), cpp_input);
   ASSERT_TRUE(souffle.ok());
   ASSERT_TRUE(cpp.ok());
   EXPECT_EQ(souffle->facts, cpp->facts);
@@ -1674,8 +1742,8 @@ TEST(WpaExecutorConformanceTest, EnginesProduceSameCanonicalFacts) {
 Run:
 
 ```bash
-cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build -DVERITAS_WPA_ENGINE=souffle
-cmake --build --preset default --target SouffleWpaExecutorTest WpaExecutorConformanceTest
+cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build -DVERITAS_WPA_ENGINE=souffle -DVERITAS_SOUFFLE_PROVENANCE_FILE=/path/to/souffle-provenance.json
+cmake --build --preset default --target SouffleWpaExecutorTest WpaExecutorConformanceTest SemanticKeyFunctorTest
 ```
 
 Expected before implementation: configure/build fails because compiled bundle generation and executor targets do not exist. If the host lacks Soufflé, configuration also confirms the new production dependency must be installed before completing this task.
@@ -1690,11 +1758,28 @@ set_property(CACHE VERITAS_WPA_ENGINE PROPERTY STRINGS souffle cpp-emergency)
 if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   find_program(VERITAS_SOUFFLE_EXECUTABLE NAMES souffle REQUIRED)
   find_path(VERITAS_SOUFFLE_INCLUDE_DIR souffle/SouffleInterface.h REQUIRED)
+  set(VERITAS_SOUFFLE_PROVENANCE_FILE "" CACHE FILEPATH
+      "Provenance JSON emitted by the pinned Souffle build")
+  if(NOT EXISTS "${VERITAS_SOUFFLE_PROVENANCE_FILE}")
+    message(FATAL_ERROR "A verified Souffle provenance manifest is required")
+  endif()
   execute_process(COMMAND ${VERITAS_SOUFFLE_EXECUTABLE} --version
                   OUTPUT_VARIABLE VERITAS_SOUFFLE_VERSION
                   OUTPUT_STRIP_TRAILING_WHITESPACE)
-  if(NOT VERITAS_SOUFFLE_VERSION MATCHES "2\\.5")
-    message(FATAL_ERROR "VERITAS requires Souffle 2.5")
+  file(READ "${VERITAS_SOUFFLE_PROVENANCE_FILE}" VERITAS_SOUFFLE_PROVENANCE)
+  string(JSON VERITAS_SOUFFLE_REVISION GET
+         "${VERITAS_SOUFFLE_PROVENANCE}" source_revision)
+  string(JSON VERITAS_SOUFFLE_RECORDED_SHA GET
+         "${VERITAS_SOUFFLE_PROVENANCE}" executable_sha256)
+  file(SHA256 "${VERITAS_SOUFFLE_EXECUTABLE}" VERITAS_SOUFFLE_ACTUAL_SHA)
+  string(LENGTH "${VERITAS_SOUFFLE_REVISION}" VERITAS_SOUFFLE_REVISION_LENGTH)
+  if(NOT VERITAS_SOUFFLE_VERSION MATCHES "^Souffle: 2\\.5($|[ -])" OR
+     NOT VERITAS_SOUFFLE_REVISION_LENGTH EQUAL 40 OR
+     NOT VERITAS_SOUFFLE_REVISION MATCHES "^[0-9a-f]+$" OR
+     NOT VERITAS_SOUFFLE_REVISION STREQUAL "5682a9f12e2668ecdd26348fe63cc508bc0fcf47" OR
+     NOT VERITAS_SOUFFLE_ACTUAL_SHA STREQUAL VERITAS_SOUFFLE_RECORDED_SHA)
+    message(FATAL_ERROR
+            "VERITAS requires qualified Souffle 2.5 at 5682a9f12e2668ecdd26348fe63cc508bc0fcf47")
   endif()
 elseif(NOT VERITAS_WPA_ENGINE STREQUAL "cpp-emergency")
   message(FATAL_ERROR "VERITAS_WPA_ENGINE must be souffle or cpp-emergency")
@@ -1703,7 +1788,11 @@ else()
 endif()
 ```
 
-`veritas_generate_souffle_program(NAME ReachabilityV2 SOURCE logic/reachability/reachability.v2.dl)` and the corresponding `MayWriteV2` call run `souffle -g` into the build tree. Compile generated sources privately into `veritas-souffle-worker`; the worker selects the registered program from a required component argument and uses `-F`/`-D` directories. No generated source is installed or checked in.
+The pinned-build provisioning step writes `souffle-provenance.json` with tag, full source revision, build configuration, compiler identity, and executable SHA-256. CMake validates the exact revision and executable digest, then canonicalizes the manifest plus generated-bundle hashes into `EngineToolchainIdentity`; every Soufflé run manifest records it. A version substring alone is never sufficient qualification.
+
+Build `src/facts/SouffleSemanticKeyFunctor.cpp` and `SemanticKeyCodec.cpp` as the private shared library `veritas-souffle-functors`, exporting only the three `extern "C"` stateful functor symbols declared in `semantic_key.dl`. `veritas_generate_souffle_program(NAME ReachabilityV2 SOURCE logic/reachability/reachability.v2.dl)` and the corresponding `MayWriteV2` call run `souffle -g` into the build tree with the functor library available through pinned `-L`/`-l` arguments. Link the generated programs and `veritas-souffle-worker` to that exact target and set a build-tree rpath so the worker loads the same library at evaluation time. `SemanticKeyFunctorTest` invokes the generated worker, proving symbol resolution and byte equality with `SemanticKeyCodec`; an unresolved or mismatched functor is a hard test failure.
+
+Compile generated sources privately into `veritas-souffle-worker`; the worker selects the registered program from a required component argument and uses `-F`/`-D` directories. No generated source, functor ABI, or Soufflé type is installed as a VERITAS public interface or checked-in generated artifact.
 
 - [ ] **Step 4: Implement the executor interface and adapters**
 
@@ -1719,7 +1808,7 @@ class WpaExecutor {
   virtual ~WpaExecutor() = default;
   virtual facts::EngineIdentity identity() const = 0;
   virtual StatusOr<RawWpaEvaluation>
-  Execute(const WpaComponentInput& input,
+  Execute(const WpaExecutionEnvelope& input,
           const WpaExecutionLimits& limits) const = 0;
 };
 
@@ -1728,27 +1817,28 @@ class SouffleWpaExecutor final : public WpaExecutor {
   explicit SouffleWpaExecutor(std::filesystem::path worker);
   facts::EngineIdentity identity() const override;
   StatusOr<RawWpaEvaluation>
-  Execute(const WpaComponentInput&, const WpaExecutionLimits&) const override;
+  Execute(const WpaExecutionEnvelope&, const WpaExecutionLimits&) const override;
 };
 ```
 
-The Soufflé adapter creates a unique run-local temporary directory, writes typed inputs atomically, executes the compiled worker with LLVM process limits and `threads == 1`, reads and validates outputs only after exit code zero, and removes temporary files after parsing. Timeout, signal, non-zero exit, missing output, schema mismatch, and witness parse failure return a non-OK `Status` with no `RawWpaEvaluation`.
+`WpaExecutionEnvelope` contains an executor-specific `AnalysisRunManifest`, exact engine/toolchain provenance, and the immutable `WpaLogicalComponentInput`. The Soufflé adapter creates a unique run-local temporary directory, writes the canonical logical inputs atomically, executes the compiled worker with LLVM process limits and `threads == 1`, reads and validates outputs only after exit code zero, and removes temporary files after parsing. Timeout, signal, non-zero exit, missing output, schema mismatch, and witness parse failure return a non-OK `Status` with no `RawWpaEvaluation`.
 
-Each adapter rejects an input whose manifest engine identity differs from its own. The C++ adapter invokes `CppRuleEvaluator` and exposes only `kCppConformance` or `kCppEmergency`. It receives an immutable component input whose stable semantic EDB matches the Soufflé input used for comparison; it cannot read summaries or construct another semantic relation set.
+Each adapter rejects an envelope whose manifest engine identity or toolchain identity differs from its own. The C++ adapter invokes `CppRuleEvaluator` and exposes only `kCppConformance` or `kCppEmergency`. It receives an envelope over the same immutable logical-input bytes used for Soufflé comparison; it cannot read summaries or construct another semantic relation set. The test harness creates one logical object, asserts its bytes and mappings remain identical, derives the two valid envelopes, and only then compares canonical engine-independent facts.
 
 - [ ] **Step 5: Run compiled engine and conformance suites**
 
 Run:
 
 ```bash
-cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build -DVERITAS_WPA_ENGINE=souffle
-cmake --build --preset default --target WpaExecutorTest SouffleWpaExecutorTest WpaExecutorConformanceTest
+cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build -DVERITAS_WPA_ENGINE=souffle -DVERITAS_SOUFFLE_PROVENANCE_FILE=/path/to/souffle-provenance.json
+cmake --build --preset default --target WpaExecutorTest SouffleWpaExecutorTest WpaExecutorConformanceTest SemanticKeyFunctorTest
 ./build/bin/WpaExecutorTest
 ./build/bin/SouffleWpaExecutorTest
 ./build/bin/WpaExecutorConformanceTest
+./build/bin/SemanticKeyFunctorTest
 ```
 
-Expected: compiled Soufflé execution, process failure handling, and semantic equality with the C++ oracle all pass; no test is skipped.
+Expected: compiled Soufflé execution, process failure handling, stateful functor symbol resolution and byte equality, and semantic equality with the C++ oracle all pass; no test is skipped.
 
 - [ ] **Step 6: Verify the explicit emergency build separately**
 
@@ -1765,7 +1855,7 @@ Expected: configuration prints the degraded-mode warning, builds without generat
 - [ ] **Step 7: Commit compiled production executors**
 
 ```bash
-git add cmake/VeritasSouffle.cmake CMakeLists.txt cmake/Dependencies.cmake include/veritas/wpa/WpaExecutor.h include/veritas/wpa/SouffleWpaExecutor.h include/veritas/wpa/CppConformanceExecutor.h src/wpa/SouffleWpaExecutor.cpp src/wpa/CppConformanceExecutor.cpp src/wpa/SouffleWorkerMain.cpp src/wpa/CMakeLists.txt tests/unit/wpa/WpaExecutorTest.cpp tests/integration/wpa/SouffleWpaExecutorTest.cpp tests/integration/wpa/WpaExecutorConformanceTest.cpp tests/unit/wpa/CMakeLists.txt tests/integration/wpa/CMakeLists.txt
+git add cmake/VeritasSouffle.cmake CMakeLists.txt cmake/Dependencies.cmake include/veritas/wpa/WpaExecutor.h include/veritas/wpa/SouffleWpaExecutor.h include/veritas/wpa/CppConformanceExecutor.h src/facts/SouffleSemanticKeyFunctor.cpp src/facts/CMakeLists.txt src/wpa/SouffleWpaExecutor.cpp src/wpa/CppConformanceExecutor.cpp src/wpa/SouffleWorkerMain.cpp src/wpa/CMakeLists.txt tests/unit/wpa/WpaExecutorTest.cpp tests/integration/facts/SemanticKeyFunctorTest.cpp tests/integration/wpa/SouffleWpaExecutorTest.cpp tests/integration/wpa/WpaExecutorConformanceTest.cpp tests/unit/wpa/CMakeLists.txt tests/integration/wpa/CMakeLists.txt
 git commit -m "feat: require compiled Souffle WPA execution"
 ```
 
@@ -1798,7 +1888,7 @@ git commit -m "feat: require compiled Souffle WPA execution"
 - Produces: `WpaRunStatus`, `WpaComponentStatus`, `WpaRunRequest`, `WpaRunResult`, `WpaRunRepository`, and `WpaOrchestrator`.
 - Persists: run manifests/status, component input/fixpoint/external hashes, diagnostics, and stale linkage; it does not persist M9 facts yet.
 - Persists: each canonical component result as an opaque immutable cache object so a reused successor still supplies semantic facts and witnesses; the cache has no M9 query/index API.
-- Reuses: only a successful component with the same `RunId`, SCC, component, and `InputHash`.
+- Reuses: an immutable successful component across runs only when `LogicalInputHash`, SCC, component, exact executor/toolchain identity, schema, rule, and model identities match; each run stores its own cache-object reference.
 - Schedules: predecessor work only when `ExternalHash` changes.
 
 - [ ] **Step 1: Write orchestration and failure-publication tests**
@@ -1826,6 +1916,26 @@ TEST(WpaOrchestratorTest, WitnessOnlyChangeDoesNotSchedulePredecessor) {
   auto result = RunWithSameExternalHashAndNewFixpointHash();
   ASSERT_TRUE(result.ok());
   EXPECT_TRUE(result->scheduled_predecessors.empty());
+}
+
+TEST(WpaOrchestratorTest, ReusesUnchangedComponentAcrossRevisions) {
+  auto first = Orchestrator(SouffleExecutor()).Run(RequestForRevision(1));
+  auto second = Orchestrator(SouffleExecutor()).Run(RequestForRevision(2));
+  ASSERT_TRUE(first.ok());
+  ASSERT_TRUE(second.ok());
+  EXPECT_NE(first->run.run_id, second->run.run_id);
+  EXPECT_EQ(first->completed_components[0].result.logical_input_hash,
+            second->completed_components[0].result.logical_input_hash);
+  EXPECT_EQ(first->completed_components[0].result_object_key,
+            second->completed_components[0].result_object_key);
+  EXPECT_EQ(SouffleExecutionCount(), 1u);
+}
+
+TEST(WpaOrchestratorTest, ToolchainOrSemanticChangeMissesCache) {
+  ASSERT_TRUE(Orchestrator(SouffleExecutor()).Run(BaseRequest()).ok());
+  ASSERT_TRUE(Orchestrator(OtherQualifiedSouffle()).Run(BaseRequest()).ok());
+  ASSERT_TRUE(Orchestrator(SouffleExecutor()).Run(ChangedSummaryRequest()).ok());
+  EXPECT_EQ(SouffleExecutionCount(), 3u);
 }
 ```
 
@@ -1855,6 +1965,7 @@ CREATE TABLE IF NOT EXISTS wpa_analysis_runs (
   svf_configuration_hash TEXT NOT NULL,
   wpa_configuration_hash TEXT NOT NULL,
   engine_identity INTEGER NOT NULL,
+  engine_toolchain_identity TEXT NOT NULL,
   status INTEGER NOT NULL,
   stale_base_run_id TEXT,
   started_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
@@ -1865,9 +1976,10 @@ CREATE TABLE IF NOT EXISTS wpa_component_states_v2 (
   run_id TEXT NOT NULL,
   scc_id TEXT NOT NULL,
   component_kind INTEGER NOT NULL,
-  input_hash TEXT NOT NULL,
+  logical_input_hash TEXT NOT NULL,
   fixpoint_hash TEXT NOT NULL,
   external_hash TEXT NOT NULL,
+  result_cache_key TEXT NOT NULL,
   result_object_key TEXT NOT NULL,
   status INTEGER NOT NULL,
   diagnostics TEXT NOT NULL,
@@ -1875,9 +1987,21 @@ CREATE TABLE IF NOT EXISTS wpa_component_states_v2 (
   PRIMARY KEY (run_id, scc_id, component_kind),
   FOREIGN KEY (run_id) REFERENCES wpa_analysis_runs(run_id)
 );
+
+CREATE TABLE IF NOT EXISTS wpa_component_result_cache_v2 (
+  result_cache_key TEXT PRIMARY KEY NOT NULL,
+  logical_input_hash TEXT NOT NULL,
+  engine_toolchain_identity TEXT NOT NULL,
+  relation_schema_version TEXT NOT NULL,
+  rule_bundle_version TEXT NOT NULL,
+  model_bundle_version TEXT NOT NULL,
+  result_object_key TEXT NOT NULL,
+  fixpoint_hash TEXT NOT NULL,
+  external_hash TEXT NOT NULL
+);
 ```
 
-Embed and apply V1 then V2 idempotently. Keep existing M8 tables readable. `WpaRunRepository::Open(db_path)` owns the shared metadata connection plus a dedicated immutable object store at `db_path/wpa-component-results`; `StoreSuccessfulComponent` writes the canonical component-result bytes before committing `result_object_key`, and `LoadSuccessfulComponent` validates the object hash before returning the complete facts/witnesses. Add repository methods `BeginRun`, `LoadSuccessfulComponent`, `StoreSuccessfulComponent`, `RecordComponentFailure`, `CompleteRun`, and `MarkIncomplete` with transactions around every metadata state transition.
+Embed and apply V1 then V2 idempotently. Keep existing M8 tables readable. `WpaRunRepository::Open(db_path)` owns the shared metadata connection plus a dedicated immutable object store at `db_path/wpa-component-results`. Derive `result_cache_key` from `LogicalInputHash`, SCC/component identity, exact engine/toolchain identity, and schema/rule/model versions. `StoreSuccessfulComponent` writes the canonical component-result bytes and immutable cache row before committing the current run's reference; `LoadReusableComponent` validates every key field and the object hash before returning complete facts, rooted inputs, and witnesses. A revision-only change can reuse the object, but creates a distinct `wpa_analysis_runs` and `wpa_component_states_v2` row. Add repository methods `BeginRun`, `LoadReusableComponent`, `StoreSuccessfulComponent`, `RecordComponentFailure`, `CompleteRun`, and `MarkIncomplete` with transactions around every metadata state transition.
 
 - [ ] **Step 4: Implement bottom-up orchestration**
 
@@ -1890,9 +2014,23 @@ struct WpaRunRequest {
   WpaExecutionLimits limits;
 };
 
+struct WpaComponentKey {
+  core::StableId scc_id;
+  WpaComponentKind component;
+  auto operator<=>(const WpaComponentKey&) const = default;
+};
+
+struct WpaComponentCompletion {
+  WpaComponentKey key;
+  std::string result_object_key;
+  WpaComponentResult result;
+};
+
 struct WpaRunResult {
   facts::AnalysisRunManifest run;
-  std::vector<WpaComponentResult> components;
+  std::vector<WpaComponentKey> expected_components;
+  std::vector<WpaComponentCompletion> completed_components;
+  std::vector<core::StableId> rooted_input_fact_ids;
   std::vector<runtime::WorkItem> scheduled_predecessors;
 };
 
@@ -1903,7 +2041,7 @@ class WpaOrchestrator {
 };
 ```
 
-Build one call/SCC graph, iterate requested components and reverse-topological SCCs, load validated successor results, materialize one input, reuse matching successful state, execute otherwise, canonicalize, and transactionally store success. On any non-OK executor or canonicalizer status, record diagnostics, mark the run incomplete, return the failure, and do not call `StoreSuccessfulComponent`. Use `ExternalHash` comparison to enqueue predecessors through the existing M7 scheduler.
+Build one call/SCC graph, freeze the expected `(SccId, ComponentKind)` set, iterate requested components and reverse-topological SCCs, load validated successor results, materialize one logical input, reuse a matching content-addressed result, execute otherwise, canonicalize, and transactionally store success. `StoreSuccessfulComponent` returns `WpaComponentCompletion`, making its immutable `result_object_key` and complete hash-bearing `WpaComponentResult` the sole completion metadata source. The returned expected set, completion records, and rooted input IDs are immutable inputs to Task 17. On any non-OK executor or canonicalizer status, record diagnostics, mark the run incomplete, return the failure, and do not call `StoreSuccessfulComponent`. Use engine-neutral `ExternalHash` comparison to enqueue predecessors through the existing M7 scheduler.
 
 - [ ] **Step 5: Run run-state, orchestration, and incremental tests**
 
@@ -1917,7 +2055,7 @@ cmake --build --preset default --target WpaRunRepositoryTest WpaOrchestratorTest
 ./build/bin/WpaCoordinatorTest
 ```
 
-Expected: reverse-topological execution, exact cache reuse, failure atomicity, stale diagnostics, and external-only predecessor scheduling pass.
+Expected: reverse-topological execution, validated cross-revision cache reuse, toolchain/semantic cache misses, failure atomicity, stale diagnostics, and external-only predecessor scheduling pass.
 
 - [ ] **Step 6: Commit the production orchestrator and run state**
 
@@ -1978,6 +2116,17 @@ TEST(WpaEmergencyModeTest, ExplicitModeUsesDistinctRunIdentity) {
   EXPECT_NE(emergency->wpa_run_id, SouffleRunIdForSameFixture());
   EXPECT_TRUE(ContainsDegradedOperationDiagnostic(*emergency));
 }
+
+TEST(WpaEmergencyModeTest, SoufflelessBuildNeverLooksUpSouffleProvenance) {
+  FailingIfCalledSouffleProvenanceLookup souffle_lookup;
+  auto analyzer = EmergencyBuildAnalyzer(souffle_lookup);
+  auto config = AnalysisConfig::Default();
+  config.wpa_engine = WpaEngineMode::kCppEmergency;
+  auto result = analyzer.AnalyzeProject(Request(), config);
+  ASSERT_TRUE(result.ok());
+  EXPECT_EQ(souffle_lookup.invocation_count(), 0u);
+  EXPECT_EQ(result->wpa_engine, WpaEngineMode::kCppEmergency);
+}
 ```
 
 - [ ] **Step 2: Build and confirm pipeline tests fail**
@@ -2013,7 +2162,9 @@ struct AnalysisConfig {
 };
 ```
 
-`AnalysisConfig::Default()` sets `wpa_threads` to `1` and validation rejects every other value in this qualification cycle. After atomic summary/CPG publication, list the just-published V2 artifacts, create the run manifest from actual versions/hashes, select exactly one executor from `wpa_engine`, and execute reachability plus may-write. When `run_cpp_conformance_oracle` is true, create a second manifest whose only ownership difference is `EngineIdentity::kCppConformance`, rematerialize the same stable semantic relations into its separately identified run, and compare canonical engine-independent fact IDs. Record that oracle under its distinct `RunId`; never publish or label it as the Soufflé run.
+`AnalysisConfig::Default()` sets `wpa_threads` to `1` and validation rejects every other value in this qualification cycle. Select exactly one executor from `wpa_engine` before constructing an engine-specific manifest. A Soufflé selection requires the verified Soufflé provenance and creates a `kSouffle` manifest with that toolchain identity. A `cpp-emergency` selection performs no Soufflé discovery or provenance lookup and creates a `kCppEmergency` manifest from the VERITAS C++ build identity; configuration rejects `run_cpp_conformance_oracle` in emergency mode. This preserves a genuinely Soufflé-less emergency build without weakening normal production requirements.
+
+After atomic summary/CPG publication, list the just-published V2 artifacts, materialize each engine-neutral logical component input once, wrap it in the selected manifest, and execute reachability plus may-write. In Soufflé mode, when `run_cpp_conformance_oracle` is true, create a second manifest with `EngineIdentity::kCppConformance` and its C++ toolchain identity, wrap the same immutable logical-input bytes in that distinct envelope, and compare canonical engine-independent fact IDs. Record that oracle under its distinct `RunId`; never publish or label it as the Soufflé run.
 
 CLI parsing rejects unknown values and records `cpp-emergency` as a degraded operation. It never catches a Soufflé error to retry with C++.
 
@@ -2029,7 +2180,7 @@ cmake --build --preset default --target ProjectAnalyzerWpaTest WpaEmergencyModeT
 ./build/bin/ProjectAnalyzerTest
 ```
 
-Expected: standard project analysis uses Soufflé, injected failure never invokes C++, and explicit emergency analysis uses a distinct run with degraded diagnostics.
+Expected: standard project analysis uses Soufflé, injected failure never invokes C++, and explicit emergency analysis uses a distinct run with degraded diagnostics and no Soufflé provenance lookup.
 
 - [ ] **Step 5: Commit M8R.4**
 
@@ -2053,6 +2204,7 @@ git commit -m "feat: require Souffle WPA in project analysis"
 - Create: `tests/qualification/wpa/WpaFailureQualificationTest.cpp`
 - Create: `tests/qualification/wpa/WpaMigrationQualificationTest.cpp`
 - Create: `tests/qualification/wpa/WpaPerformanceQualificationTest.cpp`
+- Create: `tests/qualification/check_no_skips.py`
 - Create: `tests/qualification/wpa/performance-ceilings.json`
 - Create: `tests/fixtures/projects/recursive_calls/compile_commands.json`
 - Create: `tests/fixtures/projects/recursive_calls/recursive_calls.cpp`
@@ -2067,9 +2219,9 @@ git commit -m "feat: require Souffle WPA in project analysis"
 
 **Interfaces:**
 
-- Qualifies: every overlapping reachability/may-write result through both engines from the identical serialized `WpaComponentInput`.
+- Qualifies: every overlapping reachability/may-write result from one byte-identical engine-neutral `WpaLogicalComponentInput`, wrapped in distinct valid Soufflé and C++ conformance execution envelopes.
 - Qualifies: input/member/evaluation-order determinism, V1 compatibility, native V2 reanalysis, failure atomicity, repeated-process analysis, and resource ceilings.
-- Produces: CTest label `m9-entry` for every hard entry criterion.
+- Produces: aggregate `wpa-qualification` tests for this task and an exact cross-task registry assigning each M9 criterion label plus composite `m9-entry` to named aggregate tests as their owning tasks create them.
 - Makes CI: install/build the pinned supported Soufflé version and run without skips.
 
 - [ ] **Step 1: Write the qualification matrix as parameterized tests**
@@ -2085,15 +2237,32 @@ class WpaDifferentialQualificationTest
     : public ::testing::TestWithParam<QualificationCase> {};
 
 TEST_P(WpaDifferentialQualificationTest, SouffleEqualsCppOracle) {
-  auto input = MaterializeFixture(GetParam().fixture, GetParam().component);
-  ASSERT_TRUE(input.ok());
-  auto souffle = ExecuteAndCanonicalize(SouffleExecutor(), *input);
-  auto cpp = ExecuteAndCanonicalize(CppOracle(), *input);
+  auto logical = MaterializeLogicalFixture(GetParam().fixture,
+                                           GetParam().component);
+  ASSERT_TRUE(logical.ok());
+  const auto logical_bytes = SerializeCanonical(*logical);
+  auto souffle_input = EnvelopeFor(*logical, SouffleManifest());
+  auto cpp_input = EnvelopeFor(*logical, CppConformanceManifest());
+  ASSERT_NE(souffle_input.run.run_id, cpp_input.run.run_id);
+  EXPECT_EQ(SerializeCanonical(souffle_input.logical), logical_bytes);
+  EXPECT_EQ(SerializeCanonical(cpp_input.logical), logical_bytes);
+  EXPECT_EQ(souffle_input.logical.mappings, cpp_input.logical.mappings);
+  auto souffle = ExecuteAndCanonicalize(SouffleExecutor(), souffle_input);
+  auto cpp = ExecuteAndCanonicalize(CppOracle(), cpp_input);
   ASSERT_TRUE(souffle.ok());
   ASSERT_TRUE(cpp.ok());
   EXPECT_EQ(souffle->facts, cpp->facts);
   EXPECT_EQ(souffle->external_hash, cpp->external_hash);
   EXPECT_TRUE(AllFactsHaveClosedWitnesses(*souffle));
+}
+
+TEST(WpaDifferentialQualificationTest, UnknownRangeIsLosslessAcrossEngines) {
+  auto logical = MaterializeLogicalFixture("abstract_memory_unknown_range",
+                                           WpaComponentKind::kMemoryEffects);
+  ASSERT_TRUE(logical.ok());
+  EXPECT_TRUE(ContainsRangeKind(*logical, ByteRangeKind::kUnknown));
+  EXPECT_EQ(RunBothValidEnvelopes(*logical).canonical_facts,
+            ExpectedUnknownRangeFacts());
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -2147,7 +2316,7 @@ TEST(WpaMigrationQualificationTest, V1ProjectionIsTaggedAndNeverFabricates) {
   ASSERT_TRUE(input.ok());
   EXPECT_TRUE(ContainsLegacyOpaqueMemory(*input));
   EXPECT_TRUE(ContainsUnknownDispatch(*input));
-  EXPECT_EQ(input->run.summary_schema_version, "summary.v1-compat-v2");
+  EXPECT_EQ(input->semantics.summary_schema_version, "summary.v1-compat-v2");
 }
 
 TEST(WpaMigrationQualificationTest, ReanalysisSupersedesWithoutMutation) {
@@ -2182,14 +2351,34 @@ The performance test runs five warmed iterations, records the median wall time a
 
 - [ ] **Step 5: Install the supported Soufflé package in CI and run qualification**
 
-Add one CI setup step that checks out Soufflé tag `2.5` at release commit `5682a9f`, builds/installs it, asserts `souffle --version` reports `2.5`, configures `-DVERITAS_WPA_ENGINE=souffle`, and treats every skipped `m9-entry` test as failure.
+Add one CI setup step that checks out Soufflé tag `2.5` and verifies full revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, builds/installs it, emits the required provenance JSON with that 40-character revision and installed executable SHA-256, configures `-DVERITAS_WPA_ENGINE=souffle -DVERITAS_SOUFFLE_PROVENANCE_FILE=<manifest>`, and treats every missing, disabled, or skipped `m9-entry` test as failure.
+
+Register the exact gate membership with `set_tests_properties(... PROPERTIES LABELS "m9-entry;<criterion>")` in each test's owning task and CMake file. Task 16 additionally labels its five qualification aggregates `wpa-qualification`:
+
+| Criterion label | Exact aggregate tests | Registration owner |
+|---|---|---|
+| `summary-v2` | `FunctionSummaryV2Test`, `SummaryRepositoryVersionTest` | Tasks 5–6 |
+| `indirect-calls` | `SvfFactMapperV2Test`, `CallGraphTest` | Tasks 8 and 10 |
+| `stable-identity` | `StableValueIdentityTest`, `AbstractMemoryBuilderTest`, `DenseIdMapTest` | Tasks 4 and 7 |
+| `relations-v2` | `RelationSchemaTest`, `WpaInputMaterializerTest`, `WpaDeterminismQualificationTest` | Tasks 3, 10, and 16 |
+| `souffle-production` | `SouffleWpaExecutorTest`, `ProjectAnalyzerWpaTest`, `WpaPerformanceQualificationTest` | Tasks 13, 15, and 16 |
+| `engine-conformance` | `WpaExecutorConformanceTest`, `WpaDifferentialQualificationTest` | Tasks 13 and 16 |
+| `witness-closure` | `WitnessCanonicalizerTest`, `AnalysisFactBusTest` | Tasks 11 and 17 |
+| `failure-atomicity` | `WpaFailureQualificationTest`, `WpaOrchestratorTest` | Tasks 16 and 14 |
+| `run-identity` | `AnalysisRunTest`, `WpaMigrationQualificationTest` | Tasks 2 and 16 |
+| `documentation-consistency` | `M9DocumentationConsistencyTest` | Task 18 |
+
+Register each table entry as a named aggregate CTest test with `add_test(NAME <exact-name> COMMAND $<TARGET_FILE:<target>>)` (or the Python interpreter for the documentation test), then assign the two labels shown. Any separately discovered GoogleTest cases may retain their normal labels, but they are not substitutes for these aggregate gate members.
+
+`check_no_skips.py` parses CTest JUnit XML, accepts the exact expected names for a selected label set, and fails on every `<skipped>` element, disabled test, missing or extra expected test, non-zero failure/error count, or duplicate test name. During Task 16 it checks the five `wpa-qualification` aggregates; Task 18's gate checks every criterion set. This makes skip rejection machine-readable without requiring the not-yet-created Task 17–18 tests to pass during Task 16.
 
 Run locally:
 
 ```bash
-cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build -DVERITAS_WPA_ENGINE=souffle
+cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build -DVERITAS_WPA_ENGINE=souffle -DVERITAS_SOUFFLE_PROVENANCE_FILE=/path/to/souffle-provenance.json
 cmake --build --preset default --target WpaDifferentialQualificationTest WpaDeterminismQualificationTest WpaFailureQualificationTest WpaMigrationQualificationTest WpaPerformanceQualificationTest
-ctest --test-dir build -L m9-entry --output-on-failure
+ctest --test-dir build -L wpa-qualification --no-tests=error --output-on-failure --output-junit build/wpa-qualification.xml
+python3 tests/qualification/check_no_skips.py build/wpa-qualification.xml --expect WpaDifferentialQualificationTest,WpaDeterminismQualificationTest,WpaFailureQualificationTest,WpaMigrationQualificationTest,WpaPerformanceQualificationTest
 ```
 
 Expected: all differential, determinism, failure, migration, lifecycle, and performance tests pass with zero skips.
@@ -2216,9 +2405,10 @@ git commit -m "test: qualify production Souffle WPA"
 
 **Interfaces:**
 
-- Consumes: only successful `WpaRunResult` component facts, witnesses, run manifest, and diagnostics.
+- Consumes: only a successful `WpaRunResult`, including its frozen expected component set, completed component records/hashes, rooted input fact IDs, facts, witnesses, run manifest, and diagnostics.
 - Produces: `AnalysisFactBatch`, abstract `AnalysisFactSink`, and `AnalysisFactBus::Publish`.
-- Validates: one manifest, stable fact uniqueness, witness closure, engine identity, complete component set, and no conflicting semantic row for one fact ID.
+- Validates: one manifest, stable fact uniqueness, witness closure against declared rooted inputs, engine identity, exact expected/completed component equality, and no conflicting semantic row for one fact ID.
+- Delivers: idempotent at least once to each named sink under canonical `(RunId, BatchId)`; partial fan-out is durably tracked per sink and safe to retry.
 - Provides: the stable M9 ingestion seam without adding a durable M9 store early.
 
 - [ ] **Step 1: Write bus validation and delivery tests**
@@ -2226,8 +2416,8 @@ git commit -m "test: qualify production Souffle WPA"
 ```cpp
 TEST(AnalysisFactBusTest, DeliversOneValidatedImmutableBatch) {
   RecordingSink sink;
-  AnalysisFactBus bus;
-  bus.AddSink(sink);
+  AnalysisFactBus bus(DeliveryRepository());
+  bus.AddSink("recording", sink);
   auto status = bus.Publish(SuccessfulBatch());
   ASSERT_TRUE(status.ok());
   ASSERT_EQ(sink.batches().size(), 1u);
@@ -2242,6 +2432,31 @@ TEST(AnalysisFactBusTest, RejectsIncompleteOrMixedRunBatch) {
 TEST(AnalysisFactBusTest, RejectsFactWithoutClosedWitness) {
   EXPECT_EQ(Bus().Publish(BatchWithOrphan()).code(),
             StatusCode::kFailedPrecondition);
+}
+
+TEST(AnalysisFactBusTest, RejectsClosedSubsetWithMissingComponent) {
+  auto batch = SuccessfulBatch();
+  batch.completed_components.pop_back();
+  EXPECT_EQ(Bus().Publish(std::move(batch)).code(),
+            StatusCode::kFailedPrecondition);
+}
+
+TEST(AnalysisFactBusTest, RejectsWitnessLeafOutsideRootSet) {
+  EXPECT_EQ(Bus().Publish(BatchWithUndeclaredRoot()).code(),
+            StatusCode::kFailedPrecondition);
+}
+
+TEST(AnalysisFactBusTest, RetryAfterPartialFanoutIsIdempotent) {
+  RecordingSink first;
+  FailOnceSink second;
+  AnalysisFactBus bus(DeliveryRepository());
+  bus.AddSink("first", first);
+  bus.AddSink("second", second);
+  auto batch = SuccessfulBatch();
+  EXPECT_FALSE(bus.Publish(batch).ok());
+  EXPECT_TRUE(bus.Publish(batch).ok());
+  EXPECT_EQ(first.logical_publication_count(batch.batch_id), 1u);
+  EXPECT_EQ(second.logical_publication_count(batch.batch_id), 1u);
 }
 ```
 
@@ -2259,7 +2474,11 @@ Expected: compilation fails because the Fact Bus contract is absent.
 
 ```cpp
 struct AnalysisFactBatch {
+  core::StableId batch_id;
   AnalysisRunManifest run;
+  std::vector<wpa::WpaComponentKey> expected_components;
+  std::vector<wpa::WpaComponentCompletion> completed_components;
+  std::vector<core::StableId> rooted_input_fact_ids;
   std::vector<AnalysisFact> facts;
   std::vector<WitnessEdge> witnesses;
   std::vector<std::string> diagnostics;
@@ -2268,17 +2487,21 @@ struct AnalysisFactBatch {
 class AnalysisFactSink {
  public:
   virtual ~AnalysisFactSink() = default;
+  // Repeated (run_id, batch_id) publication is a successful no-op.
   virtual Status Publish(const AnalysisFactBatch& batch) = 0;
 };
 
 class AnalysisFactBus {
  public:
-  void AddSink(AnalysisFactSink& sink);
+  explicit AnalysisFactBus(wpa::WpaRunRepository& delivery_state);
+  void AddSink(std::string sink_id, AnalysisFactSink& sink);
   Status Publish(AnalysisFactBatch batch) const;
 };
 ```
 
-Canonicalize batch ordering by fact ID and witness tuple. Validate the same invariants as result canonicalization, then deliver the immutable batch to each registered sink. A sink failure returns non-OK and is recorded by the run repository; it does not mutate component success. M9 will implement a transactional durable sink and `explainFact` over these exact witness edges.
+Construct the batch only from `WpaRunResult`. Canonicalize component, rooted-input, fact, and witness ordering; derive `BatchId` from that immutable semantic content. Require set equality between `expected_components` and the keys in `completed_components`, verify each completion hash against the run result, and close every witness leaf over either a published fact or `rooted_input_fact_ids`. Only then deliver the immutable batch.
+
+Every sink must implement idempotent at-least-once publication keyed by `(run_id, batch_id)`. The bus records per-sink pending/completed delivery state in the run repository. A sink failure returns non-OK without mutating component success; retry visits only pending sinks, and a defensive repeated call to a completed sink is a successful no-op. Cross-sink atomicity is not claimed. M9 will implement a transactional durable sink and `explainFact` over these exact witness edges.
 
 - [ ] **Step 4: Connect successful orchestration to the bus and run tests**
 
@@ -2290,7 +2513,7 @@ cmake --build --preset default --target AnalysisFactBusTest WpaEndToEndTest
 ./build/bin/WpaEndToEndTest
 ```
 
-Expected: only complete validated batches are delivered and end-to-end WPA exposes the exact fact/witness handoff expected by M9.
+Expected: only complete validated batches are delivered, rooted closure is independently checked, partial fan-out retries without duplicate logical publication, and end-to-end WPA exposes the exact fact/witness handoff expected by M9.
 
 - [ ] **Step 5: Commit the Fact Bus**
 
@@ -2306,6 +2529,7 @@ git commit -m "feat: add WPA analysis fact bus"
 - Create: `docs/specs/milestones/m8r-souffle-wpa-remediation-design-spec.md`
 - Create: `tools/check_m9_entry.py`
 - Create: `tests/qualification/M9EntryGateTest.py`
+- Create: `tests/qualification/M9DocumentationConsistencyTest.py`
 - Modify: `README.md`
 - Modify: `docs/architecture/veritas-platform-architecture-design.md`
 - Modify: `docs/architecture/veritas-whole-program-analysis-design.md`
@@ -2338,6 +2562,11 @@ class M9EntryGateTest(unittest.TestCase):
         result = run_gate(build_dir=fixture_build("missing-witness-test"))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("criterion 7", result.stderr)
+
+    def test_gate_rejects_skipped_or_disabled_test(self):
+        result = run_gate(build_dir=fixture_build("skipped-conformance"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("skipped or disabled", result.stderr)
 ```
 
 - [ ] **Step 2: Run and confirm the gate test fails**
@@ -2373,14 +2602,26 @@ def check_cache(build_dir: pathlib.Path) -> None:
 
 def run_criteria(build_dir: pathlib.Path) -> None:
     for number, label in REQUIRED_CTEST_LABELS.items():
+        junit = build_dir / f"m9-entry-{number}.xml"
         completed = subprocess.run(
             ["ctest", "--test-dir", str(build_dir), "-L", label,
-             "--output-on-failure"], text=True, capture_output=True)
-        require(completed.returncode == 0 and "No tests were found" not in completed.stdout,
+             "--no-tests=error", "--output-on-failure",
+             "--output-junit", str(junit)], text=True, capture_output=True)
+        require(completed.returncode == 0,
                 f"criterion {number} failed: {label}\n{completed.stdout}\n{completed.stderr}")
+        report = xml.etree.ElementTree.parse(junit)
+        cases = report.findall(".//testcase")
+        names = {case.attrib["name"] for case in cases}
+        require(names == EXPECTED_TESTS_BY_LABEL[label],
+                f"criterion {number} test membership mismatch: {names}")
+        require(not any(case.find("skipped") is not None for case in cases),
+                f"criterion {number} contains skipped or disabled tests")
+        require(not report.findall(".//failure") and
+                not report.findall(".//error"),
+                f"criterion {number} contains failures or errors")
 ```
 
-Also check that rule/model manifests exist and match the current run defaults, generated compiled targets exist, and the canonical architecture/milestone/README files contain the same ownership statements. Emit one pass/fail line per criterion and a non-zero exit on any missing or skipped criterion.
+Define `EXPECTED_TESTS_BY_LABEL` from Task 16's exact table, including `M9DocumentationConsistencyTest`. Register that Python test with labels `m9-entry;documentation-consistency`. Also check that rule/model manifests exist and match the current run defaults, the configured Soufflé provenance manifest contains the exact 40-character source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47` and the actual executable digest, generated compiled targets exist, and the canonical architecture/milestone/README files contain the same ownership statements. Emit one pass/fail line per criterion and a non-zero exit on any missing, extra, disabled, skipped, failed, or errored test.
 
 - [ ] **Step 4: Update canonical documentation**
 
@@ -2403,7 +2644,7 @@ Expected: unit tests for the gate pass, all ten live-build criteria pass, and `g
 Run:
 
 ```bash
-cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build -DVERITAS_WPA_ENGINE=souffle
+cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build -DVERITAS_WPA_ENGINE=souffle -DVERITAS_SOUFFLE_PROVENANCE_FILE=/path/to/souffle-provenance.json
 cmake --build --preset default
 ctest --preset default
 python3 tools/check_m9_entry.py --build-dir build
@@ -2414,7 +2655,7 @@ Expected: configure and build exit zero, CTest reports zero failed and zero skip
 - [ ] **Step 7: Commit M8R.5 and the M9 handoff**
 
 ```bash
-git add docs/specs/milestones/m8r-souffle-wpa-remediation-design-spec.md tools/check_m9_entry.py tests/qualification/M9EntryGateTest.py README.md docs/architecture/veritas-platform-architecture-design.md docs/architecture/veritas-whole-program-analysis-design.md docs/architecture/veritas-thin-summarydb-backends-design.md docs/specs/milestones/README.md docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md docs/specs/veritas-backbone-milestones-and-implementation-plan.md docs/brainstorm/souffle-analysis-architecture.md CMakeLists.txt tests/qualification/CMakeLists.txt
+git add docs/specs/milestones/m8r-souffle-wpa-remediation-design-spec.md tools/check_m9_entry.py tests/qualification/M9EntryGateTest.py tests/qualification/M9DocumentationConsistencyTest.py README.md docs/architecture/veritas-platform-architecture-design.md docs/architecture/veritas-whole-program-analysis-design.md docs/architecture/veritas-thin-summarydb-backends-design.md docs/specs/milestones/README.md docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md docs/specs/veritas-backbone-milestones-and-implementation-plan.md docs/brainstorm/souffle-analysis-architecture.md CMakeLists.txt tests/qualification/CMakeLists.txt
 git commit -m "docs: qualify M9 handoff after Souffle WPA remediation"
 ```
 
@@ -2431,12 +2672,12 @@ git commit -m "docs: qualify M9 handoff after Souffle WPA remediation"
 | Abstract object + access path + byte range | Tasks 5, 7, 8 |
 | Indirect calls from SVF | Tasks 8, 9, 10 |
 | Per-SCC successor support | Tasks 10, 12, 14 |
-| Input/fixpoint/external hashes | Tasks 10, 11, 14 |
+| Engine-neutral logical input/fixpoint/external hashes and cross-revision cache | Tasks 10, 11, 14 |
 | Generic finite rooted witnesses | Tasks 11, 12, 17 |
 | Atomic failure and stale prior results | Tasks 13, 14, 16 |
 | C++ conformance/emergency identities | Tasks 2, 13, 15, 16 |
 | V1 compatibility without fabricated precision | Tasks 4, 6, 16 |
-| Fact Bus M9 handoff | Task 17 |
+| Complete, rooted, idempotently delivered Fact Bus M9 handoff | Task 17 |
 | M9 hard entry criteria and documentation | Tasks 16, 18 |
 
 ## Final Verification Checklist
@@ -2447,13 +2688,13 @@ git commit -m "docs: qualify M9 handoff after Souffle WPA remediation"
 - [ ] Distinct unnamed values and allocations have distinct stable IDs.
 - [ ] All alias kinds and all six epistemic states cross the fact boundary.
 - [ ] Every hot relation uses typed dense IDs and round-trips through stable maps.
-- [ ] Compiled Soufflé is selected in the production CMake cache.
-- [ ] C++ consumes identical component inputs and is never selected implicitly.
+- [ ] Compiled Soufflé is selected in the production CMake cache and its exact source/executable provenance is verified.
+- [ ] C++ consumes byte-identical engine-neutral logical inputs under a distinct valid envelope and is never selected implicitly.
 - [ ] Every derived fact has a deterministic finite rooted witness.
 - [ ] Timeout/crash/schema/witness failures publish no replacement component.
 - [ ] Witness-only changes leave `ExternalHash` and predecessor scheduling unchanged.
 - [ ] Qualification reports semantic equality, determinism, migration safety, and performance within ceilings.
-- [ ] `AnalysisFactBatch` is the only M9 input contract.
+- [ ] `AnalysisFactBatch` is the only M9 input contract and proves component completion, rooted-input closure, and idempotent sink identity.
 - [ ] `python3 tools/check_m9_entry.py --build-dir build` passes all ten criteria.
 
 ## Execution Handoff

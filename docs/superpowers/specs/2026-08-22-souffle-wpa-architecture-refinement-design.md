@@ -156,11 +156,12 @@ AnalysisRun(
     ModelBundleVersion,
     SvfConfigurationHash,
     WpaConfigurationHash,
-    EngineIdentity
+    EngineIdentity,
+    EngineToolchainIdentity
 )
 ```
 
-All fields participate in `RunId`. Results from different manifests cannot be merged into one run.
+All fields participate in `RunId`. `EngineToolchainIdentity` includes the qualified Soufflé source revision, executable digest, and generated bundle/toolchain provenance (or the C++ build identity). Results from different manifests cannot be merged into one run.
 
 ### 6.2 Dual identity
 
@@ -199,8 +200,8 @@ Calls:
   UnknownCall(CallSiteId, CallerId, ReasonId, Epistemic)
 
 Memory:
-  DirectRead(FunctionId, MemoryId, Offset, Size, Epistemic)
-  DirectWrite(FunctionId, MemoryId, Offset, Size, Epistemic)
+  DirectRead(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
+  DirectWrite(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
   Alias(MemoryId, MemoryId, AliasKind, Epistemic)
 
 Flow:
@@ -231,6 +232,8 @@ SoundnessCoverage
 
 Each relation has a registry entry specifying column names, types, key columns, ownership, allowed epistemic values, materialization policy, and schema version. `std::vector<std::string>` is not the authoritative schema representation for V2.
 
+`RangeKind` is `KNOWN` or `UNKNOWN`. A known range carries its signed byte offset and unsigned size. An unknown range uses canonical zero payload cells that have no range meaning; validators reject non-zero payloads for `UNKNOWN` and reject half-known ranges before projection. The tag therefore distinguishes a known zero-length or zero-offset access from an unknown access without nullable Soufflé columns or sentinel inference.
+
 ## 8. Abstract Memory Model
 
 The minimum V2 memory identity is:
@@ -250,16 +253,24 @@ Opaque-pointer recovery may use GEP source types, load/store types, `DataLayout`
 VERITAS continues to own call-graph construction and SCC scheduling. One execution unit evaluates one component for one SCC.
 
 ```text
-WpaComponentInput:
-  AnalysisRun manifest
+WpaLogicalComponentInput:
+  LogicalInputHash
   SccId
   ComponentKind
   Member identities
+  Stable/dense mappings
   Member base facts
   Outgoing call edges
   Successor externally visible facts
   Applicable function models
+
+WpaExecutionEnvelope:
+  AnalysisRun manifest
+  Engine/toolchain provenance
+  WpaLogicalComponentInput
 ```
+
+The logical component input is engine-neutral and has one canonical serialization. `LogicalInputHash` excludes revision, `RunId`, and engine identity; it covers the exact schema, rule, model, and semantic configuration versions plus the canonical stable EDB, mappings, member set, and successor external facts. Production and conformance executions derive separate envelopes and `RunId` values from that same immutable logical input. Each executor rejects an envelope whose engine identity does not match the executor. Differential qualification asserts byte-identical logical-input serialization and mappings before comparing engine-independent canonical facts.
 
 SCCs execute in reverse topological order. Results from successor SCCs enter a component as explicit support relations carrying stable support fact identities. Rules may recursively derive facts for members of the current SCC and may cite successor support, but they cannot claim ownership of successor results.
 
@@ -270,16 +281,16 @@ The component output includes semantic result rows, witness rows, and diagnostic
 Each SCC component retains:
 
 ```text
-InputHash
+LogicalInputHash
 FixpointHash
 ExternalHash
 ```
 
-`InputHash` covers relation, rule, model, and configuration versions; local semantic facts; and successor external hashes. `FixpointHash` covers the complete canonical result and selected witnesses. `ExternalHash` covers only predecessor-visible semantic results.
+`LogicalInputHash` covers relation, rule, model, and semantic configuration versions; local semantic facts; member identity; mappings; and successor external hashes. It excludes revision, `RunId`, engine identity, and tuple order. `FixpointHash` covers the complete canonical result and selected witnesses. `ExternalHash` covers only predecessor-visible semantic results and is also engine-neutral.
 
-A matching successful `InputHash` may reuse the prior component result. A witness-only change can update `FixpointHash` while leaving `ExternalHash` unchanged; in that case no predecessor is scheduled. An `ExternalHash` change enqueues the predecessor SCCs that consume that component.
+A matching successful `LogicalInputHash` may reuse an immutable prior component result only when its exact executor/toolchain provenance and rule bundle also match. The cache key is `(LogicalInputHash, EngineToolchainIdentity)`; each new run manifest records its own reference to the content-addressed result object, so run histories are never merged. This permits validated cross-revision reuse when semantic inputs are unchanged while preventing C++ results or a different Soufflé build from satisfying a production Soufflé run. A witness-only change can update `FixpointHash` while leaving `ExternalHash` unchanged; in that case no predecessor is scheduled. An `ExternalHash` change enqueues the predecessor SCCs that consume that component.
 
-No cache entry is reused across different analysis-run manifests.
+Cache lookup always revalidates the object hash, logical input hash, executor/toolchain provenance, schema and bundle identities, and rooted inputs. Revision-only changes may reuse the object; any semantic input or qualified-toolchain change misses the cache.
 
 ## 11. Witness and Provenance Contract
 
@@ -301,6 +312,8 @@ Base and successor-support inputs are rooted in stable input fact identities. Lo
 3. lexicographically ordered stable input identities.
 
 The selected proof must be acyclic and closed over the published fact set and rooted input set. Alternative witnesses may be retained as optional diagnostic evidence but do not participate in the canonical fact ID.
+
+Semantic keys use a versioned, injective length-prefixed UTF-8 codec shared by the C++ canonicalizer and a private Soufflé 2.5 stateful-functor library. Symbol, signed-number, and unsigned-number functors expose C-linkage entry points, encode one type-tagged self-delimiting field at a time, and are linked into the generated worker; only encoded fields may then be concatenated. Concatenation of raw values with an ambiguous delimiter is forbidden. Qualification invokes the generated program with adversarial cells containing delimiters, empty strings, Unicode, digit prefixes, and numeric bounds and requires byte-identical decoded keys from both engines.
 
 This contract replaces relation-specific C++ reconstruction of Datalog joins. Soufflé's interactive provenance remains available for rule debugging but is not the durable VERITAS evidence protocol.
 
@@ -344,7 +357,9 @@ Required suites include:
 - repeated project analysis in one process;
 - a recorded performance and memory baseline for representative fixtures.
 
-Release qualification requires semantic equality between Soufflé and the C++ oracle for the overlapping domain corpus. Emergency-only behavior is tested separately and is never used to qualify the Soufflé engine.
+Release qualification first requires byte-identical engine-neutral logical-input bytes, rooted-input identities, and dense/stable mappings. It then derives distinct Soufflé and C++ conformance execution envelopes and requires semantic equality for the overlapping domain corpus. Emergency-only behavior is tested separately and is never used to qualify the Soufflé engine.
+
+The M9 handoff is constructed only from a successful `WpaRunResult`. Its immutable batch carries the expected component keys from the run manifest, completed component records and hashes, and rooted input fact IDs in addition to derived facts and witnesses. The Fact Bus rejects any expected/completed set mismatch or witness leaf absent from the rooted-input set. Multi-sink delivery is idempotent at least once under a canonical `(RunId, BatchId)` key; partial fan-out is recorded per sink and safe retry cannot duplicate logical publication.
 
 ## 14. Repository Boundaries
 
@@ -358,7 +373,8 @@ include/veritas/facts/
   RelationSchema, AnalysisRun, AnalysisFact, Witness, FactBus
 
 include/veritas/wpa/
-  WpaExecutor, WpaComponentInput, WpaComponentResult
+  WpaExecutor, WpaLogicalComponentInput,
+  WpaExecutionEnvelope, WpaComponentResult
 
 src/analysis/svf/
   SVF-native mapping only
@@ -441,8 +457,10 @@ Complete when existing supported M8 semantics match across engines and every out
 Deliver:
 
 - required Soufflé build integration and compiled rule programs;
+- exact supported Soufflé source/binary provenance verification recorded in the engine toolchain identity;
 - private production executor;
 - SCC orchestration and incremental state integration;
+- content-addressed cross-revision component reuse keyed by logical input and qualified engine toolchain;
 - standard project-pipeline integration;
 - stale and incomplete run handling;
 - explicit C++ emergency configuration.
@@ -456,6 +474,7 @@ Deliver:
 - differential conformance corpus;
 - determinism, failure-injection, migration, and performance qualification;
 - generic Analysis Fact Bus handoff;
+- complete component/rooted-input metadata and idempotent multi-sink delivery;
 - removal of relation-specific semantic-row proof reconstruction from the production path;
 - synchronized platform, WPA, SummaryDB, README, and milestone documentation.
 
@@ -494,8 +513,8 @@ M9 may begin only when all of these conditions hold:
 3. Distinct unnamed values and allocation sites retain distinct semantic identity.
 4. V2 WPA relations use a typed schema and run-local dense IDs for hot joins.
 5. Soufflé is the normal production recursive executor and is integrated into standard analysis.
-6. C++ comparison uses the same logical component input and passes the overlapping conformance corpus.
-7. Every derived result has a validated finite witness.
+6. C++ comparison uses byte-identical engine-neutral logical component input under its own run envelope and passes the overlapping conformance corpus.
+7. Every derived result has a validated finite witness, and the M9 batch proves expected-component completion and rooted-input closure.
 8. Failed or incomplete runs cannot replace successful results.
 9. Run, schema, rule, model, configuration, and engine versions participate in identity.
 10. Architecture, milestone, README, and operational documentation agree on engine ownership and current behavior.
@@ -526,3 +545,6 @@ When implementation begins, documentation changes follow these rules:
 10. No incomplete run replaces a successful result.
 11. Semantic changes, not file timestamps or evidence-only churn, drive recursive invalidation.
 12. Engine replacement does not require changing Summary IR, Fact Bus, or Evidence APIs.
+13. Conformance compares distinct valid run envelopes over byte-identical engine-neutral logical input.
+14. Component-cache reuse never crosses a logical-input or qualified engine/toolchain boundary.
+15. M9 receives only complete batches whose rooted witnesses and idempotent delivery identity have been validated.
