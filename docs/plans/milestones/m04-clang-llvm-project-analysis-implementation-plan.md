@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22.x libraries, Clang LibTooling and CodeGen, LLVM IR Linker, DominatorTree and MemorySSA, Protobuf Summary IR, GoogleTest.
 
-**Spec:** `docs/specs/milestones/m4-clang-llvm-local-extraction-design-spec.md`
+**Spec:** `docs/specs/milestones/m04-clang-llvm-project-analysis-design-spec.md`
 
 ## Global Constraints
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, CMake 3.23+, Protobuf, SQLite, optional Souffle executable, LLVM Support process utilities, GoogleTest.
 
-**Spec:** `docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md`
+**Spec:** `docs/specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md`
 
 ## Global Constraints
 
@@ -1444,7 +1444,7 @@ git commit -m "feat(facts): add optional Souffle rule execution"
 - Create: `tests/integration/wpa/CMakeLists.txt`
 - Modify: `tests/integration/CMakeLists.txt`
 - Modify: `CLAUDE.md`
-- Modify: `docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md`
+- Modify: `docs/specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md`
 
 **Interfaces:**
 - Consumes: `SummaryRepository`, `ListCurrentSummaries`, `CallGraph`, `SccGraph`, `FixpointEngine`, `SccStateRepository`, `WpaCoordinator`, and M7 `WorklistScheduler`.
@@ -1522,7 +1522,7 @@ may be explicitly skipped when unavailable.
 
 ```bash
 git add tests/integration/CMakeLists.txt tests/integration/wpa CLAUDE.md \
-  docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md
+  docs/specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md
 git commit -m "test(wpa): verify M8 end-to-end acceptance"
 ```
 

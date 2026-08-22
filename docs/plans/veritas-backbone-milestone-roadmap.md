@@ -91,22 +91,22 @@ Detailed milestone design specs live under `docs/specs/milestones/`:
 
 | Milestone | Detailed Spec |
 | --- | --- |
-| M1 | `docs/specs/milestones/m1-build-intelligence-program-context-design-spec.md` |
-| M2 | `docs/specs/milestones/m2-identity-canonical-hashing-metadata-store-design-spec.md` |
-| M3 | `docs/specs/milestones/m3-summary-ir-cas-object-store-design-spec.md` |
-| M4 | `docs/specs/milestones/m4-clang-llvm-local-extraction-design-spec.md` |
-| M5 | `docs/specs/milestones/m5-svf-value-flow-pointer-adapter-design-spec.md` |
-| M6 | `docs/specs/milestones/m6-thin-veritas-cpg-projection-design-spec.md` |
-| M7 | `docs/specs/milestones/m7-reverse-dependency-incremental-scheduler-design-spec.md` |
-| M8 | `docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md` |
-| M8R.1-M8R.5 | `docs/specs/milestones/m8r-souffle-wpa-remediation-design-spec.md` |
-| M9 | `docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md` |
+| M1 | `docs/specs/milestones/m01-project-ingestion-program-context-design-spec.md` |
+| M2 | `docs/specs/milestones/m02-identity-canonical-hashing-metadata-store-design-spec.md` |
+| M3 | `docs/specs/milestones/m03-summary-ir-cas-object-store-design-spec.md` |
+| M4 | `docs/specs/milestones/m04-clang-llvm-project-analysis-design-spec.md` |
+| M5 | `docs/specs/milestones/m05-required-svf-analysis-design-spec.md` |
+| M6 | `docs/specs/milestones/m06-thin-cpg-projection-design-spec.md` |
+| M7 | `docs/specs/milestones/m07-reverse-dependency-incremental-scheduler-design-spec.md` |
+| M8 | `docs/specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md` |
+| M8R.1-M8R.5 | `docs/specs/milestones/m08r-souffle-wpa-remediation-design-spec.md` |
+| M9 | `docs/specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md` |
 | M10A | Detailed recursive-domain-expansion spec required before implementation |
-| M10B | `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` |
+| M10B | `docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md` |
 
 Historical per-milestone implementation plans live under `docs/plans/`. The
 M8R executable plan is
-`docs/superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md`;
+`docs/plans/milestones/m08r-souffle-wpa-remediation-implementation-plan.md`;
 M10A still requires its detailed plan, and M13's independently approved
 research plan is outside the M9-M12 critical path.
 
@@ -410,7 +410,7 @@ veritas-build analyze --project <directory> [--output <directory>]
 - [ ] Normalize path roots and ordered semantic arguments, then compute domain-separated SHA-256 hashes.
 - [ ] Implement deterministic canonical bytes and one-way diagnostic JSON.
 - [ ] Add `veritas-build analyze --project`; reject manifest, bitcode, LLVM-module, SVF-artifact, and alternate compile-database flags.
-- [ ] Follow `docs/plans/m1-build-intelligence-program-context-implementation-plan.md` for test-first task details and commits.
+- [ ] Follow `docs/plans/milestones/m01-project-ingestion-program-context-implementation-plan.md` for test-first task details and commits.
 
 ## Tests
 
@@ -690,7 +690,7 @@ StatusOr<LocalAnalysisResult> RunLocalAnalysis(
 - [ ] Build the LLVM-to-VERITAS origin map and deterministic module hash.
 - [ ] Extract direct calls, local CFG/dominator facts, memory effects, value flows, ranges, and scoped unknowns.
 - [ ] Return local summary drafts and the live `ProgramIr` without publishing before M5.
-- [ ] Follow `docs/plans/m4-clang-llvm-local-extraction-implementation-plan.md` for test-first task details and commits.
+- [ ] Follow `docs/plans/milestones/m04-clang-llvm-project-analysis-implementation-plan.md` for test-first task details and commits.
 
 ## Tests
 
@@ -796,7 +796,7 @@ struct SvfFacts {
 - [ ] Resolve SVF values through LLVM values and M4 origins, then map value-flow, alias, memory, indirect-call, dependency, unknown, and provenance facts.
 - [ ] Preserve validated partial facts plus explicit truncation unknowns at supported soft-budget checkpoints.
 - [ ] Merge conservatively, publish only after required SVF completion, and route `analyze --project` through `ProjectAnalyzer`.
-- [ ] Follow `docs/plans/m5-svf-value-flow-pointer-adapter-implementation-plan.md` for test-first task details and commits.
+- [ ] Follow `docs/plans/milestones/m05-required-svf-analysis-implementation-plan.md` for test-first task details and commits.
 
 ## Tests
 
@@ -930,7 +930,7 @@ struct TraversalResult {
 - [ ] Reject publication before the transaction unless graph and completed-summary revision/build/module identities and exact sorted `FunctionSummaryID` sets match.
 - [ ] Bind each `CpgQuery` to one immutable `ProjectionID` and return explicit traversal truncation metadata.
 - [ ] Add caller/callee, writer, value-flow, call-path, determinism, failure-injection, and ownership-boundary tests.
-- [ ] Follow `docs/plans/m6-thin-veritas-cpg-projection-implementation-plan.md` for test-first tasks and commits.
+- [ ] Follow `docs/plans/milestones/m06-thin-cpg-projection-implementation-plan.md` for test-first tasks and commits.
 
 ## Tests
 
@@ -1175,7 +1175,7 @@ SCC state hashes participate in incremental propagation.
 # 12A. M8R.1-M8R.5: Souffle WPA Remediation Bridge
 
 The historical M8 section above describes what was implemented. The approved
-[M8R bridge](milestones/m8r-souffle-wpa-remediation-design-spec.md) is inserted
+[M8R bridge](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md) is inserted
 after M8 and before M9 and does not rewrite that history.
 
 The five gates deliver, in order:

@@ -134,19 +134,21 @@ the working tree, so partially staged changes remain intact.
 
 ## Current State
 
-**Design-phase repository.** Four architecture documents (`docs/architecture/`), engineering-backbone spec, milestone specs M1–M12 (`docs/specs/milestones/`), implementation plans for M11/M12 (`docs/plans/`). No source code yet; `main` is clean awaiting M0 implementation.
+M0–M8 are implemented and tested. M8R is approved and pending implementation;
+M9–M12 remain planned. The current project pipeline and CLI are available now,
+with the remaining milestones extending provenance, Evidence Builder APIs, and
+external inputs.
 
-**Documentation:**
-- Architecture: `docs/architecture/`
-  - `veritas-platform-architecture-design.md` — system pipeline, principles P1–P8, ingest adapters
-  - `veritas-whole-program-analysis-design.md` — analyzer engines and SOTA C/C++ pointer-alias policy
-  - `veritas-thin-summarydb-backends-design.md` — SummaryDB physical layers and pluggable storage
-  - `veritas-evidence-ir-design.md` — Evidence IR formal syntax and semantics
-- Specifications: `docs/specs/`
-  - `veritas-engineering-backbone-design-specification.md` — connective spec between architecture and milestones
-  - `veritas-backbone-milestones-and-implementation-plan.md` — implementation checklist
-  - `docs/specs/milestones/` — detailed design specs for M1–M12
-- Implementation Plans: `docs/plans/` — executable per-milestone plans (M11/M12 in place)
+**Documentation:** Start at the [documentation index](docs/README.md).
+
+- Architecture: [platform](docs/architecture/01-platform-architecture.md),
+  [whole-program analysis](docs/architecture/02-whole-program-analysis-architecture.md),
+  [SummaryDB storage](docs/architecture/03-summarydb-storage-architecture.md),
+  and [Evidence IR](docs/architecture/04-evidence-ir-architecture.md).
+- Specifications: [cross-cutting specs](docs/specs/README.md) and the
+  [milestone specification matrix](docs/specs/milestones/README.md).
+- Plans: the [backbone milestone roadmap](docs/plans/veritas-backbone-milestone-roadmap.md)
+  and [milestone implementation plans](docs/plans/README.md).
 
 ---
 

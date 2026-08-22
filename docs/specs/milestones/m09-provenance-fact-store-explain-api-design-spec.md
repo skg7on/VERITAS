@@ -21,7 +21,7 @@ what uncertainty or assumption is visible?
 ```
 
 M9 does not start until the
-[M8R bridge](m8r-souffle-wpa-remediation-design-spec.md) passes all ten entry
+[M8R bridge](m08r-souffle-wpa-remediation-design-spec.md) passes all ten entry
 criteria without missing, extra, disabled, skipped, failed, or errored tests.
 It does not recompute recursive WPA facts or accept engine-native rows.
 

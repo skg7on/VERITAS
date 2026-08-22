@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, SQLite, GoogleTest.
 
-**Spec:** `docs/specs/milestones/m7-reverse-dependency-incremental-scheduler-design-spec.md`
+**Spec:** `docs/specs/milestones/m07-reverse-dependency-incremental-scheduler-design-spec.md`
 
 ## Global Constraints
 

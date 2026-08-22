@@ -8,8 +8,8 @@
 
 **Tech Stack:** C++20, LLVM 22 (`BitcodeReader`, `AsmParser`, `Linker`), CMake, GoogleTest.
 
-**Spec:** `docs/specs/veritas-summarydb-ingest-adapter-design.md` (milestone-scoped signatures + tests)
-**Architecture:** `docs/architecture/veritas-platform-architecture-design.md` (§6–§11 adapter tiers, invariant B10)
+**Spec:** `docs/specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md` (milestone-scoped signatures + tests)
+**Architecture:** `docs/architecture/01-platform-architecture.md` (§6–§11 adapter tiers, invariant B10)
 
 ## Global Constraints
 
@@ -157,8 +157,8 @@ class BitcodeIrSource : public veritas::analysis::pipeline::ProgramIrSource {
 ### Task 7: Revise invariant and milestone docs
 
 - [ ] Rewrite backbone invariant **B10** in `docs/specs/veritas-engineering-backbone-design-specification.md` per design doc §2 (allow bitcode at module acquisition + external facts via importer, without bypassing VERITAS-owned analysis/identity/provenance).
-- [ ] Relax the M4 "public CLI accepts no bitcode" test/constraint in `docs/specs/milestones/m4-clang-llvm-local-extraction-design-spec.md` to permit bitcode only via module acquisition.
-- [ ] Update `docs/specs/veritas-backbone-milestones-and-implementation-plan.md` "Global Constraints" and M4 exit criteria to drop the "no bitcode input" absolutism.
+- [ ] Relax the M4 "public CLI accepts no bitcode" test/constraint in `docs/specs/milestones/m04-clang-llvm-project-analysis-design-spec.md` to permit bitcode only via module acquisition.
+- [ ] Update `docs/plans/veritas-backbone-milestone-roadmap.md` "Global Constraints" and M4 exit criteria to drop the "no bitcode input" absolutism.
 - [ ] Commit: `docs: revise B10 and M4 for external IR input`.
 
 ## Tests (required assertions)

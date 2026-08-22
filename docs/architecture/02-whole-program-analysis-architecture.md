@@ -7,9 +7,9 @@
 **Project:** VERITAS
 **Peers:**
 
-* `docs/architecture/veritas-platform-architecture-design.md` — platform pipeline, principles P1–P8, ingest adapter tiers.
-* `docs/architecture/veritas-thin-summarydb-backends-design.md` — SummaryDB physical layers and pluggable backends.
-* `docs/architecture/veritas-evidence-ir-design.md` — Evidence IR consumed by the Agent.
+* `docs/architecture/01-platform-architecture.md` — platform pipeline, principles P1–P8, ingest adapter tiers.
+* `docs/architecture/03-summarydb-storage-architecture.md` — SummaryDB physical layers and pluggable backends.
+* `docs/architecture/04-evidence-ir-architecture.md` — Evidence IR consumed by the Agent.
 
 ---
 
@@ -29,10 +29,10 @@ file-based Souffle comparison. The approved M8R architecture described below is
 the target and is not yet delivered: pinned SVF owns V1 points-to/alias/SVFG and
 indirect-call truth, compiled Souffle owns normal production recursive WPA, and
 C++ is only a conformance oracle or explicitly selected emergency engine. The
-[M8R bridge spec](../specs/milestones/m8r-souffle-wpa-remediation-design-spec.md)
+[M8R bridge spec](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md)
 records the gated transition without rewriting M8 history.
 
-Platform-wide invariants (P1–P8) live in `veritas-platform-architecture-design.md`. Storage layout and identity IDs live in `veritas-thin-summarydb-backends-design.md`. This document assumes both.
+Platform-wide invariants (P1–P8) live in `01-platform-architecture.md`. Storage layout and identity IDs live in `03-summarydb-storage-architecture.md`. This document assumes both.
 
 ---
 
@@ -74,7 +74,7 @@ LLVM IR is used for anything that benefits from a normalized, target-aware subst
 
 ## 2.3 Boundary rules
 
-* VERITAS owns the frontend end-to-end (Clang CodeGen and `llvm::Linker` are executed by VERITAS, not by the user; see `veritas-platform-architecture-design.md` §7–8).
+* VERITAS owns the frontend end-to-end (Clang CodeGen and `llvm::Linker` are executed by VERITAS, not by the user; see `01-platform-architecture.md` §7–8).
 * No `Clang::Decl*`, `llvm::Module*`, or `llvm::Value*` pointer ever persists into a VERITAS artifact. All references are re-derived to VERITAS stable IDs.
 * Detailed instruction-level graphs are regenerable on demand from the private in-memory `ProgramIr`; the persistent world is function- and object-centric.
 
@@ -440,7 +440,7 @@ The upgrade is a matter of adding SVF passes and refinement stages, not of rearc
 * **L2 (context-sensitive).** Enable SVF's context-sensitive Andersen or object-sensitive extension; results replace the L1 points-to for functions the scheduler flags as hot (call-graph fan-in above threshold, or Evidence-cited).
 * **L3 (demand-driven).** Invoke SUPA-style refinement on a per-query basis inside the Evidence Builder. Facts produced at L3 are stamped with the query context that motivated them; they are not published as global summaries.
 
-The tier of every alias fact participates in the fact's provenance record (see `veritas-thin-summarydb-backends-design.md` §7).
+The tier of every alias fact participates in the fact's provenance record (see `03-summarydb-storage-architecture.md` §7).
 
 ---
 
@@ -687,7 +687,7 @@ Rules and boundaries:
   `cpp-emergency` mode. Automatic fallback is forbidden, and its engine/run
   identity cannot impersonate or overwrite Souffle.
 * VERITAS canonicalizes outputs back to stable engine-neutral facts before any
-  durable publication. See `veritas-thin-summarydb-backends-design.md` §12.
+  durable publication. See `03-summarydb-storage-architecture.md` §12.
 
 Every rule bundle emits generic immediate witness edges from a result semantic
 key to input semantic keys. Base and successor-support leaves are stable rooted
@@ -726,7 +726,7 @@ VERITAS's Evidence Builder queries the VFG plus provenance to construct a compac
 * `unknown U1 postcondition(vendor_validate)` — the missing semantics.
 * `verify O1 forall path reaching sink: len <= capacity(dst)` — the proof obligation.
 
-The M10B mechanics of these queries are specified in `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` and the syntax in `veritas-evidence-ir-design.md`.
+The M10B mechanics of these queries are specified in `docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md` and the syntax in `04-evidence-ir-architecture.md`.
 
 ---
 
@@ -751,7 +751,7 @@ explainFact(RunId, FactID)
 getEvidenceSlice(Claim)
 ```
 
-These APIs are the read interface WPA and the Evidence Builder consume. Backend implementations live in the SummaryDB layer (see `veritas-thin-summarydb-backends-design.md` §8).
+These APIs are the read interface WPA and the Evidence Builder consume. Backend implementations live in the SummaryDB layer (see `03-summarydb-storage-architecture.md` §8).
 
 ---
 
@@ -794,7 +794,7 @@ Domain-specific semantic graphs; this is where VERITAS differentiates from gener
 
 # 14. Analysis Invariants
 
-Analysis-specific invariants are layered on top of the platform invariants (`veritas-platform-architecture-design.md` §11). This document adds:
+Analysis-specific invariants are layered on top of the platform invariants (`01-platform-architecture.md` §11). This document adds:
 
 | ID | Invariant | Reason |
 | --- | --- | --- |
@@ -816,15 +816,15 @@ Analysis-specific invariants are layered on top of the platform invariants (`ver
 
 # 15. Reading Order
 
-Start with `veritas-platform-architecture-design.md` for the platform pipeline and principles.
+Start with `01-platform-architecture.md` for the platform pipeline and principles.
 Then this document for how the analysis engines fit together.
-Then `veritas-thin-summarydb-backends-design.md` for how identity, hashing, and storage are laid out.
-Then `veritas-evidence-ir-design.md` for the IR the Agent consumes.
+Then `03-summarydb-storage-architecture.md` for how identity, hashing, and storage are laid out.
+Then `04-evidence-ir-architecture.md` for the IR the Agent consumes.
 
 Milestone specs under `docs/specs/milestones/` refine specific sections:
 
-* M4 (`m4-clang-llvm-local-extraction-design-spec.md`) — frontend and local extraction.
-* M5 (`m5-svf-value-flow-pointer-adapter-design-spec.md`) — SVF integration.
-* M6 (`m6-thin-veritas-cpg-projection-design-spec.md`) — thin CPG projection.
-* M8 (`m8-scc-wpa-souffle-fact-engine-design-spec.md`) — SCC / Datalog WPA.
-* M8R (`m8r-souffle-wpa-remediation-design-spec.md`) — approved production-Souffle remediation and M9 gate.
+* M4 (`m04-clang-llvm-project-analysis-design-spec.md`) — frontend and local extraction.
+* M5 (`m05-required-svf-analysis-design-spec.md`) — SVF integration.
+* M6 (`m06-thin-cpg-projection-design-spec.md`) — thin CPG projection.
+* M8 (`m08-scc-wpa-souffle-fact-engine-design-spec.md`) — SCC / Datalog WPA.
+* M8R (`m08r-souffle-wpa-remediation-design-spec.md`) — approved production-Souffle remediation and M9 gate.
