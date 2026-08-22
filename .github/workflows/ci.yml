@@ -197,7 +197,7 @@ jobs:
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r3
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r4
 
       - name: Checkout LLVM source
         if: steps.llvm-cache.outputs.cache-hit != 'true'
@@ -209,19 +209,21 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      # LLVM must be built as individual component libraries, NOT the monolithic
-      # libLLVM.so DYLIB. With DYLIB linking enabled, LLVM's exported
-      # LLVMCore/LLVMSupport targets remap to the DYLIB while clangCodeGen and
-      # friends still link static LLVM components, so one process loads both and
-      # re-registers LLVM cl::opt options ("Option registered more than once")
-      # and SVF's analysis registry ("support is already registered"), crashing
-      # every SVF/LLVM integration test. Keep the component layout instead.
+      # LLVM must be built as SHARED component libraries (BUILD_SHARED_LIBS=ON).
+      # Both alternatives break: the monolithic libLLVM.so DYLIB mixes with
+      # clang's still-static components, and static .a components get baked into
+      # multiple VERITAS/SVF shared objects. Either way LLVM/SVF cl::opt options
+      # ("Option registered more than once") and SVF's analysis registry
+      # ("support is already registered") re-register per process and crash every
+      # SVF/LLVM integration test. Shared components load once, matching the
+      # local dev LLVM build.
       - name: Configure LLVM
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         run: |
           cmake -S llvm-project/llvm -B "$RUNNER_TEMP/llvm-build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/llvm-install" \
+            -DBUILD_SHARED_LIBS=ON \
             -DLLVM_ENABLE_PROJECTS=clang \
             -DLLVM_TARGETS_TO_BUILD=X86 \
             -DLLVM_ENABLE_RTTI=ON \
@@ -260,7 +262,7 @@ jobs:
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r3
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r4
 
       - name: Configure VERITAS
         env:
