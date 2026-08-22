@@ -1,15 +1,23 @@
-# M10 Evidence Builder Input APIs and First Demo Design Spec
+# M10B Evidence Builder Input APIs and First Demo Design Spec
 
 **Status:** Draft
-**Milestone:** M10
-**Depends on:** M6 thin CPG, M9 fact/provenance store
+**Milestone:** M10B
+**Depends on:** M6 thin CPG, M9 fact/provenance store, M10A recursive domain expansion
 **Feeds:** Evidence IR implementation and future Review Agent tools
 
 ---
 
 # 1. Purpose
 
-M10 exposes semantic slices that Evidence IR needs. It does not implement full EIR serialization. It proves the backbone can produce compact, provenance-backed evidence inputs for a concrete memory-safety case.
+M10B exposes semantic slices that Evidence IR needs. It does not implement full
+EIR serialization. It proves the backbone can produce compact,
+provenance-backed evidence inputs for a concrete memory-safety case.
+
+M10A is a separate prerequisite milestone. It expands the compiled-Souffle
+recursive domains with `MayRead`, `GlobalFlow`, `UnknownEffect`, and
+`SoundnessCoverage`, their models, and conformance suites. M10B builds the
+Evidence/API surface over those M10A relations and the durable M9 fact/witness
+store; it does not move recursive analysis into the query layer.
 
 Target demo:
 
@@ -83,10 +91,10 @@ class EvidenceQueryService {
       core::StableId dst,
       EvidenceQueryBudget budget) const;
 
-  StatusOr<std::vector<facts::FactTuple>> GetRanges(core::StableId value_ref) const;
-  StatusOr<std::vector<facts::FactTuple>> GetAliases(core::StableId memory_ref) const;
-  StatusOr<std::vector<facts::FactTuple>> GetUnknowns(core::StableId scope_ref) const;
-  StatusOr<std::vector<facts::FactTuple>> GetDominatingChecks(core::StableId callsite_ref) const;
+  StatusOr<std::vector<facts::Fact>> GetRanges(core::StableId value_ref) const;
+  StatusOr<std::vector<facts::Fact>> GetAliases(core::StableId memory_ref) const;
+  StatusOr<std::vector<facts::Fact>> GetUnknowns(core::StableId scope_ref) const;
+  StatusOr<std::vector<facts::Fact>> GetDominatingChecks(core::StableId callsite_ref) const;
   StatusOr<facts::ProvenanceGraph> Explain(core::StableId fact_id, facts::ExplainBudget budget) const;
 };
 }
@@ -185,7 +193,7 @@ JSON output is deterministic for golden fixture
 
 # 9. Handoff to Evidence IR
 
-M10 produces:
+M10B produces:
 
 ```text
 FlowSlice
@@ -208,5 +216,6 @@ Provenance
 Proof Obligations
 ```
 
-M10 is complete when the first buffer-overflow evidence case can be generated from semantic infrastructure without an LLM and without loading entire source files into a prompt.
-
+M10B is complete when the first buffer-overflow evidence case can be generated
+from M9 facts and M10A relations without an LLM and without loading entire
+source files into a prompt.

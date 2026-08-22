@@ -3,7 +3,7 @@
 **Status:** Draft
 **Milestone:** M5
 **Depends on:** M4 VERITAS-owned Clang/LLVM project analysis
-**Feeds:** M6 thin CPG, M7 dependency index, M8 WPA, and M10 Evidence APIs
+**Feeds:** M6 thin CPG, M7 dependency index, M8 WPA, and M10B Evidence APIs
 
 ---
 

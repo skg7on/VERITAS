@@ -39,6 +39,15 @@ The central engineering goal is:
 
 This document specifies the V1 data model, hash model, storage layout, update algorithms, consistency rules, and implementation milestones.
 
+**Approved remediation overlay.** The implemented M8 baseline uses C++
+fixpoint execution and optional Souffle comparison. The approved M8R target is
+not yet delivered and supersedes live WPA/Datalog ownership statements in this
+draft: Function Summary IR is durable, detailed relations are run-local, pinned
+SVF owns V1 points-to/alias/SVFG and indirect calls, compiled Souffle owns normal
+production recursion, and C++ is conformance or explicit emergency only. The
+[M8R bridge spec](milestones/m8r-souffle-wpa-remediation-design-spec.md) is the
+delivery authority.
+
 ---
 
 # 2. Scope
@@ -85,6 +94,11 @@ The backbone MUST preserve these invariants.
 | B8 | Publication is atomic at metadata bindings, not object mutation. | Readers must never observe a half-written summary revision. |
 | B9 | Deterministic analysis is reproducible for the same inputs. | Enables stable hashes, diffing, and regression analysis. |
 | B10 | The only public source input is a project directory containing `compile_commands.json`; VERITAS owns AST, IR, and SVF execution. | Prevents external preprocessing artifacts from becoming public contracts or reproducibility gaps. |
+| B11 | Function Summary IR is durable; `relations.v2` and typed dense IDs are run-local. | Preserve one stable WPA contract. |
+| B12 | Compiled Souffle is the normal recursive owner; C++ is conformance or explicitly selected emergency only. | Prevent semantic split and silent fallback. |
+| B13 | Every published derived fact has a generic deterministic finite rooted witness. | Engine-neutral explanation. |
+| B14 | Failed components publish no replacement; prior success remains stale history. | Failure atomicity. |
+| B15 | M9 receives only a complete, rooted, idempotently delivered `AnalysisFactBatch`. | Safe durable publication. |
 
 ---
 
@@ -114,7 +128,7 @@ The backbone MUST preserve these invariants.
                      Local Summary Builder
                               |
                               v
-                 Immutable FunctionSummary
+               Immutable Function Summary IR v2
                               |
                               v
       +------------------- SummaryDB --------------------+
@@ -130,10 +144,24 @@ The backbone MUST preserve these invariants.
       +---------------------+----------------------------+
                             |
                             v
-                    Incremental WPA Engine
+                WPA Input Materializer
+                 run-local relations.v2
+                            |
+              +-------------+-------------+
+              |                           |
+              v                           v
+     Compiled Souffle WPA          C++ Conformance Oracle
+       required production        or explicit cpp-emergency
+              +-------------+-------------+
                             |
                             v
-                    Global Derived Facts
+              Result/Witness Canonicalizer
+                            |
+                            v
+                 Analysis Fact Bus
+                            |
+                            v
+           Global Derived Facts + Witnesses
                             |
                             v
                   Query API / Evidence Builder
@@ -144,7 +172,7 @@ V1 can use:
 ```text
 RocksDB        immutable summary objects and local key-value indexes
 SQLite         metadata, identities, dependency edges, publication bindings
-Flat files     Souffle facts during early Datalog integration
+Run-local      typed relation projections and diagnostic artifacts
 In-memory      temporary graph projection and SCC worklists
 ```
 
@@ -947,6 +975,10 @@ consumer_component
 # 14. SCC-Aware WPA
 
 Recursive and mutually recursive functions require SCC-level propagation.
+VERITAS owns call-graph construction and reverse-topological scheduling, while
+compiled Souffle owns the recursive production evaluation within each logical
+component. Pinned SVF supplies normalized indirect-call candidates; unknown
+calls remain explicit and never fan out to the entire program.
 
 ## 14.1 SCC Tables
 
@@ -1021,61 +1053,37 @@ WPA propagation processes SCCs in reverse topological order for bottom-up summar
 
 ## 14.4 Fixpoint Requirements
 
-Each WPA component defines:
+Each WPA component defines a versioned relation/rule/model contract and one
+canonical `WpaLogicalComponentInput` containing member facts, stable/typed-dense
+mappings, outgoing calls, successor support facts, and applicable models. The
+same byte-identical logical input is placed into distinct production and C++
+conformance/emergency execution envelopes with distinct `RunId` values.
+
+The first production domains are:
 
 ```text
-Domain
-Bottom
-Join
-Transfer
-Widen
-Compare
+ReachableCall
+MayWrite
 ```
 
-The domain MUST be monotone or explicitly bounded.
+M10A later adds `MayRead`, `GlobalFlow`, `UnknownEffect`, and
+`SoundnessCoverage` through independent bundles and conformance suites.
 
-Example domains:
-
-| WPA Component | Domain | Join |
-| --- | --- | --- |
-| Transitive calls | set of target function variants | set union |
-| May-write | set of abstract memory locations | set union |
-| Value flow | relation over abstract values | relation union with widening |
-| Range | interval map | interval join/widen |
-| Taint | source-sink transfer relation | relation union |
-| Ownership | abstract ownership state lattice | lattice join |
-
-## 14.5 SCC Fixpoint Pseudocode
+## 14.5 SCC Execution Pseudocode
 
 ```cpp
-SccResult computeSccFixpoint(SccID scc, ComponentKind component) {
-    State state = loadPreviousOrBottom(scc, component);
-    int iteration = 0;
-
-    while (iteration < max_iterations) {
-        State next = bottom();
-
-        for (FunctionVariantID f : members(scc)) {
-            LocalSummary local = loadCurrentLocalSummary(f);
-            ImportedState imports = loadCalleeStates(f, component);
-            next = join(next, transfer(f, local, state, imports));
-        }
-
-        if (equivalent(next, state))
-            return publishSccState(scc, component, next, iteration, CONVERGED);
-
-        if (iteration >= widen_after)
-            next = widen(state, next);
-
-        state = next;
-        iteration++;
-    }
-
-    return publishSccState(scc, component, state, iteration, APPROXIMATED);
+StatusOr<WpaComponentResult> executeComponent(SccID scc,
+                                               ComponentKind component) {
+    WpaLogicalComponentInput logical = materializeCanonicalInput(scc, component);
+    WpaExecutionEnvelope envelope = makeSouffleEnvelope(currentRun(), logical);
+    auto output = souffleExecutor().execute(envelope);
+    return validateAndCanonicalize(logical, output);
 }
 ```
 
-`APPROXIMATED` is not a failure. It means facts derived from this state must carry the appropriate epistemic/provenance metadata.
+The normal path never catches a Souffle failure and invokes C++. C++ execution
+requires a separate conformance envelope or explicit `cpp-emergency`
+configuration and cannot impersonate or overwrite a Souffle run.
 
 ## 14.6 SCC Delta Rule
 
@@ -1089,7 +1097,15 @@ old_external_hash != new_external_hash
     -> schedule predecessor SCCs that consume changed components
 ```
 
-Internal function summaries may change without changing the externally visible SCC summary. In that case, upstream propagation stops.
+`LogicalInputHash` covers canonical semantic inputs but excludes revision,
+`RunId`, engine identity, and tuple order. `FixpointHash` covers canonical results
+and selected witnesses. `ExternalHash` covers predecessor-visible semantics
+only. A witness-only change therefore does not schedule predecessors.
+
+Successful immutable components may be reused across revisions only by
+`(LogicalInputHash, EngineToolchainIdentity)`, after content, schema, bundle,
+rooted-input, and exact executor provenance revalidation. A failure publishes no
+replacement; it records diagnostics and leaves the previous success stale.
 
 ---
 
@@ -1296,11 +1312,22 @@ Evidence IR should cite facts and provenance IDs rather than copying every deriv
 
 # 17. Datalog Integration
 
-V1 can start with a C++ worklist engine. Datalog should be introduced for recursive relation derivation once base summary export is stable.
+Compiled Souffle is the required normal production recursive engine after
+M8R.4. The supported toolchain is Souffle 2.5 source revision
+`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`; its verified executable digest and
+generated bundle/toolchain provenance participate in
+`EngineToolchainIdentity`. Generated programs use one evaluation thread until a
+separately qualified upgrade retires the upstream ARM concurrency issue.
+
+C++ consumes the same byte-identical engine-neutral logical component input
+only as a CI conformance oracle or explicitly selected `cpp-emergency` engine.
+There is no automatic fallback, and the two executions have distinct valid
+envelopes and `RunId` values.
 
 ## 17.1 Base Relations
 
-Examples:
+These typed relations are a `relations.v2` run-local projection from durable
+Function Summary IR, not a durable platform IR. Examples:
 
 ```text
 DirectCall(caller, callee, epistemic).
@@ -1331,17 +1358,30 @@ MayWrite(f, m) :-
 
 ## 17.3 Provenance Capture
 
-The Datalog layer must export derivation metadata:
+Every rule bundle exports generic immediate witness edges:
 
 ```text
-derived tuple
-rule id
-input tuple ids
-iteration or stratum
-epistemic join result
+Witness(ResultSemanticKey, RuleId, InputSemanticKey, InputOrdinal)
 ```
 
-If the chosen Datalog engine cannot provide sufficient provenance directly, VERITAS should wrap rule execution with tuple IDs and reconstruct proof trees for the rules used in V1.
+Semantic keys use a shared versioned, injective, type-tagged, length-prefixed
+UTF-8 codec. Raw delimiter concatenation is forbidden. Base and successor
+support inputs are rooted in stable input fact IDs; locally derived keys must
+resolve within the published component.
+
+The VERITAS canonicalizer rejects malformed, cyclic, orphaned, or unclosed
+witnesses and selects one finite proof by derived-edge count, versioned rule
+priority, then lexicographic stable input identity. Relation-specific C++ proof
+reconstruction is forbidden on the production path. Souffle interactive
+provenance remains a debugging aid only.
+
+## 17.4 Semantic and identity preservation
+
+Stable identity and typed dense IDs are separate. `RangeKind` losslessly
+distinguishes known signed offsets/unsigned sizes (including zero) from explicit
+unknown ranges. All six epistemic states and all alias kinds cross the boundary,
+so `NO_ALIAS + MUST`, an unknown alias result, and an absent tuple remain
+distinct.
 
 ---
 
@@ -1388,6 +1428,22 @@ publication_epoch <= snapshot_epoch
 ```
 
 This prevents long-running queries from observing mixed old/new summary bindings.
+
+## 18.4 WPA batch publication
+
+A production component publishes only after execution, schema/identity
+validation, and rooted-witness closure all succeed. Missing or incompatible
+bundles, engine failure, timeout, resource exhaustion, invalid mappings,
+duplicate conflict, or malformed witnesses record an incomplete run and
+durable diagnostics but no replacement facts. The prior success remains
+queryable as stale history.
+
+Only a successful `WpaRunResult` creates `AnalysisFactBatch`. The batch includes
+the manifest's expected component keys, completed component records and hashes,
+rooted input fact IDs, canonical facts, witnesses, and diagnostics. The Fact Bus
+rejects expected/completed mismatch and witness leaves absent from the rooted
+set. Delivery is idempotent at least once by canonical `(RunId, BatchId)`;
+per-sink progress makes retry after partial fan-out safe and non-duplicating.
 
 ---
 
@@ -1646,7 +1702,8 @@ Deliver:
 
 * call graph SCC detection,
 * condensation DAG,
-* fixpoint engine for transitive calls and may-write,
+* compiled-Souffle execution for `ReachableCall` and `MayWrite`,
+* byte-identical logical input for the C++ conformance/explicit emergency engine,
 * SCC component state hashes,
 * stop propagation when external SCC hash is unchanged.
 
@@ -1655,6 +1712,7 @@ Exit criteria:
 ```text
 Recursive fixtures converge.
 Internal recursive changes do not propagate upstream if external summary is stable.
+Missing or failed Souffle publishes no replacement and never falls back silently.
 ```
 
 ## Milestone 5: Provenance-Aware Fact Store
@@ -1665,7 +1723,8 @@ Deliver:
 * provenance nodes and edges,
 * `explainFact`,
 * epistemic propagation,
-* Datalog export or C++ derivation provenance for V1 rules.
+* generic finite rooted witness storage from the engine-neutral witness contract,
+* complete `AnalysisFactBatch` and idempotent Fact Bus publication.
 
 Exit criteria:
 
@@ -1717,9 +1776,9 @@ These should be resolved before implementation begins.
 | Metadata store | SQLite |
 | CAS store | RocksDB |
 | Hash algorithm | SHA-256 |
-| First WPA components | transitive calls, may-read/may-write, simple global value flow |
+| First production WPA components | `ReachableCall`, `MayWrite`; M10A later adds `MayRead`, `GlobalFlow`, `UnknownEffect`, `SoundnessCoverage` |
 | First language target | C/C++ via Clang + LLVM |
-| Datalog timing | After C++ worklist V1 proves schema stability |
+| Recursive engine ownership | Compiled Souffle 2.5 at `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`; C++ conformance or explicit emergency only |
 | Unknown call policy | emit unknown external summary, do not connect to every function |
 | Evidence invalidation | summary/fact dependency based, not text-location based |
 

@@ -3,7 +3,7 @@
 **Status:** Draft
 **Milestone:** M6
 **Depends on:** M4 live `ProgramIr` and origin map, M5 completed mapped facts
-**Feeds:** M10 Evidence Builder and query tools
+**Feeds:** M10B Evidence Builder and query tools
 
 ---
 
@@ -411,9 +411,9 @@ Boundary tests scan `CMakeLists.txt`, `cmake/`, `src/`, `include/`, and `tests/`
 
 ---
 
-# 13. Handoff to M10
+# 13. Handoff to M10B
 
-M10 consumes:
+M10B consumes:
 
 ```text
 CpgQuery

@@ -169,7 +169,7 @@ veritas-build import  --phasar <result>    # external importer → PhasarResultI
 
 ## 6. Milestone Placement and Doc Touch-Points
 
-### Milestones (appended to M0–M10)
+### Milestones (after M10B in the M0-M12 chronology)
 
 - **M11 — External IR adapter** (depends on **M5**): `BitcodeIrSource`, `--bitcode` CLI. Reuses M4 extractor + M5 SVF unchanged.
 - **M12 — External-facts importer** (depends on **M9**): Joern/PhASAR importers + `veritas-build import`. Needs the fact + provenance stores.
