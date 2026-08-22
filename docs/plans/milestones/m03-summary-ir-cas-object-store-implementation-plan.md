@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, Protobuf, RocksDB, SQLite, GoogleTest.
 
-**Spec:** `docs/specs/milestones/m3-summary-ir-cas-object-store-design-spec.md`
+**Spec:** `docs/specs/milestones/m03-summary-ir-cas-object-store-design-spec.md`
 
 ## Global Constraints
 

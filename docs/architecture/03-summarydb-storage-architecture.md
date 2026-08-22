@@ -7,9 +7,9 @@
 **Project:** VERITAS
 **Peers:**
 
-* `docs/architecture/veritas-platform-architecture-design.md` — platform pipeline, principles P1–P8, ingest adapter tiers.
-* `docs/architecture/veritas-whole-program-analysis-design.md` — analyzer engines and SOTA C/C++ alias policy.
-* `docs/architecture/veritas-evidence-ir-design.md` — Evidence IR consumed by the Agent.
+* `docs/architecture/01-platform-architecture.md` — platform pipeline, principles P1–P8, ingest adapter tiers.
+* `docs/architecture/02-whole-program-analysis-architecture.md` — analyzer engines and SOTA C/C++ alias policy.
+* `docs/architecture/04-evidence-ir-architecture.md` — Evidence IR consumed by the Agent.
 
 ---
 
@@ -26,13 +26,13 @@ This document specifies:
 * publication atomicity and reader consistency (§10);
 * the read API the rest of the platform consumes (§8).
 
-Platform principles P1–P8 and the ingest tiers live in `veritas-platform-architecture-design.md`. Analyzer engines live in `veritas-whole-program-analysis-design.md`. This document assumes both.
+Platform principles P1–P8 and the ingest tiers live in `01-platform-architecture.md`. Analyzer engines live in `02-whole-program-analysis-architecture.md`. This document assumes both.
 
 **Delivery status.** Implemented M8 publishes C++ fixed-point state and supports
 optional file-based Souffle comparison. The approved, not-yet-delivered M8R
 target adds the run/component/fact/witness contracts below. Its gate status is
 tracked in the
-[M8R bridge specification](../specs/milestones/m8r-souffle-wpa-remediation-design-spec.md).
+[M8R bridge specification](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md).
 
 ---
 
@@ -89,7 +89,7 @@ Five properties matter more than throughput:
 1. **Semantic identity.** Every stored object has a stable identity independent of file layout, source-line drift, and macros. §5.
 2. **Immutability.** Summaries never mutate; new content produces new addresses. §6.
 3. **Precise invalidation.** Change detection operates on component-level semantic deltas, not object equality or file mtime. §7.
-4. **Provenance.** Every derived fact is explainable through a finite provenance subgraph. See `veritas-evidence-ir-design.md` §30–31.
+4. **Provenance.** Every derived fact is explainable through a finite provenance subgraph. See `04-evidence-ir-architecture.md` §30–31.
 5. **Reader consistency.** Readers never observe a half-written revision. Publication is atomic at metadata bindings. §10.
 
 Throughput is a downstream concern. If these five hold, backends can be swapped or scaled without rewrites.
@@ -616,7 +616,7 @@ semantic row with a different witness therefore has the same `FactID` and
 distinct `(RunId, FactID)` occurrence/witness bindings. M9 validates and
 persists incoming Fact Bus IDs; it never replaces them with store-local IDs.
 
-Full syntax and semantics are in `veritas-evidence-ir-design.md` §30–33.
+Full syntax and semantics are in `04-evidence-ir-architecture.md` §30–33.
 
 ## 12.1 Run and component records
 
@@ -743,22 +743,22 @@ getRelevantSummaries(path)
 explainFact(run_id, fact_id)
 ```
 
-The Evidence Builder assembles the answers into an `EvidenceCase`. See `veritas-evidence-ir-design.md` for the full IR.
+The Evidence Builder assembles the answers into an `EvidenceCase`. See `04-evidence-ir-architecture.md` for the full IR.
 
 ---
 
 # 17. Reading Order
 
-Start with `veritas-platform-architecture-design.md` for the platform pipeline and principles.
-Then `veritas-whole-program-analysis-design.md` for how the analyzer engines produce the objects this document stores.
+Start with `01-platform-architecture.md` for the platform pipeline and principles.
+Then `02-whole-program-analysis-architecture.md` for how the analyzer engines produce the objects this document stores.
 Then this document for identity, hashing, storage, and the backend adapter contract.
-Then `veritas-evidence-ir-design.md` for the IR the Agent consumes.
+Then `04-evidence-ir-architecture.md` for the IR the Agent consumes.
 
 Milestone specs and implementation plans:
 
-* M2 (`docs/specs/milestones/m2-identity-canonical-hashing-metadata-store-design-spec.md`) — identity and metadata store.
-* M3 (`docs/specs/milestones/m3-summary-ir-cas-object-store-design-spec.md`) — Summary IR + CAS.
-* M7 (`docs/specs/milestones/m7-reverse-dependency-incremental-scheduler-design-spec.md`) — dependency index + scheduler.
-* M8 (`docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md`) — Soufflé WPA execution.
-* M8R (`docs/specs/milestones/m8r-souffle-wpa-remediation-design-spec.md`) — production-Souffle remediation, Fact Bus, and M9 gate.
-* M9 (`docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md`) — provenance-aware fact store + explain API.
+* M2 (`docs/specs/milestones/m02-identity-canonical-hashing-metadata-store-design-spec.md`) — identity and metadata store.
+* M3 (`docs/specs/milestones/m03-summary-ir-cas-object-store-design-spec.md`) — Summary IR + CAS.
+* M7 (`docs/specs/milestones/m07-reverse-dependency-incremental-scheduler-design-spec.md`) — dependency index + scheduler.
+* M8 (`docs/specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md`) — Soufflé WPA execution.
+* M8R (`docs/specs/milestones/m08r-souffle-wpa-remediation-design-spec.md`) — production-Souffle remediation, Fact Bus, and M9 gate.
+* M9 (`docs/specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md`) — provenance-aware fact store + explain API.

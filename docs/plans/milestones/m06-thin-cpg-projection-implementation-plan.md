@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22.x private APIs, pinned in-process SVF facts through VERITAS Summary IR, Protobuf, SQLite, GoogleTest.
 
-**Spec:** `docs/specs/milestones/m6-thin-veritas-cpg-projection-design-spec.md`
+**Spec:** `docs/specs/milestones/m06-thin-cpg-projection-design-spec.md`
 
 ## Global Constraints
 
@@ -691,7 +691,7 @@ git commit -m "feat: query immutable CPG projections"
 - Create: `tests/integration/analysis/cpg/ProjectAnalyzerCpgTest.cpp`
 - Create: `tests/integration/analysis/cpg/RepeatedCpgProjectionTest.cpp`
 - Create: `tests/integration/analysis/cpg/RequiredCpgBoundaryTest.cpp`
-- Modify: `docs/specs/veritas-backbone-milestones-and-implementation-plan.md`
+- Modify: `docs/plans/veritas-backbone-milestone-roadmap.md`
 
 **Interfaces:**
 - Consumes: the standard `veritas-build analyze --project` pipeline
@@ -775,7 +775,7 @@ Expected: the standard in-process M4/M5/M6 pipeline, repository/query tests, rep
 - [ ] **Step 8: Commit end-to-end verification and documentation**
 
 ```bash
-git add src/tools/veritas-build.cpp tests/integration/analysis/cpg docs/specs/veritas-backbone-milestones-and-implementation-plan.md
+git add src/tools/veritas-build.cpp tests/integration/analysis/cpg docs/plans/veritas-backbone-milestone-roadmap.md
 git commit -m "test: verify LLVM-native CPG pipeline"
 ```
 

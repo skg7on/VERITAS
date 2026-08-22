@@ -4,8 +4,8 @@
 **Milestone:** M8R.1-M8R.5
 **Historical predecessor:** M8 (implemented; unchanged)
 **Entry gate for:** M9
-**Authoritative design:** [`2026-08-22-souffle-wpa-architecture-refinement-design.md`](../../superpowers/specs/2026-08-22-souffle-wpa-architecture-refinement-design.md)
-**Implementation plan:** [`2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md`](../../superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md)
+**Authoritative design:** [`m08r-souffle-wpa-architecture-refinement-design-spec.md`](m08r-souffle-wpa-architecture-refinement-design-spec.md)
+**Implementation plan:** [`m08r-souffle-wpa-remediation-implementation-plan.md`](../../plans/milestones/m08r-souffle-wpa-remediation-implementation-plan.md)
 
 ---
 
@@ -208,9 +208,9 @@ each label and compare it with executed JUnit membership. Labels alone are not
 delivery evidence.
 
 The implementation plan's
-[Task 16](../../superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md#task-16-build-the-differential-determinism-migration-failure-and-performance-corpus)
+[Task 16](../../plans/milestones/m08r-souffle-wpa-remediation-implementation-plan.md#task-16-build-the-differential-determinism-migration-failure-and-performance-corpus)
 defines the executable corpus and per-label membership authority; its
-[Task 18](../../superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md#task-18-synchronize-architecturemilestones-and-enforce-the-m9-entry-gate)
+[Task 18](../../plans/milestones/m08r-souffle-wpa-remediation-implementation-plan.md#task-18-synchronize-architecturemilestones-and-enforce-the-m9-entry-gate)
 enforces the documentation and M9-entry synchronization.
 
 # 8. Delivery record (to be completed by implementation)

@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, Protobuf, SQLite, GoogleTest.
 
-**Spec:** `docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md`
+**Spec:** `docs/specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md`
 
 ## Global Constraints
 

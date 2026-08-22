@@ -3,7 +3,7 @@
 **Status:** Draft Formal Specification  
 **Version:** 0.1  
 **Project:** VERITAS — Verified Evidence Reasoning IR for Trans-program Analysis and Semantics  
-**Depends on:** `docs/architecture/veritas-evidence-ir-design.md`
+**Depends on:** `docs/architecture/04-evidence-ir-architecture.md`
 
 ---
 
@@ -844,10 +844,10 @@ Well-formedness checking requires:
 
 ## 23. References
 
-- **Source Architecture Document**: `docs/architecture/veritas-evidence-ir-design.md`
+- **Source Architecture Document**: `docs/architecture/04-evidence-ir-architecture.md`
 - **EBNF Standard**: ISO/IEC 14977:1996
 - **Related Specifications**:
-  - `docs/architecture/veritas-platform-architecture-design.md`
+  - `docs/architecture/01-platform-architecture.md`
   - `docs/specs/veritas-engineering-backbone-design-specification.md`
 
 ---

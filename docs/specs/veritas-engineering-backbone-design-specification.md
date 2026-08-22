@@ -7,9 +7,9 @@
 **Project:** VERITAS
 **Depends on:**
 
-- `docs/architecture/veritas-platform-architecture-design.md` — platform pipeline, principles P1–P8, ingest adapter tiers.
-- `docs/architecture/veritas-whole-program-analysis-design.md` — analyzer engines and SOTA C/C++ pointer-alias policy.
-- `docs/architecture/veritas-thin-summarydb-backends-design.md` — SummaryDB physical layers and pluggable storage backends.
+- `docs/architecture/01-platform-architecture.md` — platform pipeline, principles P1–P8, ingest adapter tiers.
+- `docs/architecture/02-whole-program-analysis-architecture.md` — analyzer engines and SOTA C/C++ pointer-alias policy.
+- `docs/architecture/03-summarydb-storage-architecture.md` — SummaryDB physical layers and pluggable storage backends.
 
 ---
 
@@ -46,7 +46,7 @@ not yet delivered and supersedes live WPA/Datalog ownership statements in this
 draft: Function Summary IR is durable, detailed relations are run-local, pinned
 SVF owns V1 points-to/alias/SVFG and indirect calls, compiled Souffle owns normal
 production recursion, and C++ is conformance or explicit emergency only. The
-[M8R bridge spec](milestones/m8r-souffle-wpa-remediation-design-spec.md) is the
+[M8R bridge spec](milestones/m08r-souffle-wpa-remediation-design-spec.md) is the
 delivery authority.
 
 ---

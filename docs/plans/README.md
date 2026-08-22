@@ -1,25 +1,30 @@
-# VERITAS Milestone Implementation Plans
+# VERITAS Implementation Plans
 
-This directory contains executable implementation plans for VERITAS backbone milestones M1 through M10.
+Plans are executable implementation guidance. Read the
+[backbone milestone roadmap](veritas-backbone-milestone-roadmap.md) for
+milestone sequencing and the [GitHub Actions CI build plan](github-actions-ci-build-implementation-plan.md)
+for the project tooling plan. The [documentation information architecture
+migration plan](documentation-information-architecture-migration-implementation-plan.md)
+records this hierarchy migration.
 
-Each plan is paired with a detailed design spec in `docs/specs/milestones/` and assumes M0 has already produced the C++ project skeleton, test harness, command-line targets, and `veritas::Status` / `veritas::StatusOr` primitives.
-
-## Plans
-
-| Milestone | Plan | Design Spec |
-| --- | --- | --- |
-| M1 | `m1-build-intelligence-program-context-implementation-plan.md` | `docs/specs/milestones/m1-build-intelligence-program-context-design-spec.md` |
-| M2 | `m2-identity-canonical-hashing-metadata-store-implementation-plan.md` | `docs/specs/milestones/m2-identity-canonical-hashing-metadata-store-design-spec.md` |
-| M3 | `m3-summary-ir-cas-object-store-implementation-plan.md` | `docs/specs/milestones/m3-summary-ir-cas-object-store-design-spec.md` |
-| M4 | `m4-clang-llvm-local-extraction-implementation-plan.md` | `docs/specs/milestones/m4-clang-llvm-local-extraction-design-spec.md` |
-| M5 | `m5-svf-value-flow-pointer-adapter-implementation-plan.md` | `docs/specs/milestones/m5-svf-value-flow-pointer-adapter-design-spec.md` |
-| M6 | `m6-thin-veritas-cpg-projection-implementation-plan.md` | `docs/specs/milestones/m6-thin-veritas-cpg-projection-design-spec.md` |
-| M7 | `m7-reverse-dependency-incremental-scheduler-implementation-plan.md` | `docs/specs/milestones/m7-reverse-dependency-incremental-scheduler-design-spec.md` |
-| M8 | `m8-scc-wpa-souffle-fact-engine-implementation-plan.md` | `docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md` |
-| M9 | `m9-provenance-fact-store-explain-api-implementation-plan.md` | `docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md` |
-| M10 | `m10-evidence-builder-input-apis-demo-implementation-plan.md` | `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` |
+| Milestone | Status | Implementation plan | Design specification | Issue |
+| --- | --- | --- | --- | --- |
+| M0 | Implemented | [plan](milestones/m00-project-skeleton-required-svf-toolchain-implementation-plan.md) | — | [#3](https://github.com/skg7on/VERITAS/issues/3) |
+| M1 | Implemented | [plan](milestones/m01-project-ingestion-program-context-implementation-plan.md) | [spec](../specs/milestones/m01-project-ingestion-program-context-design-spec.md) | [#4](https://github.com/skg7on/VERITAS/issues/4) |
+| M2 | Implemented | [plan](milestones/m02-identity-canonical-hashing-metadata-store-implementation-plan.md) | [spec](../specs/milestones/m02-identity-canonical-hashing-metadata-store-design-spec.md) | [#5](https://github.com/skg7on/VERITAS/issues/5) |
+| M3 | Implemented | [plan](milestones/m03-summary-ir-cas-object-store-implementation-plan.md) | [spec](../specs/milestones/m03-summary-ir-cas-object-store-design-spec.md) | [#6](https://github.com/skg7on/VERITAS/issues/6) |
+| M4 | Implemented | [plan](milestones/m04-clang-llvm-project-analysis-implementation-plan.md) | [spec](../specs/milestones/m04-clang-llvm-project-analysis-design-spec.md) | [#7](https://github.com/skg7on/VERITAS/issues/7) |
+| M5 | Implemented | [plan](milestones/m05-required-svf-analysis-implementation-plan.md) | [spec](../specs/milestones/m05-required-svf-analysis-design-spec.md) | [#8](https://github.com/skg7on/VERITAS/issues/8) |
+| M6 | Implemented | [plan](milestones/m06-thin-cpg-projection-implementation-plan.md) | [spec](../specs/milestones/m06-thin-cpg-projection-design-spec.md) | [#9](https://github.com/skg7on/VERITAS/issues/9) |
+| M7 | Implemented | [plan](milestones/m07-reverse-dependency-incremental-scheduler-implementation-plan.md) | [spec](../specs/milestones/m07-reverse-dependency-incremental-scheduler-design-spec.md) | [#10](https://github.com/skg7on/VERITAS/issues/10) |
+| M8 | Implemented | [plan](milestones/m08-scc-wpa-souffle-fact-engine-implementation-plan.md) | [spec](../specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md) | [#11](https://github.com/skg7on/VERITAS/issues/11) |
+| M8R.1–M8R.5 | Approved / pending implementation | [plan](milestones/m08r-souffle-wpa-remediation-implementation-plan.md) | [remediation spec](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md); [architecture refinement](../specs/milestones/m08r-souffle-wpa-architecture-refinement-design-spec.md) | [#61](https://github.com/skg7on/VERITAS/issues/61) |
+| M9 | Planned | [plan](milestones/m09-provenance-fact-store-explain-api-implementation-plan.md) | [spec](../specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md) | [#12](https://github.com/skg7on/VERITAS/issues/12) |
+| M10A | Planned; detailed specification and plan required before implementation | — | — | — |
+| M10B | Planned | [plan](milestones/m10b-evidence-builder-input-apis-demo-implementation-plan.md) | [spec](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md) | [#13](https://github.com/skg7on/VERITAS/issues/13) |
+| M11 / M12 | Planned | [M11 plan](milestones/m11-external-ir-adapter-implementation-plan.md); [M12 plan](milestones/m12-external-facts-importer-implementation-plan.md) | [shared M11/M12 spec](../specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md) | [#20](https://github.com/skg7on/VERITAS/issues/20), [#21](https://github.com/skg7on/VERITAS/issues/21) |
 
 ## Execution Rule
 
-Implement one milestone per branch or PR. Do not start the next milestone until the previous milestone's tests and CLI acceptance checks pass.
-
+Implement one milestone per branch or PR. Do not start the next milestone until
+the previous milestone's tests and CLI acceptance checks pass.

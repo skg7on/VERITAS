@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, JSON diagnostic output, CPG query layer, FactStore, ProvenanceStore, GoogleTest.
 
-**Spec:** `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md`
+**Spec:** `docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md`
 
 ## Global Constraints
 

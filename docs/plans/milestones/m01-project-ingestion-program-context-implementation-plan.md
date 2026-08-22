@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22.x, Clang LibTooling, LLVM SHA-256 and JSON support, GoogleTest, project-local `veritas::Status` and `StatusOr`.
 
-**Spec:** `docs/specs/milestones/m1-build-intelligence-program-context-design-spec.md`
+**Spec:** `docs/specs/milestones/m01-project-ingestion-program-context-design-spec.md`
 
 ## Global Constraints
 

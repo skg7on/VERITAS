@@ -8,7 +8,7 @@
 
 **Tech Stack:** GitHub Actions, Ubuntu 24.04, CMake, Ninja, CTest, LLVM/Clang 24, Z3 4.16.0, vendored SVF, CMake script tests.
 
-**Spec:** `docs/specs/github-actions-ci-build-design.md`
+**Spec:** `docs/specs/github-actions-ci-build-design-spec.md`
 
 ## Global Constraints
 

@@ -26,7 +26,7 @@
 
 **First Demo:** A `decode → memcpy(b->data, p->payload, p->len)` fixture showing upstream `validatePacket` change → one local summary recomputed → range component delta → seven dependent summaries invalidated → WPA finds unsafe flow → Evidence case built with flow, range facts, missing dominating check, unknown for `vendor_validate`, and proof obligation. No LLM required; provenance-backed semantic slices only.
 
-**Current State:** M0–M8 are implemented and tested. The standard `veritas-build analyze --project <dir>` runs M1 → M4 → M5 → M3 → M6 entirely in-process: Clang/LLVM local extraction → required in-process SVF → Summary IR → atomic summary+CPG publication, with the thin CPG queryable via `veritas-query`. M7 adds the reverse-dependency index and deterministic incremental scheduler. M8 adds deterministic call/SCC graphs, C++ fixpoint evaluation, persisted SCC convergence hashes, M7 propagation only for externally visible changes, and an optional Souffle relation export/import and rule-execution path. Souffle was unavailable during local M8 verification, so its executable comparison test is registered but explicitly skipped; the required C++ WPA path passes without it. M9–M12 (durable provenance fact store and explain API, Evidence Builder, external IR adapter, and external-facts importer) remain. Architecture docs, the engineering-backbone spec, milestone specs M1–M12, and implementation plans for M0–M12 live under `docs/`.
+**Current State:** M0–M8 are implemented and tested. The standard `veritas-build analyze --project <dir>` runs M1 → M4 → M5 → M3 → M6 entirely in-process: Clang/LLVM local extraction → required in-process SVF → Summary IR → atomic summary+CPG publication, with the thin CPG queryable via `veritas-query`. M7 adds the reverse-dependency index and deterministic incremental scheduler. M8 adds deterministic call/SCC graphs, C++ fixpoint evaluation, persisted SCC convergence hashes, M7 propagation only for externally visible changes, and an optional Souffle relation export/import and rule-execution path. Souffle was unavailable during local M8 verification, so its executable comparison test is registered but explicitly skipped; the required C++ WPA path passes without it. M8R is approved and pending implementation; M9–M12 (durable provenance fact store and explain API, Evidence Builder, external IR adapter, and external-facts importer) remain planned. Start with the [documentation index](docs/README.md), then use the [architecture index](docs/architecture/README.md), [milestone specifications](docs/specs/milestones/README.md), and [milestone plans](docs/plans/README.md).
 
 ---
 
@@ -56,7 +56,9 @@ This repository enforces a mandatory Git worktree policy for every Claude Code s
 
 @.claude/rules/git-worktree-policy.md
 
-This repository has a canonical documentation layout. Design specs live under `docs/specs/` and implementation plans under `docs/plans/`. See the referenced rule below; the `superpowers` skills write to these paths.
+This repository has a canonical documentation layout. Architecture documents,
+design specs, and implementation plans have separate indexes under
+`docs/README.md`; see the referenced rule below for the exact paths.
 
 @.claude/rules/docs-layout.md
 

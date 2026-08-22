@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22+, pinned SVF submodule at commit `18fb5650600530a54f0afc22f4df1a10b03d3c02`, Z3, Protobuf, RocksDB, SQLite, GoogleTest. Souffle remains optional until M8.
 
-**Spec:** Section 4 of `docs/specs/veritas-backbone-milestones-and-implementation-plan.md`
+**Spec:** Section 4 of `docs/plans/veritas-backbone-milestone-roadmap.md`
 
 ## Global Constraints
 

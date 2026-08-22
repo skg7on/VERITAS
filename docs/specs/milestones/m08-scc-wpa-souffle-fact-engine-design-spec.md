@@ -9,7 +9,7 @@
 > **Historical status and forward bridge:** This specification records the
 > implemented M8 behavior: the required C++ engine plus optional Souffle
 > comparison. It is not the current production-ownership target. The approved,
-> not-yet-delivered [M8R remediation bridge](m8r-souffle-wpa-remediation-design-spec.md)
+> not-yet-delivered [M8R remediation bridge](m08r-souffle-wpa-remediation-design-spec.md)
 > makes compiled Souffle the required normal recursive engine, confines C++ to
 > conformance or explicit emergency use, and replaces the historical direct M9
 > handoff below with a gated `AnalysisFactBatch` contract. M8's delivered body

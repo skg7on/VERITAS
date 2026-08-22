@@ -1,10 +1,10 @@
 # VERITAS SummaryDB Ingest Adapter — Milestone Spec
 
-**Status:** Milestone spec (M11 + M12). Superseded for architectural content by `docs/architecture/veritas-platform-architecture-design.md`.
+**Status:** Milestone spec (M11 + M12). Superseded for architectural content by `docs/architecture/01-platform-architecture.md`.
 **Date:** 2026-08-16
 **Scope:** Concrete interface signatures, CLI contract, error handling, and testing for the two-tier ingest adapter delivered by milestones M11 (external IR adapter) and M12 (external-facts importer).
 
-Architectural framing lives in `docs/architecture/veritas-platform-architecture-design.md`:
+Architectural framing lives in `docs/architecture/01-platform-architecture.md`:
 
 - §6 — the three-tier adapter picture.
 - §7 — Tier 1: `compile_commands.json` project directory (`CodeGenIrSource`).
@@ -13,7 +13,7 @@ Architectural framing lives in `docs/architecture/veritas-platform-architecture-
 - §10 — adapter interface contract (`ProgramIrSource`, `ExternalFactsImporter`).
 - §11 — invariant B10 in its current form.
 
-This spec fixes the milestone-scoped C++ signatures, CLI contract, error policy, and test matrix. It is the reference for `docs/plans/m11-external-ir-adapter-implementation-plan.md` and `docs/plans/m12-external-facts-importer-implementation-plan.md`.
+This spec fixes the milestone-scoped C++ signatures, CLI contract, error policy, and test matrix. It is the reference for `docs/plans/milestones/m11-external-ir-adapter-implementation-plan.md` and `docs/plans/milestones/m12-external-facts-importer-implementation-plan.md`.
 
 ---
 
@@ -107,7 +107,7 @@ class ExternalIdentityBridge {
 }  // namespace veritas::facts::external
 ```
 
-Admission rules (identity bridge, epistemic floor, producer/trust, no-WPA-participation, vocabulary normalization) are stated in `docs/architecture/veritas-platform-architecture-design.md` §9.2 and are enforced at fact-store write time.
+Admission rules (identity bridge, epistemic floor, producer/trust, no-WPA-participation, vocabulary normalization) are stated in `docs/architecture/01-platform-architecture.md` §9.2 and are enforced at fact-store write time.
 
 ---
 
@@ -176,7 +176,7 @@ veritas-build import  --phasar <result>    # external importer → PhasarResultI
 
 ### Existing docs consulted during implementation
 
-1. `docs/architecture/veritas-platform-architecture-design.md` — the architectural home for adapter tiers (§6–§11).
+1. `docs/architecture/01-platform-architecture.md` — the architectural home for adapter tiers (§6–§11).
 2. `docs/specs/veritas-engineering-backbone-design-specification.md` — invariant B10 as rewritten to admit Tier 2 and Tier 3.
-3. `docs/specs/milestones/m4-clang-llvm-local-extraction-design-spec.md` — the extraction pipeline reused by both tiers.
-4. `docs/specs/milestones/m6-thin-veritas-cpg-projection-design-spec.md` — the CPG projection stage is unchanged; external artifacts never enter it.
+3. `docs/specs/milestones/m04-clang-llvm-project-analysis-design-spec.md` — the extraction pipeline reused by both tiers.
+4. `docs/specs/milestones/m06-thin-cpg-projection-design-spec.md` — the CPG projection stage is unchanged; external artifacts never enter it.

@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22.x, SVF commit `18fb5650600530a54f0afc22f4df1a10b03d3c02`, SVF `SvfCore`/`SvfLLVM`, Z3 as required by SVF, Protobuf Summary IR, GoogleTest.
 
-**Spec:** `docs/specs/milestones/m5-svf-value-flow-pointer-adapter-design-spec.md`
+**Spec:** `docs/specs/milestones/m05-required-svf-analysis-design-spec.md`
 
 ## Global Constraints
 

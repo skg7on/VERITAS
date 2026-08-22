@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, LLVM/Clang 22+, pinned SVF, Protobuf, Soufflé compiled C++ interface, CMake/Ninja, SQLite, RocksDB, GoogleTest, Python 3 schema-generation checks.
 
-**Spec:** `docs/superpowers/specs/2026-08-22-souffle-wpa-architecture-refinement-design.md`
+**Spec:** `docs/specs/milestones/m08r-souffle-wpa-architecture-refinement-design-spec.md`
 
 ## Global Constraints
 
@@ -2526,18 +2526,18 @@ git commit -m "feat: add WPA analysis fact bus"
 
 **Files:**
 
-- Create: `docs/specs/milestones/m8r-souffle-wpa-remediation-design-spec.md`
+- Create: `docs/specs/milestones/m08r-souffle-wpa-remediation-design-spec.md`
 - Create: `tools/check_m9_entry.py`
 - Create: `tests/qualification/M9EntryGateTest.py`
 - Create: `tests/qualification/M9DocumentationConsistencyTest.py`
 - Modify: `README.md`
-- Modify: `docs/architecture/veritas-platform-architecture-design.md`
-- Modify: `docs/architecture/veritas-whole-program-analysis-design.md`
-- Modify: `docs/architecture/veritas-thin-summarydb-backends-design.md`
+- Modify: `docs/architecture/01-platform-architecture.md`
+- Modify: `docs/architecture/02-whole-program-analysis-architecture.md`
+- Modify: `docs/architecture/03-summarydb-storage-architecture.md`
 - Modify: `docs/specs/milestones/README.md`
-- Modify: `docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md`
-- Modify: `docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md`
-- Modify: `docs/specs/veritas-backbone-milestones-and-implementation-plan.md`
+- Modify: `docs/specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md`
+- Modify: `docs/specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md`
+- Modify: `docs/plans/veritas-backbone-milestone-roadmap.md`
 - Modify: `docs/brainstorm/souffle-analysis-architecture.md`
 - Modify: `CMakeLists.txt`
 - Modify: `tests/qualification/CMakeLists.txt`
@@ -2655,7 +2655,7 @@ Expected: configure and build exit zero, CTest reports zero failed and zero skip
 - [ ] **Step 7: Commit M8R.5 and the M9 handoff**
 
 ```bash
-git add docs/specs/milestones/m8r-souffle-wpa-remediation-design-spec.md tools/check_m9_entry.py tests/qualification/M9EntryGateTest.py tests/qualification/M9DocumentationConsistencyTest.py README.md docs/architecture/veritas-platform-architecture-design.md docs/architecture/veritas-whole-program-analysis-design.md docs/architecture/veritas-thin-summarydb-backends-design.md docs/specs/milestones/README.md docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md docs/specs/veritas-backbone-milestones-and-implementation-plan.md docs/brainstorm/souffle-analysis-architecture.md CMakeLists.txt tests/qualification/CMakeLists.txt
+git add docs/specs/milestones/m08r-souffle-wpa-remediation-design-spec.md tools/check_m9_entry.py tests/qualification/M9EntryGateTest.py tests/qualification/M9DocumentationConsistencyTest.py README.md docs/architecture/01-platform-architecture.md docs/architecture/02-whole-program-analysis-architecture.md docs/architecture/03-summarydb-storage-architecture.md docs/specs/milestones/README.md docs/specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md docs/specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md docs/plans/veritas-backbone-milestone-roadmap.md docs/brainstorm/souffle-analysis-architecture.md CMakeLists.txt tests/qualification/CMakeLists.txt
 git commit -m "docs: qualify M9 handoff after Souffle WPA remediation"
 ```
 

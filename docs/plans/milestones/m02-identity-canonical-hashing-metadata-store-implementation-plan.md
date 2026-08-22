@@ -8,7 +8,7 @@
 
 **Tech Stack:** C++20, SQLite, SHA-256 provider selected in M0, GoogleTest.
 
-**Spec:** `docs/specs/milestones/m2-identity-canonical-hashing-metadata-store-design-spec.md`
+**Spec:** `docs/specs/milestones/m02-identity-canonical-hashing-metadata-store-design-spec.md`
 
 ## Global Constraints
 

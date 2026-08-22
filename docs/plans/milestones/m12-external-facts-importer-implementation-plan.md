@@ -8,8 +8,8 @@
 
 **Tech Stack:** C++20, a minimal GraphML/JSON reader (private to `src/`), GoogleTest.
 
-**Spec:** `docs/specs/veritas-summarydb-ingest-adapter-design.md` (milestone-scoped signatures + tests)
-**Architecture:** `docs/architecture/veritas-platform-architecture-design.md` (§6–§11 adapter tiers, invariant B10)
+**Spec:** `docs/specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md` (milestone-scoped signatures + tests)
+**Architecture:** `docs/architecture/01-platform-architecture.md` (§6–§11 adapter tiers, invariant B10)
 
 ## Global Constraints
 
@@ -145,8 +145,8 @@ class PhasarResultImporter {
 
 ### Task 7: Re-scope M6 and register milestones
 
-- [ ] Re-scope M6 §2 in `docs/specs/milestones/m6-thin-veritas-cpg-projection-design-spec.md`: the CPG *projection stage* accepts no artifacts; Joern/PhASAR arrive via the M12 importer as external facts (M6 still builds VERITAS's own CPG).
-- [ ] Add M11/M12 to the milestone map in `docs/specs/veritas-backbone-milestones-and-implementation-plan.md` and to `docs/plans/README.md`.
+- [ ] Re-scope M6 §2 in `docs/specs/milestones/m06-thin-cpg-projection-design-spec.md`: the CPG *projection stage* accepts no artifacts; Joern/PhASAR arrive via the M12 importer as external facts (M6 still builds VERITAS's own CPG).
+- [ ] Add M11/M12 to the milestone map in `docs/plans/veritas-backbone-milestone-roadmap.md` and to `docs/plans/README.md`.
 - [ ] Commit: `docs: re-scope M6 inputs and register M11/M12`.
 
 ## Tests (required assertions)

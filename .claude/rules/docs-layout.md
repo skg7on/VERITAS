@@ -1,32 +1,34 @@
 # Documentation Layout Policy
 
-This policy defines the canonical locations for documentation in this repository and overrides the default output paths of the `superpowers` skills.
+This policy defines the canonical locations for documentation in this
+repository and overrides the default output paths of the `superpowers` skills.
 
-## Canonical paths
+## Canonical Paths
 
-| Document type | Location |
+| Document type | Canonical filename pattern |
 | --- | --- |
-| Architecture documents | `docs/architecture/` |
-| Design specifications | `docs/specs/` |
-| Milestone design specs | `docs/specs/milestones/` |
-| Implementation plans | `docs/plans/` |
+| Architecture documents | `docs/architecture/NN-topic-slug-architecture.md` |
+| Cross-cutting design specs | `docs/specs/topic-slug-design-spec.md` |
+| Milestone design specs | `docs/specs/milestones/mNN-or-mNNsuffix-topic-slug-design-spec.md` |
+| Project/tooling plans | `docs/plans/topic-slug-implementation-plan.md` |
+| Milestone plans | `docs/plans/milestones/mNN-or-mNNsuffix-topic-slug-implementation-plan.md` |
 
-## Rules for skill-generated documents
+## Rules for Skill-Generated Documents
 
-The `superpowers:brainstorming` and `superpowers:writing-plans` skills SHALL write their outputs to the canonical paths above, overriding their built-in defaults of `docs/superpowers/specs/` and `docs/superpowers/plans/`:
+The `superpowers:brainstorming` and `superpowers:writing-plans` skills SHALL
+write their outputs to the canonical paths above:
 
-- `superpowers:brainstorming` writes the design spec to `docs/specs/`.
-- `superpowers:writing-plans` writes the implementation plan to `docs/plans/`.
+- `superpowers:brainstorming` writes a design spec to `docs/specs/`.
+- `superpowers:writing-plans` writes an implementation plan to `docs/plans/`.
 
-## Naming conventions
+## Naming Conventions
 
-Use the repository's existing naming style (no `YYYY-MM-DD-` date prefixes):
-
-- Design spec: `veritas-<topic>-design.md` (or `veritas-<topic>-design-specification.md`).
-- Milestone design spec: `m<num>-<topic>-design-spec.md`.
-- Implementation plan: `m<num>-<topic>-implementation-plan.md`.
+Use zero-padded milestone numbers below ten. Preserve approved suffixes such as
+`m08r` and `m10b`. Do not use date prefixes.
 
 ## Invariants
 
-- Do not create or populate `docs/superpowers/`.
+- Forbidden: `docs/superpowers/`.
 - All specs live under `docs/specs/`; all plans live under `docs/plans/`.
+- Required indexes: `docs/README.md` plus `README.md` in `docs/architecture/`,
+  `docs/specs/`, `docs/specs/milestones/`, and `docs/plans/`.

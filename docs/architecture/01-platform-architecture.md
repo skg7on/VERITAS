@@ -7,10 +7,10 @@
 **Project:** VERITAS — Verified Evidence Reasoning IR for Trans-program Analysis and Semantics
 **Peers:**
 
-* `docs/architecture/veritas-whole-program-analysis-design.md` — analyzer engines (AST/CFG/DDG/VFG/CPG) and SOTA C/C++ alias policy.
-* `docs/architecture/veritas-thin-summarydb-backends-design.md` — SummaryDB physical layers and pluggable storage backends.
-* `docs/architecture/veritas-evidence-ir-design.md` — Evidence IR formal syntax and semantics.
-* `docs/superpowers/specs/2026-08-22-souffle-wpa-architecture-refinement-design.md` — approved M8R WPA ownership and M9 entry gate.
+* `docs/architecture/02-whole-program-analysis-architecture.md` — analyzer engines (AST/CFG/DDG/VFG/CPG) and SOTA C/C++ alias policy.
+* `docs/architecture/03-summarydb-storage-architecture.md` — SummaryDB physical layers and pluggable storage backends.
+* `docs/architecture/04-evidence-ir-architecture.md` — Evidence IR formal syntax and semantics.
+* `docs/specs/milestones/m08r-souffle-wpa-architecture-refinement-design-spec.md` — approved M8R WPA ownership and M9 entry gate.
 
 ---
 
@@ -46,8 +46,8 @@ The organizing thesis is:
 To deliver that thesis, VERITAS maintains three intermediate representations and one feedback loop:
 
 * **Function Summary IR** — the externally visible semantic effects of a function (calls, memory reads/writes, value flows, ranges, aliases, locks, state transitions, unknowns). Produced by local extraction, immutable, content-addressed.
-* **SummaryDB** — a logical subsystem (object store · metadata · fact store · graph index · dependency index · evidence cache · history store) that keeps summaries immutable and incrementally maintainable. See `veritas-thin-summarydb-backends-design.md`.
-* **Evidence IR (EIR)** — a claim-oriented, provenance-preserving typed graph IR that mediates the loop between whole-program analysis and the Review Agent. See `veritas-evidence-ir-design.md`.
+* **SummaryDB** — a logical subsystem (object store · metadata · fact store · graph index · dependency index · evidence cache · history store) that keeps summaries immutable and incrementally maintainable. See `03-summarydb-storage-architecture.md`.
+* **Evidence IR (EIR)** — a claim-oriented, provenance-preserving typed graph IR that mediates the loop between whole-program analysis and the Review Agent. See `04-evidence-ir-architecture.md`.
 
 The architectural pattern is ThinLTO-style: local translation units emit compact summaries, and whole-program analysis operates primarily over a combined summary index rather than reloading full IR.
 
@@ -104,14 +104,14 @@ Neuro-symbolic reasoning enters only as `INFERRED` propositions. Promotion to `M
         module acquisition
                 │
                 ▼
-      local static analysis    (see veritas-whole-program-analysis-design.md)
+      local static analysis    (see 02-whole-program-analysis-architecture.md)
                 │
                 ▼
      Function Summary IR v2 (immutable, component-hashed)
                 │
                 ▼
    ┌─────────── SummaryDB ────────────┐
-   │   object · metadata · facts       │  (see veritas-thin-summarydb-backends-design.md)
+   │   object · metadata · facts       │  (see 03-summarydb-storage-architecture.md)
    │   graph index · dep index         │
    │   evidence cache · history        │
    └─────────────────┬─────────────────┘
@@ -147,7 +147,7 @@ approved M8R target, which is not yet delivered, keeps pinned SVF authoritative
 for V1 points-to, aliases, SVFG, and indirect calls; requires compiled Souffle
 for normal production recursive WPA; and restricts C++ to conformance or an
 explicit `cpp-emergency` engine. There is no automatic fallback. See the
-[M8R bridge specification](../specs/milestones/m8r-souffle-wpa-remediation-design-spec.md)
+[M8R bridge specification](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md)
 for delivery status and the executable M9 gate.
 
 ---
@@ -159,9 +159,9 @@ Responsibilities are cleanly divided across the three architecture documents.
 | Concern | Document |
 | --- | --- |
 | Ingest surface, adapter tiers, invariants, principles, milestones, CLI, end-to-end pipeline | this document |
-| Analyzer engines: AST, CFG, dominators, DDG, VFG, thin CPG projection, call-graph, memory-effect model, range/constraint model, SOTA C/C++ pointer-alias policy, in-process SVF integration | `veritas-whole-program-analysis-design.md` |
-| Storage physical layers, pluggable backend contract, RocksDB/SQLite reference bindings, identity model, content-addressed CAS, component hashes, publication atomicity, evidence cache, history store | `veritas-thin-summarydb-backends-design.md` |
-| Evidence IR syntax, semantics, epistemic lattice, provenance DAG, proof obligations | `veritas-evidence-ir-design.md` |
+| Analyzer engines: AST, CFG, dominators, DDG, VFG, thin CPG projection, call-graph, memory-effect model, range/constraint model, SOTA C/C++ pointer-alias policy, in-process SVF integration | `02-whole-program-analysis-architecture.md` |
+| Storage physical layers, pluggable backend contract, RocksDB/SQLite reference bindings, identity model, content-addressed CAS, component hashes, publication atomicity, evidence cache, history store | `03-summarydb-storage-architecture.md` |
+| Evidence IR syntax, semantics, epistemic lattice, provenance DAG, proof obligations | `04-evidence-ir-architecture.md` |
 
 The four documents are complementary; none duplicates load-bearing statements from the others.
 
@@ -205,7 +205,7 @@ Three architectural properties define the boundary:
 
 1. **Module-acquisition vs. facts.** Tiers 1 and 2 produce a private `ProgramIr` and then flow through the full analysis pipeline unchanged. Tier 3 injects external observations directly into the fact store; it never influences summaries, SCC propagation, or CPG projection.
 2. **VERITAS owns analysis.** No adapter runs VERITAS's own analysis pipeline for the caller. Local extraction, SVF, CPG projection, WPA, and provenance derivation are always executed by VERITAS on the module it acquired.
-3. **Identity is derived, never carried.** External IDs (LLVM `Value*`, Joern node IDs, PhASAR fact IDs) never persist in VERITAS artifacts. All references are re-derived to VERITAS stable IDs (see `veritas-thin-summarydb-backends-design.md` §5).
+3. **Identity is derived, never carried.** External IDs (LLVM `Value*`, Joern node IDs, PhASAR fact IDs) never persist in VERITAS artifacts. All references are re-derived to VERITAS stable IDs (see `03-summarydb-storage-architecture.md` §5).
 
 ---
 
@@ -329,7 +329,7 @@ ExternalFact {
 
 1. **Identity bridge.** The importer resolves each external entity to a VERITAS stable ID only via stable inputs: mangled name → `FunctionVariantID`, `file:line` → `SourceAnchorID`. Unresolvable entities receive a synthetic subject `external:<producer>:<external_id>`. VERITAS **never** fabricates a semantic ID from a Joern/PhASAR ordinal.
 2. **Epistemic floor.** External facts enter as `INFERRED` (from a semantic analysis) or `ASSUMED` (accepted as a premise). The `MUST` state is unreachable from external input. This is the P4 / P8 rule made concrete: an inferred premise cannot yield a verified fact.
-3. **Trust policy.** Provenance records `producer_kind = external`, `producer_id = joern | phasar`; deployment-specific trust levels apply per `veritas-evidence-ir-design.md` §58–59. No `EXTERNAL` fact silently becomes a `VERIFIED_FACT`.
+3. **Trust policy.** Provenance records `producer_kind = external`, `producer_id = joern | phasar`; deployment-specific trust levels apply per `04-evidence-ir-architecture.md` §58–59. No `EXTERNAL` fact silently becomes a `VERIFIED_FACT`.
 4. **No WPA participation.** External facts are terminal; they are not summary components, so they do not drive incremental invalidation, SCC propagation, or dependency-index rebuilds. They *are* citable by the Evidence Builder and queryable in the fact store.
 5. **Vocabulary normalization.** Joern / PhASAR predicates map into VERITAS's fact vocabulary where a stable equivalence exists (e.g. Joern `CALL` → `CallFact`, `REACHING_DEF` → `ValueFlowFact`). Unmappable predicates persist as opaque `external_observation`, and the raw record is retained for provenance.
 
@@ -403,13 +403,13 @@ class ExternalIdentityBridge {
 
 Downstream, the fact-store `Put` path applies the epistemic-floor validation. An attempt to insert an external fact at epistemic `MUST` is rejected at write time (`FailedPrecondition`).
 
-Concrete signatures and testing tables for these interfaces live in `docs/specs/veritas-summarydb-ingest-adapter-design.md` (milestone-scoped spec).
+Concrete signatures and testing tables for these interfaces live in `docs/specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md` (milestone-scoped spec).
 
 ---
 
 # 11. Invariants
 
-VERITAS carries a set of platform-wide invariants. Analysis-specific invariants are stated in `veritas-whole-program-analysis-design.md`; storage-specific invariants in `veritas-thin-summarydb-backends-design.md`. The invariants below govern the platform as a whole and the ingest boundary in particular.
+VERITAS carries a set of platform-wide invariants. Analysis-specific invariants are stated in `02-whole-program-analysis-architecture.md`; storage-specific invariants in `03-summarydb-storage-architecture.md`. The invariants below govern the platform as a whole and the ingest boundary in particular.
 
 | ID | Invariant | Reason |
 | --- | --- | --- |
@@ -736,21 +736,21 @@ The Agent's role is compact: interpret evidence, rank findings, identify missing
 New readers:
 
 1. This document — platform pipeline, principles, ingest boundary.
-2. `veritas-whole-program-analysis-design.md` — how the analyzer engines fit together and what precision the pointer/alias layer delivers.
-3. `veritas-thin-summarydb-backends-design.md` — how identity, hashing, and storage are laid out.
-4. `veritas-evidence-ir-design.md` — the Evidence IR the Agent consumes.
+2. `02-whole-program-analysis-architecture.md` — how the analyzer engines fit together and what precision the pointer/alias layer delivers.
+3. `03-summarydb-storage-architecture.md` — how identity, hashing, and storage are laid out.
+4. `04-evidence-ir-architecture.md` — the Evidence IR the Agent consumes.
 
 Implementers:
 
 * Historical and normal milestone specs live under `docs/specs/milestones/`;
   their available implementation plans live under `docs/plans/`.
 * M8R uses the canonical
-  [`M8R bridge spec`](../specs/milestones/m8r-souffle-wpa-remediation-design-spec.md)
+  [`M8R bridge spec`](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md)
   and
-  [`remediation implementation plan`](../superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md).
+  [`remediation implementation plan`](../plans/milestones/m08r-souffle-wpa-remediation-implementation-plan.md).
 * M10A's detailed design and implementation plan are still pending. M13 is the
   separately approved, benchmark-gated research scope in the
-  [architecture refinement design](../superpowers/specs/2026-08-22-souffle-wpa-architecture-refinement-design.md#m13--benchmark-gated-pta-research)
+  [architecture refinement design](../specs/milestones/m08r-souffle-wpa-architecture-refinement-design-spec.md#m13--benchmark-gated-pta-research)
   and remains independent of the M9-M12 critical path.
 * The
   [engineering-backbone spec](../specs/veritas-engineering-backbone-design-specification.md)
