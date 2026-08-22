@@ -194,7 +194,9 @@ The migration is complete only when all of these checks pass:
 
 1. Every canonical path in Sections 4–6 exists.
 2. No tracked file exists below `docs/superpowers/`.
-3. No tracked Markdown file references a migrated old path.
+3. No tracked Markdown file outside this specification and its implementation
+   plan references a migrated old path; those two migration records retain the
+   old-to-new tables intentionally.
 4. Documentation indexes cover every architecture, milestone-spec, and
    milestone-plan document exactly once.
 5. Internal Markdown links resolve to tracked files and local anchors.
