@@ -23,6 +23,7 @@
 #include "veritas/build/AnalysisManifest.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
+#include "veritas/summary/SummaryArtifact.h"
 #include "veritas/summary/v1/summary.pb.h"
 #include "veritas/summarydb/MetadataStore.h"
 #include "veritas/summarydb/ObjectStore.h"
@@ -50,6 +51,12 @@ public:
   PublishSummary(const summary::v1::FunctionSummary &summary,
                  const PublicationContext &context);
 
+  // V2 overload: publish a summary.v2 object through the same version-aware
+  // storage path, binding it as current.
+  veritas::StatusOr<core::StableId>
+  PublishSummary(const summary::v2::FunctionSummary &summary,
+                 const PublicationContext &context);
+
   // Publish a batch of summaries atomically: every current binding advances in
   // one SQLite transaction, or none do. Immutable objects are written first
   // (outside the transaction); the metadata inserts and binding updates are
@@ -57,6 +64,11 @@ public:
   veritas::StatusOr<std::vector<core::StableId>> PublishProjectSummaries(
       const std::string &revision_id, const std::string &build_variant_id,
       const std::vector<summary::v1::FunctionSummary> &summaries);
+
+  // V2 overload of PublishProjectSummaries.
+  veritas::StatusOr<std::vector<core::StableId>> PublishProjectSummaries(
+      const std::string &revision_id, const std::string &build_variant_id,
+      const std::vector<summary::v2::FunctionSummary> &summaries);
 
   // Retrieve the current summary for a function variant.
   veritas::StatusOr<summary::v1::FunctionSummary>
@@ -71,6 +83,22 @@ public:
   // Retrieve a specific summary by ID.
   veritas::StatusOr<summary::v1::FunctionSummary>
   GetSummary(const core::StableId &summary_id) const;
+
+  // Version-neutral retrieval. GetSummaryArtifact reads the stored
+  // schema_version and parses the CAS bytes with the matching protobuf, so a
+  // summary.v2 object round-trips without being reinterpreted as V1.
+  veritas::StatusOr<summary::SummaryArtifact>
+  GetSummaryArtifact(const core::StableId &summary_id) const;
+
+  // Version-neutral current-binding retrieval for a function variant.
+  veritas::StatusOr<summary::SummaryArtifact>
+  GetCurrentSummaryArtifact(const std::string &function_variant_id) const;
+
+  // Version-neutral listing of current summaries in one revision/build
+  // context, ordered by stable function-variant ID.
+  veritas::StatusOr<std::vector<summary::SummaryArtifact>>
+  ListCurrentSummaryArtifacts(std::string_view revision_id,
+                              std::string_view build_variant_id) const;
 
   // Persist the M1 program context (repository, revision, build variant, and
   // translation units). Required before PublishProjectSummaries so the summary
@@ -87,11 +115,20 @@ public:
   veritas::StatusOr<std::vector<core::StableId>> PutImmutableSummaries(
       const std::vector<summary::v1::FunctionSummary> &summaries);
 
+  // Version-neutral PutImmutableSummaries: accepts a mix of V1 and V2 objects.
+  veritas::StatusOr<std::vector<core::StableId>> PutImmutableSummaryArtifacts(
+      const std::vector<summary::SummaryArtifact> &artifacts);
+
   // Stage summary metadata and current bindings within the current transaction.
   // Assumes BeginTransaction has already been called on metadata_store().
   veritas::Status StageCurrentBindings(
       const std::string &revision_id, const std::string &build_variant_id,
       const std::vector<summary::v1::FunctionSummary> &summaries);
+
+  // Version-neutral StageCurrentBindings: stages a mix of V1 and V2 objects.
+  veritas::Status StageCurrentArtifactBindings(
+      const std::string &revision_id, const std::string &build_variant_id,
+      const std::vector<summary::SummaryArtifact> &artifacts);
 
 private:
   SummaryRepository(std::unique_ptr<ObjectStore> object_store,

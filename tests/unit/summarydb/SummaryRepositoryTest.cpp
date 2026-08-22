@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "veritas/summary/v1/summary.pb.h"
+#include "veritas/summary/v2/summary.pb.h"
 #include "veritas/summarydb/MetadataStore.h"
 
 namespace veritas::summarydb {
@@ -277,6 +278,42 @@ TEST_F(SummaryRepositoryTest, ListCurrentSummariesIsolatesContext) {
       repo->ListCurrentSummaries("rev:sha256:other", context.build_variant_id);
   ASSERT_TRUE(listed.ok()) << listed.status().message();
   EXPECT_TRUE(listed->empty());
+}
+
+TEST_F(SummaryRepositoryTest, V1GettersRejectCurrentV2Binding) {
+  auto repo_result = SummaryRepository::Open(test_dir_.string());
+  ASSERT_TRUE(repo_result.ok());
+  auto repo = std::move(*repo_result);
+
+  summary::v2::FunctionSummary v2_summary;
+  auto *header = v2_summary.mutable_header();
+  header->set_schema_version("summary.v2");
+  header->set_creation_epoch_ms(1234567890);
+  auto *identity = v2_summary.mutable_identity();
+  identity->set_repository_id("repo:sha256:abc");
+  identity->set_revision_id("rev:sha256:def");
+  identity->set_build_variant_id("variant:sha256:ghi");
+  identity->set_function_variant_id("funcvar:sha256:jkl");
+  identity->set_function_body_id("funcbody:sha256:mno");
+
+  PublicationContext context;
+  context.revision_id = "rev:sha256:def";
+  context.build_variant_id = "variant:sha256:ghi";
+  context.function_variant_id = "funcvar:sha256:jkl";
+  SetupParentRows(context);
+
+  auto publish = repo->PublishSummary(v2_summary, context);
+  ASSERT_TRUE(publish.ok()) << publish.status().message();
+
+  // The current binding is a V2 object; the V1 getters must reject it rather
+  // than reinterpret the V2 bytes as a V1 summary.
+  auto current = repo->GetCurrentSummary(context.function_variant_id);
+  ASSERT_FALSE(current.ok());
+  EXPECT_EQ(current.status().code(), StatusCode::kFailedPrecondition);
+
+  auto by_id = repo->GetSummary(*publish);
+  ASSERT_FALSE(by_id.ok());
+  EXPECT_EQ(by_id.status().code(), StatusCode::kFailedPrecondition);
 }
 
 TEST_F(SummaryRepositoryTest,

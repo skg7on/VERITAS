@@ -58,6 +58,7 @@ add_library(veritas_summary
   ComponentHash.cpp
   FunctionSummary.cpp
   LocalSummaryBuilder.cpp
+  SummaryArtifact.cpp
   SummaryV2Builder.cpp
 )
 
