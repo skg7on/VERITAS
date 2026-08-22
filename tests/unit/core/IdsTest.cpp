@@ -14,6 +14,8 @@
 
 #include "veritas/core/Ids.h"
 
+#include <array>
+
 #include <gtest/gtest.h>
 
 using namespace veritas::core;
@@ -86,4 +88,14 @@ TEST(IdsTest, SccIdRoundTripsWithDedicatedPrefix) {
   auto parsed = ParseStableId(text);
   ASSERT_TRUE(parsed.ok()) << parsed.status().message();
   EXPECT_EQ(*parsed, id);
+}
+
+TEST(IdsTest, AnalysisRunAndAbstractObjectIdsRoundTrip) {
+  const std::array bytes{std::byte{0x01}};
+  for (auto kind : {IdKind::kAnalysisRun, IdKind::kAbstractObject,
+                    IdKind::kModel}) {
+    const auto id = MakeStableId(kind, bytes);
+    ASSERT_TRUE(ParseStableId(ToString(id)).ok());
+    EXPECT_EQ(*ParseStableId(ToString(id)), id);
+  }
 }

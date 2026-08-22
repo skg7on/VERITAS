@@ -36,6 +36,7 @@ target_link_libraries(veritas_analysis
     veritas_summarydb
 )
 
+add_subdirectory(semantic)
 add_subdirectory(pipeline)
 add_subdirectory(llvm)
 add_subdirectory(svf)
