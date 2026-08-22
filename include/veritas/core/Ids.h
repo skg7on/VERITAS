@@ -47,6 +47,7 @@ enum class IdKind {
   kFunctionBody,
   kFunctionSummary,
   kFact,
+  kScc,
   // CPG (M6) identities
   kValueRef,
   kMemoryRef,
@@ -61,14 +62,14 @@ struct StableId {
   IdKind kind;
   std::string digest_hex;
 
-  auto operator<=>(const StableId&) const = default;
+  auto operator<=>(const StableId &) const = default;
 };
 
 // Construct a StableId from kind and canonical bytes. Uses SHA-256.
 StableId MakeStableId(IdKind kind, std::span<const std::byte> canonical_bytes);
 
 // Serialize a StableId to its string form: <kind>:<algorithm>:<digest>.
-std::string ToString(const StableId& id);
+std::string ToString(const StableId &id);
 
 // Parse a StableId from its string form. Returns InvalidArgument if the
 // format is invalid or the kind/algorithm is unrecognized.
@@ -77,6 +78,6 @@ StatusOr<StableId> ParseStableId(std::string_view text);
 // Type aliases for specific ID kinds
 using FunctionSymbolId = std::string;
 
-}  // namespace veritas::core
+} // namespace veritas::core
 
-#endif  // VERITAS_CORE_IDS_H_
+#endif // VERITAS_CORE_IDS_H_

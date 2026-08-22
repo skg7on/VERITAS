@@ -43,6 +43,8 @@ target_link_libraries(svf_fact_mapper_integration_test
   PRIVATE
     veritas_svf_analysis
     veritas_analysis_pipeline
+    veritas_build
+    veritas_test_support
     veritas_unit_test_support
     LLVMCore
     LLVMSupport

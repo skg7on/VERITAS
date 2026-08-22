@@ -107,6 +107,8 @@ option(BUILD_SHARED_LIBS   "Build VERITAS and SVF as shared libraries"          
 
 option(VERITAS_BUILD_TESTS "Build VERITAS unit and integration tests"           ON)
 option(VERITAS_BUILD_TOOLS "Build VERITAS CLI binaries (veritas-build, ...)"    ON)
+option(VERITAS_ENABLE_SOUFFLE
+  "Enable optional Souffle WPA execution when the executable is available" ON)
 
 # Position-independent code is required when producing shared libraries and
 # is harmless for static builds. Set it globally so every target (including
@@ -152,8 +154,9 @@ include(VeritasSVF)
 include(tests/RequiredSvfContract)
 
 # Remaining VERITAS dependencies: Z3, Protobuf, RocksDB, SQLite3, and
-# GoogleTest (when tests are enabled). Souffle is optional at M0 and
-# becomes required at M8. Resolved before src/ subdirectories are added.
+# GoogleTest (when tests are enabled). Souffle execution is an optional M8
+# accelerator; the C++ WPA remains available without it. Resolved before src/
+# subdirectories are added.
 include(Dependencies)
 
 # -----------------------------------------------------------------------------
@@ -169,7 +172,9 @@ add_subdirectory(src/core)
 add_subdirectory(src/build)
 add_subdirectory(src/summary)
 add_subdirectory(src/summarydb)
+add_subdirectory(src/facts)
 add_subdirectory(src/runtime)
+add_subdirectory(src/wpa)
 add_subdirectory(src/cpg)
 add_subdirectory(src/frontend)
 add_subdirectory(src/analysis)
@@ -196,6 +201,8 @@ message(STATUS "  Shared libraries     : ${BUILD_SHARED_LIBS}")
 message(STATUS "  Position-indep. code : ${CMAKE_POSITION_INDEPENDENT_CODE}")
 message(STATUS "  Build tests          : ${VERITAS_BUILD_TESTS}")
 message(STATUS "  Build tools          : ${VERITAS_BUILD_TOOLS}")
+message(STATUS "  Enable Souffle       : ${VERITAS_ENABLE_SOUFFLE}")
+message(STATUS "  Souffle available    : ${VERITAS_HAS_SOUFFLE}")
 message(STATUS "  LLVM version         : ${LLVM_PACKAGE_VERSION}")
 message(STATUS "  Binary root          : ${CMAKE_BINARY_DIR}")
 message(STATUS "  SVF binary dir       : ${VERITAS_SVF_BINARY_DIR}")

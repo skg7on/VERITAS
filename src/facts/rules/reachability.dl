@@ -1,0 +1,30 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+.decl Weaken(left:number, right:number, result:number)
+Weaken(1, 1, 1).
+Weaken(1, 2, 2).
+Weaken(2, 1, 2).
+Weaken(2, 2, 2).
+
+.decl DirectCall(tuple_id:symbol, caller:symbol, callee:symbol,
+                 epistemic:number)
+.input DirectCall
+.decl ReachableCall(source:symbol, destination:symbol, epistemic:number)
+.output ReachableCall
+
+ReachableCall(a, b, e) :- DirectCall(_, a, b, e).
+ReachableCall(a, c, out) :-
+  DirectCall(_, a, b, edge), ReachableCall(b, c, fact),
+  Weaken(edge, fact, out).

@@ -20,7 +20,7 @@ using namespace veritas::core;
 
 TEST(IdsTest, RoundTripsStableIdText) {
   std::vector<std::byte> data = {std::byte{0x01}, std::byte{0x02},
-                                  std::byte{0x03}};
+                                 std::byte{0x03}};
   auto id = MakeStableId(IdKind::kRepository, data);
   auto text = ToString(id);
   auto parsed = ParseStableId(text);
@@ -47,8 +47,16 @@ TEST(IdsTest, ParseRejectsInvalidFormat) {
   EXPECT_FALSE(ParseStableId("").ok());
   EXPECT_FALSE(ParseStableId("malformed").ok());
   EXPECT_FALSE(ParseStableId("no:colons").ok());
-  EXPECT_FALSE(ParseStableId("repo:md5:abc123").ok());  // wrong algorithm
+  EXPECT_FALSE(ParseStableId("repo:md5:abc123").ok()); // wrong algorithm
   EXPECT_FALSE(ParseStableId("unknownkind:sha256:abc123").ok());
+}
+
+TEST(IdsTest, ParseRejectsNonHexDigest) {
+  EXPECT_FALSE(ParseStableId("fact:sha256:" + std::string(64, 'g')).ok());
+}
+
+TEST(IdsTest, ParseRejectsUppercaseDigestAlias) {
+  EXPECT_FALSE(ParseStableId("fact:sha256:" + std::string(64, 'A')).ok());
 }
 
 TEST(IdsTest, ToStringIncludesKindAlgorithmAndDigest) {
@@ -57,7 +65,7 @@ TEST(IdsTest, ToStringIncludesKindAlgorithmAndDigest) {
   auto text = ToString(id);
   EXPECT_TRUE(text.find("summary:") != std::string::npos);
   EXPECT_TRUE(text.find("sha256:") != std::string::npos);
-  EXPECT_GT(text.size(), 20u);  // kind + algo + hex digest
+  EXPECT_GT(text.size(), 20u); // kind + algo + hex digest
 }
 
 TEST(IdsTest, EmptyBytesProduceValidId) {
@@ -66,4 +74,16 @@ TEST(IdsTest, EmptyBytesProduceValidId) {
   auto text = ToString(id);
   EXPECT_FALSE(text.empty());
   EXPECT_TRUE(ParseStableId(text).ok());
+}
+
+TEST(IdsTest, SccIdRoundTripsWithDedicatedPrefix) {
+  const std::vector<std::byte> data = {std::byte{0x53}, std::byte{0x43},
+                                       std::byte{0x43}};
+  const auto id = MakeStableId(IdKind::kScc, data);
+  const std::string text = ToString(id);
+
+  EXPECT_EQ(text.rfind("scc:sha256:", 0), 0u);
+  auto parsed = ParseStableId(text);
+  ASSERT_TRUE(parsed.ok()) << parsed.status().message();
+  EXPECT_EQ(*parsed, id);
 }

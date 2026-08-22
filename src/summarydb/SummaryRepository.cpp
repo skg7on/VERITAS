@@ -21,10 +21,10 @@
 #include <system_error>
 
 #include "veritas/core/Hash.h"
-#include "veritas/summarydb/MetadataStore.h"
-#include "veritas/summarydb/ObjectStore.h"
 #include "veritas/summary/ComponentHash.h"
 #include "veritas/summary/FunctionSummary.h"
+#include "veritas/summarydb/MetadataStore.h"
+#include "veritas/summarydb/ObjectStore.h"
 
 namespace veritas::summarydb {
 
@@ -34,8 +34,8 @@ SummaryRepository::SummaryRepository(
     : object_store_(std::move(object_store)),
       metadata_store_(std::move(metadata_store)) {}
 
-veritas::StatusOr<std::unique_ptr<SummaryRepository>> SummaryRepository::Open(
-    const std::string& db_path) {
+veritas::StatusOr<std::unique_ptr<SummaryRepository>>
+SummaryRepository::Open(const std::string &db_path) {
   std::error_code error;
   std::filesystem::create_directories(db_path, error);
   if (error) {
@@ -68,9 +68,9 @@ veritas::StatusOr<std::unique_ptr<SummaryRepository>> SummaryRepository::Open(
       std::move(*object_store_result), std::move(metadata_store_ptr)));
 }
 
-veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
-    const summary::v1::FunctionSummary& summary,
-    const PublicationContext& context) {
+veritas::StatusOr<core::StableId>
+SummaryRepository::PublishSummary(const summary::v1::FunctionSummary &summary,
+                                  const PublicationContext &context) {
   // Compute summary ID
   auto summary_id_result = summary::ComputeFunctionSummaryId(summary);
   if (!summary_id_result.ok()) {
@@ -104,14 +104,14 @@ veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
   }
 
   // RAII guard to ensure rollback on early return or exception
-  auto rollback_guard = [this](bool* committed) {
+  auto rollback_guard = [this](bool *committed) {
     if (!*committed) {
       metadata_store_->RollbackTransaction();
     }
   };
   bool committed = false;
   std::unique_ptr<bool, decltype(rollback_guard)> guard(&committed,
-                                                         rollback_guard);
+                                                        rollback_guard);
 
   // Insert summary object metadata
   auto insert_object_result = metadata_store_->Execute(
@@ -124,12 +124,13 @@ veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
   }
 
   // Insert component digests
-  for (const auto& digest : component_digests) {
+  for (const auto &digest : component_digests) {
     auto insert_component_result = metadata_store_->Execute(
         "INSERT OR REPLACE INTO summary_components (summary_id, "
         "component_kind, semantic_hash, evidence_hash, item_count) "
         "VALUES (?, ?, ?, ?, ?)",
-        {core::ToString(summary_id), std::to_string(static_cast<int>(digest.kind)),
+        {core::ToString(summary_id),
+         std::to_string(static_cast<int>(digest.kind)),
          core::DigestToHex(digest.semantic_hash),
          core::DigestToHex(digest.evidence_hash),
          std::to_string(digest.item_count)});
@@ -152,9 +153,8 @@ veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
   // Commit transaction
   auto commit_result = metadata_store_->CommitTransaction();
   if (!commit_result.ok()) {
-    // CommitTransaction already clears in_transaction_ flag on failure
-    // (SQLite auto-rolls-back). No manual rollback needed - RAII guard
-    // will handle cleanup if still needed.
+    // SQLite may leave the transaction active after a failed commit. The RAII
+    // guard rolls it back when MetadataStore reports that cleanup is needed.
     return commit_result;
   }
 
@@ -166,12 +166,13 @@ veritas::StatusOr<core::StableId> SummaryRepository::PublishSummary(
 
 veritas::StatusOr<std::vector<core::StableId>>
 SummaryRepository::PutImmutableSummaries(
-    const std::vector<summary::v1::FunctionSummary>& summaries) {
+    const std::vector<summary::v1::FunctionSummary> &summaries) {
   std::vector<core::StableId> ids;
   ids.reserve(summaries.size());
-  for (const auto& summary : summaries) {
+  for (const auto &summary : summaries) {
     auto id_result = summary::ComputeFunctionSummaryId(summary);
-    if (!id_result.ok()) return id_result.status();
+    if (!id_result.ok())
+      return id_result.status();
     std::string serialized;
     if (!summary.SerializeToString(&serialized)) {
       return veritas::Status::Internal("Failed to serialize summary");
@@ -180,28 +181,30 @@ SummaryRepository::PutImmutableSummaries(
     std::vector<std::byte> bytes_vec(bytes_span.begin(), bytes_span.end());
     auto put_status =
         object_store_->PutIfAbsent(core::ToString(*id_result), bytes_vec);
-    if (!put_status.ok()) return put_status;
+    if (!put_status.ok())
+      return put_status;
     ids.push_back(*id_result);
   }
   return ids;
 }
 
 veritas::Status SummaryRepository::StageCurrentBindings(
-    const std::string& revision_id,
-    const std::string& build_variant_id,
-    const std::vector<summary::v1::FunctionSummary>& summaries) {
-  for (const auto& summary : summaries) {
+    const std::string &revision_id, const std::string &build_variant_id,
+    const std::vector<summary::v1::FunctionSummary> &summaries) {
+  for (const auto &summary : summaries) {
     auto id_result = summary::ComputeFunctionSummaryId(summary);
-    if (!id_result.ok()) return id_result.status();
+    if (!id_result.ok())
+      return id_result.status();
     const std::string id_str = core::ToString(*id_result);
 
     auto insert_object = metadata_store_->Execute(
         "INSERT OR IGNORE INTO summary_objects (summary_id, object_key, "
         "schema_version, created_at) VALUES (?, ?, ?, strftime('%s', 'now'))",
         {id_str, id_str, summary.header().schema_version()});
-    if (!insert_object.ok()) return insert_object;
+    if (!insert_object.ok())
+      return insert_object;
 
-    for (const auto& digest : summary::ComputeComponentDigests(summary)) {
+    for (const auto &digest : summary::ComputeComponentDigests(summary)) {
       auto insert_component = metadata_store_->Execute(
           "INSERT OR REPLACE INTO summary_components (summary_id, "
           "component_kind, semantic_hash, evidence_hash, item_count) "
@@ -210,25 +213,26 @@ veritas::Status SummaryRepository::StageCurrentBindings(
            core::DigestToHex(digest.semantic_hash),
            core::DigestToHex(digest.evidence_hash),
            std::to_string(digest.item_count)});
-      if (!insert_component.ok()) return insert_component;
+      if (!insert_component.ok())
+        return insert_component;
     }
 
     auto update_binding = metadata_store_->Execute(
         "INSERT OR REPLACE INTO summary_bindings (function_variant_id, "
         "revision_id, build_variant_id, summary_id, publication_epoch, "
         "is_current) VALUES (?, ?, ?, ?, strftime('%s', 'now'), 1)",
-        {summary.identity().function_variant_id(), revision_id, build_variant_id,
-         id_str});
-    if (!update_binding.ok()) return update_binding;
+        {summary.identity().function_variant_id(), revision_id,
+         build_variant_id, id_str});
+    if (!update_binding.ok())
+      return update_binding;
   }
   return veritas::Status::Ok();
 }
 
 veritas::StatusOr<std::vector<core::StableId>>
 SummaryRepository::PublishProjectSummaries(
-    const std::string& revision_id,
-    const std::string& build_variant_id,
-    const std::vector<summary::v1::FunctionSummary>& summaries) {
+    const std::string &revision_id, const std::string &build_variant_id,
+    const std::vector<summary::v1::FunctionSummary> &summaries) {
   struct Prepared {
     core::StableId id;
     std::string object_key;
@@ -241,7 +245,7 @@ SummaryRepository::PublishProjectSummaries(
   // transaction so the CAS layer never participates in a metadata transaction.
   std::vector<Prepared> prepared;
   prepared.reserve(summaries.size());
-  for (const auto& summary : summaries) {
+  for (const auto &summary : summaries) {
     auto id_result = summary::ComputeFunctionSummaryId(summary);
     if (!id_result.ok()) {
       return id_result.status();
@@ -274,15 +278,16 @@ SummaryRepository::PublishProjectSummaries(
     return begin_result;
   }
   bool committed = false;
-  auto rollback_guard = [this](bool* c) {
-    if (!*c) metadata_store_->RollbackTransaction();
+  auto rollback_guard = [this](bool *c) {
+    if (!*c)
+      metadata_store_->RollbackTransaction();
   };
   std::unique_ptr<bool, decltype(rollback_guard)> guard(&committed,
                                                         rollback_guard);
 
   std::vector<core::StableId> ids;
   ids.reserve(prepared.size());
-  for (const auto& entry : prepared) {
+  for (const auto &entry : prepared) {
     const std::string id_str = core::ToString(entry.id);
 
     auto insert_object = metadata_store_->Execute(
@@ -293,7 +298,7 @@ SummaryRepository::PublishProjectSummaries(
       return insert_object;
     }
 
-    for (const auto& digest : entry.digests) {
+    for (const auto &digest : entry.digests) {
       auto insert_component = metadata_store_->Execute(
           "INSERT OR REPLACE INTO summary_components (summary_id, "
           "component_kind, semantic_hash, evidence_hash, item_count) "
@@ -330,7 +335,7 @@ SummaryRepository::PublishProjectSummaries(
 
 veritas::StatusOr<summary::v1::FunctionSummary>
 SummaryRepository::GetCurrentSummary(
-    const std::string& function_variant_id) const {
+    const std::string &function_variant_id) const {
   // Query current binding
   auto query_result = metadata_store_->Query(
       "SELECT summary_id FROM summary_bindings WHERE function_variant_id = ? "
@@ -342,8 +347,7 @@ SummaryRepository::GetCurrentSummary(
 
   auto rows = *query_result;
   if (rows.empty()) {
-    return veritas::Status::NotFound(
-        "No current summary for function variant");
+    return veritas::Status::NotFound("No current summary for function variant");
   }
 
   std::string summary_id_str = rows[0][0];
@@ -355,13 +359,56 @@ SummaryRepository::GetCurrentSummary(
   return GetSummary(*summary_id_result);
 }
 
+veritas::StatusOr<std::vector<summary::v1::FunctionSummary>>
+SummaryRepository::ListCurrentSummaries(
+    std::string_view revision_id, std::string_view build_variant_id) const {
+  auto query_result = metadata_store_->Query(
+      "SELECT summary_id, function_variant_id FROM summary_bindings "
+      "WHERE revision_id = ? AND build_variant_id = ? AND is_current = 1 "
+      "ORDER BY function_variant_id ASC",
+      {std::string(revision_id), std::string(build_variant_id)});
+  if (!query_result.ok())
+    return query_result.status();
+
+  std::vector<summary::v1::FunctionSummary> summaries;
+  summaries.reserve(query_result->size());
+  for (const auto &row : *query_result) {
+    if (row.size() != 2u) {
+      return veritas::Status::Internal(
+          "current summary query returned an unexpected column count");
+    }
+    auto summary_id = core::ParseStableId(row[0]);
+    if (!summary_id.ok())
+      return summary_id.status();
+    if (summary_id->kind != core::IdKind::kFunctionSummary) {
+      return veritas::Status::FailedPrecondition(
+          "current summary binding has a non-summary object ID");
+    }
+
+    auto summary = GetSummary(*summary_id);
+    if (!summary.ok())
+      return summary.status();
+    if (summary->identity().revision_id() != revision_id ||
+        summary->identity().build_variant_id() != build_variant_id) {
+      return veritas::Status::FailedPrecondition(
+          "current summary binding does not match requested context");
+    }
+    if (summary->identity().function_variant_id() != row[1]) {
+      return veritas::Status::FailedPrecondition(
+          "current summary binding does not match stored function identity");
+    }
+    summaries.push_back(std::move(*summary));
+  }
+  return summaries;
+}
+
 veritas::Status SummaryRepository::PersistManifestContext(
-    const build::AnalysisManifest& manifest) {
+    const build::AnalysisManifest &manifest) {
   return metadata_store_->PutManifestContext(manifest);
 }
 
-veritas::StatusOr<summary::v1::FunctionSummary> SummaryRepository::GetSummary(
-    const core::StableId& summary_id) const {
+veritas::StatusOr<summary::v1::FunctionSummary>
+SummaryRepository::GetSummary(const core::StableId &summary_id) const {
   std::string object_key = core::ToString(summary_id);
 
   // Retrieve from object store
@@ -380,4 +427,4 @@ veritas::StatusOr<summary::v1::FunctionSummary> SummaryRepository::GetSummary(
   return summary;
 }
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb

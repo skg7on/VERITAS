@@ -20,7 +20,7 @@ using namespace veritas::core;
 
 TEST(HashTest, ComputesSHA256) {
   std::vector<std::byte> data = {std::byte{0x61}, std::byte{0x62},
-                                  std::byte{0x63}};  // "abc"
+                                 std::byte{0x63}}; // "abc"
   auto digest = ComputeSHA256(data);
   EXPECT_EQ(digest.size(), kSHA256DigestBytes);
 }
@@ -66,4 +66,7 @@ TEST(HashTest, HexToDigestRejectsInvalidLength) {
 TEST(HashTest, HexToDigestRejectsNonHex) {
   EXPECT_FALSE(HexToDigest(std::string(64, 'g')).has_value());
   EXPECT_FALSE(HexToDigest(std::string(64, ' ')).has_value());
+  std::string high_bit(64, '0');
+  high_bit[0] = static_cast<char>(0x80);
+  EXPECT_FALSE(HexToDigest(high_bit).has_value());
 }

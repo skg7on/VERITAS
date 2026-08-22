@@ -17,44 +17,51 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace llvm {
 class Function;
-}  // namespace llvm
+} // namespace llvm
 
 namespace veritas::analysis::llvm {
 
 // OriginMap tracks the bidirectional relationship between LLVM Function
-// instances and their FunctionSymbolID. It survives LLVM IR transformations
-// that preserve function identity (inlining destroys the mapping for the
-// inlined callee, but not the caller).
+// instances and their stable function identity. It survives LLVM IR
+// transformations that preserve function identity (inlining destroys the
+// mapping for the inlined callee, but not the caller).
 class OriginMap {
- public:
+public:
   OriginMap() = default;
   ~OriginMap() = default;
 
   // Non-copyable, movable
-  OriginMap(const OriginMap&) = delete;
-  OriginMap& operator=(const OriginMap&) = delete;
-  OriginMap(OriginMap&&) noexcept = default;
-  OriginMap& operator=(OriginMap&&) noexcept = default;
+  OriginMap(const OriginMap &) = delete;
+  OriginMap &operator=(const OriginMap &) = delete;
+  OriginMap(OriginMap &&) noexcept = default;
+  OriginMap &operator=(OriginMap &&) noexcept = default;
 
   // Records the origin of an LLVM function. The function pointer must remain
   // valid for the lifetime of this OriginMap instance.
-  void RecordOrigin(::llvm::Function* func, std::string symbol_id);
+  void RecordOrigin(::llvm::Function *func, std::string symbol_id);
 
   // Looks up the symbol ID for a given LLVM function. Returns nullopt if the
   // function is not tracked.
-  std::optional<std::string> GetSymbolId(const ::llvm::Function* func) const;
+  std::optional<std::string> GetSymbolId(const ::llvm::Function *func) const;
+
+  // Looks up a symbol ID by the exact LLVM function name. Ambiguous names are
+  // deliberately unresolved so downstream analysis can preserve uncertainty.
+  std::optional<std::string>
+  GetSymbolIdByLlvmName(std::string_view llvm_name) const;
 
   // Looks up the LLVM function for a given symbol ID. Returns nullptr if the
   // symbol is not tracked.
-  ::llvm::Function* GetFunction(const std::string& symbol_id) const;
+  ::llvm::Function *GetFunction(const std::string &symbol_id) const;
 
   // Removes the mapping for a function (used when a function is deleted or
   // inlined away).
-  void RemoveFunction(const ::llvm::Function* func);
+  void RemoveFunction(const ::llvm::Function *func);
 
   // Returns the number of tracked functions.
   size_t Size() const { return func_to_symbol_.size(); }
@@ -62,11 +69,13 @@ class OriginMap {
   // Clears all mappings.
   void Clear();
 
- private:
-  std::unordered_map<const ::llvm::Function*, std::string> func_to_symbol_;
-  std::unordered_map<std::string, ::llvm::Function*> symbol_to_func_;
+private:
+  std::unordered_map<const ::llvm::Function *, std::string> func_to_symbol_;
+  std::unordered_map<std::string, ::llvm::Function *> symbol_to_func_;
+  std::unordered_map<std::string, std::string> name_to_symbol_;
+  std::unordered_set<std::string> ambiguous_names_;
 };
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm
 
-#endif  // VERITAS_ANALYSIS_LLVM_ORIGINMAP_H_
+#endif // VERITAS_ANALYSIS_LLVM_ORIGINMAP_H_

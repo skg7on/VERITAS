@@ -286,3 +286,63 @@ CREATE TABLE IF NOT EXISTS component_deltas (
   PRIMARY KEY (delta_id, component_kind),
   FOREIGN KEY (delta_id) REFERENCES summary_deltas(delta_id)
 );
+
+-- M8: deterministic SCC topology and component convergence state.
+CREATE TABLE IF NOT EXISTS wpa_sccs (
+  scc_id TEXT NOT NULL,
+  revision_id TEXT NOT NULL,
+  build_variant_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  PRIMARY KEY (scc_id, revision_id, build_variant_id),
+  FOREIGN KEY (revision_id) REFERENCES revisions(revision_id),
+  FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
+);
+
+CREATE TABLE IF NOT EXISTS wpa_scc_members (
+  scc_id TEXT NOT NULL,
+  revision_id TEXT NOT NULL,
+  build_variant_id TEXT NOT NULL,
+  function_variant_id TEXT NOT NULL,
+  PRIMARY KEY (scc_id, revision_id, build_variant_id, function_variant_id),
+  FOREIGN KEY (scc_id, revision_id, build_variant_id)
+    REFERENCES wpa_sccs(scc_id, revision_id, build_variant_id),
+  FOREIGN KEY (revision_id) REFERENCES revisions(revision_id),
+  FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_wpa_scc_members_function
+  ON wpa_scc_members(function_variant_id, revision_id, build_variant_id);
+
+CREATE TABLE IF NOT EXISTS wpa_scc_edges (
+  caller_scc_id TEXT NOT NULL,
+  callee_scc_id TEXT NOT NULL,
+  revision_id TEXT NOT NULL,
+  build_variant_id TEXT NOT NULL,
+  epistemic INTEGER NOT NULL,
+  PRIMARY KEY (caller_scc_id, callee_scc_id, revision_id, build_variant_id),
+  FOREIGN KEY (caller_scc_id, revision_id, build_variant_id)
+    REFERENCES wpa_sccs(scc_id, revision_id, build_variant_id),
+  FOREIGN KEY (callee_scc_id, revision_id, build_variant_id)
+    REFERENCES wpa_sccs(scc_id, revision_id, build_variant_id),
+  FOREIGN KEY (revision_id) REFERENCES revisions(revision_id),
+  FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_wpa_scc_edges_callee
+  ON wpa_scc_edges(callee_scc_id, revision_id, build_variant_id);
+
+CREATE TABLE IF NOT EXISTS wpa_component_states (
+  scc_id TEXT NOT NULL,
+  revision_id TEXT NOT NULL,
+  build_variant_id TEXT NOT NULL,
+  component_kind INTEGER NOT NULL,
+  input_hash TEXT NOT NULL,
+  fixpoint_hash TEXT NOT NULL,
+  externally_visible_hash TEXT NOT NULL,
+  iteration_count INTEGER NOT NULL,
+  status INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  PRIMARY KEY (scc_id, revision_id, build_variant_id, component_kind),
+  FOREIGN KEY (scc_id, revision_id, build_variant_id)
+    REFERENCES wpa_sccs(scc_id, revision_id, build_variant_id),
+  FOREIGN KEY (revision_id) REFERENCES revisions(revision_id),
+  FOREIGN KEY (build_variant_id) REFERENCES build_variants(build_variant_id)
+);

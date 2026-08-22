@@ -17,7 +17,9 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <span>
 #include <string>
+#include <string_view>
 
 #include "cpg/CpgCanonicalizer.h"
 #include "veritas/summarydb/MetadataStore.h"
@@ -25,11 +27,9 @@
 namespace veritas::cpg {
 namespace {
 
-core::StableId Id(core::IdKind kind, std::string hex) {
-  // Pad to a valid 64-char SHA-256 hex digest so the ID round-trips through
-  // ParseStableId in the repository.
-  hex.resize(64, '0');
-  return core::StableId{kind, std::move(hex)};
+core::StableId Id(core::IdKind kind, std::string_view name) {
+  return core::MakeStableId(kind,
+                            std::as_bytes(std::span(name.data(), name.size())));
 }
 
 ThinCpg MakeGraph() {
@@ -40,10 +40,10 @@ ThinCpg MakeGraph() {
       .module_hash = "modulehash",
       .summary_ids = {Id(core::IdKind::kFunctionSummary, "s1")},
   });
-  (void)graph.AddNode(
-      CpgNode{Id(core::IdKind::kFunctionVariant, "f"), NodeKind::kFunction, "foo"});
-  (void)graph.AddNode(
-      CpgNode{Id(core::IdKind::kMemoryRef, "m"), NodeKind::kMemoryObject, "mem"});
+  (void)graph.AddNode(CpgNode{Id(core::IdKind::kFunctionVariant, "f"),
+                              NodeKind::kFunction, "foo"});
+  (void)graph.AddNode(CpgNode{Id(core::IdKind::kMemoryRef, "m"),
+                              NodeKind::kMemoryObject, "mem"});
   CpgEdge edge;
   edge.edge_id = Id(core::IdKind::kCpgEdge, "e");
   edge.kind = EdgeKind::kReads;
@@ -80,5 +80,5 @@ TEST(CpgRepositoryTest, OpensHistoricalProjectionById) {
   std::filesystem::remove(path);
 }
 
-}  // namespace
-}  // namespace veritas::cpg
+} // namespace
+} // namespace veritas::cpg

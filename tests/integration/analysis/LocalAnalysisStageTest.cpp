@@ -14,14 +14,20 @@
 
 #include <gtest/gtest.h>
 
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Module.h>
+
+#include <set>
 #include <string>
 #include <string_view>
 
 #include "ProjectFixture.h"
+#include "analysis/llvm/ProjectIrBuilder.h"
 #include "analysis/pipeline/LocalAnalysisStage.h"
 #include "veritas/analysis/ProjectAnalysisRequest.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
+#include "veritas/core/Ids.h"
 
 namespace veritas::analysis::pipeline {
 namespace {
@@ -32,7 +38,8 @@ StatusOr<build::AnalysisManifest> LoadFixtureManifest(std::string_view name) {
       .output_root = {},
   };
   auto input = build::ResolveProjectInput(request);
-  if (!input.ok()) return input.status();
+  if (!input.ok())
+    return input.status();
   return build::LoadProjectManifest(*input);
 }
 
@@ -47,7 +54,7 @@ TEST(LocalAnalysisStageTest, BuildsLinkedProgramIrAndSummaryDrafts) {
   EXPECT_FALSE(result->program_ir.module_hash().empty());
   ASSERT_EQ(result->summary_drafts.size(), 2u);
 
-  for (const auto& draft : result->summary_drafts) {
+  for (const auto &draft : result->summary_drafts) {
     EXPECT_FALSE(draft.identity().function_variant_id().empty());
     EXPECT_FALSE(draft.identity().revision_id().empty());
   }
@@ -61,7 +68,7 @@ TEST(LocalAnalysisStageTest, ExtractsMemoryEffectsAndValueFlows) {
   ASSERT_TRUE(result.ok()) << result.status().message();
   ASSERT_EQ(result->summary_drafts.size(), 1u);
 
-  const auto& draft = result->summary_drafts[0];
+  const auto &draft = result->summary_drafts[0];
   EXPECT_GT(draft.value_flows_size(), 0);
   EXPECT_GT(draft.memory_effects_size(), 0);
 }
@@ -85,5 +92,99 @@ TEST(LocalAnalysisStageTest, IdenticalInputsProduceDeterministicDrafts) {
   }
 }
 
-}  // namespace
-}  // namespace veritas::analysis::pipeline
+TEST(LocalAnalysisStageTest, DirectCallCarriesResolvedFunctionVariantId) {
+  auto manifest = LoadFixtureManifest("smoke");
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+  auto result = RunLocalAnalysis(*manifest);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+
+  const summary::v1::Call *add_call = nullptr;
+  for (const auto &draft : result->summary_drafts) {
+    for (const auto &call : draft.calls()) {
+      if (call.callee_symbol().find("add") != std::string::npos) {
+        add_call = &call;
+      }
+    }
+  }
+  ASSERT_NE(add_call, nullptr);
+  auto parsed =
+      core::ParseStableId(add_call->resolved_callee_function_variant_id());
+  ASSERT_TRUE(parsed.ok()) << parsed.status().message();
+  EXPECT_EQ(parsed->kind, core::IdKind::kFunctionVariant);
+  auto call_site = core::ParseStableId(add_call->call_site_anchor_id());
+  ASSERT_TRUE(call_site.ok()) << call_site.status().message();
+  EXPECT_EQ(call_site->kind, core::IdKind::kCallSite);
+}
+
+TEST(LocalAnalysisStageTest, FunctionVariantsIncludeBuildVariantIdentity) {
+  auto first_manifest = LoadFixtureManifest("store_load");
+  ASSERT_TRUE(first_manifest.ok()) << first_manifest.status().message();
+  auto second_manifest = *first_manifest;
+  const auto alternate_build =
+      core::MakeStableId(core::IdKind::kBuildVariant,
+                         std::as_bytes(std::span("alternate-build", 15)));
+  second_manifest.context.build_variant_id = core::ToString(alternate_build);
+  for (auto &unit : second_manifest.translation_units) {
+    unit.build_variant_id = second_manifest.context.build_variant_id;
+  }
+
+  auto first = RunLocalAnalysis(*first_manifest);
+  auto second = RunLocalAnalysis(second_manifest);
+  ASSERT_TRUE(first.ok()) << first.status().message();
+  ASSERT_TRUE(second.ok()) << second.status().message();
+  ASSERT_EQ(first->summary_drafts.size(), second->summary_drafts.size());
+
+  for (std::size_t i = 0; i < first->summary_drafts.size(); ++i) {
+    EXPECT_NE(first->summary_drafts[i].identity().function_variant_id(),
+              second->summary_drafts[i].identity().function_variant_id());
+  }
+}
+
+TEST(LocalAnalysisStageTest, InternalFunctionsIncludeTranslationUnitIdentity) {
+  auto manifest = LoadFixtureManifest("internal_linkage");
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+  auto result = RunLocalAnalysis(*manifest);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+
+  std::set<std::string> helper_ids;
+  for (const auto &function : *result->program_ir.GetModule()) {
+    if (!function.hasInternalLinkage() ||
+        function.getName().find("helper") == std::string_view::npos) {
+      continue;
+    }
+    auto id = result->program_ir.origin_map().GetSymbolId(&function);
+    ASSERT_TRUE(id.has_value());
+    helper_ids.insert(*id);
+  }
+  EXPECT_EQ(helper_ids.size(), 2u);
+}
+
+TEST(LocalAnalysisStageTest, PrivateFunctionsIncludeTranslationUnitIdentity) {
+  ::llvm::LLVMContext context;
+  ::llvm::Module first_module("first", context);
+  ::llvm::Module second_module("second", context);
+  auto *function_type =
+      ::llvm::FunctionType::get(::llvm::Type::getVoidTy(context), false);
+  auto *first = ::llvm::Function::Create(function_type,
+                                         ::llvm::GlobalValue::PrivateLinkage,
+                                         "helper", first_module);
+  auto *second = ::llvm::Function::Create(function_type,
+                                          ::llvm::GlobalValue::PrivateLinkage,
+                                          "helper", second_module);
+  const build::ProgramContext program_context{
+      .repository_id = core::ToString(core::MakeStableId(
+          core::IdKind::kRepository, std::as_bytes(std::span("repo", 4))))};
+  const build::TranslationUnitCommand first_command{
+      .translation_unit_id = "translation-unit:first"};
+  const build::TranslationUnitCommand second_command{
+      .translation_unit_id = "translation-unit:second"};
+
+  const auto first_id = ::veritas::analysis::llvm::detail::FunctionSymbolId(
+      *first, first_command, program_context);
+  const auto second_id = ::veritas::analysis::llvm::detail::FunctionSymbolId(
+      *second, second_command, program_context);
+  EXPECT_NE(first_id, second_id);
+}
+
+} // namespace
+} // namespace veritas::analysis::pipeline

@@ -22,8 +22,8 @@
 #   Z3, Protobuf, RocksDB, SQLite3, and (when VERITAS_BUILD_TESTS)
 #   GoogleTest.
 #
-# Optional at M0:
-#   Souffle (becomes required in M8).
+# Optional:
+#   Souffle executable for M8 Datalog rule execution.
 #
 # Nothing in this module directly consumes the discovered packages — target
 # linking happens in the leaf CMakeLists.txt files that actually need each
@@ -105,11 +105,17 @@ if(VERITAS_BUILD_TESTS)
 endif()
 
 # -----------------------------------------------------------------------------
-# Souffle — WPA Datalog engine. Optional at M0, required starting at M8.
+# Souffle — optional WPA Datalog execution engine.
 # -----------------------------------------------------------------------------
-find_package(Souffle QUIET)
-if(Souffle_FOUND)
-  message(STATUS "VERITAS: Found Souffle (optional at M0)")
+set(VERITAS_HAS_SOUFFLE OFF)
+if(VERITAS_ENABLE_SOUFFLE)
+  find_program(VERITAS_SOUFFLE_EXECUTABLE NAMES souffle)
+  if(VERITAS_SOUFFLE_EXECUTABLE)
+    set(VERITAS_HAS_SOUFFLE ON)
+    message(STATUS "VERITAS: Found Souffle ${VERITAS_SOUFFLE_EXECUTABLE}")
+  else()
+    message(STATUS "VERITAS: Souffle not found; C++ WPA remains enabled")
+  endif()
 else()
-  message(STATUS "VERITAS: Souffle not found (optional at M0, required at M8)")
+  message(STATUS "VERITAS: Souffle execution disabled")
 endif()
