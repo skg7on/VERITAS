@@ -20,10 +20,11 @@ This document turns the high-level SummaryDB architecture into an engineering de
 The backbone is the subsystem that makes VERITAS scalable before any LLM reviewer is introduced:
 
 ```text
-project directory containing compile_commands.json
-    -> VERITAS Build Intelligence
-    -> VERITAS-owned Clang AST and LLVM IR construction
-    -> required in-process SVF analysis
+Tier 1: project directory containing compile_commands.json (current/pre-M11)
+    -> VERITAS Build Intelligence and owned Clang AST/LLVM IR construction
+M11 Tier 2: .bc/.ll file or directory
+    -> VERITAS-owned bitcode module acquisition
+both -> required in-process SVF analysis
     -> stable function identities
     -> immutable function summaries
     -> semantic component hashes
@@ -38,6 +39,15 @@ The central engineering goal is:
 > Given a large C/C++ codebase and a source revision change, recompute only the semantic facts whose inputs actually changed, explain every derived fact, and expose enough stable IDs for Evidence IR to cite the result without reloading the whole program.
 
 This document specifies the V1 data model, hash model, storage layout, update algorithms, consistency rules, and implementation milestones.
+
+**Approved remediation overlay.** The implemented M8 baseline uses C++
+fixpoint execution and optional Souffle comparison. The approved M8R target is
+not yet delivered and supersedes live WPA/Datalog ownership statements in this
+draft: Function Summary IR is durable, detailed relations are run-local, pinned
+SVF owns V1 points-to/alias/SVFG and indirect calls, compiled Souffle owns normal
+production recursion, and C++ is conformance or explicit emergency only. The
+[M8R bridge spec](milestones/m8r-souffle-wpa-remediation-design-spec.md) is the
+delivery authority.
 
 ---
 
@@ -84,37 +94,61 @@ The backbone MUST preserve these invariants.
 | B7 | Epistemic state and confidence are separate. | `MAY` is not low confidence, and `INFERRED` is not verified. |
 | B8 | Publication is atomic at metadata bindings, not object mutation. | Readers must never observe a half-written summary revision. |
 | B9 | Deterministic analysis is reproducible for the same inputs. | Enables stable hashes, diffing, and regression analysis. |
-| B10 | The only public source input is a project directory containing `compile_commands.json`; VERITAS owns AST, IR, and SVF execution. | Prevents external preprocessing artifacts from becoming public contracts or reproducibility gaps. |
+| B10 | `--project <directory>` is the only public source input and the current pre-M11 contract. M11 adds mutually exclusive `--bitcode <.bc\|.ll\|directory>` as a Tier-2 module-acquisition input; both routes continue through VERITAS-owned local extraction, SVF, Summary IR, WPA, and provenance. No route accepts an SVF artifact or bypasses analysis. M12 external facts are non-authoritative terminal observations. | Preserves owned analysis and reproducibility while admitting controlled module input without confusing it with source or third-party analysis output. |
+| B11 | Function Summary IR is durable; `relations.v2` and typed dense IDs are run-local. | Preserve one stable WPA contract. |
+| B12 | Compiled Souffle is the normal recursive owner; C++ is conformance or explicitly selected emergency only. | Prevent semantic split and silent fallback. |
+| B13 | Every published derived fact has a generic deterministic finite rooted witness. | Engine-neutral explanation. |
+| B14 | Failed components publish no replacement; prior success remains stale history. | Failure atomicity. |
+| B15 | M9 receives only a complete, rooted, idempotently delivered `AnalysisFactBatch`. | Safe durable publication. |
 
 ---
 
 # 4. Logical Architecture
 
 ```text
-                Project Directory + Build Config
-                              |
-                              v
-                      Build Intelligence
-                              |
-                              v
-                Typed In-Memory Project Context
-                              |
-                              v
-              +---------------+----------------+
-              |                                |
-              v                                v
-      Clang Semantic Frontend           LLVM Analysis Frontend
-              |                                |
-              +---------------+----------------+
-                              |
-                              v
-                   Required In-Process SVF
-                              |
-                              v
-                     Local Summary Builder
-                              |
-                              v
-                 Immutable FunctionSummary
+Tier 1: project + build config
+              |
+              v
+      Build Intelligence
+              |
+              v
+   Typed Project Context
+      |               |
+      |               +--> Clang Semantic Frontend
+      |                         |
+      |                         +--------------------------+
+      |                          Tier-1 AST semantic inputs |
+      v                                                    |
+CodeGenIrSource                                            |
+(LLVM CodeGen + link)                                      |
+      |                                                    |
+      +---------------------+                              |
+                            |                              |
+Tier 2: .bc/.ll file or directory                          |
+      |                                                    |
+      v                                                    |
+BitcodeIrSource                                            |
+(verify + load + link + OriginMap; skips Clang/CodeGen)    |
+      |                                                    |
+      +---------------------+                              |
+                            v                              |
+             ProgramIrSource::Build boundary               |
+                            |                              |
+                            v                              |
+                    Private ProgramIr                      |
+                            |                              |
+                            v                              |
+              Shared LLVM Local Extraction                 |
+                            |                              |
+                            v                              |
+                Required In-Process SVF                    |
+                            |                              |
+                            +------------------------------+
+                            v
+                  Local Summary Builder
+                            |
+                            v
+             Immutable Function Summary IR v2
                               |
                               v
       +------------------- SummaryDB --------------------+
@@ -130,21 +164,42 @@ The backbone MUST preserve these invariants.
       +---------------------+----------------------------+
                             |
                             v
-                    Incremental WPA Engine
+                WPA Input Materializer
+                 run-local relations.v2
+                            |
+              +-------------+-------------+
+              |                           |
+              v                           v
+     Compiled Souffle WPA          C++ Conformance Oracle
+       required production        or explicit cpp-emergency
+              +-------------+-------------+
                             |
                             v
-                    Global Derived Facts
+              Result/Witness Canonicalizer
+                            |
+                            v
+                 Analysis Fact Bus
+                            |
+                            v
+           Global Derived Facts + Witnesses
                             |
                             v
                   Query API / Evidence Builder
 ```
+
+Only Tier 1 produces the AST semantic-input branch. `CodeGenIrSource` and
+`BitcodeIrSource` both implement the `ProgramIrSource::Build` boundary and
+produce the private `ProgramIr`; Tier 2 never traverses Clang or CodeGen. LLVM
+local extraction and required in-process SVF are shared after that boundary,
+and the summary builder combines their facts with Tier-1 AST semantics when
+present.
 
 V1 can use:
 
 ```text
 RocksDB        immutable summary objects and local key-value indexes
 SQLite         metadata, identities, dependency edges, publication bindings
-Flat files     Souffle facts during early Datalog integration
+Run-local      typed relation projections and diagnostic artifacts
 In-memory      temporary graph projection and SCC worklists
 ```
 
@@ -166,7 +221,8 @@ VERITAS uses multiple IDs because "the function" has multiple meanings.
 | `FunctionBodyID` | Normalized function body for one revision/build. | Formatting and nonsemantic source edits. | AST/IR semantic body changes. |
 | `FunctionSummaryID` | Exact immutable summary content. | All consumers and revisions with identical analysis output. | Any summary component payload or summary metadata changes. |
 | `AnalyzerRunID` | Analyzer binary/config/schema identity. | All facts emitted by one configured analyzer run. | Analyzer version, schema version, or analysis config changes. |
-| `FactID` | Exact derived or observed fact in one program context. | Rebuilds of the same revision/build/analyzer context. | Program context, predicate, epistemic state, scope, producer, or derivation changes. |
+| `AnalysisRunID` | Exact WPA execution manifest and envelope identity. | Never merged across incompatible or engine-distinct runs. | Revision, build variant, summary/relation schema, rule/model bundle, SVF/WPA configuration, engine, or exact toolchain identity changes. |
+| `FactID` | Witness-independent canonical `relations.v2` semantic row. | Revisions, builds, runs, engines, and derivations with identical typed stable semantic cells and epistemic value. | Relation schema/name, typed stable semantic cell, or epistemic value changes. |
 
 ## 5.1 Hash Format
 
@@ -182,6 +238,7 @@ Examples:
 funcsym:sha256:...
 funcvar:sha256:...
 summary:sha256:...
+analysis_run:sha256:...
 fact:sha256:...
 ```
 
@@ -365,9 +422,18 @@ Source anchors are for diagnostics and Evidence IR display. They are not identit
 
 ---
 
-# 7. Analyzer Runs and Schema Versioning
+# 7. Analyzer Runs, Analysis Runs, and Schema Versioning
 
-Summary and fact identity MUST include enough analyzer metadata to avoid silently mixing incompatible outputs.
+`AnalyzerRunID` identifies local extraction and Summary IR production.
+`AnalysisRunID` identifies a whole WPA execution envelope. They are distinct:
+content-addressed result reuse may reference the same immutable result from
+multiple analysis runs, but it never merges their manifests or history.
+
+Summary identities and run-fact bindings MUST retain enough analyzer and WPA
+metadata to avoid silently mixing incompatible outputs. Canonical `FactID`
+itself remains run- and witness-independent under §15.3. `AnalyzerRunID` hashes
+analyzer binary/config/schema identity; its `started_at` lifecycle field is not
+an identity input.
 
 ```sql
 CREATE TABLE analyzer_runs (
@@ -384,7 +450,60 @@ CREATE TABLE analysis_configurations (
     config_hash            TEXT PRIMARY KEY,
     serialized_config      BLOB NOT NULL
 );
+
+CREATE TABLE engine_toolchains (
+    engine_toolchain_identity      TEXT PRIMARY KEY,
+    engine_identity                TEXT NOT NULL,
+    canonical_provenance_payload   BLOB NOT NULL,
+    canonical_provenance_hash      TEXT NOT NULL
+);
+
+CREATE TABLE analysis_run_manifests (
+    analysis_run_id          TEXT PRIMARY KEY,
+    revision_id              TEXT NOT NULL REFERENCES revisions(revision_id),
+    build_variant_id         TEXT NOT NULL REFERENCES build_variants(build_variant_id),
+    summary_schema_version   TEXT NOT NULL,
+    relation_schema_version  TEXT NOT NULL,
+    rule_bundle_version      TEXT NOT NULL,
+    model_bundle_version     TEXT NOT NULL,
+    svf_configuration_hash   TEXT NOT NULL,
+    wpa_configuration_hash   TEXT NOT NULL,
+    engine_identity          TEXT NOT NULL,
+    engine_toolchain_identity TEXT NOT NULL REFERENCES engine_toolchains(engine_toolchain_identity)
+);
+
+CREATE TABLE analysis_run_state (
+    analysis_run_id          TEXT PRIMARY KEY REFERENCES analysis_run_manifests(analysis_run_id),
+    status                   TEXT NOT NULL,
+    started_at               INTEGER NOT NULL,
+    completed_at             INTEGER,
+    diagnostics_object_ref   TEXT
+);
 ```
+
+`AnalysisRunID` hashes only the immutable `AnalysisRunManifest` fields:
+revision, build variant, summary/relation schemas, rule/model bundles, SVF/WPA
+configurations, engine identity, and exact engine/toolchain identity. Mutable
+lifecycle status, timestamps, diagnostics, retry count, and progress never
+participate in `AnalysisRunID`; they live in `analysis_run_state`.
+`EngineToolchainIdentity` is the hash of `engine_identity` plus the canonical
+engine-specific provenance payload. An
+`analysis_run_manifests.engine_identity` must match the referenced toolchain
+record's engine identity. The validator applies a tagged union rule:
+
+* `souffle` requires the configured install-provenance manifest and its digest,
+  version 2.5 source revision
+  `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, the configured executable digest
+  verified against that manifest, the generated-bundle digest, and
+  generator/compiler/link toolchain provenance;
+* C++ conformance and `cpp-emergency` require the exact C++ build identity and
+  reject a payload that claims or reuses Souffle provenance;
+* a future engine must define and validate its own canonical payload before it
+  can create a run.
+
+Thus every engine has exact provenance without fabricating another engine's
+fields. `canonical_provenance_hash` must match the stored payload before an
+`AnalysisRunManifest` or component record may reference it.
 
 Examples of config fields:
 
@@ -947,43 +1066,70 @@ consumer_component
 # 14. SCC-Aware WPA
 
 Recursive and mutually recursive functions require SCC-level propagation.
+VERITAS owns call-graph construction and reverse-topological scheduling, while
+compiled Souffle owns the recursive production evaluation within each logical
+component. Pinned SVF supplies normalized indirect-call candidates; unknown
+calls remain explicit and never fan out to the entire program.
 
 ## 14.1 SCC Tables
 
 ```sql
 CREATE TABLE wpa_sccs (
-    scc_id                 TEXT PRIMARY KEY,
-    revision_id            TEXT NOT NULL REFERENCES revisions(revision_id),
-    build_variant_id       TEXT NOT NULL REFERENCES build_variants(build_variant_id),
+    analysis_run_id        TEXT NOT NULL REFERENCES analysis_run_manifests(analysis_run_id),
+    scc_id                 TEXT NOT NULL,
     call_graph_hash        TEXT NOT NULL,
     member_hash            TEXT NOT NULL,
-    externally_visible_hash TEXT NOT NULL,
-    created_at             INTEGER NOT NULL
+    created_at             INTEGER NOT NULL,
+    PRIMARY KEY(analysis_run_id, scc_id)
 );
 
 CREATE TABLE wpa_scc_members (
-    scc_id                 TEXT NOT NULL REFERENCES wpa_sccs(scc_id),
+    analysis_run_id        TEXT NOT NULL,
+    scc_id                 TEXT NOT NULL,
     function_variant_id    TEXT NOT NULL REFERENCES function_variants(function_variant_id),
-    PRIMARY KEY(scc_id, function_variant_id)
+    PRIMARY KEY(analysis_run_id, scc_id, function_variant_id),
+    FOREIGN KEY(analysis_run_id, scc_id)
+        REFERENCES wpa_sccs(analysis_run_id, scc_id)
 );
 
 CREATE TABLE wpa_scc_edges (
-    from_scc_id            TEXT NOT NULL REFERENCES wpa_sccs(scc_id),
-    to_scc_id              TEXT NOT NULL REFERENCES wpa_sccs(scc_id),
+    analysis_run_id        TEXT NOT NULL,
+    from_scc_id            TEXT NOT NULL,
+    to_scc_id              TEXT NOT NULL,
     edge_kind              TEXT NOT NULL,
     epistemic              TEXT NOT NULL,
-    PRIMARY KEY(from_scc_id, to_scc_id, edge_kind)
+    PRIMARY KEY(analysis_run_id, from_scc_id, to_scc_id, edge_kind),
+    FOREIGN KEY(analysis_run_id, from_scc_id)
+        REFERENCES wpa_sccs(analysis_run_id, scc_id),
+    FOREIGN KEY(analysis_run_id, to_scc_id)
+        REFERENCES wpa_sccs(analysis_run_id, scc_id)
 );
 
 CREATE TABLE wpa_scc_component_state (
-    scc_id                 TEXT NOT NULL REFERENCES wpa_sccs(scc_id),
+    analysis_run_id        TEXT NOT NULL,
+    scc_id                 TEXT NOT NULL,
     component_kind         TEXT NOT NULL,
-    fixpoint_hash          TEXT NOT NULL,
-    iteration_count        INTEGER NOT NULL,
+    logical_input_hash     TEXT NOT NULL,
+    fixpoint_hash          TEXT,
+    external_hash          TEXT,
+    engine_toolchain_identity TEXT NOT NULL REFERENCES engine_toolchains(engine_toolchain_identity),
+    result_object_ref      TEXT,
+    iteration_count        INTEGER,
     status                 TEXT NOT NULL,
-    PRIMARY KEY(scc_id, component_kind)
+    diagnostics_object_ref TEXT,
+    completed_at           INTEGER,
+    PRIMARY KEY(analysis_run_id, scc_id, component_kind),
+    FOREIGN KEY(analysis_run_id, scc_id)
+        REFERENCES wpa_sccs(analysis_run_id, scc_id)
 );
 ```
+
+The component row's toolchain identity must equal its `AnalysisRun` manifest.
+A successful row requires `fixpoint_hash`, `external_hash`, and an immutable
+`result_object_ref`. Pending or failed rows leave those successful-result
+fields null and retain status/diagnostics, so they cannot replace a prior
+success. Cache reuse creates a new per-run component row that references the
+validated immutable result object; it never reuses or merges another run's row.
 
 ## 14.2 SCC Construction
 
@@ -1021,61 +1167,37 @@ WPA propagation processes SCCs in reverse topological order for bottom-up summar
 
 ## 14.4 Fixpoint Requirements
 
-Each WPA component defines:
+Each WPA component defines a versioned relation/rule/model contract and one
+canonical `WpaLogicalComponentInput` containing member facts, stable/typed-dense
+mappings, outgoing calls, successor support facts, and applicable models. The
+same byte-identical logical input is placed into distinct production and C++
+conformance/emergency execution envelopes with distinct `RunId` values.
+
+The first production domains are:
 
 ```text
-Domain
-Bottom
-Join
-Transfer
-Widen
-Compare
+ReachableCall
+MayWrite
 ```
 
-The domain MUST be monotone or explicitly bounded.
+M10A later adds `MayRead`, `GlobalFlow`, `UnknownEffect`, and
+`SoundnessCoverage` through independent bundles and conformance suites.
 
-Example domains:
-
-| WPA Component | Domain | Join |
-| --- | --- | --- |
-| Transitive calls | set of target function variants | set union |
-| May-write | set of abstract memory locations | set union |
-| Value flow | relation over abstract values | relation union with widening |
-| Range | interval map | interval join/widen |
-| Taint | source-sink transfer relation | relation union |
-| Ownership | abstract ownership state lattice | lattice join |
-
-## 14.5 SCC Fixpoint Pseudocode
+## 14.5 SCC Execution Pseudocode
 
 ```cpp
-SccResult computeSccFixpoint(SccID scc, ComponentKind component) {
-    State state = loadPreviousOrBottom(scc, component);
-    int iteration = 0;
-
-    while (iteration < max_iterations) {
-        State next = bottom();
-
-        for (FunctionVariantID f : members(scc)) {
-            LocalSummary local = loadCurrentLocalSummary(f);
-            ImportedState imports = loadCalleeStates(f, component);
-            next = join(next, transfer(f, local, state, imports));
-        }
-
-        if (equivalent(next, state))
-            return publishSccState(scc, component, next, iteration, CONVERGED);
-
-        if (iteration >= widen_after)
-            next = widen(state, next);
-
-        state = next;
-        iteration++;
-    }
-
-    return publishSccState(scc, component, state, iteration, APPROXIMATED);
+StatusOr<WpaComponentResult> executeComponent(SccID scc,
+                                               ComponentKind component) {
+    WpaLogicalComponentInput logical = materializeCanonicalInput(scc, component);
+    WpaExecutionEnvelope envelope = makeSouffleEnvelope(currentRun(), logical);
+    auto output = souffleExecutor().execute(envelope);
+    return validateAndCanonicalize(logical, output);
 }
 ```
 
-`APPROXIMATED` is not a failure. It means facts derived from this state must carry the appropriate epistemic/provenance metadata.
+The normal path never catches a Souffle failure and invokes C++. C++ execution
+requires a separate conformance envelope or explicit `cpp-emergency`
+configuration and cannot impersonate or overwrite a Souffle run.
 
 ## 14.6 SCC Delta Rule
 
@@ -1089,7 +1211,16 @@ old_external_hash != new_external_hash
     -> schedule predecessor SCCs that consume changed components
 ```
 
-Internal function summaries may change without changing the externally visible SCC summary. In that case, upstream propagation stops.
+`LogicalInputHash` covers canonical semantic inputs but excludes revision,
+`RunId`, engine identity, and tuple order. `FixpointHash` covers canonical results
+and selected witnesses. `ExternalHash` covers predecessor-visible semantics
+only. A witness-only change may alter `FixpointHash` but not canonical
+fact/root IDs or `ExternalHash`, and therefore does not schedule predecessors.
+
+Successful immutable components may be reused across revisions only by
+`(LogicalInputHash, EngineToolchainIdentity)`, after content, schema, bundle,
+rooted-input, and exact executor provenance revalidation. A failure publishes no
+replacement; it records diagnostics and leaves the previous success stale.
 
 ---
 
@@ -1111,61 +1242,57 @@ The fact engine materializes global semantic facts from local summaries and SCC 
 | Lock | `may_hold(F, L)` |
 | Unknown | `unknown_external_call(F, Site)` |
 
-## 15.2 Fact Table
+## 15.2 Canonical Facts and Run Bindings
 
 ```sql
-CREATE TABLE facts (
+CREATE TABLE analysis_facts (
     fact_id                TEXT PRIMARY KEY,
-    revision_id            TEXT NOT NULL REFERENCES revisions(revision_id),
-    build_variant_id       TEXT NOT NULL REFERENCES build_variants(build_variant_id),
-    predicate_kind         TEXT NOT NULL,
-    predicate_canonical    TEXT NOT NULL,
-    subject_kind           TEXT NOT NULL,
-    subject_id             TEXT NOT NULL,
-    epistemic              TEXT NOT NULL,
+    relation_schema_version TEXT NOT NULL,
+    relation_name          TEXT NOT NULL,
+    typed_semantic_cells   BLOB NOT NULL,
+    epistemic              TEXT NOT NULL
+);
+
+CREATE TABLE run_fact_bindings (
+    analysis_run_id        TEXT NOT NULL REFERENCES analysis_run_manifests(analysis_run_id),
+    fact_id                TEXT NOT NULL REFERENCES analysis_facts(fact_id),
     confidence             TEXT NOT NULL,
     producer_kind          TEXT NOT NULL,
     analyzer_run_id        TEXT REFERENCES analyzer_runs(analyzer_run_id),
     scope_kind             TEXT,
     scope_id               TEXT,
-    provenance_id          TEXT NOT NULL,
+    selected_witness_id    TEXT,
     is_current             INTEGER NOT NULL,
-    created_at             INTEGER NOT NULL
+    created_at             INTEGER NOT NULL,
+    PRIMARY KEY(analysis_run_id, fact_id)
 );
 
-CREATE INDEX idx_facts_subject
-    ON facts(revision_id, build_variant_id, subject_kind, subject_id);
-
-CREATE INDEX idx_facts_predicate
-    ON facts(revision_id, build_variant_id, predicate_kind);
-
-CREATE UNIQUE INDEX idx_facts_current_unique
-    ON facts(revision_id, build_variant_id, predicate_kind, predicate_canonical, subject_kind, subject_id)
-    WHERE is_current = 1;
+CREATE INDEX idx_analysis_facts_relation
+    ON analysis_facts(relation_schema_version, relation_name);
 ```
 
-`predicate_canonical` may be a compact binary blob in production. Text is shown for readability.
+`typed_semantic_cells` is the canonical typed stable-cell encoding supplied by
+the Fact Bus. Subject indexes may project selected schema columns, but they do
+not redefine identity. Current/history state, producer, confidence, scope,
+timestamps, and witness selection belong only to `run_fact_bindings`.
 
 ## 15.3 Fact Identity
 
-`FactID` is computed from:
+`MakeFact` computes `FactID` from exactly:
 
 ```text
-revision_id
-build_variant_id
-predicate_kind
-canonical predicate
-subject
+relations.v2
+relation name
+typed stable semantic cells
 epistemic
-producer
-analyzer_run_id
-scope
-provenance hash
 ```
 
-For derived facts, including provenance in the hash ensures that the same predicate derived by a different proof path is distinguishable when explanation matters.
-
-V1 SHOULD also store `semantic_fact_hash` without revision and provenance for cross-revision equivalence checks and semantic fact deduplication.
+Revision, build, analyzer/run/engine identity, dense IDs, tuple order, producer,
+scope, rule, witness, provenance, and derivation do not participate. The store
+revalidates the incoming ID against these bytes and never re-identifies an
+`AnalysisFact`. The same semantic row derived by another proof path keeps the
+same `FactID`; `(RunId, FactID)` and its selected/alternative witness records
+preserve occurrence and explanation history.
 
 ---
 
@@ -1195,8 +1322,11 @@ What epistemic assumptions were required?
 ## 16.2 Provenance Tables
 
 ```sql
-CREATE TABLE provenance_nodes (
-    provenance_id          TEXT PRIMARY KEY,
+CREATE TABLE fact_witnesses (
+    analysis_run_id        TEXT NOT NULL REFERENCES analysis_run_manifests(analysis_run_id),
+    fact_id                TEXT NOT NULL REFERENCES analysis_facts(fact_id),
+    witness_id             TEXT NOT NULL,
+    selected               INTEGER NOT NULL,
     producer_kind          TEXT NOT NULL,
     producer_id            TEXT NOT NULL,
     rule_id                TEXT,
@@ -1204,21 +1334,29 @@ CREATE TABLE provenance_nodes (
     analyzer_run_id        TEXT REFERENCES analyzer_runs(analyzer_run_id),
     source_anchor_id       TEXT REFERENCES source_anchors(source_anchor_id),
     summary_id             TEXT REFERENCES summary_objects(function_summary_id),
-    fact_id                TEXT,
-    description            TEXT
+    description            TEXT,
+    PRIMARY KEY(analysis_run_id, fact_id, witness_id)
 );
 
-CREATE TABLE provenance_edges (
-    output_provenance_id   TEXT NOT NULL REFERENCES provenance_nodes(provenance_id),
+CREATE TABLE fact_witness_edges (
+    analysis_run_id        TEXT NOT NULL,
+    output_fact_id         TEXT NOT NULL,
+    witness_id             TEXT NOT NULL,
     input_kind             TEXT NOT NULL,
     input_id               TEXT NOT NULL,
-    input_role             TEXT NOT NULL,
-    PRIMARY KEY(output_provenance_id, input_kind, input_id, input_role)
+    input_ordinal          INTEGER NOT NULL,
+    PRIMARY KEY(analysis_run_id, output_fact_id, witness_id, input_ordinal),
+    FOREIGN KEY(analysis_run_id, output_fact_id, witness_id)
+        REFERENCES fact_witnesses(analysis_run_id, fact_id, witness_id)
 );
 
-CREATE INDEX idx_provenance_edges_input
-    ON provenance_edges(input_kind, input_id);
+CREATE INDEX idx_fact_witness_edges_input
+    ON fact_witness_edges(input_kind, input_id);
 ```
+
+Each `(RunId, FactID)` has one selected witness and may retain alternatives.
+Changing that selection may alter `FixpointHash`, but it never changes the
+canonical fact/root IDs or `ExternalHash`.
 
 Input kinds include:
 
@@ -1265,7 +1403,7 @@ An LLM-created hypothesis can be stored as `INFERRED`, but it cannot produce a `
 
 ## 16.4 Explain API
 
-`explainFact(fact_id)` returns:
+`explainFact(run_id, fact_id)` returns:
 
 ```text
 Fact
@@ -1296,52 +1434,99 @@ Evidence IR should cite facts and provenance IDs rather than copying every deriv
 
 # 17. Datalog Integration
 
-V1 can start with a C++ worklist engine. Datalog should be introduced for recursive relation derivation once base summary export is stable.
+Compiled Souffle is the required normal production recursive engine after
+M8R.4. Before execution, the adapter applies §7's configured-manifest and
+executable-digest verification for Souffle 2.5 source revision
+`5682a9f12e2668ecdd26348fe63cc508bc0fcf47`. The verified manifest, executable,
+generated bundle, and generator/compiler/link provenance form
+`EngineToolchainIdentity`. Generated programs use one evaluation thread until a
+separately qualified upgrade retires the upstream ARM concurrency issue.
+
+C++ consumes the same byte-identical engine-neutral logical component input
+only as a CI conformance oracle or explicitly selected `cpp-emergency` engine.
+There is no automatic fallback, and the two executions have distinct valid
+envelopes and `RunId` values. A C++ envelope records the exact C++ build
+identity in its engine-specific provenance payload and never reuses or
+impersonates the verified Souffle payload.
 
 ## 17.1 Base Relations
 
-Examples:
+These typed relations are a `relations.v2` run-local projection from durable
+Function Summary IR, not a durable platform IR. The live EDB signatures are:
 
 ```text
-DirectCall(caller, callee, epistemic).
-DirectWrite(function, memory_object, epistemic).
-DirectRead(function, memory_object, epistemic).
-LocalFlow(src_value, dst_value, function, epistemic).
-SummaryFlow(src_value, dst_value, function, epistemic).
-MayAlias(memory_a, memory_b, epistemic).
+DirectCall(CallSiteId, CallerId, CalleeId, DispatchKind, Epistemic)
+UnknownCall(CallSiteId, CallerId, ReasonId, Epistemic)
+DirectRead(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
+DirectWrite(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
+Alias(MemoryId, MemoryId, AliasKind, Epistemic)
+LocalFlow(FunctionId, SourceId, DestinationId, FlowKind, Epistemic)
+ParameterFlow(CallSiteId, ActualId, FormalId, Epistemic)
+ReturnFlow(CallSiteId, ReturnId, ResultId, Epistemic)
+ModeledEffect(ModelId, FunctionId, EffectKind, SubjectId, Epistemic)
+UnsupportedFeature(NodeId, FeatureKind, SoundnessPolicy)
+SupportReachableCall(SourceId, TargetId, Epistemic)
+SupportMayWrite(FunctionId, MemoryId, Epistemic)
 ```
+
+The last two relations are EDB-only successor support. `RangeKind`, signed
+`Offset`, and unsigned `Size` are lossless payloads; rules may ignore those
+payload columns only when the derived relation intentionally abstracts range.
 
 ## 17.2 Derived Relations
 
-```text
-ReachableCall(f, g) :-
-    DirectCall(f, g, _).
+```souffle
+.decl ReachableCall(source:FunctionId, target:FunctionId, epistemic:Epistemic)
+.decl MayWrite(function:FunctionId, memory:MemoryId, epistemic:Epistemic)
 
-ReachableCall(f, h) :-
-    DirectCall(f, g, _),
-    ReachableCall(g, h).
+ReachableCall(f, g, e) :- DirectCall(_, f, g, _, e).
+ReachableCall(f, h, e) :-
+    DirectCall(_, f, g, _, e1), ReachableCall(g, h, e2),
+    WeakenEpistemic(e1, e2, e).
+ReachableCall(f, h, e) :-
+    DirectCall(_, f, g, _, e1), SupportReachableCall(g, h, e2),
+    WeakenEpistemic(e1, e2, e).
 
-MayWrite(f, m) :-
-    DirectWrite(f, m, _).
-
-MayWrite(f, m) :-
-    DirectCall(f, g, _),
-    MayWrite(g, m).
+MayWrite(f, m, e) :- DirectWrite(f, m, _, _, _, e).
+MayWrite(f, m, e) :-
+    DirectCall(_, f, g, _, e1), MayWrite(g, m, e2),
+    WeakenEpistemic(e1, e2, e).
+MayWrite(f, m, e) :-
+    DirectCall(_, f, g, _, e1), SupportMayWrite(g, m, e2),
+    WeakenEpistemic(e1, e2, e).
 ```
+
+Both IDBs have exactly three columns: `(source, target, epistemic)` for
+`ReachableCall` and `(function, memory, epistemic)` for `MayWrite`. The
+`MayWrite` base rule consumes `DirectWrite`'s full six-column row while
+deliberately abstracting its range payload.
 
 ## 17.3 Provenance Capture
 
-The Datalog layer must export derivation metadata:
+Every rule bundle exports generic immediate witness edges:
 
 ```text
-derived tuple
-rule id
-input tuple ids
-iteration or stratum
-epistemic join result
+Witness(ResultSemanticKey, RuleId, InputSemanticKey, InputOrdinal)
 ```
 
-If the chosen Datalog engine cannot provide sufficient provenance directly, VERITAS should wrap rule execution with tuple IDs and reconstruct proof trees for the rules used in V1.
+Semantic keys use a shared versioned, injective, type-tagged, length-prefixed
+UTF-8 codec. Raw delimiter concatenation is forbidden. Base and successor
+support inputs are rooted in stable input fact IDs; locally derived keys must
+resolve within the published component.
+
+The VERITAS canonicalizer rejects malformed, cyclic, orphaned, or unclosed
+witnesses and selects one finite proof by derived-edge count, versioned rule
+priority, then lexicographic stable input identity. Relation-specific C++ proof
+reconstruction is forbidden on the production path. Souffle interactive
+provenance remains a debugging aid only.
+
+## 17.4 Semantic and identity preservation
+
+Stable identity and typed dense IDs are separate. `RangeKind` losslessly
+distinguishes known signed offsets/unsigned sizes (including zero) from explicit
+unknown ranges. All six epistemic states and all alias kinds cross the boundary,
+so `NO_ALIAS + MUST`, an unknown alias result, and an absent tuple remain
+distinct.
 
 ---
 
@@ -1389,6 +1574,22 @@ publication_epoch <= snapshot_epoch
 
 This prevents long-running queries from observing mixed old/new summary bindings.
 
+## 18.4 WPA batch publication
+
+A production component publishes only after execution, schema/identity
+validation, and rooted-witness closure all succeed. Missing or incompatible
+bundles, engine failure, timeout, resource exhaustion, invalid mappings,
+duplicate conflict, or malformed witnesses record an incomplete run and
+durable diagnostics but no replacement facts. The prior success remains
+queryable as stale history.
+
+Only a successful `WpaRunResult` creates `AnalysisFactBatch`. The batch includes
+the manifest's expected component keys, completed component records and hashes,
+rooted input fact IDs, canonical facts, witnesses, and diagnostics. The Fact Bus
+rejects expected/completed mismatch and witness leaves absent from the rooted
+set. Delivery is idempotent at least once by canonical `(RunId, BatchId)`;
+per-sink progress makes retry after partial fan-out safe and non-duplicating.
+
 ---
 
 # 19. Query and Service APIs
@@ -1425,9 +1626,9 @@ getDerivedFacts(subject_id, predicate_kind) -> Fact[]
 ## 19.4 Provenance API
 
 ```text
-explainFact(fact_id, budget) -> ProvenanceGraph
+explainFact(run_id, fact_id, budget) -> ProvenanceGraph
 explainSummaryComponent(summary_id, component_kind, budget) -> ProvenanceGraph
-getFactInputs(fact_id) -> InputRef[]
+getFactInputs(run_id, fact_id) -> InputRef[]
 ```
 
 ## 19.5 Evidence Builder API
@@ -1448,13 +1649,31 @@ These APIs are semantic. They should not expose SQL, RocksDB keys, or graph stor
 
 # 20. Initial CLI Workflow
 
-The first command-line workflow should prove that the backbone works without an LLM or user-managed compiler-analysis preprocessing.
+The current pre-M11 command-line workflow proves the backbone without an LLM
+or user-managed compiler-analysis preprocessing:
 
 ```bash
 veritas-build analyze --project <project-directory>
 ```
 
-`<project-directory>/compile_commands.json` is mandatory. Build Intelligence, Clang AST extraction, LLVM IR generation/linking, required in-process SVF analysis, and summary publication execute as internal stages of this one command. A diagnostic manifest or cached IR may be emitted under `.veritas`, but neither is a public input to a later command.
+`<project-directory>/compile_commands.json` is mandatory. Build Intelligence,
+Clang AST extraction, LLVM IR generation/linking, required in-process SVF
+analysis, and summary publication execute as internal stages of this command.
+A diagnostic manifest or cached IR may be emitted under `.veritas`, but neither
+is a public input to a later command.
+
+M11 adds the mutually exclusive module-input form:
+
+```bash
+veritas-build analyze --bitcode <file.bc|file.ll|directory>
+```
+
+It enters at VERITAS-owned module acquisition (skipping only Clang CodeGen),
+then runs the same local extraction, required SVF, Summary IR, WPA, and
+provenance pipeline. It never accepts an SVF artifact or a third-party analysis
+result. M12's separate external-facts import remains non-authoritative and
+terminal: imported observations do not become Summary IR or recursive-WPA
+inputs.
 
 Expected output:
 
@@ -1492,7 +1711,7 @@ Evidence cases stale:                 7
 ```
 
 ```bash
-veritas-explain fact <fact_id>
+veritas-explain fact <fact_id> --run <run_id>
 ```
 
 Expected output:
@@ -1646,7 +1865,8 @@ Deliver:
 
 * call graph SCC detection,
 * condensation DAG,
-* fixpoint engine for transitive calls and may-write,
+* compiled-Souffle execution for `ReachableCall` and `MayWrite`,
+* byte-identical logical input for the C++ conformance/explicit emergency engine,
 * SCC component state hashes,
 * stop propagation when external SCC hash is unchanged.
 
@@ -1655,6 +1875,7 @@ Exit criteria:
 ```text
 Recursive fixtures converge.
 Internal recursive changes do not propagate upstream if external summary is stable.
+Missing or failed Souffle publishes no replacement and never falls back silently.
 ```
 
 ## Milestone 5: Provenance-Aware Fact Store
@@ -1665,7 +1886,8 @@ Deliver:
 * provenance nodes and edges,
 * `explainFact`,
 * epistemic propagation,
-* Datalog export or C++ derivation provenance for V1 rules.
+* generic finite rooted witness storage from the engine-neutral witness contract,
+* complete `AnalysisFactBatch` and idempotent Fact Bus publication.
 
 Exit criteria:
 
@@ -1711,15 +1933,17 @@ A buffer-overflow fixture can produce all data needed for an EIR-L1 case without
 
 These should be resolved before implementation begins.
 
-| Decision | Default for V1 |
+| Decision | Approved contract/default |
 | --- | --- |
-| Protobuf schema package names | `veritas.ir.summary.v1`, `veritas.ir.fact.v1` |
+| Summary schema compatibility | Existing `summary.v1` artifacts remain immutable/readable; native reanalysis and new publication emit `summary.v2` only |
+| WPA contract versions | `relations.v2` execution projection and `wpa-run.v1` manifest |
+| M9 fact schema version | Defined by the M9 persistence implementation/specification; this design does not invent an additional fact-version name |
 | Metadata store | SQLite |
 | CAS store | RocksDB |
 | Hash algorithm | SHA-256 |
-| First WPA components | transitive calls, may-read/may-write, simple global value flow |
+| First production WPA components | `ReachableCall`, `MayWrite`; M10A later adds `MayRead`, `GlobalFlow`, `UnknownEffect`, `SoundnessCoverage` |
 | First language target | C/C++ via Clang + LLVM |
-| Datalog timing | After C++ worklist V1 proves schema stability |
+| Recursive engine ownership | Compiled Souffle 2.5 at `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`; C++ conformance or explicit emergency only |
 | Unknown call policy | emit unknown external summary, do not connect to every function |
 | Evidence invalidation | summary/fact dependency based, not text-location based |
 

@@ -3,7 +3,7 @@
 **Status:** Draft
 **Milestone:** M3
 **Depends on:** M2 identity and metadata
-**Feeds:** M4 local extraction, M7 incremental scheduling, M8 WPA, M10 Evidence APIs
+**Feeds:** M4 local extraction, M7 incremental scheduling, M8 WPA, M10B Evidence APIs
 
 ---
 

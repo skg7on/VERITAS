@@ -4,9 +4,9 @@
 
 **Goal:** Break the VERITAS engineering backbone into small, testable milestones, each with a design spec and implementation plan.
 
-**Architecture:** VERITAS owns the complete project-analysis workflow from one project directory: compilation-database ingestion, Clang AST traversal, LLVM IR generation/linking, required in-process SVF analysis, Summary IR publication, persistence, incremental invalidation, thin CPG projection, provenance, and Evidence Builder APIs. Clang, LLVM, and a pinned SVF Git submodule provide compiler/analysis libraries behind private stages; they are never separate user-managed preprocessing tools or public artifact-input contracts.
+**Architecture:** VERITAS owns the complete analysis workflow. The current pre-M11 Tier-1 route starts at one project directory and performs compilation-database ingestion plus Clang AST/LLVM IR generation. M11 adds mutually exclusive Tier-2 `.bc`/`.ll` module acquisition. Both routes continue through required in-process SVF, durable Function Summary IR publication, persistence, incremental invalidation, run-local WPA projection, provenance, and Evidence Builder APIs. Pinned SVF owns V1 points-to/alias/SVFG and indirect-call truth; compiled Souffle owns normal production recursive WPA; C++ is a conformance oracle or explicitly selected emergency engine. Third-party types remain behind private stages and never bypass VERITAS analysis.
 
-**Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22+, Clang LibTooling and CodeGen, SVF commit `18fb5650600530a54f0afc22f4df1a10b03d3c02`, Z3, Protobuf, RocksDB, SQLite, Souffle, GoogleTest, and Python helper scripts for golden fixture checks.
+**Tech Stack:** C++20, CMake 3.23+, LLVM/Clang 22+, Clang LibTooling and CodeGen, SVF commit `18fb5650600530a54f0afc22f4df1a10b03d3c02`, Z3, Protobuf, RocksDB, SQLite, compiled Souffle 2.5 source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47` with verified executable/toolchain provenance, GoogleTest, and Python helper scripts for golden fixture checks.
 
 **Spec:** `docs/specs/veritas-engineering-backbone-design-specification.md`
 
@@ -22,11 +22,20 @@
 - LLM or heuristic output is not a verified fact.
 - The persistent VERITAS CPG is function- and object-centric; instruction-level detail is generated or cached on demand.
 - The first language target is C/C++ through Clang and LLVM.
-- The only public source input is `veritas-build analyze --project <directory>`, where `<directory>/compile_commands.json` exists.
-- VERITAS owns AST parsing, LLVM IR generation/linking, and SVF invocation; public workflows do not accept manifests, bitcode, LLVM modules, or SVF artifacts.
+- `veritas-build analyze --project <directory>` is the only public source input and the current pre-M11 contract; `<directory>/compile_commands.json` must exist.
+- M11 adds mutually exclusive `veritas-build analyze --bitcode <.bc|.ll|directory>` as a Tier-2 module-acquisition input. It skips only Clang CodeGen and then uses the same VERITAS-owned local extraction, required SVF, Summary IR, WPA, and provenance pipeline; it never accepts an SVF artifact or analysis result.
+- M12 external facts are non-authoritative terminal observations and never become Summary IR or recursive-WPA inputs.
 - SVF is required, lives at `third_party/SVF`, and is pinned to `18fb5650600530a54f0afc22f4df1a10b03d3c02`; no SVF-disabled standard build exists.
 - The first storage stack is RocksDB for immutable objects and SQLite for metadata.
-- The first WPA stack is a C++ worklist engine, with Souffle introduced when recursive fact export is stable.
+- Function Summary IR is the durable WPA contract; typed `relations.v2` rows and dense IDs are run-local execution projections.
+- Compiled Souffle is the required normal production recursive-WPA engine after M8R.4; C++ consumes the same byte-identical `WpaLogicalComponentInput` only for conformance or explicit `cpp-emergency` use, under a distinct valid envelope and `RunId`.
+- Every engine toolchain record has a required canonical engine-specific provenance payload/hash. Before production Souffle execution, VERITAS parses the configured install-provenance manifest, requires version 2.5 at source revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured executable, and verifies it against the manifest; its payload includes manifest, executable, generated-bundle, and generator/compiler/link provenance. C++ conformance/`cpp-emergency` instead records exact C++ build identity and never reuses or impersonates Souffle provenance.
+- Automatic engine fallback is forbidden. Failed components publish no replacement and retain the last successful result only as stale history.
+- Component reuse is content-addressed by engine-neutral logical input plus exact executor/toolchain identity.
+- Canonical `FactID` hashes only `relations.v2`, relation name, typed stable semantic cells, and epistemic value; revision/build/run/engine/dense/tuple/rule/witness/provenance context is stored separately and never re-identifies an incoming Fact Bus fact.
+- Every derived fact has a generic deterministic finite witness rooted in stable input fact IDs.
+- `AnalysisFactBatch` is the only M9 input and must prove expected/completed component equality, rooted-input closure, and idempotent Fact Bus delivery.
+- M9 starts only after all ten M8R executable gates pass without missing, extra, disabled, skipped, failed, or errored tests.
 
 ---
 
@@ -37,7 +46,7 @@ The backbone should not reimplement mature static-analysis infrastructure unless
 | Area | Reuse | VERITAS Owns | Rationale |
 | --- | --- | --- | --- |
 | C/C++ parsing, AST, macros, source locations, compilation database | Clang 22 LibTooling | Project-level orchestration, stable extraction adapters, and source anchors | VERITAS calls `FrontendAction`s itself from the project compilation database. |
-| LLVM IR, SSA, MemorySSA, alias hooks, dominators, range-ish local facts | LLVM 22 libraries | In-process IR generation/linking, private `ProgramIr`, and normalization into Summary IR | VERITAS owns module construction and lifetime instead of accepting external IR artifacts. |
+| LLVM IR, SSA, MemorySSA, alias hooks, dominators, range-ish local facts | LLVM 22 libraries | Tier-1 in-process IR generation/linking, M11 Tier-2 module acquisition, private `ProgramIr`, and normalization into Summary IR | Both input tiers remain behind VERITAS-owned module verification, lifetime, extraction, and identity boundaries. |
 | Pointer/value-flow, VFG, and AndersenWaveDiff analysis | Required pinned SVF Git submodule | Direct library invocation, stable value IDs, component hashes, lifecycle cleanup, and uncertainty mapping | SVF supplies mature analysis while VERITAS owns its input module, execution, and outputs. |
 | Recursive relations and transitive WPA facts | Souffle | Fact schemas, tuple IDs, provenance capture, publication | Souffle is designed as a Datalog tool for static analysis; VERITAS should add provenance and epistemic policy around it. |
 | CPG concepts and schema vocabulary | Joern CPG/spec | Thin persistent VERITAS CPG projection | The architecture wants CPG benefits without storing a full instruction-level universal graph for every repo. |
@@ -59,11 +68,24 @@ The source architecture says "Build a VERITAS CPG, but keep it thin." This docum
 | M5 | Required in-process SVF analysis | Required SVF facts merged and published from the project pipeline | M4 |
 | M6 | Thin VERITAS CPG projection | Function/object-centric graph projection and query API | M4, M5 |
 | M7 | Reverse dependency index and incremental scheduler | Component deltas and precise consumer scheduling | M3, M4, M5 |
-| M8 | SCC-aware WPA and Souffle fact engine | Recursive facts with fixpoint state and provenance hooks | M7 |
-| M9 | Provenance-aware fact store and explain API | Fact/provenance tables and `veritas-explain` | M8 |
-| M10 | Evidence Builder input APIs and first demo | EIR-ready slices for buffer-overflow style cases | M6, M9 |
+| M8 | SCC-aware WPA and Souffle fact engine (implemented history) | C++ recursive facts plus optional Souffle comparison | M7 |
+| M8R.1 | Semantic Fact Contract | Typed semantic values, run manifests, relation registry, stable/dense maps | M8 |
+| M8R.2 | SVF and Memory Refinement | Native `summary.v2`, indirect calls, collision-free abstract memory | M8R.1 |
+| M8R.3 | Relational WPA Projection | Engine-neutral SCC input, `relations.v2`, rooted witnesses | M8R.2 |
+| M8R.4 | Production Souffle WPA | Required compiled engine, exact provenance, atomic failure/reuse | M8R.3 |
+| M8R.5 | Qualification and M9 Handoff | Conformance corpus, `AnalysisFactBatch`, Fact Bus, ten-criterion entry gate with exact expected test-name membership per criterion | M8R.4 |
+| M9 | Provenance-aware fact store and explain API | Run/fact/witness/diagnostic persistence and `veritas-explain` | M8R.5 gate |
+| M10A | Recursive domain expansion | `MayRead`, `GlobalFlow`, `UnknownEffect`, `SoundnessCoverage` | M9 |
+| M10B | Evidence Builder input APIs and first demo | EIR-ready slices over M9 facts and M10A relations | M6, M9, M10A |
+| M11 | External IR adapter | External bitcode/textual IR through the same summary boundary | M5 |
+| M12 | External facts importer | Provenance-tagged non-authoritative imported facts | M9 |
+| M13 | Benchmark-gated PTA research | Independent Souffle-native PTA comparison against pinned SVF | independent of M9-M12 |
 
 Each milestone should merge independently. Every milestone has tests and a small user-visible CLI behavior.
+
+M11 and M12 remain chronologically placed after M10B, but chronology is not a
+functional dependency: M11 reuses the M5 local/SVF pipeline, while M12 requires
+the M9 fact and provenance stores.
 
 Detailed milestone design specs live under `docs/specs/milestones/`:
 
@@ -77,10 +99,16 @@ Detailed milestone design specs live under `docs/specs/milestones/`:
 | M6 | `docs/specs/milestones/m6-thin-veritas-cpg-projection-design-spec.md` |
 | M7 | `docs/specs/milestones/m7-reverse-dependency-incremental-scheduler-design-spec.md` |
 | M8 | `docs/specs/milestones/m8-scc-wpa-souffle-fact-engine-design-spec.md` |
+| M8R.1-M8R.5 | `docs/specs/milestones/m8r-souffle-wpa-remediation-design-spec.md` |
 | M9 | `docs/specs/milestones/m9-provenance-fact-store-explain-api-design-spec.md` |
-| M10 | `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` |
+| M10A | Detailed recursive-domain-expansion spec required before implementation |
+| M10B | `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` |
 
-Executable per-milestone implementation plans live under `docs/plans/`.
+Historical per-milestone implementation plans live under `docs/plans/`. The
+M8R executable plan is
+`docs/superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md`;
+M10A still requires its detailed plan, and M13's independently approved
+research plan is outside the M9-M12 critical path.
 
 ---
 
@@ -1144,19 +1172,59 @@ SCC state hashes participate in incremental propagation.
 
 ---
 
+# 12A. M8R.1-M8R.5: Souffle WPA Remediation Bridge
+
+The historical M8 section above describes what was implemented. The approved
+[M8R bridge](milestones/m8r-souffle-wpa-remediation-design-spec.md) is inserted
+after M8 and before M9 and does not rewrite that history.
+
+The five gates deliver, in order:
+
+1. typed semantic/run/relation contracts with stable and run-local dense
+   identity and complete negative/unknown transport;
+2. native `summary.v2` with SVF-owned indirect-call/alias/SVFG results and
+   collision-free `AbstractObject + AccessPath + ByteRange` memory identity;
+3. canonical engine-neutral per-SCC `WpaLogicalComponentInput`, run-local
+   `relations.v2`, successor support, and generic finite rooted witnesses using
+   an injective semantic-key codec;
+4. compiled Souffle production recursion, pinned to version 2.5 source revision
+   `5682a9f12e2668ecdd26348fe63cc508bc0fcf47` with configured install-manifest
+   parsing, executable-digest verification, and generated-toolchain provenance,
+   plus C++ conformance/explicit emergency only, no automatic fallback,
+   content-addressed reuse, and failure atomicity;
+5. differential/failure/performance qualification and the complete, rooted,
+   idempotently delivered `AnalysisFactBatch`/Fact Bus handoff.
+
+M9 begins only when all ten executable entry criteria pass with exact expected
+test membership and no missing, extra, disabled, skipped, failed, or errored
+tests. The bridge spec is the canonical delivery record; until implementers
+fill reviewed commits and exact test labels, every M8R gate remains a target,
+not a shipped claim.
+
+---
+
 # 13. M9: Provenance-Aware Fact Store and Explain API
 
 ## Design Spec
 
-M9 publishes current facts and provenance DAGs. Every non-trivial derived fact must answer "why is this true?" within a budgeted explanation.
+M9 persists complete validated `AnalysisFactBatch` values, current and
+historical facts, generic rooted witness DAGs, diagnostics, hashes, and stale
+state. Every non-trivial derived fact must answer "why is this true?" within a
+budgeted explanation. Raw `FactTuple` vectors are not an M9 input.
 
 The fact store separates:
 
 ```text
-FactID: exact fact in one program context with provenance
-semantic_fact_hash: cross-revision semantic equivalence without revision/provenance
-provenance_id: derivation node root
+FactID: hash(relations.v2, relation name, typed stable semantic cells, epistemic)
+(RunId, FactID): occurrence/history/current binding
+WitnessID: selected or alternative derivation bound to one (RunId, FactID)
 ```
+
+Revision/build/run/engine identity, dense IDs, tuple order, producer, scope,
+rule, witness, provenance, and derivation are excluded from `FactID`. M9
+validates and persists incoming Fact Bus IDs rather than re-identifying them.
+The same semantic row may have different witnesses in different runs while
+retaining one canonical fact/root identity.
 
 Epistemic propagation must be conservative. Inferred or assumed inputs cannot silently produce verified `MUST` facts.
 
@@ -1194,15 +1262,18 @@ EpistemicState JoinEpistemic(
 
 class FactStore {
  public:
-  veritas::Status PublishFacts(std::vector<FactTuple> facts);
-  veritas::StatusOr<std::vector<FactTuple>> GetFactsBySubject(core::StableId subject_id) const;
+  veritas::Status PublishBatch(AnalysisFactBatch batch);
+  veritas::StatusOr<std::vector<Fact>> GetFactsBySubject(core::StableId subject_id) const;
 };
 
 class ProvenanceStore {
  public:
-  veritas::Status PutNode(ProvenanceNode node);
-  veritas::Status PutEdge(ProvenanceEdge edge);
-  veritas::StatusOr<ProvenanceGraph> Explain(core::StableId provenance_id, ExplainBudget budget) const;
+  veritas::Status PutWitness(FactWitness witness);
+  veritas::Status PutEdge(FactWitnessEdge edge);
+  veritas::StatusOr<ProvenanceGraph> Explain(
+      core::StableId run_id,
+      core::StableId fact_id,
+      ExplainBudget budget) const;
 };
 }
 ```
@@ -1210,16 +1281,19 @@ class ProvenanceStore {
 CLI contract:
 
 ```text
-veritas-explain fact <fact_id> --max-depth 5 --max-nodes 100
+veritas-explain fact <fact_id> --run <run_id> --max-depth 5 --max-nodes 100
 ```
 
 ## Implementation Plan
 
 - [ ] Write Protobuf fact/provenance messages.
-- [ ] Add SQLite fact and provenance tables.
+- [ ] Add SQLite canonical-fact, run-fact-binding, and witness tables.
 - [ ] Write epistemic join tests for MUST, MAY, UNKNOWN, ASSUMED, and INFERRED inputs.
 - [ ] Implement `JoinEpistemic`.
-- [ ] Implement fact publication with current fact replacement.
+- [ ] Implement fact publication without re-identifying incoming facts; replace only current run bindings.
+- [ ] Reject expected/completed component mismatch and unrooted witness leaves.
+- [ ] Make `(RunId, BatchId)` delivery idempotent across partial multi-sink retry.
+- [ ] Preserve incomplete-run diagnostics and the previous success as stale history.
 - [ ] Implement provenance node/edge insertion.
 - [ ] Implement budgeted recursive explanation.
 - [ ] Add `veritas-explain fact`.
@@ -1237,24 +1311,37 @@ MAY + sound rule -> MAY
 INFERRED input remains INFERRED unless verifier result is present
 ASSUMED input appears in explanation
 explain budget truncates graph with explicit truncation marker
-same semantic fact with different provenance has distinct FactID
+same semantic row with different witness has the same FactID and distinct witness/run bindings
+witness-only change may alter FixpointHash but not canonical fact/root IDs or ExternalHash
 ```
 
 ## Exit Criteria
 
 ```text
-Every M8 derived fact can be published.
+Every accepted AnalysisFactBatch can be published atomically and idempotently.
 Every current derived fact can be explained.
 Epistemic state is preserved through derivation.
 ```
 
 ---
 
-# 14. M10: Evidence Builder Input APIs and First Demo
+# 14A. M10A: Recursive Domain Expansion
+
+M10A extends the compiled-Souffle production WPA with independently versioned
+`MayRead`, `GlobalFlow`, `UnknownEffect`, and `SoundnessCoverage` rule bundles,
+models, golden cases, C++/Souffle conformance coverage, rooted witnesses, and
+incremental `ExternalHash` behavior. It preserves the M8R logical-input,
+toolchain-identity, failure-atomicity, and Fact Bus contracts. M10A requires a
+separate detailed design and implementation plan before work begins.
+
+---
+
+# 14B. M10B: Evidence Builder Input APIs and First Demo
 
 ## Design Spec
 
-M10 does not implement full Evidence IR. It exposes the semantic slices that Evidence IR needs:
+M10B does not implement full Evidence IR. It exposes semantic slices over M9
+facts and M10A relations:
 
 ```text
 value-flow slice
@@ -1296,8 +1383,8 @@ namespace veritas::evidence {
 struct FlowSlice {
   std::vector<cpg::CpgNode> nodes;
   std::vector<cpg::CpgEdge> edges;
-  std::vector<facts::FactTuple> supporting_facts;
-  std::vector<facts::FactTuple> unknowns;
+  std::vector<facts::Fact> supporting_facts;
+  std::vector<facts::Fact> unknowns;
 };
 
 struct EvidenceQueryBudget {
@@ -1313,9 +1400,9 @@ class EvidenceQueryService {
       core::StableId dst,
       EvidenceQueryBudget budget) const;
 
-  veritas::StatusOr<std::vector<facts::FactTuple>> GetRanges(core::StableId value_ref) const;
-  veritas::StatusOr<std::vector<facts::FactTuple>> GetAliases(core::StableId memory_ref) const;
-  veritas::StatusOr<std::vector<facts::FactTuple>> GetUnknowns(core::StableId scope_ref) const;
+  veritas::StatusOr<std::vector<facts::Fact>> GetRanges(core::StableId value_ref) const;
+  veritas::StatusOr<std::vector<facts::Fact>> GetAliases(core::StableId memory_ref) const;
+  veritas::StatusOr<std::vector<facts::Fact>> GetUnknowns(core::StableId scope_ref) const;
 };
 }
 ```
@@ -1397,8 +1484,11 @@ M5  feat: require SVF in project analysis
 M6  feat: add thin CPG projection
 M7  feat: add incremental dependency scheduler
 M8  feat: add SCC WPA fact engine
+M8R remediation commits: semantic contract, SVF/memory refinement,
+     relational projection, production Souffle, qualification/M9 handoff
 M9  feat: add provenance fact store
-M10 feat: add evidence query slices
+M10A feat: expand recursive WPA domains
+M10B feat: add evidence query slices
 ```
 
 Each commit should be reviewable alone. A reviewer should be able to checkout any milestone commit and run its documented tests.

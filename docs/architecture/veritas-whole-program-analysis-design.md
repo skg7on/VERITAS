@@ -24,6 +24,14 @@ This document specifies how VERITAS builds the deterministic semantic world that
 * what SVF at the committed revision delivers today and the upgrade path;
 * how uncertainty is preserved end-to-end.
 
+**Delivery status.** M8 is implemented with a C++ recursive engine and optional
+file-based Souffle comparison. The approved M8R architecture described below is
+the target and is not yet delivered: pinned SVF owns V1 points-to/alias/SVFG and
+indirect-call truth, compiled Souffle owns normal production recursive WPA, and
+C++ is only a conformance oracle or explicitly selected emergency engine. The
+[M8R bridge spec](../specs/milestones/m8r-souffle-wpa-remediation-design-spec.md)
+records the gated transition without rewriting M8 history.
+
 Platform-wide invariants (P1–P8) live in `veritas-platform-architecture-design.md`. Storage layout and identity IDs live in `veritas-thin-summarydb-backends-design.md`. This document assumes both.
 
 ---
@@ -417,6 +425,12 @@ revision: 18fb5650600530a54f0afc22f4df1a10b03d3c02
 
 `AndersenWaveDiff` is invoked in-process on the private `ProgramIr`. Results are mapped to VERITAS references (see §7). SVF headers and native types are confined to `src/analysis/svf`; no public VERITAS API accepts or returns an SVF node, graph, identifier, or command-line artifact.
 
+Pinned SVF is the authoritative V1 owner for Andersen points-to results, alias
+classification, SVFG construction, and indirect-call candidates. A
+Souffle-native PTA is not a production alternative; M13 may research one only
+against explicit correctness, precision, model-coverage, and performance
+benchmarks, independently of the M9-M12 critical path.
+
 Standard VERITAS builds cannot disable SVF — there is no `VERITAS_ENABLE_SVF` option — because M5's design invariants require whole-program pointer analysis for correctness of call-graph refinement and value flow.
 
 ## 6.4 Upgrade path to L2 / L3
@@ -481,118 +495,217 @@ SVF is initialized per analysis run and released at the end. There are no long-l
 
 # 8. Memory Abstraction Model
 
+The minimum durable V2 identity is lossless and structural:
+
+```text
+MemoryLocation = AbstractObject + AccessPath + ByteRange
+```
+
+`AbstractObject` distinguishes global, stack, heap, argument, function,
+external, and unknown objects. `AccessPath` carries fields, array elements or
+ranges, and an explicit unknown suffix. `ByteRange` preserves a signed offset
+and unsigned size when known and an explicit unknown range otherwise.
+
+The run-local relation projection carries `RangeKind = KNOWN | UNKNOWN`.
+Known zero offsets and sizes remain known values. Unknown ranges use canonical
+zero payload cells with no semantic range meaning; half-known ranges and
+non-zero unknown payloads fail validation. No nullable column or sentinel value
+may blur these cases.
+
 The memory abstraction interacts with every other engine. VERITAS's model:
 
 * **Named globals** — one abstract location per canonical global declaration.
-* **Parameter objects** — one abstract location per function parameter, refined by callee's field access pattern.
-* **Fields** — field-sensitive, keyed by declared field path (`obj.parent.child`), with type-punning tracked as `UnknownAlias`.
-* **Heap** — allocation-site abstraction (`HeapSite:foo.cpp:128`), with optional k-limited context.
-* **Stack** — flow-sensitive within a function; escape analysis marks stack objects that outlive the call.
+* **Parameter objects** — one abstract location per function parameter,
+  refined by the callee's field access pattern.
+* **Fields** — field-sensitive declared paths, with type-punning preserved as
+  explicit overlap or `UnknownAlias`.
+* **Heap** — collision-free allocation-site identity from owner function,
+  stable semantic/source anchor, allocation kind, and a deterministic local
+  fingerprint, with optional k-limited context.
+* **Stack** — flow-sensitive within a function; escape analysis marks stack
+  objects that outlive the call.
 
-Operations tracked in summaries:
+Raw display names and placeholders such as `<local>`, `<unnamed>`, `<param>`,
+and `<call-effect>` are diagnostic only. Multiple unnamed values or allocations
+in one function must retain distinct stable identities. Opaque-pointer recovery
+uses available LLVM types, `DataLayout`, debug/TBAA evidence, allocation sizes,
+and SVF results; missing evidence yields an explicit unknown or overlap, never
+fabricated precision.
 
-```text
-reads(F, M)
-writes(F, M)
-aliases(M1, M2)
-owns(F, M)
-frees(F, M)
-escapes(M, F)
-allocates(F, M)
-```
-
-Guards on effects are preserved (path-sensitive effects):
-
-```text
-effect {
-    guard  = @len <= 128;
-    write  = @ctx.state := VALID;
-}
-```
+Operations and their guards remain in durable summaries; detailed relation rows
+are reconstructed only for a WPA run.
 
 ---
 
-# 9. WPA — SCC-Aware Fixpoint
+# 9. WPA — SCC-Scoped Execution
 
-WPA turns local summaries into whole-program facts. Two properties matter:
+WPA turns durable function summaries into whole-program facts. VERITAS owns the
+call graph and evaluates SCCs in reverse topological order.
 
-## 9.1 SCC over the call graph
+## 9.1 Engine-neutral logical component input
 
-Recursive call regions are joined into strongly connected components. Fixpoint runs over the SCC's collective summary:
+One execution unit evaluates one domain for one SCC:
 
 ```text
-Summary(SCC) = join over members
-while changed:
-    evaluate members
-    join summaries
-converge → SCCSummaryHash
+WpaLogicalComponentInput
+  LogicalInputHash
+  SccId and ComponentKind
+  member stable identities and base facts
+  stable <-> typed dense mappings
+  outgoing call edges
+  successor external support facts
+  applicable models and semantic configuration
 ```
 
-Once an SCC converges, its externally visible summary is what participates in downstream propagation. If an internal change does not change the SCC's external summary, propagation stops there.
+This structure has one canonical engine-neutral serialization. Souffle
+production and C++ conformance/emergency executions receive byte-identical
+logical-input bytes and mappings, then derive distinct valid
+`WpaExecutionEnvelope` values and `RunId` values. Each executor rejects an
+envelope bearing another engine's identity.
+
+Successor SCC results enter as explicit support relations with stable support
+fact identities. Rules may derive only results owned by the current SCC.
 
 ## 9.2 Uncertainty in SCC construction
 
-Call edges enter the SCC graph with their epistemic labels:
+Call edges retain dispatch kind and epistemic labels. `MUST_CALL` and
+`MAY_CALL` participate; `UNKNOWN_CALL` remains an explicit scoped fact and never
+fans out to every function. SVF-normalized indirect, virtual, and callback
+candidates enter as stable `MAY` edges rather than raw SVF identities.
+
+## 9.3 Domains, hashes, and content-addressed reuse
+
+The first production rule bundles are `ReachableCall` and `MayWrite`. M10A
+later adds `MayRead`, `GlobalFlow`, `UnknownEffect`, and `SoundnessCoverage` as
+independent bundles with models and conformance suites.
+
+Each component records:
 
 ```text
-MUST_CALL       participates in SCC graph
-MAY_CALL        participates in SCC graph with MAY label
-UNKNOWN_CALL    does NOT connect to all functions
+LogicalInputHash  canonical semantic input, mappings, schemas, bundles, models,
+                  configuration, and successor external facts
+FixpointHash      complete canonical results plus selected witnesses
+ExternalHash      predecessor-visible semantic results only
 ```
 
-The `UNKNOWN_CALL` rule is critical: allowing an unknown edge to fan out to the whole program would collapse the call graph into a single SCC on any codebase with function pointers or indirect calls.
+Revision, `RunId`, engine identity, and tuple order do not enter the logical or
+external hashes. A witness-only change may alter `FixpointHash` without changing
+canonical fact/root IDs or `ExternalHash`, so predecessors are not scheduled.
 
-## 9.3 Fixpoint domains
+A prior successful immutable component may be reused across revisions only by
+`(LogicalInputHash, EngineToolchainIdentity)`. Lookup revalidates content,
+rooted inputs, schema/bundle identities, and exact executor provenance. Each run
+retains a distinct history reference; C++ output or another Souffle build can
+never satisfy the production run.
 
-V1 domains:
+## 9.4 Failure and stale history
 
-```text
-TransitiveCalls
-MayRead
-MayWrite
-GlobalValueFlow
-```
-
-Each domain provides `Bottom`, `Join`, `Transfer`, `Widen`, `Equivalent`, and an `ExternalHash` used for change detection. Convergence status per domain is recorded:
-
-```text
-CONVERGED
-APPROXIMATED
-TIMEOUT
-UNSUPPORTED
-```
-
-Approximation must weaken the epistemic state; it may never strengthen it.
+Execution is failure atomic. A missing/incompatible bundle, engine failure,
+timeout or resource exhaustion, invalid stable/dense mapping, schema mismatch,
+unsupported epistemic output, inconsistent duplicate, or malformed/unrooted
+witness publishes no replacement component. Durable diagnostics mark the run
+incomplete and the last successful result remains queryable only as stale
+history. Partial output is never mixed with old facts.
 
 ---
 
-# 10. Datalog / Soufflé Fact Engine
+# 10. Compiled Souffle Production Engine
 
-For recursive interprocedural queries, VERITAS uses Datalog via Soufflé. Datalog is a natural fit because most WPA relations are recursive:
+For recursive interprocedural queries, the normal production engine is compiled
+Souffle. Every engine toolchain record has a canonical engine-specific
+provenance payload and hash. Before Souffle execution, the adapter parses the
+configured install-provenance manifest, requires version 2.5 at exact source
+revision `5682a9f12e2668ecdd26348fe63cc508bc0fcf47`, hashes the configured
+executable, and rejects any mismatch with the manifest's recorded executable
+digest. The Souffle `EngineToolchainIdentity` payload includes the verified
+manifest identity/content digest, source revision, executable digest, generated
+rule-bundle digest, and generator/compiler/link toolchain provenance. A C++
+conformance or `cpp-emergency` record instead requires the exact C++ build
+identity; it cannot claim, reuse, or impersonate Souffle provenance. Generated
+Souffle programs use one evaluation thread until a separately qualified upgrade
+retires the upstream ARM concurrency issue.
+
+Datalog remains a natural execution form over the exact typed
+`relations.v2` EDB:
 
 ```text
-MayWrite(f,x) :- DirectWrite(f,x).
-MayWrite(f,x) :- Call(f,g), MayWrite(g,x).
-
-Reachable(f,g) :- Call(f,g).
-Reachable(f,h) :- Call(f,g), Reachable(g,h).
+DirectCall(CallSiteId, CallerId, CalleeId, DispatchKind, Epistemic)
+UnknownCall(CallSiteId, CallerId, ReasonId, Epistemic)
+DirectRead(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
+DirectWrite(FunctionId, MemoryId, RangeKind, Offset, Size, Epistemic)
+Alias(MemoryId, MemoryId, AliasKind, Epistemic)
+LocalFlow(FunctionId, SourceId, DestinationId, FlowKind, Epistemic)
+ParameterFlow(CallSiteId, ActualId, FormalId, Epistemic)
+ReturnFlow(CallSiteId, ReturnId, ResultId, Epistemic)
+ModeledEffect(ModelId, FunctionId, EffectKind, SubjectId, Epistemic)
+UnsupportedFeature(NodeId, FeatureKind, SoundnessPolicy)
+SupportReachableCall(SourceId, TargetId, Epistemic)
+SupportMayWrite(FunctionId, MemoryId, Epistemic)
 ```
+
+The support relations are EDB-only projections of successor results. The first
+IDB rules preserve the exact three-column result signatures:
+
+```souffle
+.decl ReachableCall(source:FunctionId, target:FunctionId, epistemic:Epistemic)
+.decl MayWrite(function:FunctionId, memory:MemoryId, epistemic:Epistemic)
+
+ReachableCall(f, g, e) :- DirectCall(_, f, g, _, e).
+ReachableCall(f, h, e) :-
+    DirectCall(_, f, g, _, e1), ReachableCall(g, h, e2),
+    WeakenEpistemic(e1, e2, e).
+ReachableCall(f, h, e) :-
+    DirectCall(_, f, g, _, e1), SupportReachableCall(g, h, e2),
+    WeakenEpistemic(e1, e2, e).
+
+MayWrite(f, m, e) :- DirectWrite(f, m, _, _, _, e).
+MayWrite(f, m, e) :-
+    DirectCall(_, f, g, _, e1), MayWrite(g, m, e2),
+    WeakenEpistemic(e1, e2, e).
+MayWrite(f, m, e) :-
+    DirectCall(_, f, g, _, e1), SupportMayWrite(g, m, e2),
+    WeakenEpistemic(e1, e2, e).
+```
+
+`DirectWrite` retains `RangeKind`, signed `Offset`, and unsigned `Size`; the
+three-column `MayWrite(function, memory, epistemic)` abstraction deliberately
+consumes and ignores that range payload rather than shortening the EDB row.
 
 Rules and boundaries:
 
-* Base tuples exported from local facts (`Call`, `DirectWrite`, `Read`, `Alias`, …) carry VERITAS tuple IDs.
-* Derived tuples carry provenance from Soufflé's proof-tree feature — every derivation is explainable.
-* Soufflé is an **execution format**, not the durable model. Base and derived tuples are re-projected into the VERITAS fact store on completion. See `veritas-thin-summarydb-backends-design.md` §6.
+* Function Summary IR remains durable. Typed `relations.v2` EDB/IDB rows and
+  dense IDs are a run-local execution projection.
+* Relation registry entries define column types, keys, ownership, epistemic
+  values, materialization policy, and schema version; untyped string vectors
+  are not authoritative V2 schemas.
+* Stable identity and dense identity are separate, and negative or unknown
+  information is represented explicitly.
+* Souffle-generated and public types remain private to the adapter; none appears
+  under `include/veritas/**`.
+* The C++ engine receives the same byte-identical
+  `WpaLogicalComponentInput`, but only in CI conformance or explicitly selected
+  `cpp-emergency` mode. Automatic fallback is forbidden, and its engine/run
+  identity cannot impersonate or overwrite Souffle.
+* VERITAS canonicalizes outputs back to stable engine-neutral facts before any
+  durable publication. See `veritas-thin-summarydb-backends-design.md` §12.
 
-Epistemic joins are applied consistently:
+Every rule bundle emits generic immediate witness edges from a result semantic
+key to input semantic keys. Base and successor-support leaves are stable rooted
+input fact IDs. The shared semantic-key codec is versioned, injective,
+type-tagged, length-prefixed UTF-8; ambiguous raw-delimiter concatenation is
+forbidden. Qualification covers delimiters, empty strings, Unicode, digit
+prefixes, and numeric bounds across both engines.
 
-```text
-MUST + MAY  = MAY
-MAY + UNKNOWN = UNKNOWN | MAY   (per rule)
-INFERRED + MUST = INFERRED       (INFERRED cannot become MUST without verification)
-```
+The canonicalizer requires every published result to have a finite acyclic
+proof closed over the published facts and rooted inputs. It selects one proof
+by fewer derived edges, versioned rule priority, then lexicographic stable input
+identity. Souffle interactive proof trees remain useful for rule debugging but
+are not the durable VERITAS evidence protocol.
 
-No rule ever produces an `INFERRED` fact from purely deterministic inputs — that state is reserved for LLM / heuristic producers (P8).
+Epistemic joins remain explicit and bundle-versioned. `NO_ALIAS + MUST`, absent
+facts, and unknown alias results are distinct; unsupported semantic or
+epistemic values are rejected or converted to explicit unknown relations under
+the declared bundle contract, never silently omitted.
 
 ---
 
@@ -613,7 +726,7 @@ VERITAS's Evidence Builder queries the VFG plus provenance to construct a compac
 * `unknown U1 postcondition(vendor_validate)` — the missing semantics.
 * `verify O1 forall path reaching sink: len <= capacity(dst)` — the proof obligation.
 
-The mechanics of these queries are specified in `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` and the syntax in `veritas-evidence-ir-design.md`.
+The M10B mechanics of these queries are specified in `docs/specs/milestones/m10-evidence-builder-input-apis-demo-design-spec.md` and the syntax in `veritas-evidence-ir-design.md`.
 
 ---
 
@@ -634,7 +747,7 @@ getRanges(V)
 getStateTransitions(F)
 getDominatorFacts(F)
 getUnknownsIn(F)
-explainFact(FactID)
+explainFact(RunId, FactID)
 getEvidenceSlice(Claim)
 ```
 
@@ -694,6 +807,10 @@ Analysis-specific invariants are layered on top of the platform invariants (`ver
 | A7 | Standard VERITAS builds cannot disable SVF. | M5 correctness. |
 | A8 | Approximation weakens epistemic state; it never strengthens it. | Soundness of WPA joins. |
 | A9 | `INFERRED` cannot become `MUST` without a deterministic verifier. | P8 enforced through the join algebra. |
+| A10 | Function Summary IR is durable; `relations.v2` and dense IDs are run-local. | Preserve the platform boundary. |
+| A11 | Compiled Souffle is the normal recursive owner; C++ is conformance or explicit emergency only. | One production semantics owner; no silent fallback. |
+| A12 | Every published derived fact has a deterministic finite rooted witness. | Durable explanation is engine-neutral. |
+| A13 | A failed component publishes nothing and cannot replace the last successful result. | Failure atomicity and coherent history. |
 
 ---
 
@@ -710,3 +827,4 @@ Milestone specs under `docs/specs/milestones/` refine specific sections:
 * M5 (`m5-svf-value-flow-pointer-adapter-design-spec.md`) — SVF integration.
 * M6 (`m6-thin-veritas-cpg-projection-design-spec.md`) — thin CPG projection.
 * M8 (`m8-scc-wpa-souffle-fact-engine-design-spec.md`) — SCC / Datalog WPA.
+* M8R (`m8r-souffle-wpa-remediation-design-spec.md`) — approved production-Souffle remediation and M9 gate.

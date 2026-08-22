@@ -10,6 +10,7 @@
 * `docs/architecture/veritas-whole-program-analysis-design.md` — analyzer engines (AST/CFG/DDG/VFG/CPG) and SOTA C/C++ alias policy.
 * `docs/architecture/veritas-thin-summarydb-backends-design.md` — SummaryDB physical layers and pluggable storage backends.
 * `docs/architecture/veritas-evidence-ir-design.md` — Evidence IR formal syntax and semantics.
+* `docs/superpowers/specs/2026-08-22-souffle-wpa-architecture-refinement-design.md` — approved M8R WPA ownership and M9 entry gate.
 
 ---
 
@@ -78,7 +79,11 @@ File-level dependency invalidation is a bootstrap. The real invariant is that on
 
 ### P6 — WPA consumes summaries by default
 
-Whole-program analysis loads detailed AST or IR only when refinement demands it. Everyday queries run over summaries and the CPG projection.
+Function Summary IR is the durable WPA boundary. Whole-program analysis loads
+detailed AST or IR only when refinement demands it. Typed `relations.v2` rows
+are reconstructed as a run-local execution projection and never become another
+durable platform IR. Everyday queries run over summaries and the CPG
+projection.
 
 ### P7 — CPG is a query projection, not the sole source of truth
 
@@ -102,7 +107,7 @@ Neuro-symbolic reasoning enters only as `INFERRED` propositions. Promotion to `M
       local static analysis    (see veritas-whole-program-analysis-design.md)
                 │
                 ▼
-     Function Summary IR (immutable, component-hashed)
+     Function Summary IR v2 (immutable, component-hashed)
                 │
                 ▼
    ┌─────────── SummaryDB ────────────┐
@@ -112,7 +117,10 @@ Neuro-symbolic reasoning enters only as `INFERRED` propositions. Promotion to `M
    └─────────────────┬─────────────────┘
                      │
                      ▼
-        Incremental WPA (SCC + fixpoint + Datalog)
+        WPA input materializer (run-local relations.v2)
+                     │
+                     ▼
+        Incremental WPA (SCC + compiled Souffle)
                      │
                      ▼
              Global derived facts
@@ -132,6 +140,15 @@ Neuro-symbolic reasoning enters only as `INFERRED` propositions. Promotion to `M
 ```
 
 The pipeline is deliberately asymmetric: local extraction, SummaryDB, WPA, and Evidence Builder run deterministically and are reproducible for identical inputs. The Agent adds semantic hypotheses that only re-enter the deterministic world as proof obligations.
+
+**Current versus approved target.** Implemented M8 currently uses the C++
+fixpoint engine and can optionally compare file-based Souffle output. The
+approved M8R target, which is not yet delivered, keeps pinned SVF authoritative
+for V1 points-to, aliases, SVFG, and indirect calls; requires compiled Souffle
+for normal production recursive WPA; and restricts C++ to conformance or an
+explicit `cpp-emergency` engine. There is no automatic fallback. See the
+[M8R bridge specification](../specs/milestones/m8r-souffle-wpa-remediation-design-spec.md)
+for delivery status and the executable M9 gate.
 
 ---
 
@@ -536,7 +553,7 @@ veritas-query writes    <global>
 veritas-query evidence  overflow  <sink>
 
 veritas-diff  <rev-a>  <rev-b>
-veritas-explain fact <fact-id>
+veritas-explain fact <fact-id> --run <run-id>
 ```
 
 Contracts:
@@ -544,6 +561,10 @@ Contracts:
 * `--project` and `--bitcode` are **mutually exclusive** (exactly one is required).
 * External ingestion lives on `veritas-build import` rather than a separate tool; it can be split later if the surface grows.
 * All read commands take the current published SummaryDB revision by default and accept `--at <rev>` for historical queries.
+* Fact explanation requires `--run <run-id>`. Canonical `FactID` may be shared
+  across runs while its selected witness is occurrence-specific; the current
+  revision or `--at <rev>` cannot disambiguate build, configuration, engine,
+  or witness selection.
 
 Sample output from `veritas-build analyze`:
 
@@ -572,7 +593,10 @@ WPA affected functions:            186
 
 # 16. Milestone Map
 
-The backbone is delivered as ten sequential milestones (plus M0 skeleton, plus M11/M12 for the external adapters). Each milestone has a design spec under `docs/specs/milestones/` and an implementation plan under `docs/plans/`.
+M0-M8 are implemented history. Five remediation gates are inserted between M8
+and M9; M9 begins only after all ten M8R entry criteria pass with no missing,
+extra, disabled, skipped, failed, or errored executable tests. Future M10 is
+split into recursive domain expansion and Evidence/API delivery.
 
 | Milestone | Scope |
 | --- | --- |
@@ -584,11 +608,18 @@ The backbone is delivered as ten sequential milestones (plus M0 skeleton, plus M
 | M5 | Required in-process SVF value-flow / pointer analysis. |
 | M6 | Thin VERITAS CPG projection. |
 | M7 | Reverse dependency index + incremental scheduler. |
-| M8 | SCC-aware WPA + Soufflé fact engine. |
-| M9 | Provenance fact store + explain API. |
-| M10 | Evidence Builder input APIs + first end-to-end demo. |
+| M8 | Implemented SCC-aware WPA: C++ fixpoint plus optional Souffle comparison. |
+| M8R.1 | Semantic fact contract. |
+| M8R.2 | SVF and memory refinement with native `summary.v2`. |
+| M8R.3 | Run-local `relations.v2` WPA projection and generic rooted witnesses. |
+| M8R.4 | Required compiled-Souffle production WPA; C++ oracle/emergency only. |
+| M8R.5 | Qualification, complete `AnalysisFactBatch`, Fact Bus, and M9 entry gate. |
+| M9 | Provenance fact store + explain API, after all M8R gates pass. |
+| M10A | Recursive domain expansion (`MayRead`, `GlobalFlow`, `UnknownEffect`, `SoundnessCoverage`). |
+| M10B | Evidence Builder input APIs + first end-to-end demo over M9/M10A facts. |
 | M11 | External IR adapter (`BitcodeIrSource`, `veritas-build analyze --bitcode`). |
 | M12 | External-facts importer (Joern / PhASAR, `veritas-build import`). |
+| M13 | Benchmark-gated Souffle PTA research, independent of the M9-M12 critical path. |
 
 The Review Agent and its verification loop are post-backbone milestones and are not required for the platform's V1 usefulness. See §17 for the first target demo.
 
@@ -669,8 +700,14 @@ This single demo demonstrates the entire VERITAS thesis: incremental semantic in
         │  (see thin-summarydb-backends doc)     │
         └────────────────────┬───────────────────┘
                              │
+                  WPA input materializer
+                  run-local relations.v2
+                             │
+                             ▼
                     Incremental WPA
-                     SCC / Datalog
+                  SCC / compiled Souffle
+                  C++ oracle or explicit
+                     emergency engine
                              │
                              ▼
                        Global Facts
@@ -705,7 +742,16 @@ New readers:
 
 Implementers:
 
-* Milestone specs under `docs/specs/milestones/` (m1 … m12) refine sections of this architecture.
-* Implementation plans under `docs/plans/` (m1 … m12) drive the concrete build order.
-* The engineering-backbone spec at `docs/specs/veritas-engineering-backbone-design-specification.md` is the connective spec between this document and the milestone-level detail.
-
+* Historical and normal milestone specs live under `docs/specs/milestones/`;
+  their available implementation plans live under `docs/plans/`.
+* M8R uses the canonical
+  [`M8R bridge spec`](../specs/milestones/m8r-souffle-wpa-remediation-design-spec.md)
+  and
+  [`remediation implementation plan`](../superpowers/plans/2026-08-22-souffle-wpa-remediation-bridge-implementation-plan.md).
+* M10A's detailed design and implementation plan are still pending. M13 is the
+  separately approved, benchmark-gated research scope in the
+  [architecture refinement design](../superpowers/specs/2026-08-22-souffle-wpa-architecture-refinement-design.md#m13--benchmark-gated-pta-research)
+  and remains independent of the M9-M12 critical path.
+* The
+  [engineering-backbone spec](../specs/veritas-engineering-backbone-design-specification.md)
+  connects this document to milestone-level detail.

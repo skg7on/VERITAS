@@ -3,7 +3,7 @@
 **Status:** Draft
 **Milestone:** M7
 **Depends on:** M3 component hashes, M4/M5 summary facts
-**Feeds:** M8 WPA, M10 stale Evidence detection
+**Feeds:** M8 WPA, M10B stale Evidence detection
 
 ---
 
@@ -208,4 +208,3 @@ impact budget truncates output explicitly
 # 9. Handoff to M8
 
 M8 consumes scheduled SCC and WPA work items. M7 is complete when `veritas-diff` can report changed components and the scheduler can produce precise recomputation targets for fixture mutations.
-
