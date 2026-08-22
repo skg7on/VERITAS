@@ -18,6 +18,7 @@
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 #include "veritas/summary/v1/summary.pb.h"
+#include "veritas/summary/v2/summary.pb.h"
 
 namespace veritas::summary {
 
@@ -25,6 +26,10 @@ namespace veritas::summary {
 // The ID is derived from the entire summary's serialized form.
 veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
     const v1::FunctionSummary& summary);
+
+// V2 overload: compute the FunctionSummaryID from a summary.v2 message.
+veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
+    const v2::FunctionSummary& summary);
 
 }  // namespace veritas::summary
 

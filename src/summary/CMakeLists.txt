@@ -25,6 +25,7 @@ find_package(Protobuf REQUIRED)
 # generated header path, matching #include "veritas/summary/v1/summary.pb.h".
 add_library(veritas_summary_proto OBJECT
   "${CMAKE_SOURCE_DIR}/proto/veritas/summary/v1/summary.proto"
+  "${CMAKE_SOURCE_DIR}/proto/veritas/summary/v2/summary.proto"
 )
 
 target_include_directories(veritas_summary_proto PUBLIC
@@ -57,6 +58,7 @@ add_library(veritas_summary
   ComponentHash.cpp
   FunctionSummary.cpp
   LocalSummaryBuilder.cpp
+  SummaryV2Builder.cpp
 )
 
 target_include_directories(veritas_summary PUBLIC
@@ -68,6 +70,7 @@ target_include_directories(veritas_summary PUBLIC
 target_link_libraries(veritas_summary PUBLIC
   veritas::core
   veritas_summary_proto
+  veritas_analysis_semantic
 )
 
 target_compile_features(veritas_summary PUBLIC cxx_std_20)
