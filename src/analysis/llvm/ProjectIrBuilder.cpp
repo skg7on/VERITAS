@@ -220,6 +220,15 @@ ProjectIrBuilder::BuildProjectIr(const build::AnalysisManifest &manifest) {
     modules.push_back(std::move(*module));
   }
 
+  // Clang's driver emits `-discard-value-names` when the LLVM it was built
+  // against is a non-asserts (Release) build, which flips this context into
+  // discard-value-names mode during codegen. SVF later loads its textual
+  // extapi.bc into this same context, and LLVM refuses to parse textual IR in
+  // a context that discards named values (LLParser::Run). VERITAS owns this
+  // context and needs names retained, so re-assert the invariant regardless of
+  // how the LLVM build was configured.
+  context.setDiscardValueNames(false);
+
   // Link every module into the first one.
   auto linked = std::move(modules.front());
   ::llvm::Linker linker(*linked);
