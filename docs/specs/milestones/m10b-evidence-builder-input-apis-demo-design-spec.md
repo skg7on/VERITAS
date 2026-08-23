@@ -3,14 +3,15 @@
 **Status:** Draft
 **Milestone:** M10B
 **Depends on:** M6 thin CPG, M9 fact/provenance store, M10A recursive domain expansion
-**Feeds:** Evidence IR implementation and future Review Agent tools
+**Feeds:** M10C Evidence IR semantic model and serialization, then future Review Agent tools
 
 ---
 
 # 1. Purpose
 
-M10B exposes semantic slices that Evidence IR needs. It does not implement full
-EIR serialization. It proves the backbone can produce compact,
+M10B exposes semantic slices and a typed, immutable handoff that M10C needs. It
+does not implement the Evidence IR semantic model or serialization. It proves
+the backbone can produce compact,
 provenance-backed evidence inputs for a concrete memory-safety case.
 
 M10A is a separate prerequisite milestone. It expands the compiled-Souffle
@@ -68,6 +69,40 @@ FlowSlice {
 ```
 
 ```text
+EvidenceFactSet {
+    facts
+    completeness = COMPLETE | TRUNCATED
+    truncation_reasons
+}
+
+ClaimSeed {
+    finding_id
+    claim_kind = BUFFER_OVERFLOW
+    severity
+    subject_ref
+    source_ref
+    sink_ref
+}
+
+EvidenceBuildInput {
+    claim_seed
+    flow_slice
+    ranges
+    capacities
+    aliases
+    dominating_checks
+    unknowns
+    provenance
+}
+```
+
+M10B owns the seed-level `ClaimKind` and `Severity` enums because the finding
+seed crosses the M10B/M10C boundary. The initial `ClaimKind` contains
+`BUFFER_OVERFLOW`; severity contains `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, and
+`INFO`. Both have invalid sentinels, stable text conversion, and rejecting parse
+helpers. M10C reuses these types rather than declaring look-alike enums.
+
+```text
 EvidenceQueryBudget {
     max_depth
     max_nodes
@@ -76,7 +111,10 @@ EvidenceQueryBudget {
 }
 ```
 
-Budget truncation is visible. A truncated slice must not masquerade as complete evidence.
+Budget truncation is visible. A truncated slice must not masquerade as complete
+evidence. Every fact lookup returns an `EvidenceFactSet`; complete-empty and
+truncated-empty results are distinct. `EvidenceBuildInput` is the only typed
+handoff M10C consumes, so M10C never parses M10B's diagnostic JSON.
 
 ---
 
@@ -91,14 +129,19 @@ class EvidenceQueryService {
       core::StableId dst,
       EvidenceQueryBudget budget) const;
 
-  StatusOr<std::vector<facts::Fact>> GetRanges(core::StableId value_ref) const;
-  StatusOr<std::vector<facts::Fact>> GetAliases(core::StableId memory_ref) const;
-  StatusOr<std::vector<facts::Fact>> GetUnknowns(core::StableId scope_ref) const;
-  StatusOr<std::vector<facts::Fact>> GetDominatingChecks(core::StableId callsite_ref) const;
+  StatusOr<EvidenceFactSet> GetRanges(core::StableId value_ref) const;
+  StatusOr<EvidenceFactSet> GetCapacities(core::StableId memory_ref) const;
+  StatusOr<EvidenceFactSet> GetAliases(core::StableId memory_ref) const;
+  StatusOr<EvidenceFactSet> GetUnknowns(core::StableId scope_ref) const;
+  StatusOr<EvidenceFactSet> GetDominatingChecks(core::StableId callsite_ref) const;
   StatusOr<facts::ProvenanceGraph> Explain(
       core::StableId run_id,
       core::StableId fact_id,
       facts::ExplainBudget budget) const;
+
+  StatusOr<EvidenceBuildInput> BuildEvidenceInput(
+      const ClaimSeed& claim_seed,
+      EvidenceQueryBudget budget) const;
 };
 }
 ```
@@ -160,9 +203,11 @@ dominating check facts
 unknowns
 provenance refs
 truncation
+per-query completeness and truncation reasons
 ```
 
-This JSON is diagnostic. Full EIR-T or Protobuf EIR is a later milestone.
+This JSON is diagnostic. M10C owns EIR-T, Protobuf, and full-EIR diagnostic
+JSON.
 
 ---
 
@@ -189,6 +234,8 @@ safe fixture reports dominating bounds check
 flow slice includes summary IDs and provenance IDs
 unknown external validation remains unknown
 path budget truncates explicitly
+complete-empty and truncated-empty fact results remain distinguishable
+typed EvidenceBuildInput contains every required query result and provenance graph
 JSON output is deterministic for golden fixture
 ```
 
@@ -207,7 +254,7 @@ Summary refs
 Source anchors
 ```
 
-The Evidence IR milestone can then wrap these into:
+M10C can then wrap these into:
 
 ```text
 Claim
@@ -219,9 +266,15 @@ Provenance
 Proof Obligations
 ```
 
-M10B is complete when the first buffer-overflow evidence case can be generated
-from M9 facts and M10A relations without an LLM and without loading entire
-source files into a prompt.
+M10B is complete when the first buffer-overflow `EvidenceBuildInput` can be
+generated from M9 facts and M10A relations without an LLM and without loading
+entire source files into a prompt. M10C is responsible for turning that input
+into an `EvidenceCase`.
+
+See the
+[M10C Evidence IR semantic model and serialization specification](m10c-evidence-ir-semantic-model-serialization-design-spec.md)
+for validation, EIR-L0/L1/L2 assembly, content identity, and representation
+boundaries.
 
 The cross-cutting
 [Evidence IR Agent security use cases](../veritas-evidence-ir-agent-security-use-cases-design-spec.md)

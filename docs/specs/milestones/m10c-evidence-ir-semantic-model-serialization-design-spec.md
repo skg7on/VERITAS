@@ -1,6 +1,6 @@
 # M10C Evidence IR Semantic Model and Serialization Design Spec
 
-**Status:** Draft
+**Status:** Approved
 **Milestone:** M10C
 **Depends on:** M10B Evidence Builder input APIs and first demo
 **Feeds:** Future Review Agent, verifier orchestration, and Evidence persistence
@@ -17,7 +17,7 @@ Agent and proof-engine milestones.
 M10C provides:
 
 ```text
-M10B claim seed + FlowSlice + fact/provenance lookups
+M10B typed EvidenceBuildInput
     -> typed EvidenceCase
     -> validation
     -> canonical identity
@@ -117,6 +117,13 @@ well-formedness rules, and canonical order must be added to the formal
 specification before parser implementation begins. This is a syntax alignment,
 not a change to the governing EIR semantics.
 
+The same stabilization replaces the draft predicate grammar's left recursion
+with explicit precedence: atoms and parenthesized expressions bind first,
+followed by prefix `not`, non-associative comparisons, left-associative `and`,
+left-associative `or`, and right-associative `implies`. A quantified predicate
+owns the complete predicate following its colon. Repeated comparisons such as
+`a < b < c` are rejected unless written as an explicit conjunction.
+
 If implementation exposes any other ambiguity or contradiction between the
 EIR architecture and formal grammar, the documents must be reconciled in a
 separate reviewed documentation change. The parser and writer must not invent
@@ -156,6 +163,7 @@ EvidenceCase {
     constraints[]
     provenance[]
     proof_obligations[]
+    summaries[]
     dependencies[]
     verification_state
     omissions[]
@@ -230,7 +238,8 @@ M9/M10A epistemic values and never strengthens them during assembly.
 
 Exactly one primary claim is required. M10C accepts a typed M10B `ClaimSeed`
 and constructs the initial claim predicate, subject, severity, and verification
-state. The buffer-overflow demo uses the predicate:
+state. It reuses M10B's `ClaimKind` and `Severity` types rather than declaring
+parallel enums. The buffer-overflow demo uses the predicate:
 
 ```text
 value(@copy_length) > capacity(@destination)
@@ -311,8 +320,8 @@ class EvidenceCaseBuilder {
 }  // namespace veritas::evidence
 ```
 
-M10C introduces the typed `ClaimSeed` and `EvidenceBuildInput` handoff using
-values already required in M10B's diagnostic output. M10B must expose those
+M10B exposes the typed `ClaimSeed` and `EvidenceBuildInput` handoff using
+values already required in its diagnostic output. M10B must expose those
 values without requiring M10C to parse diagnostic JSON. It must also expose
 capacity results and a completeness/truncation state for every fact lookup;
 the current vector-only M10B API cannot distinguish a complete empty result
@@ -382,7 +391,8 @@ provenance roots
 all relevant unknowns and truncation markers
 ```
 
-The M10B buffer-overflow fixture must produce a complete L1 case.
+The M10B buffer-overflow fixture must produce an input from which M10C builds a
+complete L1 case.
 
 ## 6.3 EIR-L2
 
@@ -448,6 +458,10 @@ Identity is:
 ```text
 EvidenceID = evidence:sha256:SHA256(CanonicalEvidenceBytes)
 ```
+
+M10C adds `core::IdKind::kEvidence` with the stable serialized spelling
+`evidence`; `MakeStableId`, `ToString`, and `ParseStableId` remain the only ID
+construction and parsing boundary.
 
 The canonical EIR-T writer derives the top-level identifier from this digest,
 so semantically equivalent input names do not change identity. Protobuf wire
@@ -537,6 +551,7 @@ proto/veritas/evidence/v1/evidence.proto
 
 include/veritas/evidence/EvidenceCase.h
 include/veritas/evidence/EvidenceCaseBuilder.h
+include/veritas/evidence/EvidencePredicateMapper.h
 include/veritas/evidence/EvidenceValidator.h
 include/veritas/evidence/EvidenceCanonicalizer.h
 include/veritas/evidence/EirText.h
@@ -545,6 +560,7 @@ include/veritas/evidence/EvidenceJson.h
 
 src/evidence/EvidenceCase.cpp
 src/evidence/EvidenceCaseBuilder.cpp
+src/evidence/EvidencePredicateMapper.cpp
 src/evidence/EvidenceValidator.cpp
 src/evidence/EvidenceCanonicalizer.cpp
 src/evidence/EirLexer.cpp

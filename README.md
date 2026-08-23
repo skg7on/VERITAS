@@ -154,7 +154,8 @@ the working tree, so partially staged changes remain intact.
 
 M0–M8 are implemented and tested. M8R is approved and pending implementation;
 M9–M12 remain planned. The current project pipeline and CLI are available now,
-with the remaining milestones extending provenance, Evidence Builder APIs, and
+with the remaining milestones extending provenance, recursive analysis,
+Evidence Builder inputs, Evidence IR semantic modeling and serialization, and
 external inputs.
 
 **Documentation:** Start at the [documentation index](docs/README.md).

@@ -743,7 +743,11 @@ getRelevantSummaries(path)
 explainFact(run_id, fact_id)
 ```
 
-The Evidence Builder assembles the answers into an `EvidenceCase`. See `04-evidence-ir-architecture.md` for the full IR.
+M10B's Evidence Builder input layer assembles the answers into a typed,
+completeness-aware input. M10C validates and converts that input into an
+`EvidenceCase`. See `04-evidence-ir-architecture.md` for the full IR and the
+M10C milestone specification for the concrete semantic and serialization
+boundary.
 
 ---
 
@@ -761,4 +765,6 @@ Milestone specs and implementation plans:
 * M7 (`docs/specs/milestones/m07-reverse-dependency-incremental-scheduler-design-spec.md`) — dependency index + scheduler.
 * M8 (`docs/specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md`) — Soufflé WPA execution.
 * M8R (`docs/specs/milestones/m08r-souffle-wpa-remediation-design-spec.md`) — production-Souffle remediation, Fact Bus, and M9 gate.
+* M10B (`docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md`) — evidence query slices and typed builder inputs.
+* M10C (`docs/specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md`) — `EvidenceCase` construction, validation, identity, and serialization.
 * M9 (`docs/specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md`) — provenance-aware fact store + explain API.

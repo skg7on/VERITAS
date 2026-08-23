@@ -717,7 +717,8 @@ For Evidence generation, the VFG is more important than the AST. Most defects ar
 packet.length → parseHeader.len → decodeIE.size → copyIE.length → memcpy.size
 ```
 
-VERITAS's Evidence Builder queries the VFG plus provenance to construct a compact `EvidenceCase`:
+VERITAS's Evidence Builder queries the VFG plus provenance to construct a
+compact, completeness-aware input that M10C maps into an `EvidenceCase`:
 
 * `path P1 value_flow` — the primary flow.
 * `fact F1 range(len, 0, 65535)` — bounds on the flowing value.
@@ -726,7 +727,12 @@ VERITAS's Evidence Builder queries the VFG plus provenance to construct a compac
 * `unknown U1 postcondition(vendor_validate)` — the missing semantics.
 * `verify O1 forall path reaching sink: len <= capacity(dst)` — the proof obligation.
 
-The M10B mechanics of these queries are specified in `docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md` and the syntax in `04-evidence-ir-architecture.md`.
+The M10B mechanics of these queries are specified in
+`docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md`.
+M10C maps their completeness-aware output into the semantic model and
+serializes it as specified in
+`docs/specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md`;
+the cross-cutting language contract remains in `04-evidence-ir-architecture.md`.
 
 ---
 

@@ -77,13 +77,14 @@ The source architecture says "Build a VERITAS CPG, but keep it thin." This docum
 | M9 | Provenance-aware fact store and explain API | Run/fact/witness/diagnostic persistence and `veritas-explain` | M8R.5 gate |
 | M10A | Recursive domain expansion | `MayRead`, `GlobalFlow`, `UnknownEffect`, `SoundnessCoverage` | M9 |
 | M10B | Evidence Builder input APIs and first demo | EIR-ready slices over M9 facts and M10A relations | M6, M9, M10A |
+| M10C | Evidence IR semantic model and serialization | Validated, canonical EIR-L0/L1/L2 with EIR-T, Protobuf, and full-EIR JSON | M10B |
 | M11 | External IR adapter | External bitcode/textual IR through the same summary boundary | M5 |
 | M12 | External facts importer | Provenance-tagged non-authoritative imported facts | M9 |
 | M13 | Benchmark-gated PTA research | Independent Souffle-native PTA comparison against pinned SVF | independent of M9-M12 |
 
 Each milestone should merge independently. Every milestone has tests and a small user-visible CLI behavior.
 
-M11 and M12 remain chronologically placed after M10B, but chronology is not a
+M11 and M12 remain chronologically placed after M10C, but chronology is not a
 functional dependency: M11 reuses the M5 local/SVF pipeline, while M12 requires
 the M9 fact and provenance stores.
 
@@ -103,12 +104,15 @@ Detailed milestone design specs live under `docs/specs/milestones/`:
 | M9 | `docs/specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md` |
 | M10A | Detailed recursive-domain-expansion spec required before implementation |
 | M10B | `docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md` |
+| M10C | `docs/specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md` |
 
 Historical per-milestone implementation plans live under `docs/plans/`. The
 M8R executable plan is
 `docs/plans/milestones/m08r-souffle-wpa-remediation-implementation-plan.md`;
-M10A still requires its detailed plan, and M13's independently approved
-research plan is outside the M9-M12 critical path.
+M10A still requires its detailed plan. M10C's executable plan is
+`docs/plans/milestones/m10c-evidence-ir-semantic-model-serialization-implementation-plan.md`;
+M13's independently approved research plan is outside the M9-M12 critical
+path.
 
 ---
 
@@ -1363,7 +1367,9 @@ range(packet.len) = [0, 65535]
 no dominating range check
 ```
 
-This milestone proves that SummaryDB, thin CPG, WPA facts, and provenance can feed an EIR-L1 case without loading full source text into an agent prompt.
+This milestone proves that SummaryDB, thin CPG, WPA facts, and provenance can
+feed M10C's EIR-L1 assembly without loading full source text into an agent
+prompt.
 
 ## Files
 
@@ -1384,13 +1390,45 @@ struct FlowSlice {
   std::vector<cpg::CpgNode> nodes;
   std::vector<cpg::CpgEdge> edges;
   std::vector<facts::Fact> supporting_facts;
+  std::vector<facts::Fact> contradicting_facts;
   std::vector<facts::Fact> unknowns;
+  std::vector<core::StableId> provenance_refs;
+  std::vector<TruncationReason> truncation_reasons;
 };
 
 struct EvidenceQueryBudget {
   int max_depth;
   int max_nodes;
   int max_paths;
+  int max_provenance_depth;
+};
+
+enum class QueryCompleteness { kComplete, kTruncated };
+
+struct EvidenceFactSet {
+  std::vector<facts::Fact> facts;
+  QueryCompleteness completeness;
+  std::vector<TruncationReason> truncation_reasons;
+};
+
+struct ClaimSeed {
+  core::StableId finding_id;
+  ClaimKind kind;
+  Severity severity;
+  core::StableId subject_ref;
+  core::StableId source_ref;
+  core::StableId sink_ref;
+};
+
+struct EvidenceBuildInput {
+  ClaimSeed claim_seed;
+  FlowSlice flow_slice;
+  EvidenceFactSet ranges;
+  EvidenceFactSet capacities;
+  EvidenceFactSet aliases;
+  EvidenceFactSet dominating_checks;
+  EvidenceFactSet unknowns;
+  facts::ProvenanceGraph provenance;
 };
 
 class EvidenceQueryService {
@@ -1400,9 +1438,18 @@ class EvidenceQueryService {
       core::StableId dst,
       EvidenceQueryBudget budget) const;
 
-  veritas::StatusOr<std::vector<facts::Fact>> GetRanges(core::StableId value_ref) const;
-  veritas::StatusOr<std::vector<facts::Fact>> GetAliases(core::StableId memory_ref) const;
-  veritas::StatusOr<std::vector<facts::Fact>> GetUnknowns(core::StableId scope_ref) const;
+  veritas::StatusOr<EvidenceFactSet> GetRanges(core::StableId value_ref) const;
+  veritas::StatusOr<EvidenceFactSet> GetCapacities(core::StableId memory_ref) const;
+  veritas::StatusOr<EvidenceFactSet> GetAliases(core::StableId memory_ref) const;
+  veritas::StatusOr<EvidenceFactSet> GetUnknowns(core::StableId scope_ref) const;
+  veritas::StatusOr<EvidenceFactSet> GetDominatingChecks(core::StableId callsite_ref) const;
+  veritas::StatusOr<facts::ProvenanceGraph> Explain(
+      core::StableId run_id,
+      core::StableId fact_id,
+      facts::ExplainBudget budget) const;
+  veritas::StatusOr<EvidenceBuildInput> BuildEvidenceInput(
+      const ClaimSeed& claim_seed,
+      EvidenceQueryBudget budget) const;
 };
 }
 ```
@@ -1445,7 +1492,63 @@ slice budget truncates paths explicitly
 One command produces EIR-ready evidence inputs for a memory-safety demo.
 No LLM agent is required.
 The slice is semantic and compact.
+Complete-empty and truncated-empty query results remain distinguishable.
 ```
+
+---
+
+# 14C. M10C: Evidence IR Semantic Model and Serialization
+
+## Design Spec
+
+M10C depends on M10B and realizes the stable representation boundary that the
+Review Agent and verifier loop will consume. It introduces a typed
+`EvidenceCase`, constructs deterministic EIR-L0/L1/L2 projections from M10B's
+immutable `EvidenceBuildInput`, validates all references and epistemic rules,
+and derives `EvidenceID` from canonical semantic bytes.
+
+The milestone also stabilizes the versioned `eir.v1` text grammar and provides
+three equivalent representation boundaries:
+
+```text
+canonical / pretty EIR-T
+deterministic Protobuf
+deterministic full-EIR diagnostic JSON
+```
+
+M10C does not implement the Review Agent, verifier dispatch, Evidence Store,
+cross-revision diff, or incremental revalidation.
+
+## Files and Interfaces
+
+The implementation is organized around these public boundaries:
+
+```text
+EvidenceCase
+EvidenceValidator
+EvidenceCanonicalizer
+EvidenceCaseBuilder
+EvidencePredicateMapper
+ParseEirText / WriteCanonicalEirText
+EncodeEvidenceProto / DecodeEvidenceProto
+ToEvidenceJson
+```
+
+The new `veritas-query evidence` formats are `eir-t`, `eir-json`, and
+`protobuf`. M10B's existing `--format json` continues to mean diagnostic slice
+JSON.
+
+## Tests and Exit Criteria
+
+M10C is complete when the overflow inputs build valid, deterministic L0/L1/L2
+cases; invalid or mixed-run inputs are rejected; truncation cannot be upgraded
+into negative proof; and EIR-T and Protobuf round trips preserve identical
+canonical semantic bytes and `EvidenceID` values.
+
+Detailed guidance:
+
+* [M10C design specification](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md)
+* [M10C implementation plan](milestones/m10c-evidence-ir-semantic-model-serialization-implementation-plan.md)
 
 ---
 
@@ -1489,6 +1592,7 @@ M8R remediation commits: semantic contract, SVF/memory refinement,
 M9  feat: add provenance fact store
 M10A feat: expand recursive WPA domains
 M10B feat: add evidence query slices
+M10C feat: add Evidence IR semantic serialization
 ```
 
 Each commit should be reviewable alone. A reviewer should be able to checkout any milestone commit and run its documented tests.
