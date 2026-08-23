@@ -80,3 +80,6 @@ Testing/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Editor / IDE settings
+.vscode/
