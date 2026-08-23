@@ -849,6 +849,7 @@ Well-formedness checking requires:
 - **Related Specifications**:
   - `docs/architecture/01-platform-architecture.md`
   - `docs/specs/veritas-engineering-backbone-design-specification.md`
+  - [Evidence IR Agent security use cases](veritas-evidence-ir-agent-security-use-cases-design-spec.md)
 
 ---
 

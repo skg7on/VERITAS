@@ -222,3 +222,9 @@ Proof Obligations
 M10B is complete when the first buffer-overflow evidence case can be generated
 from M9 facts and M10A relations without an LLM and without loading entire
 source files into a prompt.
+
+The cross-cutting
+[Evidence IR Agent security use cases](../veritas-evidence-ir-agent-security-use-cases-design-spec.md)
+show how this deterministic slice becomes progressive EIR-L0/L1/L2 input to a
+future Review Agent and extend the same interaction contract to other common C
+and C++ security patterns.
