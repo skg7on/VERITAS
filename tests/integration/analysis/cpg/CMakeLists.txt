@@ -18,7 +18,6 @@ add_executable(cpg_end_to_end_integration_test
 target_link_libraries(cpg_end_to_end_integration_test PRIVATE
   veritas_analysis
   veritas_test_support
-  GTest::gtest
   GTest::gtest_main
 )
 add_test(NAME CpgEndToEndTest COMMAND cpg_end_to_end_integration_test)
@@ -42,7 +41,6 @@ target_link_libraries(cpg_projection_stage_integration_test PRIVATE
   veritas_test_support
   veritas::cpg
   veritas::core
-  GTest::gtest
   GTest::gtest_main
 )
 

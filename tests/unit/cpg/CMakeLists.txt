@@ -17,7 +17,6 @@ add_executable(ThinCpgTest
 )
 target_link_libraries(ThinCpgTest PRIVATE
   veritas::cpg
-  GTest::gtest
   GTest::gtest_main
 )
 gtest_discover_tests(ThinCpgTest DISCOVERY_TIMEOUT 60)
@@ -32,7 +31,6 @@ target_link_libraries(CpgQueryTest PRIVATE
   veritas::cpg
   veritas_summarydb
   veritas::core
-  GTest::gtest
   GTest::gtest_main
 )
 gtest_discover_tests(CpgQueryTest DISCOVERY_TIMEOUT 60)
@@ -47,7 +45,6 @@ target_link_libraries(CpgRepositoryTest PRIVATE
   veritas::cpg
   veritas_summarydb
   veritas::core
-  GTest::gtest
   GTest::gtest_main
 )
 gtest_discover_tests(CpgRepositoryTest DISCOVERY_TIMEOUT 60)
@@ -61,7 +58,6 @@ target_include_directories(CpgCanonicalizerTest PRIVATE
 target_link_libraries(CpgCanonicalizerTest PRIVATE
   veritas::cpg
   veritas::core
-  GTest::gtest
   GTest::gtest_main
 )
 gtest_discover_tests(CpgCanonicalizerTest DISCOVERY_TIMEOUT 60)
