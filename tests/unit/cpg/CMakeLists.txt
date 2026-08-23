@@ -20,7 +20,7 @@ target_link_libraries(ThinCpgTest PRIVATE
   GTest::gtest
   GTest::gtest_main
 )
-gtest_discover_tests(ThinCpgTest)
+gtest_discover_tests(ThinCpgTest DISCOVERY_TIMEOUT 60)
 
 add_executable(CpgQueryTest
   CpgQueryTest.cpp
@@ -35,7 +35,7 @@ target_link_libraries(CpgQueryTest PRIVATE
   GTest::gtest
   GTest::gtest_main
 )
-gtest_discover_tests(CpgQueryTest)
+gtest_discover_tests(CpgQueryTest DISCOVERY_TIMEOUT 60)
 
 add_executable(CpgRepositoryTest
   CpgRepositoryTest.cpp
@@ -50,7 +50,7 @@ target_link_libraries(CpgRepositoryTest PRIVATE
   GTest::gtest
   GTest::gtest_main
 )
-gtest_discover_tests(CpgRepositoryTest)
+gtest_discover_tests(CpgRepositoryTest DISCOVERY_TIMEOUT 60)
 
 add_executable(CpgCanonicalizerTest
   CpgCanonicalizerTest.cpp
@@ -64,4 +64,4 @@ target_link_libraries(CpgCanonicalizerTest PRIVATE
   GTest::gtest
   GTest::gtest_main
 )
-gtest_discover_tests(CpgCanonicalizerTest)
+gtest_discover_tests(CpgCanonicalizerTest DISCOVERY_TIMEOUT 60)
