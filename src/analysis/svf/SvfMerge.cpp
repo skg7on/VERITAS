@@ -47,21 +47,6 @@ v1::EpistemicState ToV1Epistemic(semantic::EpistemicState state) {
   return v1::EPISTEMIC_STATE_UNKNOWN;
 }
 
-// semantic::MemoryEffectKind -> v1 proto EffectKind.
-v1::EffectKind ToV1EffectKind(semantic::MemoryEffectKind kind) {
-  switch (kind) {
-    case semantic::MemoryEffectKind::kRead:
-    case semantic::MemoryEffectKind::kMayRead:
-      return v1::EFFECT_KIND_READ;
-    case semantic::MemoryEffectKind::kWrite:
-    case semantic::MemoryEffectKind::kMayWrite:
-      return v1::EFFECT_KIND_WRITE;
-    case semantic::MemoryEffectKind::kUnknown:
-      return v1::EFFECT_KIND_UNKNOWN;
-  }
-  return v1::EFFECT_KIND_UNKNOWN;
-}
-
 std::optional<std::string> OwningFunctionVariant(
     std::string_view value_name,
     const ::veritas::analysis::llvm::OriginMap& origin_map) {
@@ -89,37 +74,19 @@ std::vector<v1::FunctionSummary> MergeSvfFacts(
     std::vector<v1::FunctionSummary> drafts,
     const semantic::NormalizedAnalysisFacts& facts,
     const ::veritas::analysis::llvm::OriginMap& origin_map) {
-  // Normalized SVF facts carry stable IDs. Value-flow, alias, and
-  // memory-effect facts are whole-program (no per-function owner is encoded in
-  // a hash); calls carry their caller's diagnostic name and are attributed to
-  // the caller's draft. Task 9 performs precise per-function attribution
-  // against summary.v2.
+  // Only facts with a recoverable per-function owner may enter a per-function
+  // summary.v1 draft. Calls carry their caller's diagnostic name, so they are
+  // attributed to the caller's draft. Value-flow, alias, and memory-effect
+  // facts are whole-program (their stable IDs carry no recoverable owner), so
+  // merging them into a draft would fabricate cross-function facts — e.g. a
+  // MUST-level NO_ALIAS between two allocas in function `foo` asserted inside
+  // an unrelated function `bar`'s summary. They are therefore gated out of
+  // summary.v1; Task 9 re-adds them with precise per-function attribution
+  // against summary.v2. Scoped unknowns are run-level diagnostics (never
+  // per-function facts) and are attached to every draft, matching the
+  // pre-normalization behavior.
   for (auto& draft : drafts) {
     const std::string& function_id = draft.identity().function_variant_id();
-
-    for (const auto& flow : facts.value_flows) {
-      auto* out = draft.add_value_flows();
-      out->set_source(ToString(flow.source_value_id));
-      out->set_sink(ToString(flow.destination_value_id));
-      out->set_epistemic(ToV1Epistemic(flow.epistemic));
-      out->set_provenance_ref(flow.provenance_ref);
-    }
-
-    for (const auto& alias : facts.aliases) {
-      auto* out = draft.add_alias_facts();
-      out->set_location_a(ToString(alias.left.id));
-      out->set_location_b(ToString(alias.right.id));
-      out->set_epistemic(ToV1Epistemic(alias.epistemic));
-      out->set_provenance_ref(alias.provenance_ref);
-    }
-
-    for (const auto& effect : facts.memory_effects) {
-      auto* out = draft.add_memory_effects();
-      out->set_kind(ToV1EffectKind(effect.kind));
-      out->set_location(ToString(effect.location.id));
-      out->set_epistemic(ToV1Epistemic(effect.epistemic));
-      out->set_provenance_ref(effect.provenance_ref);
-    }
 
     for (const auto& call : facts.calls) {
       if (!IsOwnedBy(call.diagnostic_symbol, function_id, origin_map)) {

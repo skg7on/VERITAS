@@ -33,13 +33,15 @@ class OriginMap;
 namespace veritas::analysis::svf {
 
 // Merge SVF-mapped facts into M4 summary drafts. M4 MUST facts are never
-// erased; SVF value-flow, alias, memory-effect, call, and unknown facts augment
-// the matching draft. Unknowns are never dropped.
+// erased; SVF calls (attributed to their caller via diagnostic_symbol) and
+// scoped unknowns augment the matching draft. Unknowns are never dropped.
 //
-// Normalized SVF facts carry stable IDs without per-function ownership; calls
-// are attributed to their caller via diagnostic_symbol, and the remaining
-// whole-program facts are attached conservatively (Task 9 performs proper
-// per-function attribution against summary.v2).
+// Value-flow, alias, and memory-effect facts are whole-program (their stable
+// IDs carry no recoverable per-function owner) and are therefore NOT merged
+// into the per-function summary.v1 drafts here — publishing them would
+// fabricate cross-function facts (e.g. a MUST-level NO_ALIAS inside an
+// unrelated function). Task 9 re-adds them with precise per-function
+// attribution against summary.v2.
 std::vector<::veritas::summary::v1::FunctionSummary> MergeSvfFacts(
     std::vector<::veritas::summary::v1::FunctionSummary> drafts,
     const semantic::NormalizedAnalysisFacts& svf_facts,
