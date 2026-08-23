@@ -12,13 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(SemanticTypesTest SemanticTypesTest.cpp)
-target_link_libraries(SemanticTypesTest PRIVATE
-  veritas_analysis_semantic
+add_executable(StableValueMapperTest
+  StableValueMapperTest.cpp
+)
+
+target_link_libraries(StableValueMapperTest PRIVATE
+  veritas_analysis_llvm
+  LLVMAsmParser
   GTest::gtest_main
 )
-veritas_add_warnings(SemanticTypesTest)
-gtest_discover_tests(SemanticTypesTest DISCOVERY_TIMEOUT 60)
 
-add_subdirectory(llvm)
-add_subdirectory(svf)
+veritas_add_warnings(StableValueMapperTest)
+gtest_discover_tests(StableValueMapperTest DISCOVERY_TIMEOUT 60)
+
+add_executable(AbstractMemoryBuilderTest
+  AbstractMemoryBuilderTest.cpp
+)
+
+target_link_libraries(AbstractMemoryBuilderTest PRIVATE
+  veritas_analysis_llvm
+  LLVMAsmParser
+  GTest::gtest_main
+)
+
+veritas_add_warnings(AbstractMemoryBuilderTest)
+gtest_discover_tests(AbstractMemoryBuilderTest DISCOVERY_TIMEOUT 60)

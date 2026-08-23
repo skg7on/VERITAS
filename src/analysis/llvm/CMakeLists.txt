@@ -19,6 +19,8 @@ add_library(veritas_analysis_llvm
   CallGraphExtractor.cpp
   MemoryAccessExtractor.cpp
   ValueFlowExtractor.cpp
+  StableValueMapper.cpp
+  AbstractMemoryBuilder.cpp
   LocalFactExtractor.cpp
 )
 
