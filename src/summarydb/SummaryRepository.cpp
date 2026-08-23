@@ -46,15 +46,35 @@ struct PreparedArtifact {
   std::vector<summary::ComponentDigestInfo> digests;
 };
 
+// Compute the ID, object key, schema version, function identity, and component
+// digests for one artifact — everything the metadata staging needs. Does not
+// touch the object store; callers that need the immutable bytes written pair
+// this with PrepareArtifact.
+veritas::StatusOr<PreparedArtifact> PrepareArtifactMetadata(
+    const summary::SummaryArtifact &artifact) {
+  auto id_result = summary::ComputeFunctionSummaryId(artifact);
+  if (!id_result.ok()) {
+    return id_result.status();
+  }
+
+  return PreparedArtifact{
+      *id_result,
+      core::ToString(*id_result),
+      std::string(summary::SchemaVersion(artifact)),
+      std::string(summary::Identity(artifact).function_variant_id()),
+      summary::ComputeComponentDigests(artifact),
+  };
+}
+
 // Compute the ID, serialize, and write the immutable bytes for one artifact.
 // Returns everything the metadata staging step needs. The object store write
 // happens before any metadata transaction so the CAS layer never participates
 // in a transaction.
 veritas::StatusOr<PreparedArtifact> PrepareArtifact(
     ObjectStore &object_store, const summary::SummaryArtifact &artifact) {
-  auto id_result = summary::ComputeFunctionSummaryId(artifact);
-  if (!id_result.ok()) {
-    return id_result.status();
+  auto prepared = PrepareArtifactMetadata(artifact);
+  if (!prepared.ok()) {
+    return prepared.status();
   }
 
   auto bytes_result = summary::SerializeSummaryArtifact(artifact);
@@ -62,19 +82,12 @@ veritas::StatusOr<PreparedArtifact> PrepareArtifact(
     return bytes_result.status();
   }
 
-  std::string object_key = core::ToString(*id_result);
-  auto put_status = object_store.PutIfAbsent(object_key, *bytes_result);
+  auto put_status = object_store.PutIfAbsent(prepared->object_key, *bytes_result);
   if (!put_status.ok()) {
     return put_status;
   }
 
-  return PreparedArtifact{
-      *id_result,
-      std::move(object_key),
-      std::string(summary::SchemaVersion(artifact)),
-      std::string(summary::Identity(artifact).function_variant_id()),
-      summary::ComputeComponentDigests(artifact),
-  };
+  return prepared;
 }
 
 // Stage the immutable-object metadata and component digests for one prepared
@@ -327,44 +340,23 @@ veritas::Status SummaryRepository::StageCurrentArtifactBindings(
     const std::string &revision_id, const std::string &build_variant_id,
     const std::vector<summary::SummaryArtifact> &artifacts) {
   for (const auto &artifact : artifacts) {
-    auto id_result = summary::ComputeFunctionSummaryId(artifact);
-    if (!id_result.ok()) {
-      return id_result.status();
-    }
-    const std::string id_str = core::ToString(*id_result);
-    const std::string schema_version =
-        std::string(summary::SchemaVersion(artifact));
-
-    auto insert_object = metadata_store_->Execute(
-        "INSERT OR IGNORE INTO summary_objects (summary_id, object_key, "
-        "schema_version, created_at) VALUES (?, ?, ?, strftime('%s', 'now'))",
-        {id_str, id_str, schema_version});
-    if (!insert_object.ok()) {
-      return insert_object;
+    // The immutable bytes were already written by PutImmutableSummaryArtifacts,
+    // so only the metadata staging is needed here.
+    auto prepared = PrepareArtifactMetadata(artifact);
+    if (!prepared.ok()) {
+      return prepared.status();
     }
 
-    for (const auto &digest : summary::ComputeComponentDigests(artifact)) {
-      auto insert_component = metadata_store_->Execute(
-          "INSERT OR REPLACE INTO summary_components (summary_id, "
-          "component_kind, semantic_hash, evidence_hash, item_count) "
-          "VALUES (?, ?, ?, ?, ?)",
-          {id_str, std::to_string(static_cast<int>(digest.kind)),
-           core::DigestToHex(digest.semantic_hash),
-           core::DigestToHex(digest.evidence_hash),
-           std::to_string(digest.item_count)});
-      if (!insert_component.ok()) {
-        return insert_component;
-      }
+    auto stage_object = StageObjectMetadata(*metadata_store_, *prepared);
+    if (!stage_object.ok()) {
+      return stage_object;
     }
 
-    auto update_binding = metadata_store_->Execute(
-        "INSERT OR REPLACE INTO summary_bindings (function_variant_id, "
-        "revision_id, build_variant_id, summary_id, publication_epoch, "
-        "is_current) VALUES (?, ?, ?, ?, strftime('%s', 'now'), 1)",
-        {std::string(summary::Identity(artifact).function_variant_id()),
-         revision_id, build_variant_id, id_str});
-    if (!update_binding.ok()) {
-      return update_binding;
+    auto stage_binding = StageBinding(*metadata_store_, *prepared,
+                                      prepared->function_variant_id,
+                                      revision_id, build_variant_id);
+    if (!stage_binding.ok()) {
+      return stage_binding;
     }
   }
   return veritas::Status::Ok();
@@ -504,26 +496,36 @@ veritas::StatusOr<summary::SummaryArtifact>
 SummaryRepository::GetSummaryArtifact(const core::StableId &summary_id) const {
   const std::string id_str = core::ToString(summary_id);
 
-  // Resolve the schema version recorded for this object so the CAS bytes are
-  // parsed with the matching protobuf rather than assumed to be V1.
+  // Read the CAS bytes first: the schema version is either recorded in the
+  // metadata row or, for objects written by PutImmutableSummaryArtifacts before
+  // staging, carried in the serialized header itself.
+  auto get_result = object_store_->Get(id_str);
+  if (!get_result.ok()) {
+    return get_result.status();
+  }
+
   auto version_query = metadata_store_->Query(
       "SELECT schema_version FROM summary_objects WHERE summary_id = ?",
       {id_str});
   if (!version_query.ok()) {
     return version_query.status();
   }
+
   std::string schema_version;
   if (version_query->empty()) {
-    // Legacy CAS-only objects written by PutImmutableSummaries predate the
-    // schema_version metadata and are always summary.v1.
-    schema_version = "summary.v1";
+    // No metadata row: probe the serialized header. Both v1 and v2 share the
+    // field-1 SummaryHeader with a field-1 schema_version, so parsing the bytes
+    // as v1 recovers the true version for either schema. Do NOT assume V1.
+    summary::v1::FunctionSummary probe;
+    if (!probe.ParseFromArray(get_result->data(),
+                              static_cast<int>(get_result->size()))) {
+      return veritas::Status::FailedPrecondition(
+          "cannot determine schema version for " + id_str +
+          ": bytes do not parse as a summary header");
+    }
+    schema_version = probe.header().schema_version();
   } else {
     schema_version = (*version_query)[0][0];
-  }
-
-  auto get_result = object_store_->Get(id_str);
-  if (!get_result.ok()) {
-    return get_result.status();
   }
 
   return summary::ParseSummaryArtifact(schema_version, *get_result);

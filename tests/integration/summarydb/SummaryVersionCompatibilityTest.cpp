@@ -155,4 +155,26 @@ TEST(SummaryVersionCompatibilityTest, ReadsHistoricalV1AfterPublishingV2) {
   EXPECT_TRUE(std::holds_alternative<v2::FunctionSummary>(*current));
 }
 
+TEST(SummaryVersionCompatibilityTest, ReadsV2ArtifactWrittenWithoutMetadata) {
+  auto repository = OpenRepository();
+  ASSERT_NE(repository, nullptr);
+
+  std::vector<summary::SummaryArtifact> artifacts;
+  artifacts.emplace_back(V2Summary());
+  auto ids = repository->PutImmutableSummaryArtifacts(artifacts);
+  ASSERT_TRUE(ids.ok()) << ids.status().message();
+  ASSERT_EQ(ids->size(), 1u);
+
+  // A V2 object written through the CAS-only path (no summary_objects row)
+  // must round-trip as V2, not be mis-parsed as V1.
+  auto artifact = repository->GetSummaryArtifact((*ids)[0]);
+  ASSERT_TRUE(artifact.ok()) << artifact.status().message();
+  EXPECT_TRUE(std::holds_alternative<v2::FunctionSummary>(*artifact));
+
+  // The V1 getter must reject it rather than reinterpret V2 bytes as V1.
+  auto v1 = repository->GetSummary((*ids)[0]);
+  ASSERT_FALSE(v1.ok());
+  EXPECT_EQ(v1.status().code(), StatusCode::kFailedPrecondition);
+}
+
 }  // namespace veritas::summarydb
