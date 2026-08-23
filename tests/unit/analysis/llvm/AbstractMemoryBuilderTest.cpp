@@ -115,14 +115,28 @@ MemoryFixture BuildFixture(const char* ir, const char* function_name) {
 }
 
 MemoryFixture FieldStoreFixture() {
+  // A non-homogeneous struct: field 0 is i8, so field 1 (i32) sits at a
+  // non-zero byte offset (4), not `field_index * 4`.
   return BuildFixture(R"(
-    %Record = type { i32, i32 }
+    %Record = type { i8, i32 }
     define void @store_field(ptr %rec) {
       %gep = getelementptr inbounds %Record, ptr %rec, i32 0, i32 1
       store i32 0, ptr %gep
       ret void
     }
   )", "store_field");
+}
+
+MemoryFixture NonHomogeneousFixture() {
+  // Another non-homogeneous struct: field 1 (i64) sits at byte offset 8.
+  return BuildFixture(R"(
+    %Wide = type { i16, i64 }
+    define void @store_wide(ptr %rec) {
+      %gep = getelementptr inbounds %Wide, ptr %rec, i32 0, i32 1
+      store i64 0, ptr %gep
+      ret void
+    }
+  )", "store_wide");
 }
 
 MemoryFixture VariableIndexFixture() {
@@ -139,9 +153,30 @@ TEST(AbstractMemoryBuilderTest, PreservesFieldAndByteRange) {
   auto access = FieldStoreFixture();
   auto location = access.builder.LocationFor(*access.pointer, 4);
   ASSERT_TRUE(location.ok());
+  // The leading `i32 0` is the outer sequential index (kArrayIndex), and the
+  // real struct field is the second index. For `{ i8, i32 }` that field is at
+  // byte offset 4, not 1 — this fails if the leading index is misread as a
+  // struct field.
+  ASSERT_EQ(location->access_path.size(), 2u);
   EXPECT_EQ(location->access_path[0].kind,
+            AccessPathSegment::Kind::kArrayIndex);
+  EXPECT_EQ(location->access_path[1].kind,
             AccessPathSegment::Kind::kField);
+  EXPECT_EQ(location->access_path[1].first, 1);
+  EXPECT_EQ(location->byte_range.offset, 4);
   EXPECT_EQ(location->byte_range.size, 4u);
+}
+
+TEST(AbstractMemoryBuilderTest, NonHomogeneousStructFieldOffset) {
+  auto access = NonHomogeneousFixture();
+  auto location = access.builder.LocationFor(*access.pointer, 8);
+  ASSERT_TRUE(location.ok());
+  ASSERT_EQ(location->access_path.size(), 2u);
+  EXPECT_EQ(location->access_path[1].kind,
+            AccessPathSegment::Kind::kField);
+  EXPECT_EQ(location->access_path[1].first, 1);
+  EXPECT_EQ(location->byte_range.offset, 8);
+  EXPECT_EQ(location->byte_range.size, 8u);
 }
 
 TEST(AbstractMemoryBuilderTest, RepresentsUnknownSuffixExplicitly) {

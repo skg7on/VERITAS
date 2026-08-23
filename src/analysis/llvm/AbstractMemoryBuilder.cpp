@@ -63,20 +63,29 @@ struct GepSummary {
 };
 
 // Reconstructs the access path and (when every index is a compile-time
-// constant) the byte offset of a single GEP, using its source element type and
-// the DataLayout. Any non-constant or unresolvable index appends kUnknown and
-// marks the offset unknown.
+// constant) the byte offset of a single GEP. The walk mirrors LLVM's
+// gep_type_iterator (GetElementPtrTypeIterator.h): the FIRST index is a
+// sequential "outer" index over the source element type (advancing over an
+// unbounded array of that type, so `i32 0` on a single struct is a redundant
+// leading array index, not a field), and each subsequent index applies to the
+// type reached so far — a StructType index is a field, an array/vector/scalar
+// index is a sequential (kArrayIndex) step. Any non-constant or unresolvable
+// index appends kUnknown and marks the offset unknown.
 GepSummary SummarizeGep(const ::llvm::GEPOperator& gep,
                         const ::llvm::DataLayout& layout) {
   GepSummary summary;
-  ::llvm::Type* current = gep.getSourceElementType();
+  bool in_struct = false;
+  ::llvm::StructType* struct_type = nullptr;
+  ::llvm::Type* flat_type = gep.getSourceElementType();
+
   for (const ::llvm::Use& index_use : gep.indices()) {
     const ::llvm::Value* index = index_use.get();
     const auto* constant = ::llvm::dyn_cast<::llvm::ConstantInt>(index);
     const bool is_constant = constant != nullptr;
     const std::int64_t value = is_constant ? constant->getSExtValue() : 0;
 
-    if (auto* struct_type = ::llvm::dyn_cast<::llvm::StructType>(current)) {
+    if (in_struct) {
+      // Field index within struct_type.
       if (!is_constant) {
         summary.segments.push_back(
             {semantic::AccessPathSegment::Kind::kUnknown, 0, 0});
@@ -84,60 +93,29 @@ GepSummary SummarizeGep(const ::llvm::GEPOperator& gep,
         return summary;
       }
       const auto field = static_cast<unsigned>(value);
-      summary.segments.push_back(
-          {semantic::AccessPathSegment::Kind::kField, value, value});
       if (field >= struct_type->getNumElements()) {
         summary.constant_offset = false;
         return summary;
       }
+      summary.segments.push_back(
+          {semantic::AccessPathSegment::Kind::kField, value, value});
       summary.offset += static_cast<std::int64_t>(
           layout.getStructLayout(struct_type)
               ->getElementOffset(field)
               .getFixedValue());
-      current = struct_type->getElementType(field);
-    } else if (auto* array_type = ::llvm::dyn_cast<::llvm::ArrayType>(current)) {
-      if (!is_constant) {
-        summary.segments.push_back(
-            {semantic::AccessPathSegment::Kind::kUnknown, 0, 0});
-        summary.constant_offset = false;
-        return summary;
+      ::llvm::Type* next = struct_type->getElementType(field);
+      if (auto* st = ::llvm::dyn_cast<::llvm::StructType>(next)) {
+        in_struct = true;
+        struct_type = st;
+        flat_type = nullptr;
+      } else {
+        in_struct = false;
+        struct_type = nullptr;
+        flat_type = next;
       }
-      summary.segments.push_back(
-          {semantic::AccessPathSegment::Kind::kArrayIndex, value, value});
-      summary.offset += value * static_cast<std::int64_t>(
-          layout.getTypeAllocSize(array_type->getElementType())
-              .getFixedValue());
-      current = array_type->getElementType();
-    } else if (auto* vector_type =
-                   ::llvm::dyn_cast<::llvm::FixedVectorType>(current)) {
-      if (!is_constant) {
-        summary.segments.push_back(
-            {semantic::AccessPathSegment::Kind::kUnknown, 0, 0});
-        summary.constant_offset = false;
-        return summary;
-      }
-      summary.segments.push_back(
-          {semantic::AccessPathSegment::Kind::kArrayIndex, value, value});
-      summary.offset += value * static_cast<std::int64_t>(
-          layout.getTypeAllocSize(vector_type->getElementType())
-              .getFixedValue());
-      current = vector_type->getElementType();
-    } else if (current->isPointerTy()) {
-      // Indexing through a pointer: the pointee size is unknowable under
-      // opaque pointers, so the byte offset is unknown even for constants.
-      if (!is_constant) {
-        summary.segments.push_back(
-            {semantic::AccessPathSegment::Kind::kUnknown, 0, 0});
-        summary.constant_offset = false;
-        return summary;
-      }
-      summary.segments.push_back(
-          {semantic::AccessPathSegment::Kind::kArrayIndex, value, value});
-      summary.constant_offset = false;
-      return summary;
     } else {
-      // Scalar source element type: pointer arithmetic over an array of
-      // scalars (e.g. `getelementptr i32, ptr %p, i64 %i`).
+      // Sequential index over flat_type (outer array-of-source-type, or an
+      // array/vector/scalar element reached by a previous index).
       if (!is_constant) {
         summary.segments.push_back(
             {semantic::AccessPathSegment::Kind::kUnknown, 0, 0});
@@ -146,8 +124,31 @@ GepSummary SummarizeGep(const ::llvm::GEPOperator& gep,
       }
       summary.segments.push_back(
           {semantic::AccessPathSegment::Kind::kArrayIndex, value, value});
-      summary.offset += value * static_cast<std::int64_t>(
-          layout.getTypeAllocSize(current).getFixedValue());
+      ::llvm::Type* step = flat_type;
+      if (auto* vector = ::llvm::dyn_cast<::llvm::VectorType>(step))
+        step = vector->getElementType();
+      if (step) {
+        summary.offset += value * static_cast<std::int64_t>(
+            layout.getTypeAllocSize(step).getFixedValue());
+      } else {
+        summary.constant_offset = false;
+      }
+
+      ::llvm::Type* ty = flat_type;
+      if (auto* array = ::llvm::dyn_cast<::llvm::ArrayType>(ty)) {
+        flat_type = array->getElementType();
+      } else if (auto* vector = ::llvm::dyn_cast<::llvm::VectorType>(ty)) {
+        // The reference keeps the vector; its next indexed type is the
+        // element type (vectors are bit-packed, but this is a rare corner).
+        flat_type = vector;
+      } else if (auto* st = ::llvm::dyn_cast<::llvm::StructType>(ty)) {
+        in_struct = true;
+        struct_type = st;
+        flat_type = nullptr;
+      } else {
+        // Scalar / opaque pointer: a further index would be invalid IR.
+        flat_type = nullptr;
+      }
     }
   }
   return summary;
