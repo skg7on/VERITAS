@@ -596,7 +596,8 @@ WPA affected functions:            186
 M0-M8 are implemented history. Five remediation gates are inserted between M8
 and M9; M9 begins only after all ten M8R entry criteria pass with no missing,
 extra, disabled, skipped, failed, or errored executable tests. Future M10 is
-split into recursive domain expansion and Evidence/API delivery.
+split into recursive domain expansion, Evidence Builder input delivery, and
+Evidence IR semantic modeling and serialization.
 
 | Milestone | Scope |
 | --- | --- |
@@ -617,11 +618,14 @@ split into recursive domain expansion and Evidence/API delivery.
 | M9 | Provenance fact store + explain API, after all M8R gates pass. |
 | M10A | Recursive domain expansion (`MayRead`, `GlobalFlow`, `UnknownEffect`, `SoundnessCoverage`). |
 | M10B | Evidence Builder input APIs + first end-to-end demo over M9/M10A facts. |
+| M10C | Validated, canonical Evidence IR with EIR-T, Protobuf, and full-EIR diagnostic JSON serialization. |
 | M11 | External IR adapter (`BitcodeIrSource`, `veritas-build analyze --bitcode`). |
 | M12 | External-facts importer (Joern / PhASAR, `veritas-build import`). |
 | M13 | Benchmark-gated Souffle PTA research, independent of the M9-M12 critical path. |
 
-The Review Agent and its verification loop are post-backbone milestones and are not required for the platform's V1 usefulness. See §17 for the first target demo.
+The Review Agent and its verification loop are post-backbone milestones and are
+not required for the platform's V1 usefulness. M10C supplies the stable EIR
+boundary they will consume. See §17 for the first target demo.
 
 ---
 
@@ -655,7 +659,7 @@ Result:
         ↓
     WPA finds new unsafe flow
         ↓
-    Evidence IR generated:
+    M10C Evidence IR generated:
         packet.len → decode → copy → memcpy
         no dominating check
         ↓
@@ -739,6 +743,10 @@ New readers:
 2. `02-whole-program-analysis-architecture.md` — how the analyzer engines fit together and what precision the pointer/alias layer delivers.
 3. `03-summarydb-storage-architecture.md` — how identity, hashing, and storage are laid out.
 4. `04-evidence-ir-architecture.md` — the Evidence IR the Agent consumes.
+5. `../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md`
+   and `../plans/milestones/m10c-evidence-ir-semantic-model-serialization-implementation-plan.md`
+   — the backbone milestone that realizes the EIR semantic and representation
+   boundary.
 
 Implementers:
 

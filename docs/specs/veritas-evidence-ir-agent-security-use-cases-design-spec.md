@@ -4,9 +4,9 @@
 
 **Scope:** Review Agent consumption of Evidence IR for large C and C++ repositories
 
-**Depends on:** Evidence IR formal specification, M9 provenance store, M10A recursive security relations, and M10B Evidence Builder inputs
+**Depends on:** Evidence IR formal specification, M9 provenance store, M10A recursive security relations, M10B Evidence Builder inputs, and M10C Evidence IR semantic serialization
 
-**Complements:** Evidence IR architecture and the M10B implementation plan
+**Complements:** Evidence IR architecture and the M10B/M10C milestone specifications and plans
 
 ---
 
@@ -61,6 +61,10 @@ authoritative for EIR-T syntax and well-formedness. The
 remains authoritative for semantics. The
 [M10B design specification](milestones/m10b-evidence-builder-input-apis-demo-design-spec.md)
 remains authoritative for Evidence Builder input APIs.
+The
+[M10C design specification](milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md)
+remains authoritative for the concrete `EvidenceCase`, validation,
+canonicalization, and EIR-T/Protobuf/JSON representation boundaries.
 
 ---
 
@@ -68,7 +72,7 @@ remains authoritative for Evidence Builder input APIs.
 
 The use cases deliberately span the complete target workflow. The repository's
 current documentation matrix marks M0 through M8 as implemented, M8R as
-approved but pending, and M9, M10A, M10B, and the full EIR Agent path as
+approved but pending, and M9, M10A, M10B, M10C, and the Review Agent path as
 planned.
 
 | Layer | Capability used by these use cases | Readiness represented here |
@@ -78,7 +82,7 @@ planned.
 | M9 | Durable FactStore, ProvenanceStore, run bindings, history, stale state, and budgeted Explain | Planned prerequisite |
 | M10A | Recursive security-domain relations such as global flow, unknown effects, range propagation, and soundness coverage | Planned; detailed specification is still required |
 | M10B | FlowSlice, EvidenceQueryService, range and alias lookup, dominating checks, provenance refs, and deterministic diagnostic JSON | Planned first Evidence Builder milestone |
-| Full EIR | Claim-oriented EIR-L0/L1/L2 packaging, canonical serialization, proof-obligation updates, and evidence diff | Planned |
+| M10C | Claim-oriented EIR-L0/L1/L2 packaging, validation, canonical identity, and EIR-T/Protobuf/full-EIR JSON serialization | Planned; depends on M10B |
 | Review Agent | Prompt assembly, schema validation, evidence expansion, hypothesis admission, verifier dispatch, and final review rendering | Planned |
 
 The implemented [CpgQuery traversal](../../src/cpg/CpgQuery.cpp) already makes
@@ -87,8 +91,9 @@ already assigns stable fact identities and retains immediate derivation inputs.
 M9 is still needed to persist and explain complete rooted witness DAGs, and
 M10B is still needed to assemble those facts into an Evidence Builder slice.
 
-Each use case below has a readiness note so an implementation plan can split a
-near-term M10B demonstration from later EIR or domain extensions.
+Each use case below has a readiness note so implementation plans can separate
+the near-term M10B input demonstration, M10C serialization, and later Agent or
+domain extensions.
 
 ---
 
@@ -574,8 +579,8 @@ declare every referenced entity and provenance object.
 
 This is the M10B anchor use case. M6 supplies call and value-flow traversal;
 M9 supplies explanation; M10A supplies the required propagated range,
-unknown-effect, and coverage relations; M10B assembles the slice. Full EIR and
-the Agent loop remain later work.
+unknown-effect, and coverage relations; M10B assembles the slice. M10C assembles
+and serializes the full Evidence IR. The Agent loop remains later work.
 
 ---
 
@@ -1311,7 +1316,8 @@ claim dependencies are revalidated.
 ## 10.6 Readiness
 
 M7 supplies semantic-delta invalidation foundations. M9 supplies run history
-and stale state. Full EIR adds evidence dependencies and typed Evidence diff.
+and stale state. M10C adds evidence dependencies and typed Evidence IR;
+cross-revision Evidence diff remains later work.
 The Review Agent should be integrated only after those revision boundaries are
 enforceable.
 
@@ -1473,11 +1479,13 @@ Pattern-specific golden cases should cover:
 | Durable fact identity, witness DAGs, and Explain | M9 design specification sections 3, 5, and 7 |
 | FlowSlice and EvidenceQueryService | M10B design specification sections 3 and 4 |
 | First buffer-overflow fixture | M10B design specification sections 5 and 8 |
+| Typed EvidenceCase, validation, canonical identity, and serialization | M10C design specification sections 4 through 10 |
 
 Related implementation guidance:
 
 * [M9 provenance store implementation plan](../plans/milestones/m09-provenance-fact-store-explain-api-implementation-plan.md)
 * [M10B Evidence Builder implementation plan](../plans/milestones/m10b-evidence-builder-input-apis-demo-implementation-plan.md)
+* [M10C Evidence IR semantic model and serialization plan](../plans/milestones/m10c-evidence-ir-semantic-model-serialization-implementation-plan.md)
 
 ---
 
