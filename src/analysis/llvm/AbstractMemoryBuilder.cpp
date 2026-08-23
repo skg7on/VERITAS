@@ -104,7 +104,20 @@ GepSummary SummarizeGep(const ::llvm::GEPOperator& gep,
               ->getElementOffset(field)
               .getFixedValue());
       ::llvm::Type* next = struct_type->getElementType(field);
-      if (auto* st = ::llvm::dyn_cast<::llvm::StructType>(next)) {
+      if (auto* array = ::llvm::dyn_cast<::llvm::ArrayType>(next)) {
+        // An array field flattens to its element type, so a subsequent
+        // sequential index strides by the element size (mirrors
+        // gep_type_iterator::operator++).
+        in_struct = false;
+        struct_type = nullptr;
+        flat_type = array->getElementType();
+      } else if (auto* vector = ::llvm::dyn_cast<::llvm::VectorType>(next)) {
+        // A vector field is kept as the vector; the sequential branch steps by
+        // the element type.
+        in_struct = false;
+        struct_type = nullptr;
+        flat_type = vector;
+      } else if (auto* st = ::llvm::dyn_cast<::llvm::StructType>(next)) {
         in_struct = true;
         struct_type = st;
         flat_type = nullptr;

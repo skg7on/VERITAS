@@ -139,6 +139,20 @@ MemoryFixture NonHomogeneousFixture() {
   )", "store_wide");
 }
 
+MemoryFixture ArrayFieldFixture() {
+  // A struct field that is itself an array: `{ i32, [4 x float] }`. Field 1
+  // sits at byte offset 4; the subsequent sequential index 3 must stride by
+  // the ELEMENT size (4), not the whole array (16), for a total offset of 16.
+  return BuildFixture(R"(
+    %S = type { i32, [4 x float] }
+    define void @array_field(ptr %s) {
+      %gep = getelementptr inbounds %S, ptr %s, i64 0, i32 1, i64 3
+      store float 0.0, ptr %gep
+      ret void
+    }
+  )", "array_field");
+}
+
 MemoryFixture VariableIndexFixture() {
   return BuildFixture(R"(
     define void @indexed(ptr %arr, i64 %i) {
@@ -177,6 +191,24 @@ TEST(AbstractMemoryBuilderTest, NonHomogeneousStructFieldOffset) {
   EXPECT_EQ(location->access_path[1].first, 1);
   EXPECT_EQ(location->byte_range.offset, 8);
   EXPECT_EQ(location->byte_range.size, 8u);
+}
+
+TEST(AbstractMemoryBuilderTest, ArrayFieldIndexUsesElementStride) {
+  auto access = ArrayFieldFixture();
+  auto location = access.builder.LocationFor(*access.pointer, 4);
+  ASSERT_TRUE(location.ok());
+  ASSERT_EQ(location->access_path.size(), 3u);
+  EXPECT_EQ(location->access_path[0].kind,
+            AccessPathSegment::Kind::kArrayIndex);
+  EXPECT_EQ(location->access_path[1].kind,
+            AccessPathSegment::Kind::kField);
+  EXPECT_EQ(location->access_path[1].first, 1);
+  EXPECT_EQ(location->access_path[2].kind,
+            AccessPathSegment::Kind::kArrayIndex);
+  EXPECT_EQ(location->access_path[2].first, 3);
+  // Field 1 offset (4) + 3 * element size (4) = 16, not 4 + 3 * 16 = 52.
+  EXPECT_EQ(location->byte_range.offset, 16);
+  EXPECT_EQ(location->byte_range.size, 4u);
 }
 
 TEST(AbstractMemoryBuilderTest, RepresentsUnknownSuffixExplicitly) {
