@@ -24,7 +24,6 @@ target_link_libraries(project_ast_extractor_integration_test PRIVATE
   veritas_frontend_clang
   veritas_build
   veritas_test_support
-  GTest::gtest
   GTest::gtest_main
 )
 

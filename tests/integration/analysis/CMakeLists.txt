@@ -38,7 +38,6 @@ target_link_libraries(local_analysis_stage_integration_test
     veritas_analysis_pipeline
     veritas_build
     veritas_test_support
-    GTest::gtest
     GTest::gtest_main
 )
 
