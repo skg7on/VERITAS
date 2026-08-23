@@ -78,23 +78,41 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 - LLVM/Clang 22+ libraries (24.x recommended; build with `LLVM_ENABLE_RTTI=OFF` and `LLVM_ENABLE_EH=OFF`). The host C/C++ compiler is auto-detected separately and need not match the LLVM library version.
 - Z3 (`brew install z3` on macOS)
 
-**Canonical configure and build** (uses `CMakePresets.json` — Ninja generator, `build/` under the repo root, Debug):
+**Canonical local configure and build** (uses `CMakePresets.json` — Ninja generator, `build/` under the repo root, Debug):
 
 ```bash
-cmake --preset default -DLLVM_PROJECT_BUILD_DIR=/path/to/llvm-project/build
+# Replace the default path if your llvm-project build is elsewhere.
+cmake --preset default \
+  -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build
 cmake --build --preset default
 ctest --preset default
 ```
 
-`LLVM_PROJECT_BUILD_DIR` derives `LLVM_DIR` and `Clang_DIR` from a local `llvm-project` build tree and shares one LLVM installation with the vendored SVF. It supplies only the LLVM/Clang **headers and libraries** — the host C/C++ compiler is auto-detected independently (via `CC`/`CXX` or `CMAKE_C_COMPILER`) and need not match the LLVM version. Omit it to fall back to `find_package(LLVM/Clang CONFIG)` — provide `LLVM_DIR` / `Clang_DIR` on the command line, or let CMake search system paths.
+Local development builds must pass `LLVM_PROJECT_BUILD_DIR`; the default local
+LLVM build directory is
+`/Users/skg7on/Workspace/Projects/llvm-project/build`. CMake derives `LLVM_DIR`
+and `Clang_DIR` from that tree so VERITAS and the vendored SVF use the same
+LLVM installation.
+
+`LLVM_PROJECT_BUILD_DIR` supplies only the LLVM/Clang **headers and libraries**.
+It must not be used as `CMAKE_TOOLCHAIN_FILE` or as a compiler path. CMake
+auto-detects the host C/C++ build toolchain independently unless the compiler is
+explicitly overridden through `CC`/`CXX`, `CMAKE_C_COMPILER`, or
+`CMAKE_CXX_COMPILER`; the compiler version does not need to match the LLVM
+library version.
+
+For non-local environments, omit `LLVM_PROJECT_BUILD_DIR` to use
+`find_package(LLVM/Clang CONFIG)`: provide `LLVM_DIR` and `Clang_DIR` explicitly,
+or let CMake search system paths.
 
 **Available presets:** `default` (Debug), `debug`, `release`, `static-release` (opts out of `BUILD_SHARED_LIBS`). All resolve `binaryDir` to `<repo>/build`.
 
 **Configure without presets** (for CMake < 3.19 or non-Ninja generators):
 
 ```bash
+# Replace the default path if your llvm-project build is elsewhere.
 cmake -S . -B build -G Ninja \
-  -DLLVM_PROJECT_BUILD_DIR=/path/to/llvm-project/build
+  -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build
 cmake --build build -j
 ```
 
