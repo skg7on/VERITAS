@@ -24,6 +24,7 @@ add_library(veritas_svf_analysis STATIC
 target_link_libraries(veritas_svf_analysis
   PRIVATE
     veritas_third_party_svf
+    veritas_analysis_llvm
     veritas_analysis_pipeline
     veritas_summary
 )

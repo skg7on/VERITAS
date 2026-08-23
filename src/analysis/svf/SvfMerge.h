@@ -17,28 +17,34 @@
 
 #include <vector>
 
+#include "veritas/analysis/semantic/NormalizedAnalysisFacts.h"
 #include "veritas/summary/v1/summary.pb.h"
 
 namespace veritas::analysis::svf {
 
-struct SvfFacts;
+namespace semantic = veritas::analysis::semantic;
 
-} // namespace veritas::analysis::svf
+}  // namespace veritas::analysis::svf
 
 namespace veritas::analysis::llvm {
 class OriginMap;
-} // namespace veritas::analysis::llvm
+}  // namespace veritas::analysis::llvm
 
 namespace veritas::analysis::svf {
 
 // Merge SVF-mapped facts into M4 summary drafts. M4 MUST facts are never
 // erased; SVF value-flow, alias, memory-effect, call, and unknown facts augment
-// the matching draft. Unknowns are never dropped. Returns the merged drafts.
-std::vector<::veritas::summary::v1::FunctionSummary>
-MergeSvfFacts(std::vector<::veritas::summary::v1::FunctionSummary> drafts,
-              const SvfFacts &svf_facts,
-              const ::veritas::analysis::llvm::OriginMap &origin_map);
+// the matching draft. Unknowns are never dropped.
+//
+// Normalized SVF facts carry stable IDs without per-function ownership; calls
+// are attributed to their caller via diagnostic_symbol, and the remaining
+// whole-program facts are attached conservatively (Task 9 performs proper
+// per-function attribution against summary.v2).
+std::vector<::veritas::summary::v1::FunctionSummary> MergeSvfFacts(
+    std::vector<::veritas::summary::v1::FunctionSummary> drafts,
+    const semantic::NormalizedAnalysisFacts& svf_facts,
+    const ::veritas::analysis::llvm::OriginMap& origin_map);
 
-} // namespace veritas::analysis::svf
+}  // namespace veritas::analysis::svf
 
-#endif // VERITAS_ANALYSIS_SVF_SVFMERGE_H_
+#endif  // VERITAS_ANALYSIS_SVF_SVFMERGE_H_

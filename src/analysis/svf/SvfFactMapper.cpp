@@ -15,8 +15,10 @@
 #include "SvfFactMapper.h"
 
 #include <algorithm>
+#include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "analysis/svf/SvfBudget.h"
@@ -25,87 +27,72 @@
 #include <SVFIR/SVFIR.h>
 #include <WPA/Andersen.h>
 #include <Graphs/SVFG.h>
-#include <llvm/IR/Argument.h>
+#include <Graphs/SVFGNode.h>
+#include <Graphs/CallGraph.h>
+#include <Util/Casting.h>
+#include <llvm/IR/DataLayout.h>
 #include <llvm/IR/Function.h>
-#include <llvm/IR/Instruction.h>
+#include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
 
+#include "analysis/llvm/AbstractMemoryBuilder.h"
+#include "analysis/llvm/StableValueMapper.h"
 #include "analysis/pipeline/ProgramIr.h"
 
 namespace veritas::analysis::svf {
 namespace {
 
-// The owning function of an LLVM value, or nullptr for globals/constants.
-const ::llvm::Function* OwningFunction(const ::llvm::Value* value) {
-  if (const auto* inst = ::llvm::dyn_cast<::llvm::Instruction>(value)) {
-    return inst->getFunction();
-  }
-  if (const auto* arg = ::llvm::dyn_cast<::llvm::Argument>(value)) {
-    return arg->getParent();
-  }
-  return nullptr;
+namespace semantic = veritas::analysis::semantic;
+using veritas::core::StableId;
+
+// Resolve an SVF value to its underlying LLVM value, or nullptr when there is
+// no underlying LLVM value (e.g. a pure memory-region node).
+const ::llvm::Value* ResolveLlvmValue(const SVF::SVFValue* svf_value,
+                                      const SvfSessionView& view) {
+  if (!svf_value || !view.module_set) return nullptr;
+  if (!view.module_set->hasLLVMValue(svf_value)) return nullptr;
+  return view.module_set->getLLVMValue(svf_value);
 }
 
-// A VERITAS name for a resolved LLVM value, function-qualified so the merge
-// stage can attribute interprocedural facts to the owning summary. The name is
-// a deterministic proxy; the M4 origin map supplies true stable ValueRef
-// identity when populated.
-std::string LlvmValueName(const ::llvm::Value* value) {
-  std::string name;
-  if (value->hasName()) {
-    name = value->getName().str();
-  } else if (const auto* arg = ::llvm::dyn_cast<::llvm::Argument>(value)) {
-    name = "arg" + std::to_string(arg->getArgNo());
-  } else if (::llvm::isa<::llvm::Instruction>(value)) {
-    name = "tmp";
-  } else {
-    name = "value";
-  }
-  if (const ::llvm::Function* function = OwningFunction(value)) {
-    return function->getName().str() + ":" + name;
-  }
-  return name;
-}
-
-// Resolve an SVF value to a VERITAS ValueRef through the session-scoped LLVM
-// module set. Returns nullopt for SVF values with no underlying LLVM value.
-std::optional<summary::ValueRef> ResolveValue(const SVF::SVFValue* svf_value,
-                                              const SvfSessionView& view) {
-  if (!svf_value || !view.module_set) return std::nullopt;
-  if (!view.module_set->hasLLVMValue(svf_value)) return std::nullopt;
-  const ::llvm::Value* llvm_value = view.module_set->getLLVMValue(svf_value);
+// Resolve an SVF value to its stable kValueRef identity, or nullopt when it
+// has no underlying LLVM value.
+std::optional<StableId> ResolveValueId(const SVF::SVFValue* svf_value,
+                                       const SvfSessionView& view,
+                                       const llvm::StableValueMapper& values) {
+  const ::llvm::Value* llvm_value = ResolveLlvmValue(svf_value, view);
   if (!llvm_value) return std::nullopt;
-  return summary::ValueRef{LlvmValueName(llvm_value)};
+  auto id = values.IdFor(*llvm_value);
+  if (!id.ok()) return std::nullopt;
+  return *id;
 }
 
-// The SVFVar backing an SVFG node, or nullptr for nodes without a direct
-// value (e.g. pure memory-region nodes).
-const SVF::SVFVar* SvfValueForNode(const SVF::SVFGNode* node) {
-  if (!node) return nullptr;
-  return node->getValue();
-}
-
-// True when the SVFVar resolves to an LLVM value of pointer type. Only pointer
-// pairs are alias candidates.
-bool IsPointer(const SVF::SVFVar* var, const SvfSessionView& view) {
-  if (!var || !view.module_set) return false;
-  if (!view.module_set->hasLLVMValue(var)) return false;
-  const ::llvm::Value* llvm_value = view.module_set->getLLVMValue(var);
+// True when the SVF value resolves to an LLVM value of pointer type.
+bool IsPointer(const SVF::SVFValue* var, const SvfSessionView& view) {
+  const ::llvm::Value* llvm_value = ResolveLlvmValue(var, view);
   return llvm_value && llvm_value->getType()->isPointerTy();
 }
 
-std::string AliasRelationship(SVF::AliasResult result) {
+// Map an SVF alias result to a semantic AliasKind and independent epistemic
+// state. MustAlias/NoAlias are definite (kMust); MayAlias/PartialAlias are
+// may-results (kMay); anything unexpected degrades to kUnknownAlias/kUnknown.
+struct AliasObservation {
+  semantic::AliasKind kind;
+  semantic::EpistemicState epistemic;
+};
+
+AliasObservation MapAliasResult(SVF::AliasResult result) {
   switch (result) {
     case SVF::MustAlias:
-      return "MUST_ALIAS";
+      return {semantic::AliasKind::kMustAlias, semantic::EpistemicState::kMust};
     case SVF::NoAlias:
-      return "NO_ALIAS";
+      return {semantic::AliasKind::kNoAlias, semantic::EpistemicState::kMust};
     case SVF::MayAlias:
-      return "MAY_ALIAS";
+      return {semantic::AliasKind::kMayAlias, semantic::EpistemicState::kMay};
     case SVF::PartialAlias:
-      return "MAY_ALIAS";
+      return {semantic::AliasKind::kMayAlias, semantic::EpistemicState::kMay};
   }
-  return "UNKNOWN_ALIAS";
+  return {semantic::AliasKind::kUnknownAlias,
+          semantic::EpistemicState::kUnknown};
 }
 
 std::string MakeProvenance(const AnalyzerRunContext& run_context,
@@ -114,28 +101,35 @@ std::string MakeProvenance(const AnalyzerRunContext& run_context,
          ";config=" + config.CanonicalAnalyzerConfig();
 }
 
-// Collect every SVFG edge once, in deterministic node order.
-std::vector<const SVF::SVFGEdge*> CollectSvfgEdges(const SVF::SVFG& svfg) {
-  std::vector<const SVF::SVFGEdge*> edges;
-  for (auto it = svfg.begin(); it != svfg.end(); ++it) {
-    const SVF::SVFGNode* node = it->second;
-    for (auto edge_it = node->OutEdgeBegin(); edge_it != node->OutEdgeEnd();
-         ++edge_it) {
-      edges.push_back(*edge_it);
-    }
-  }
-  return edges;
+// A pointer admitted as an alias candidate, carrying its stable value identity
+// and its resolved memory location beside the SVF var (for Andersen queries).
+struct AliasPointer {
+  const SVF::SVFVar* var;
+  StableId value_id;  // kValueRef, the dedup/sort key
+  semantic::MemoryLocation location;
+};
+
+// Resolve an SVF pointer var into an AliasPointer, or nullopt when it is not a
+// pointer or cannot be mapped to a stable value/location identity.
+std::optional<AliasPointer> ResolveAliasPointer(
+    const SVF::SVFVar* var, const SvfSessionView& view,
+    const llvm::StableValueMapper& values,
+    const llvm::AbstractMemoryBuilder& memory) {
+  const ::llvm::Value* llvm_value = ResolveLlvmValue(var, view);
+  if (!llvm_value || !llvm_value->getType()->isPointerTy()) return std::nullopt;
+  auto id = values.IdFor(*llvm_value);
+  if (!id.ok()) return std::nullopt;
+  auto location = memory.LocationFor(*llvm_value, std::nullopt);
+  if (!location.ok()) return std::nullopt;
+  return AliasPointer{var, *id, std::move(*location)};
 }
 
-// An alias candidate retains the callback-scoped SVFVar pointers beside the
-// resolved VERITAS MemoryRefs so MapAliasResult can query Andersen without
-// re-resolving.
-struct AliasCandidate {
-  const SVF::SVFVar* left_var;
-  const SVF::SVFVar* right_var;
-  summary::MemoryRef left;
-  summary::MemoryRef right;
-};
+// Sort + unique a vector of fully-orderable facts (operator<=>/==).
+template <typename Vec>
+void Canonicalize(Vec& facts) {
+  std::sort(facts.begin(), facts.end());
+  facts.erase(std::unique(facts.begin(), facts.end()), facts.end());
+}
 
 }  // namespace
 
@@ -145,86 +139,309 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
                    const SvfConfig& config,
                    SvfMappingResult* result) {
   if (!result) return Status::Internal("result is null");
-  if (!view.svf_ir || !view.andersen || !view.svfg) {
+  if (!view.svf_ir || !view.andersen || !view.svfg || !view.module_set) {
     return Status::Internal("incomplete SVF session view");
   }
+  const ::llvm::Module* module = program_ir.GetModule();
+  if (!module) return Status::Internal("ProgramIr has no module");
 
-  SvfFacts facts;
-  std::vector<AliasCandidate> alias_candidates;
+  llvm::StableValueMapper values(*module, program_ir.origin_map());
+  llvm::AbstractMemoryBuilder memory(module->getDataLayout(), values,
+                                     program_ir.origin_map());
+
+  semantic::NormalizedAnalysisFacts facts;
   const std::string provenance = MakeProvenance(run_context, config);
-  int unmapped_count = 0;
   SvfBudget budget(config);
   bool truncated = false;
+  int unmapped_count = 0;
 
-  for (const auto* edge : CollectSvfgEdges(*view.svfg)) {
-    if (!edge) continue;
+  // Alias candidates, deduplicated by value identity. A std::map keyed by the
+  // value id gives deterministic, insertion-independent uniqueness and order.
+  std::map<StableId, AliasPointer> alias_pointers;
 
-    const SVF::SVFVar* source_var = SvfValueForNode(edge->getSrcNode());
-    const SVF::SVFVar* dest_var = SvfValueForNode(edge->getDstNode());
-    auto source = ResolveValue(source_var, view);
-    auto dest = ResolveValue(dest_var, view);
+  // ---- Pass 1: value flows, memory effects, and alias pointers ----
+  for (auto it = view.svfg->begin(); it != view.svfg->end(); ++it) {
+    const SVF::SVFGNode* node = it->second;
+    if (!node) continue;
 
-    if (!source || !dest) {
-      ++unmapped_count;
-      facts.unknowns.push_back(summary::UnknownFact{
-          .scope = "value_flow_edge",
-          .reason = "unmapped_svf_node",
-          .provenance = provenance,
+    if (const auto* load = SVF::SVFUtil::dyn_cast<SVF::LoadVFGNode>(node)) {
+      const SVF::SVFVar* pointer = load->getSrcNode();
+      auto location = ResolveAliasPointer(pointer, view, values, memory);
+      if (!location) {
+        ++unmapped_count;
+        facts.unknowns.push_back(semantic::NormalizedUnknown{
+            .scope = "memory_effect",
+            .reason = "unmapped_load_pointer",
+            .epistemic = semantic::EpistemicState::kUnknown,
+            .provenance_ref = provenance,
+        });
+      } else {
+        alias_pointers.emplace(location->value_id, *location);
+        auto operation = ResolveValueId(node->getValue(), view, values);
+        if (budget.TryEmit() && operation) {
+          facts.memory_effects.push_back(semantic::NormalizedMemoryEffect{
+              .operation = *operation,
+              .location = location->location,
+              .kind = semantic::MemoryEffectKind::kMayRead,
+              .epistemic = semantic::EpistemicState::kMay,
+              .provenance_ref = provenance,
+          });
+        } else if (!operation) {
+          ++unmapped_count;
+          facts.unknowns.push_back(semantic::NormalizedUnknown{
+              .scope = "memory_effect",
+              .reason = "unmapped_load_operation",
+              .epistemic = semantic::EpistemicState::kUnknown,
+              .provenance_ref = provenance,
+          });
+        } else {
+          truncated = true;
+        }
+      }
+    } else if (const auto* store = SVF::SVFUtil::dyn_cast<SVF::StoreVFGNode>(node)) {
+      const SVF::SVFVar* pointer = store->getDstNode();
+      auto location = ResolveAliasPointer(pointer, view, values, memory);
+      if (!location) {
+        ++unmapped_count;
+        facts.unknowns.push_back(semantic::NormalizedUnknown{
+            .scope = "memory_effect",
+            .reason = "unmapped_store_pointer",
+            .epistemic = semantic::EpistemicState::kUnknown,
+            .provenance_ref = provenance,
+        });
+      } else {
+        alias_pointers.emplace(location->value_id, *location);
+        auto operation = ResolveValueId(node->getValue(), view, values);
+        if (budget.TryEmit() && operation) {
+          facts.memory_effects.push_back(semantic::NormalizedMemoryEffect{
+              .operation = *operation,
+              .location = location->location,
+              .kind = semantic::MemoryEffectKind::kMayWrite,
+              .epistemic = semantic::EpistemicState::kMay,
+              .provenance_ref = provenance,
+          });
+        } else if (!operation) {
+          ++unmapped_count;
+          facts.unknowns.push_back(semantic::NormalizedUnknown{
+              .scope = "memory_effect",
+              .reason = "unmapped_store_operation",
+              .epistemic = semantic::EpistemicState::kUnknown,
+              .provenance_ref = provenance,
+          });
+        } else {
+          truncated = true;
+        }
+      }
+    }
+
+    // Value flows along out-edges (matching the pre-normalization mapper: any
+    // edge whose endpoints both resolve to LLVM values is a value flow).
+    for (auto edge_it = node->OutEdgeBegin(); edge_it != node->OutEdgeEnd();
+         ++edge_it) {
+      const SVF::SVFGEdge* edge = *edge_it;
+      if (!edge) continue;
+
+      const SVF::SVFVar* source_var =
+          edge->getSrcNode() ? edge->getSrcNode()->getValue() : nullptr;
+      const SVF::SVFVar* dest_var =
+          edge->getDstNode() ? edge->getDstNode()->getValue() : nullptr;
+      auto source = ResolveValueId(source_var, view, values);
+      auto dest = ResolveValueId(dest_var, view, values);
+
+      if (!source || !dest) {
+        ++unmapped_count;
+        facts.unknowns.push_back(semantic::NormalizedUnknown{
+            .scope = "value_flow_edge",
+            .reason = "unmapped_svf_node",
+            .epistemic = semantic::EpistemicState::kUnknown,
+            .provenance_ref = provenance,
+        });
+        continue;
+      }
+
+      if (budget.TryEmit()) {
+        facts.value_flows.push_back(semantic::NormalizedValueFlow{
+            .source_value_id = *source,
+            .destination_value_id = *dest,
+            .epistemic = semantic::EpistemicState::kMay,
+            .provenance_ref = provenance,
+        });
+      } else {
+        truncated = true;
+      }
+
+      // Pointer-pointer value-flow edges also admit alias candidates.
+      if (IsPointer(source_var, view) && IsPointer(dest_var, view)) {
+        if (auto candidate =
+                ResolveAliasPointer(source_var, view, values, memory)) {
+          alias_pointers.emplace(candidate->value_id, *candidate);
+        }
+        if (auto candidate =
+                ResolveAliasPointer(dest_var, view, values, memory)) {
+          alias_pointers.emplace(candidate->value_id, *candidate);
+        }
+      }
+    }
+  }
+
+  // ---- Pass 2: alias relationships over all admitted pointer pairs ----
+  {
+    std::vector<const AliasPointer*> ordered;
+    ordered.reserve(alias_pointers.size());
+    for (const auto& entry : alias_pointers) ordered.push_back(&entry.second);
+    // std::map iteration is already key-ordered (by value id), so `ordered`
+    // is sorted and the cross-product below is deterministic.
+    for (std::size_t i = 0; i < ordered.size(); ++i) {
+      for (std::size_t j = i + 1; j < ordered.size(); ++j) {
+        const AliasPointer& left = *ordered[i];
+        const AliasPointer& right = *ordered[j];
+        AliasObservation observation =
+            MapAliasResult(view.andersen->alias(left.var, right.var));
+        if (budget.TryEmit()) {
+          facts.aliases.push_back(semantic::NormalizedAlias{
+              .left = left.location,
+              .right = right.location,
+              .kind = observation.kind,
+              .epistemic = observation.epistemic,
+              .provenance_ref = provenance,
+          });
+        } else {
+          truncated = true;
+        }
+      }
+    }
+  }
+
+  // ---- Pass 3: indirect and virtual call targets ----
+  {
+    const SVF::CallGraph* callgraph = view.andersen->getCallGraph();
+
+    // Resolve each indirect call site to stable identities first, then sort by
+    // (call_site, caller, callee) so emission never depends on SVF's
+    // pointer-ordered maps.
+    struct ResolvedCall {
+      StableId call_site;
+      StableId caller;
+      std::optional<StableId> callee;
+      semantic::DispatchKind dispatch;
+      std::string diagnostic_symbol;
+    };
+    std::vector<ResolvedCall> resolved_calls;
+
+    for (const auto& entry : view.svf_ir->getIndirectCallsites()) {
+      const SVF::CallICFGNode* call_block = entry.first;
+      const ::llvm::Value* call_value = ResolveLlvmValue(call_block, view);
+      const auto* call = ::llvm::dyn_cast<::llvm::CallBase>(call_value);
+      if (!call || !call->getFunction()) {
+        ++unmapped_count;
+        facts.unknowns.push_back(semantic::NormalizedUnknown{
+            .scope = "indirect_call",
+            .reason = "unmapped_call_site",
+            .epistemic = semantic::EpistemicState::kUnknown,
+            .provenance_ref = provenance,
+        });
+        continue;
+      }
+
+      auto call_site_id = values.CallSiteIdFor(*call);
+      auto caller_id = values.IdFor(*call->getFunction());
+      if (!call_site_id.ok() || !caller_id.ok()) {
+        ++unmapped_count;
+        facts.unknowns.push_back(semantic::NormalizedUnknown{
+            .scope = "indirect_call",
+            .reason = "unmapped_call_site",
+            .epistemic = semantic::EpistemicState::kUnknown,
+            .provenance_ref = provenance,
+        });
+        continue;
+      }
+
+      const semantic::DispatchKind dispatch =
+          call_block->isVirtualCall() ? semantic::DispatchKind::kVirtual
+                                      : semantic::DispatchKind::kIndirect;
+
+      const SVF::CallGraph::FunctionSet* candidates = nullptr;
+      if (callgraph && callgraph->hasIndCSCallees(call_block)) {
+        candidates = &callgraph->getIndCSCallees(call_block);
+      }
+      if (!candidates || candidates->empty()) {
+        ++unmapped_count;
+        facts.unknowns.push_back(semantic::NormalizedUnknown{
+            .scope = "indirect_call",
+            .reason = "no_resolved_targets",
+            .epistemic = semantic::EpistemicState::kUnknown,
+            .provenance_ref = provenance,
+        });
+        continue;
+      }
+
+      for (const SVF::FunObjVar* candidate : *candidates) {
+        const ::llvm::Value* candidate_value =
+            ResolveLlvmValue(candidate, view);
+        const auto* callee_fn =
+            ::llvm::dyn_cast<::llvm::Function>(candidate_value);
+        auto callee_id = ResolveValueId(candidate, view, values);
+        if (!callee_fn || !callee_id) {
+          ++unmapped_count;
+          facts.unknowns.push_back(semantic::NormalizedUnknown{
+              .scope = "indirect_call",
+              .reason = "unmapped_callee",
+              .epistemic = semantic::EpistemicState::kUnknown,
+              .provenance_ref = provenance,
+          });
+          continue;
+        }
+        resolved_calls.push_back(ResolvedCall{
+            .call_site = *call_site_id,
+            .caller = *caller_id,
+            .callee = *callee_id,
+            .dispatch = dispatch,
+            .diagnostic_symbol = call->getFunction()->getName().str(),
+        });
+      }
+    }
+
+    std::sort(resolved_calls.begin(), resolved_calls.end(),
+              [](const ResolvedCall& a, const ResolvedCall& b) {
+                if (a.call_site != b.call_site) return a.call_site < b.call_site;
+                if (a.caller != b.caller) return a.caller < b.caller;
+                if (a.callee != b.callee) return a.callee < b.callee;
+                return a.dispatch < b.dispatch;
+              });
+
+    for (const ResolvedCall& call : resolved_calls) {
+      if (!budget.TryEmit()) {
+        truncated = true;
+        break;
+      }
+      facts.calls.push_back(semantic::NormalizedCallTarget{
+          .call_site = call.call_site,
+          .caller = call.caller,
+          .callee = call.callee,
+          .dispatch = call.dispatch,
+          .epistemic = semantic::EpistemicState::kMay,
+          .diagnostic_symbol = call.diagnostic_symbol,
+          .provenance_ref = provenance,
       });
-      continue;
-    }
-
-    if (!budget.TryEmit()) {
-      truncated = true;
-      break;
-    }
-    facts.value_flows.push_back(summary::ValueFlowFact{
-        .source = *source,
-        .destination = *dest,
-        .provenance = provenance,
-    });
-
-    if (IsPointer(source_var, view) && IsPointer(dest_var, view)) {
-      alias_candidates.push_back(AliasCandidate{
-          source_var, dest_var, summary::MemoryRef{source->name},
-          summary::MemoryRef{dest->name}});
     }
   }
 
-  // Query Andersen for each pointer candidate pair.
-  for (const auto& candidate : alias_candidates) {
-    if (!budget.TryEmit()) {
-      truncated = true;
-      break;
-    }
-    facts.aliases.push_back(summary::AliasFact{
-        .left = candidate.left,
-        .right = candidate.right,
-        .relationship = AliasRelationship(
-            view.andersen->alias(candidate.left_var, candidate.right_var)),
-        .provenance = provenance,
-    });
-  }
-
+  // ---- Pass 4: budget truncation becomes a scoped unknown ----
   if (truncated) {
-    facts.unknowns.push_back(summary::UnknownFact{
+    facts.unknowns.push_back(semantic::NormalizedUnknown{
         .scope = "analysis_truncated",
         .reason = BudgetReasonName(budget.state().reason),
-        .provenance = provenance,
+        .epistemic = semantic::EpistemicState::kUnknown,
+        .provenance_ref = provenance,
     });
   }
 
-  auto canonicalize = [](auto& fact_vec) {
-    std::sort(fact_vec.begin(), fact_vec.end());
-    fact_vec.erase(std::unique(fact_vec.begin(), fact_vec.end()),
-                   fact_vec.end());
-  };
-  canonicalize(facts.value_flows);
-  canonicalize(facts.aliases);
-  canonicalize(facts.refined_memory_effects);
-  canonicalize(facts.refined_calls);
-  canonicalize(facts.unknowns);
-  canonicalize(facts.dependencies);
+  Canonicalize(facts.value_flows);
+  Canonicalize(facts.aliases);
+  Canonicalize(facts.memory_effects);
+  Canonicalize(facts.calls);
+  Canonicalize(facts.unknowns);
+  Canonicalize(facts.dependencies);
 
   const auto completion = (unmapped_count > 0 || truncated)
                               ? SvfMappingCompletion::kCompleteWithUnknowns

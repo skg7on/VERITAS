@@ -87,7 +87,7 @@ TEST(SvfTruncationTest, TruncatedMappingReturnsCompleteWithUnknowns) {
     for (const auto& unknown : result.facts.unknowns) {
       EXPECT_FALSE(unknown.scope.empty());
       EXPECT_FALSE(unknown.reason.empty());
-      EXPECT_FALSE(unknown.provenance.empty());
+      EXPECT_FALSE(unknown.provenance_ref.empty());
     }
   }
 }
@@ -116,14 +116,14 @@ TEST(SvfTruncationTest, ValidPartialFactsPreservedAtTruncation) {
 
   // All emitted facts should be valid (deduplicated, with provenance)
   for (const auto& fact : result.facts.value_flows) {
-    EXPECT_FALSE(fact.provenance.empty());
+    EXPECT_FALSE(fact.provenance_ref.empty());
   }
 
   // Should not exceed the configured limit
   EXPECT_LE(result.facts.value_flows.size() +
             result.facts.aliases.size() +
-            result.facts.refined_memory_effects.size() +
-            result.facts.refined_calls.size(),
+            result.facts.memory_effects.size() +
+            result.facts.calls.size(),
             config.max_emitted_facts);
 }
 

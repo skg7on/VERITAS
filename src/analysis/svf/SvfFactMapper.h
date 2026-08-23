@@ -18,8 +18,9 @@
 #include <string>
 #include <vector>
 
-#include "analysis/svf/SvfSession.h"
 #include "analysis/svf/SvfConfig.h"
+#include "analysis/svf/SvfSession.h"
+#include "veritas/analysis/semantic/NormalizedAnalysisFacts.h"
 
 namespace veritas::analysis::pipeline {
 class ProgramIr;
@@ -27,105 +28,42 @@ class ProgramIr;
 
 namespace veritas::analysis::svf {
 
-// Placeholder types for VERITAS Summary IR facts
-// In real implementation these would be from include/veritas/summary/
-namespace summary {
-
-struct ValueRef {
-  std::string name;
-  auto operator<=>(const ValueRef&) const = default;
-};
-
-struct MemoryRef {
-  std::string name;
-  auto operator<=>(const MemoryRef&) const = default;
-};
-
-struct ValueFlowFact {
-  ValueRef source;
-  ValueRef destination;
-  std::string provenance;
-  auto operator<=>(const ValueFlowFact&) const = default;
-};
-
-struct AliasFact {
-  MemoryRef left;
-  MemoryRef right;
-  std::string relationship;  // MUST_ALIAS, MAY_ALIAS, NO_ALIAS, UNKNOWN_ALIAS
-  std::string provenance;
-  auto operator<=>(const AliasFact&) const = default;
-};
-
-struct MemoryEffectFact {
-  ValueRef operation;
-  MemoryRef memory;
-  std::string effect_kind;  // READ, WRITE, MAY_READ, MAY_WRITE
-  std::string provenance;
-  auto operator<=>(const MemoryEffectFact&) const = default;
-};
-
-struct CallFact {
-  ValueRef callsite;
-  ValueRef target;
-  std::string call_kind;  // MUST_CALL, MAY_CALL, UNKNOWN_CALL
-  std::string provenance;
-  auto operator<=>(const CallFact&) const = default;
-};
-
-struct UnknownFact {
-  std::string scope;
-  std::string reason;
-  std::string provenance;
-  auto operator<=>(const UnknownFact&) const = default;
-};
-
-struct DependencyEdge {
-  ValueRef from;
-  ValueRef to;
-  std::string kind;
-  auto operator<=>(const DependencyEdge&) const = default;
-};
-
-}  // namespace summary
-
-// AnalyzerRunContext provides identity and provenance for this analysis run
+// AnalyzerRunContext provides identity and provenance for this analysis run.
 struct AnalyzerRunContext {
   std::string analyzer_run_id;
   std::string llvm_toolchain_identity;
   std::string program_module_hash;
 };
 
-// SvfFacts contains all VERITAS-normalized facts mapped from SVF results
-struct SvfFacts {
-  std::vector<summary::ValueFlowFact> value_flows;
-  std::vector<summary::AliasFact> aliases;
-  std::vector<summary::MemoryEffectFact> refined_memory_effects;
-  std::vector<summary::CallFact> refined_calls;
-  std::vector<summary::UnknownFact> unknowns;
-  std::vector<summary::DependencyEdge> dependencies;
-};
+// SvfFacts contains all VERITAS-normalized facts mapped from SVF results. The
+// facts carry stable VERITAS identities (core::StableId) and typed semantic
+// enums; SVF-native nodes never leave this boundary.
+using SvfFacts = veritas::analysis::semantic::NormalizedAnalysisFacts;
 
-// SvfMappingCompletion indicates whether mapping completed fully or with unknowns
+// SvfMappingCompletion indicates whether mapping completed fully or with
+// unknowns.
 enum class SvfMappingCompletion {
   kComplete,
   kCompleteWithUnknowns,
 };
 
-// SvfMappingResult packages the completion status with mapped facts
+// SvfMappingResult packages the completion status with mapped facts.
 struct SvfMappingResult {
   SvfMappingCompletion completion;
   SvfFacts facts;
 };
 
-// MapSvfFacts translates SVF analysis results into VERITAS Summary IR facts.
+// MapSvfFacts translates SVF analysis results into normalized VERITAS facts.
 //
-// Resolves SVF values through LLVM values and M4 origin maps. Maps value-flow
-// edges, alias relationships, memory effects, and indirect call targets.
-// Attaches complete analyzer provenance to every fact.
+// Resolves SVF values through LLVM values, the Task 7 StableValueMapper /
+// AbstractMemoryBuilder, and the ProgramIr origin map. Maps value-flow edges,
+// alias relationships (all four AliasKind values with independent epistemic
+// state), memory effects (loads/stores), and indirect-call targets. Every fact
+// carries stable identities and complete analyzer provenance.
 //
 // Returns kComplete when all SVF results mapped successfully, or
-// kCompleteWithUnknowns when some results could not be resolved (unmapped
-// SVF nodes become scoped UnknownFacts).
+// kCompleteWithUnknowns when some results could not be resolved (unmapped SVF
+// nodes and empty/unknown indirect-call sets become scoped NormalizedUnknowns).
 Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
                    const SvfSessionView& view,
                    const AnalyzerRunContext& run_context,

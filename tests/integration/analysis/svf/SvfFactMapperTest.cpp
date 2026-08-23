@@ -26,11 +26,16 @@
 #include "analysis/svf/SvfMerge.h"
 #include "analysis/svf/SvfSession.h"
 #include "veritas/analysis/ProjectAnalysisRequest.h"
+#include "veritas/analysis/semantic/NormalizedAnalysisFacts.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
+#include "veritas/core/Ids.h"
 
 namespace veritas::analysis::svf {
 namespace {
+
+namespace semantic = veritas::analysis::semantic;
+namespace core = veritas::core;
 
 // Helper to build a fixture ProgramIr for testing
 std::unique_ptr<pipeline::ProgramIr>
@@ -93,7 +98,7 @@ TEST(SvfFactMapperTest, MapsParameterReturnFlow) {
 
   // All facts should have provenance
   for (const auto &fact : result.facts.value_flows) {
-    EXPECT_FALSE(fact.provenance.empty());
+    EXPECT_FALSE(fact.provenance_ref.empty());
   }
 }
 
@@ -115,13 +120,13 @@ TEST(SvfFactMapperTest, AttachesCompleteProvenance) {
 
   // All fact types should have provenance
   for (const auto &fact : result.facts.value_flows) {
-    EXPECT_NE(fact.provenance.find("analyzer="), std::string::npos);
+    EXPECT_NE(fact.provenance_ref.find("analyzer="), std::string::npos);
   }
   for (const auto &fact : result.facts.aliases) {
-    EXPECT_NE(fact.provenance.find("analyzer="), std::string::npos);
+    EXPECT_NE(fact.provenance_ref.find("analyzer="), std::string::npos);
   }
   for (const auto &fact : result.facts.unknowns) {
-    EXPECT_NE(fact.provenance.find("analyzer="), std::string::npos);
+    EXPECT_NE(fact.provenance_ref.find("analyzer="), std::string::npos);
   }
 }
 
@@ -135,57 +140,61 @@ TEST(SvfFactMapperTest, UnmappedNodesCreateUnknownFacts) {
     for (const auto &unknown : result.facts.unknowns) {
       EXPECT_FALSE(unknown.scope.empty());
       EXPECT_FALSE(unknown.reason.empty());
-      EXPECT_FALSE(unknown.provenance.empty());
+      EXPECT_FALSE(unknown.provenance_ref.empty());
     }
   }
 }
 
-TEST(SvfFactMapperTest, MergeResolvesExactSvfTargetName) {
-  auto program_ir = BuildFixtureProgramIr("identity");
-  auto *identity = program_ir->GetFunction("identity");
-  ASSERT_NE(identity, nullptr);
-  program_ir->mutable_origin_map().RecordOrigin(identity,
-                                                "funcvar:sha256:identity");
+TEST(SvfFactMapperTest, MergeAttributesCallsToCallerDraft) {
+  auto program_ir = BuildFixtureProgramIr("caller");
+  auto *caller = program_ir->GetFunction("caller");
+  ASSERT_NE(caller, nullptr);
+  program_ir->mutable_origin_map().RecordOrigin(caller,
+                                                "funcvar:sha256:caller");
 
   ::veritas::summary::v1::FunctionSummary draft;
   draft.mutable_identity()->set_function_variant_id("funcvar:sha256:caller");
-  SvfFacts facts;
-  facts.refined_calls.push_back(summary::CallFact{
-      .callsite = {.name = "funcvar:sha256:caller:site"},
-      .target = {.name = "identity"},
-      .call_kind = "MAY_CALL",
-      .provenance = "svf:test",
+  semantic::NormalizedAnalysisFacts facts;
+  facts.calls.push_back(semantic::NormalizedCallTarget{
+      .call_site = {core::IdKind::kCallSite, "aa"},
+      .caller = {core::IdKind::kValueRef, "bb"},
+      .callee = core::StableId{core::IdKind::kValueRef, "cc"},
+      .dispatch = semantic::DispatchKind::kIndirect,
+      .epistemic = semantic::EpistemicState::kMay,
+      .diagnostic_symbol = "caller",
+      .provenance_ref = "svf:test",
   });
 
   auto merged = MergeSvfFacts({draft}, facts, program_ir->origin_map());
   ASSERT_EQ(merged.size(), 1u);
   ASSERT_EQ(merged[0].calls_size(), 1);
-  EXPECT_EQ(merged[0].calls(0).resolved_callee_function_variant_id(),
-            "funcvar:sha256:identity");
+  EXPECT_EQ(merged[0].calls(0).callee_symbol(), "valref:sha256:cc");
+  EXPECT_EQ(merged[0].calls(0).call_site_anchor_id(), "callsite:sha256:aa");
 }
 
-TEST(SvfFactMapperTest, MergeAttributesRawSvfValuesThroughOriginMap) {
+TEST(SvfFactMapperTest, MergeAppendsValueFlowsAndAliases) {
   auto program_ir = BuildFixtureProgramIr("identity");
-  auto *identity = program_ir->GetFunction("identity");
-  ASSERT_NE(identity, nullptr);
-  const std::string function_id =
-      "funcvar:sha256:"
-      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-  program_ir->mutable_origin_map().RecordOrigin(identity, function_id);
 
   ::veritas::summary::v1::FunctionSummary draft;
-  draft.mutable_identity()->set_function_variant_id(function_id);
-  SvfFacts facts;
-  facts.value_flows.push_back(summary::ValueFlowFact{
-      .source = {.name = "identity:arg0"},
-      .destination = {.name = "identity:tmp"},
-      .provenance = "svf:test",
+  draft.mutable_identity()->set_function_variant_id("funcvar:sha256:identity");
+  semantic::NormalizedAnalysisFacts facts;
+  facts.value_flows.push_back(semantic::NormalizedValueFlow{
+      .source_value_id = {core::IdKind::kValueRef, "01"},
+      .destination_value_id = {core::IdKind::kValueRef, "02"},
+      .epistemic = semantic::EpistemicState::kMay,
+      .provenance_ref = "svf:test",
   });
-  facts.aliases.push_back(summary::AliasFact{
-      .left = {.name = "identity:left"},
-      .right = {.name = "identity:right"},
-      .relationship = "MAY_ALIAS",
-      .provenance = "svf:test",
+
+  semantic::MemoryLocation left;
+  left.id = {core::IdKind::kMemoryRef, "03"};
+  semantic::MemoryLocation right;
+  right.id = {core::IdKind::kMemoryRef, "04"};
+  facts.aliases.push_back(semantic::NormalizedAlias{
+      .left = left,
+      .right = right,
+      .kind = semantic::AliasKind::kNoAlias,
+      .epistemic = semantic::EpistemicState::kMust,
+      .provenance_ref = "svf:test",
   });
 
   auto merged = MergeSvfFacts({draft}, facts, program_ir->origin_map());
@@ -221,6 +230,8 @@ TEST(SvfFactMapperTest, LocalAnalysisSvfFactsMergeIntoHashedOwnerSummary) {
       });
   ASSERT_TRUE(status.ok()) << status.message();
   ASSERT_FALSE(mapped.facts.value_flows.empty());
+  // The on-disk store_load fixture performs a store and a load.
+  EXPECT_GT(mapped.facts.memory_effects.size(), 0u);
 
   auto merged = MergeSvfFacts(std::move(local->summary_drafts), mapped.facts,
                               local->program_ir.origin_map());

@@ -60,6 +60,52 @@ set_tests_properties(SvfFactMapperTest PROPERTIES
   LABELS "integration;svf"
 )
 
+add_executable(svf_indirect_call_integration_test
+  SvfIndirectCallTest.cpp
+)
+
+target_link_libraries(svf_indirect_call_integration_test
+  PRIVATE
+    veritas_svf_analysis
+    veritas_analysis_pipeline
+    veritas_unit_test_support
+    LLVMCore
+    LLVMSupport
+)
+
+target_include_directories(svf_indirect_call_integration_test
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+)
+
+add_test(NAME SvfIndirectCallTest COMMAND svf_indirect_call_integration_test)
+set_tests_properties(SvfIndirectCallTest PROPERTIES
+  TIMEOUT 30
+  LABELS "integration;svf"
+)
+
+add_executable(svf_alias_kinds_integration_test
+  SvfAliasKindsTest.cpp
+)
+
+target_link_libraries(svf_alias_kinds_integration_test
+  PRIVATE
+    veritas_svf_analysis
+    veritas_analysis_pipeline
+    veritas_unit_test_support
+    LLVMCore
+    LLVMSupport
+)
+
+target_include_directories(svf_alias_kinds_integration_test
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+)
+
+add_test(NAME SvfAliasKindsTest COMMAND svf_alias_kinds_integration_test)
+set_tests_properties(SvfAliasKindsTest PROPERTIES
+  TIMEOUT 30
+  LABELS "integration;svf"
+)
+
 add_executable(svf_truncation_integration_test
   SvfTruncationTest.cpp
 )

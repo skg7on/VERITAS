@@ -143,7 +143,7 @@ public:
     result.unknowns.reserve(svf_result->facts.unknowns.size());
     for (const auto &unknown : svf_result->facts.unknowns) {
       result.unknowns.push_back(
-          UnknownFact{unknown.scope, unknown.reason, unknown.provenance});
+          UnknownFact{unknown.scope, unknown.reason, unknown.provenance_ref});
     }
     return result;
   }
