@@ -83,3 +83,6 @@ Testing/
 
 # Editor / IDE settings
 .vscode/
+
+# Superpowers SDD scratch (ledger, briefs, review packages)
+.superpowers/

@@ -14,6 +14,7 @@
 
 add_library(veritas_analysis_semantic STATIC
   SemanticTypes.cpp
+  ModelBundle.cpp
 )
 
 target_include_directories(veritas_analysis_semantic

@@ -20,6 +20,7 @@
 
 #include "veritas/core/Hash.h"
 #include "veritas/summary/v1/summary.pb.h"
+#include "veritas/summary/v2/summary.pb.h"
 
 namespace veritas::summary {
 
@@ -45,6 +46,14 @@ std::vector<ComponentDigestInfo> ComputeComponentDigests(
 ComponentDigestInfo ComputeComponentDigest(
     v1::ComponentKind kind,
     const v1::FunctionSummary& summary);
+
+// V2 overloads preserve the same semantic/evidence split for summary.v2.
+std::vector<ComponentDigestInfo> ComputeComponentDigests(
+    const v2::FunctionSummary& summary);
+
+ComponentDigestInfo ComputeComponentDigest(
+    v1::ComponentKind kind,
+    const v2::FunctionSummary& summary);
 
 }  // namespace veritas::summary
 

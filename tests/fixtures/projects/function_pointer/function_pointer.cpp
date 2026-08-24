@@ -12,13 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Indirect call through function pointer fixture
+// Indirect call through a global function pointer fixture. `fp` is initialized
+// to `identity` so Andersen's points-to analysis resolves the indirect call in
+// `invoke_callback` to `identity`, which surfaces as a stable MAY target.
 typedef int (*Callback)(int);
 
 int identity(int x) {
   return x;
 }
 
-int invoke_callback(Callback callback, int value) {
-  return callback(value);
+Callback fp = &identity;
+
+int invoke_callback(int value) {
+  return fp(value);
 }

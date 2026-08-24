@@ -48,5 +48,25 @@ set_tests_properties(LocalAnalysisStageTest PROPERTIES
   LABELS "integration;analysis"
 )
 
+add_executable(summary_v2_pipeline_integration_test
+  SummaryV2PipelineTest.cpp
+)
+
+target_link_libraries(summary_v2_pipeline_integration_test
+  PRIVATE
+    veritas_analysis
+    veritas_summarydb
+    veritas_test_support
+    GTest::gtest
+    GTest::gtest_main
+)
+
+add_test(NAME SummaryV2PipelineTest
+  COMMAND summary_v2_pipeline_integration_test)
+set_tests_properties(SummaryV2PipelineTest PROPERTIES
+  TIMEOUT 180
+  LABELS "integration;analysis"
+)
+
 add_subdirectory(svf)
 add_subdirectory(cpg)

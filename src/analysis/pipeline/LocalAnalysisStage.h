@@ -20,16 +20,16 @@
 #include "analysis/pipeline/ProgramIr.h"
 #include "veritas/build/AnalysisManifest.h"
 #include "veritas/core/Status.h"
-#include "veritas/summary/v1/summary.pb.h"
+#include "veritas/summary/v2/summary.pb.h"
 
 namespace veritas::analysis::pipeline {
 
 // LocalAnalysisResult is the M4-to-M5 handoff: a live linked ProgramIr plus the
-// unpublished local FunctionSummary drafts that M5 merges with SVF facts. The
+// unpublished local summary.v2 drafts that M5 merges with SVF facts. The
 // ProgramIr stays alive so M5 and M6 can borrow it before publication.
 struct LocalAnalysisResult {
   ProgramIr program_ir;
-  std::vector<summary::v1::FunctionSummary> summary_drafts;
+  std::vector<summary::v2::FunctionSummary> summary_drafts;
 };
 
 // RunLocalAnalysis builds the linked whole-program IR from an M1 manifest,

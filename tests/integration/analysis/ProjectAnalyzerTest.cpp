@@ -61,6 +61,8 @@ TEST(ProjectAnalyzerTest, PublishesSummariesForFixture) {
   auto result = analyzer.AnalyzeProject(request, AnalysisConfig::Default());
   ASSERT_TRUE(result.ok()) << result.status().message();
   EXPECT_FALSE(result->program_context_id.empty());
+  EXPECT_FALSE(result->revision_id.empty());
+  EXPECT_FALSE(result->build_variant_id.empty());
   EXPECT_FALSE(result->published_summary_ids.empty());
 }
 

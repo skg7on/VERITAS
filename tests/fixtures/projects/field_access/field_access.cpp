@@ -21,3 +21,11 @@ struct Record {
 int field_access(Record* record) {
   return record->payload;
 }
+
+void field_store(Record* record) {
+  record->metadata = 42;
+}
+
+int variable_index(int* values, int index) {
+  return values[index];
+}

@@ -113,7 +113,7 @@ TEST(LocalAnalysisStageTest, DirectCallCarriesResolvedFunctionVariantId) {
   auto result = RunLocalAnalysis(*manifest);
   ASSERT_TRUE(result.ok()) << result.status().message();
 
-  const summary::v1::Call *add_call = nullptr;
+  const summary::v2::Call *add_call = nullptr;
   for (const auto &draft : result->summary_drafts) {
     for (const auto &call : draft.calls()) {
       if (call.callee_symbol().find("add") != std::string::npos) {
@@ -126,7 +126,7 @@ TEST(LocalAnalysisStageTest, DirectCallCarriesResolvedFunctionVariantId) {
       core::ParseStableId(add_call->resolved_callee_function_variant_id());
   ASSERT_TRUE(parsed.ok()) << parsed.status().message();
   EXPECT_EQ(parsed->kind, core::IdKind::kFunctionVariant);
-  auto call_site = core::ParseStableId(add_call->call_site_anchor_id());
+  auto call_site = core::ParseStableId(add_call->call_site_id());
   ASSERT_TRUE(call_site.ok()) << call_site.status().message();
   EXPECT_EQ(call_site->kind, core::IdKind::kCallSite);
 }

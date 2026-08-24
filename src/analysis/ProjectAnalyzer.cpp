@@ -22,6 +22,7 @@
 #include "analysis/svf/SvfConfig.h"
 #include "analysis/svf/SvfMerge.h"
 #include "cpg/CpgCanonicalizer.h"
+#include "veritas/analysis/semantic/ModelBundle.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
 #include "veritas/core/Ids.h"
@@ -30,6 +31,18 @@
 #include "ProjectPublicationCoordinator.h"
 
 namespace veritas::analysis {
+
+namespace {
+
+// The versioned external-model bundle is a checked-in source resource. Its
+// directory is baked in at configure time (VERITAS_LOGIC_MODELS_DIR) so the
+// analyzer loads the exact bundle it was built against.
+constexpr const char* kModelBundleRows =
+    VERITAS_LOGIC_MODELS_DIR "/models.v1.tsv";
+constexpr const char* kModelBundleManifest =
+    VERITAS_LOGIC_MODELS_DIR "/models.v1.manifest";
+
+}  // namespace
 
 AnalysisConfig AnalysisConfig::Default() {
   auto svf_config = svf::SvfConfig::Default();
@@ -86,10 +99,21 @@ public:
     if (!svf_result.ok())
       return svf_result.status();
 
-    // Merge SVF facts conservatively into the M4 drafts.
-    auto merged =
-        svf::MergeSvfFacts(std::move(local->summary_drafts), svf_result->facts,
-                           local->program_ir.origin_map());
+    // Load the versioned external-model bundle; its hash and rows feed the
+    // whole-program analysis, and modeled-function effects attach to the
+    // modeled function's summary.
+    auto model_bundle = semantic::ModelBundle::Load(kModelBundleRows,
+                                                    kModelBundleManifest);
+    if (!model_bundle.ok()) {
+      return model_bundle.status();
+    }
+
+    // Merge SVF facts by stable owning function ID into the summary.v2 drafts.
+    auto merged = svf::MergeSvfFactsV2(std::move(local->summary_drafts),
+                                       svf_result->facts, *model_bundle);
+    if (!merged.ok()) {
+      return merged.status();
+    }
 
     // M6: project the CPG from the live ProgramIr and completed summaries.
     auto revision_id = core::ParseStableId(manifest->context.revision_id);
@@ -101,7 +125,7 @@ public:
       return build_variant_id.status();
     auto graph = cpg::BuildThinCpg(cpg::CpgProjectionInput{
         .program_ir = local->program_ir,
-        .completed_summaries = merged,
+        .completed_summaries = *merged,
         .revision_id = *revision_id,
         .build_variant_id = *build_variant_id,
     });
@@ -121,9 +145,10 @@ public:
     auto persist = (*coordinator)->PersistManifestContext(*manifest);
     if (!persist.ok())
       return persist;
-    auto published = (*coordinator)
-                         ->Publish(CompletedProjectAnalysis{std::move(merged),
-                                                            std::move(*graph)});
+    auto published =
+        (*coordinator)
+            ->Publish(CompletedProjectAnalysis{std::move(*merged),
+                                               std::move(*graph)});
     if (!published.ok())
       return published.status();
 
@@ -136,6 +161,8 @@ public:
             ? AnalysisCompletion::kComplete
             : AnalysisCompletion::kCompleteWithUnknowns;
     result.program_context_id = manifest->context.revision_id;
+    result.revision_id = manifest->context.revision_id;
+    result.build_variant_id = manifest->context.build_variant_id;
     result.published_summary_ids.reserve(published->size());
     for (const auto &id : *published) {
       result.published_summary_ids.push_back(core::ToString(id));
@@ -143,7 +170,7 @@ public:
     result.unknowns.reserve(svf_result->facts.unknowns.size());
     for (const auto &unknown : svf_result->facts.unknowns) {
       result.unknowns.push_back(
-          UnknownFact{unknown.scope, unknown.reason, unknown.provenance});
+          UnknownFact{unknown.scope, unknown.reason, unknown.provenance_ref});
     }
     return result;
   }

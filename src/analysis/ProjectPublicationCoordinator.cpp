@@ -19,6 +19,7 @@
 
 #include "veritas/cpg/CpgRepository.h"
 #include "veritas/summary/FunctionSummary.h"
+#include "veritas/summary/SummaryArtifact.h"
 #include "veritas/summarydb/SummaryRepository.h"
 
 namespace veritas::analysis {
@@ -44,6 +45,18 @@ Status ValidateSnapshotCorrespondence(const CompletedProjectAnalysis& completed)
         "graph summary IDs do not match completed summaries");
   }
   return Status::Ok();
+}
+
+// Wrap the completed summary.v2 objects in version-neutral artifacts so the
+// storage layer records their summary.v2 schema and CAS identity.
+std::vector<summary::SummaryArtifact> ToArtifacts(
+    const std::vector<summary::v2::FunctionSummary>& summaries) {
+  std::vector<summary::SummaryArtifact> artifacts;
+  artifacts.reserve(summaries.size());
+  for (const auto& summary : summaries) {
+    artifacts.emplace_back(summary);
+  }
+  return artifacts;
 }
 
 }  // namespace
@@ -77,8 +90,11 @@ StatusOr<std::vector<core::StableId>> ProjectPublicationCoordinator::Publish(
   auto correspondence = ValidateSnapshotCorrespondence(completed);
   if (!correspondence.ok()) return correspondence;
 
-  // Immutable objects first (outside the transaction).
-  auto put = summaries_->PutImmutableSummaries(completed.summaries);
+  // Immutable objects first (outside the transaction), through the
+  // version-neutral CAS path so summary.v2 schema versions are recorded.
+  std::vector<summary::SummaryArtifact> artifacts =
+      ToArtifacts(completed.summaries);
+  auto put = summaries_->PutImmutableSummaryArtifacts(artifacts);
   if (!put.ok()) return put.status();
 
   auto& metadata = summaries_->metadata_store();
@@ -92,9 +108,9 @@ StatusOr<std::vector<core::StableId>> ProjectPublicationCoordinator::Publish(
                                                         rollback_guard);
 
   const auto& meta = completed.graph.metadata();
-  auto stage_summaries = summaries_->StageCurrentBindings(
+  auto stage_summaries = summaries_->StageCurrentArtifactBindings(
       core::ToString(meta.revision_id), core::ToString(meta.build_variant_id),
-      completed.summaries);
+      artifacts);
   if (!stage_summaries.ok()) return stage_summaries;
 
   auto stage_cpg = cpg_->StageProjection(completed.graph);

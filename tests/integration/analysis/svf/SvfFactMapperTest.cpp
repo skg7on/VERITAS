@@ -14,6 +14,8 @@
 
 #include "analysis/svf/SvfFactMapper.h"
 
+#include <filesystem>
+
 #include <gtest/gtest.h>
 
 #include <llvm/IR/IRBuilder.h>
@@ -26,11 +28,17 @@
 #include "analysis/svf/SvfMerge.h"
 #include "analysis/svf/SvfSession.h"
 #include "veritas/analysis/ProjectAnalysisRequest.h"
+#include "veritas/analysis/semantic/ModelBundle.h"
+#include "veritas/analysis/semantic/NormalizedAnalysisFacts.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
+#include "veritas/core/Ids.h"
 
 namespace veritas::analysis::svf {
 namespace {
+
+namespace semantic = veritas::analysis::semantic;
+namespace core = veritas::core;
 
 // Helper to build a fixture ProgramIr for testing
 std::unique_ptr<pipeline::ProgramIr>
@@ -52,6 +60,25 @@ BuildFixtureProgramIr(const std::string &fixture_name) {
   ::llvm::IRBuilder<> builder(entry);
   builder.CreateRet(func->getArg(0));
 
+  program_ir->SetModule(std::move(module));
+  return program_ir;
+}
+
+// Helper to build a ProgramIr with two functions, foo and bar.
+std::unique_ptr<pipeline::ProgramIr> BuildTwoFunctionProgramIr() {
+  auto program_ir = std::make_unique<pipeline::ProgramIr>();
+  auto module =
+      std::make_unique<::llvm::Module>("two", program_ir->GetContext());
+  auto *i32ty = ::llvm::Type::getInt32Ty(program_ir->GetContext());
+  auto *func_type = ::llvm::FunctionType::get(i32ty, {i32ty}, false);
+  for (const char *name : {"foo", "bar"}) {
+    auto *func = ::llvm::Function::Create(
+        func_type, ::llvm::Function::ExternalLinkage, name, module.get());
+    auto *entry =
+        ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry", func);
+    ::llvm::IRBuilder<> builder(entry);
+    builder.CreateRet(func->getArg(0));
+  }
   program_ir->SetModule(std::move(module));
   return program_ir;
 }
@@ -93,7 +120,7 @@ TEST(SvfFactMapperTest, MapsParameterReturnFlow) {
 
   // All facts should have provenance
   for (const auto &fact : result.facts.value_flows) {
-    EXPECT_FALSE(fact.provenance.empty());
+    EXPECT_FALSE(fact.provenance_ref.empty());
   }
 }
 
@@ -115,13 +142,13 @@ TEST(SvfFactMapperTest, AttachesCompleteProvenance) {
 
   // All fact types should have provenance
   for (const auto &fact : result.facts.value_flows) {
-    EXPECT_NE(fact.provenance.find("analyzer="), std::string::npos);
+    EXPECT_NE(fact.provenance_ref.find("analyzer="), std::string::npos);
   }
   for (const auto &fact : result.facts.aliases) {
-    EXPECT_NE(fact.provenance.find("analyzer="), std::string::npos);
+    EXPECT_NE(fact.provenance_ref.find("analyzer="), std::string::npos);
   }
   for (const auto &fact : result.facts.unknowns) {
-    EXPECT_NE(fact.provenance.find("analyzer="), std::string::npos);
+    EXPECT_NE(fact.provenance_ref.find("analyzer="), std::string::npos);
   }
 }
 
@@ -135,63 +162,109 @@ TEST(SvfFactMapperTest, UnmappedNodesCreateUnknownFacts) {
     for (const auto &unknown : result.facts.unknowns) {
       EXPECT_FALSE(unknown.scope.empty());
       EXPECT_FALSE(unknown.reason.empty());
-      EXPECT_FALSE(unknown.provenance.empty());
+      EXPECT_FALSE(unknown.provenance_ref.empty());
     }
   }
 }
 
-TEST(SvfFactMapperTest, MergeResolvesExactSvfTargetName) {
-  auto program_ir = BuildFixtureProgramIr("identity");
-  auto *identity = program_ir->GetFunction("identity");
-  ASSERT_NE(identity, nullptr);
-  program_ir->mutable_origin_map().RecordOrigin(identity,
-                                                "funcvar:sha256:identity");
+TEST(SvfFactMapperTest, MergeAttributesCallsToCallerDraft) {
+  auto program_ir = BuildFixtureProgramIr("caller");
+  auto *caller = program_ir->GetFunction("caller");
+  ASSERT_NE(caller, nullptr);
+  program_ir->mutable_origin_map().RecordOrigin(caller,
+                                                "funcvar:sha256:caller");
 
   ::veritas::summary::v1::FunctionSummary draft;
   draft.mutable_identity()->set_function_variant_id("funcvar:sha256:caller");
-  SvfFacts facts;
-  facts.refined_calls.push_back(summary::CallFact{
-      .callsite = {.name = "funcvar:sha256:caller:site"},
-      .target = {.name = "identity"},
-      .call_kind = "MAY_CALL",
-      .provenance = "svf:test",
+  semantic::NormalizedAnalysisFacts facts;
+  facts.calls.push_back(semantic::NormalizedCallTarget{
+      .call_site = {core::IdKind::kCallSite, "aa"},
+      .caller = {core::IdKind::kValueRef, "bb"},
+      .callee = core::StableId{core::IdKind::kValueRef, "cc"},
+      .dispatch = semantic::DispatchKind::kIndirect,
+      .epistemic = semantic::EpistemicState::kMay,
+      .diagnostic_symbol = "caller",
+      .provenance_ref = "svf:test",
   });
 
   auto merged = MergeSvfFacts({draft}, facts, program_ir->origin_map());
   ASSERT_EQ(merged.size(), 1u);
   ASSERT_EQ(merged[0].calls_size(), 1);
-  EXPECT_EQ(merged[0].calls(0).resolved_callee_function_variant_id(),
-            "funcvar:sha256:identity");
+  EXPECT_EQ(merged[0].calls(0).callee_symbol(), "valref:sha256:cc");
+  EXPECT_EQ(merged[0].calls(0).call_site_anchor_id(), "callsite:sha256:aa");
 }
 
-TEST(SvfFactMapperTest, MergeAttributesRawSvfValuesThroughOriginMap) {
-  auto program_ir = BuildFixtureProgramIr("identity");
-  auto *identity = program_ir->GetFunction("identity");
-  ASSERT_NE(identity, nullptr);
-  const std::string function_id =
-      "funcvar:sha256:"
-      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-  program_ir->mutable_origin_map().RecordOrigin(identity, function_id);
+TEST(SvfFactMapperTest, MergeDoesNotLeakWholeProgramFactsAcrossFunctions) {
+  auto program_ir = BuildTwoFunctionProgramIr();
+  program_ir->mutable_origin_map().RecordOrigin(program_ir->GetFunction("foo"),
+                                                "funcvar:sha256:foo");
+  program_ir->mutable_origin_map().RecordOrigin(program_ir->GetFunction("bar"),
+                                                "funcvar:sha256:bar");
 
-  ::veritas::summary::v1::FunctionSummary draft;
-  draft.mutable_identity()->set_function_variant_id(function_id);
-  SvfFacts facts;
-  facts.value_flows.push_back(summary::ValueFlowFact{
-      .source = {.name = "identity:arg0"},
-      .destination = {.name = "identity:tmp"},
-      .provenance = "svf:test",
-  });
-  facts.aliases.push_back(summary::AliasFact{
-      .left = {.name = "identity:left"},
-      .right = {.name = "identity:right"},
-      .relationship = "MAY_ALIAS",
-      .provenance = "svf:test",
+  ::veritas::summary::v1::FunctionSummary foo_draft;
+  foo_draft.mutable_identity()->set_function_variant_id("funcvar:sha256:foo");
+  ::veritas::summary::v1::FunctionSummary bar_draft;
+  bar_draft.mutable_identity()->set_function_variant_id("funcvar:sha256:bar");
+
+  semantic::NormalizedAnalysisFacts facts;
+
+  // A MUST-level NO_ALIAS — the kind of fact that must never be fabricated
+  // into an unrelated function's summary.
+  semantic::MemoryLocation left;
+  left.id = {core::IdKind::kMemoryRef, "left"};
+  semantic::MemoryLocation right;
+  right.id = {core::IdKind::kMemoryRef, "right"};
+  facts.aliases.push_back(semantic::NormalizedAlias{
+      .left = left,
+      .right = right,
+      .kind = semantic::AliasKind::kNoAlias,
+      .epistemic = semantic::EpistemicState::kMust,
+      .provenance_ref = "svf:test",
   });
 
-  auto merged = MergeSvfFacts({draft}, facts, program_ir->origin_map());
-  ASSERT_EQ(merged.size(), 1u);
-  EXPECT_EQ(merged[0].value_flows_size(), 1);
-  EXPECT_EQ(merged[0].alias_facts_size(), 1);
+  facts.value_flows.push_back(semantic::NormalizedValueFlow{
+      .source_value_id = {core::IdKind::kValueRef, "01"},
+      .destination_value_id = {core::IdKind::kValueRef, "02"},
+      .epistemic = semantic::EpistemicState::kMay,
+      .provenance_ref = "svf:test",
+  });
+
+  semantic::MemoryLocation mem;
+  mem.id = {core::IdKind::kMemoryRef, "mem"};
+  facts.memory_effects.push_back(semantic::NormalizedMemoryEffect{
+      .operation = {core::IdKind::kValueRef, "op"},
+      .location = mem,
+      .kind = semantic::MemoryEffectKind::kMayWrite,
+      .epistemic = semantic::EpistemicState::kMay,
+      .provenance_ref = "svf:test",
+  });
+
+  // A call made inside foo.
+  facts.calls.push_back(semantic::NormalizedCallTarget{
+      .call_site = {core::IdKind::kCallSite, "cs"},
+      .caller = {core::IdKind::kValueRef, "foo"},
+      .callee = core::StableId{core::IdKind::kValueRef, "callee"},
+      .dispatch = semantic::DispatchKind::kIndirect,
+      .epistemic = semantic::EpistemicState::kMay,
+      .diagnostic_symbol = "foo",
+      .provenance_ref = "svf:test",
+  });
+
+  auto merged = MergeSvfFacts({foo_draft, bar_draft}, facts,
+                              program_ir->origin_map());
+  ASSERT_EQ(merged.size(), 2u);
+
+  // Whole-program facts (value flows, aliases, memory effects) must not leak
+  // into either draft.
+  for (const auto &draft : merged) {
+    EXPECT_EQ(draft.value_flows_size(), 0);
+    EXPECT_EQ(draft.alias_facts_size(), 0);
+    EXPECT_EQ(draft.memory_effects_size(), 0);
+  }
+
+  // The call is attributed only to its caller, foo (draft order preserved).
+  EXPECT_EQ(merged[0].calls_size(), 1);
+  EXPECT_EQ(merged[1].calls_size(), 0);
 }
 
 TEST(SvfFactMapperTest, LocalAnalysisSvfFactsMergeIntoHashedOwnerSummary) {
@@ -221,11 +294,23 @@ TEST(SvfFactMapperTest, LocalAnalysisSvfFactsMergeIntoHashedOwnerSummary) {
       });
   ASSERT_TRUE(status.ok()) << status.message();
   ASSERT_FALSE(mapped.facts.value_flows.empty());
+  // The on-disk store_load fixture performs a store and a load.
+  EXPECT_GT(mapped.facts.memory_effects.size(), 0u);
 
-  auto merged = MergeSvfFacts(std::move(local->summary_drafts), mapped.facts,
-                              local->program_ir.origin_map());
-  ASSERT_EQ(merged.size(), 1u);
-  EXPECT_GT(merged[0].value_flows_size(), original_flows);
+  const auto model_dir =
+      testing::TestSourceRoot().parent_path() / "logic" / "models";
+  auto bundle = semantic::ModelBundle::Load(model_dir / "models.v1.tsv",
+                                            model_dir / "models.v1.manifest");
+  ASSERT_TRUE(bundle.ok()) << bundle.status().message();
+
+  auto merged = MergeSvfFactsV2(std::move(local->summary_drafts),
+                                mapped.facts, *bundle);
+  ASSERT_TRUE(merged.ok()) << merged.status().message();
+  ASSERT_EQ(merged->size(), 1u);
+  // Whole-program SVF value flows carry no recoverable per-function owner, so
+  // they stay gated out of the merged summary.v2; the draft retains only its
+  // local (M4) value flows.
+  EXPECT_EQ((*merged)[0].value_flows_size(), original_flows);
 }
 
 } // namespace

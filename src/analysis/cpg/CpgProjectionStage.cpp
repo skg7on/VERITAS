@@ -31,6 +31,7 @@ namespace veritas::analysis::cpg {
 namespace {
 
 namespace v1 = veritas::summary::v1;
+namespace v2 = veritas::summary::v2;
 using ::veritas::cpg::AliasState;
 using ::veritas::cpg::CpgEdge;
 using ::veritas::cpg::CpgNode;
@@ -44,16 +45,38 @@ core::StableId MakeId(core::IdKind kind, std::string_view value) {
       kind, std::as_bytes(std::span(value.data(), value.size())));
 }
 
-AliasState ToAliasState(v1::EpistemicState state) {
-  switch (state) {
-  case v1::EPISTEMIC_STATE_MUST:
+// Parse a stable-ID string and reject it unless it is a well-formed ID of the
+// expected kind. Used for V2 structured memory/value identities so the CPG
+// never re-derives an identity from a diagnostic string.
+StatusOr<core::StableId> ParseIdOfKind(std::string_view text,
+                                       core::IdKind expected) {
+  auto parsed = core::ParseStableId(text);
+  if (!parsed.ok()) {
+    return parsed.status();
+  }
+  if (!core::HexToDigest(parsed->digest_hex).has_value()) {
+    return Status::InvalidArgument("invalid CPG identity: invalid SHA-256");
+  }
+  if (parsed->kind != expected) {
+    return Status::InvalidArgument("invalid CPG identity: wrong ID kind");
+  }
+  return *parsed;
+}
+
+// The V2 alias kind is a semantic AliasKind; map it directly to the CPG alias
+// state rather than re-deriving it from epistemic certainty.
+AliasState ToAliasState(v2::AliasKind kind) {
+  switch (kind) {
+  case v2::ALIAS_KIND_MUST_ALIAS:
     return AliasState::kMustAlias;
-  case v1::EPISTEMIC_STATE_MUST_NOT:
+  case v2::ALIAS_KIND_MAY_ALIAS:
+    return AliasState::kMayAlias;
+  case v2::ALIAS_KIND_NO_ALIAS:
     return AliasState::kNoAlias;
-  case v1::EPISTEMIC_STATE_UNKNOWN:
+  case v2::ALIAS_KIND_UNKNOWN_ALIAS:
     return AliasState::kUnknownAlias;
   default:
-    return AliasState::kMayAlias;
+    return AliasState::kUnknownAlias;
   }
 }
 
@@ -131,7 +154,7 @@ StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
       return status;
   }
 
-  // 2. Summary nodes and semantic edges from completed facts.
+  // 2. Summary nodes and semantic edges from completed summary.v2 facts.
   std::vector<core::StableId> summary_ids;
   summary_ids.reserve(input.completed_summaries.size());
   for (const auto &summary : input.completed_summaries) {
@@ -203,63 +226,82 @@ StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
       }
     }
 
-    // READS / WRITES.
+    // READS / WRITES. V2 memory effects carry a structured MemoryLocation
+    // whose memory_location_id is the durable kMemoryRef identity; the CPG
+    // uses that identity directly instead of re-deriving one from a string.
     for (const auto &effect : summary.memory_effects()) {
-      core::StableId memory =
-          MakeId(core::IdKind::kMemoryRef, fn + ":" + effect.location());
+      auto memory = ParseIdOfKind(effect.location().memory_location_id(),
+                                  core::IdKind::kMemoryRef);
+      if (!memory.ok())
+        return memory.status();
+      const std::string &diagnostic = effect.location().object().diagnostic_name();
+      const std::string label =
+          diagnostic.empty() ? effect.location().memory_location_id()
+                             : diagnostic;
       auto add_memory = graph.AddNode(
-          CpgNode{memory, NodeKind::kMemoryObject, effect.location()});
+          CpgNode{*memory, NodeKind::kMemoryObject, label});
       if (!add_memory.ok())
         return add_memory;
       const EdgeKind kind = effect.kind() == v1::EFFECT_KIND_WRITE
                                 ? EdgeKind::kWrites
                                 : EdgeKind::kReads;
       auto status =
-          AddSemanticEdge(&graph, kind, fn_it->second, memory, std::nullopt,
+          AddSemanticEdge(&graph, kind, fn_it->second, *memory, std::nullopt,
                           {SupportRef{summary_id, effect.provenance_ref()}});
       if (!status.ok())
         return status;
     }
 
-    // FLOWS_TO.
+    // FLOWS_TO. V2 value flows carry stable kValueRef identities.
     for (const auto &flow : summary.value_flows()) {
-      core::StableId source =
-          MakeId(core::IdKind::kValueRef, fn + ":" + flow.source());
-      core::StableId sink =
-          MakeId(core::IdKind::kValueRef, fn + ":" + flow.sink());
-      auto add_src =
-          graph.AddNode(CpgNode{source, NodeKind::kParameter, flow.source()});
-      auto add_sink =
-          graph.AddNode(CpgNode{sink, NodeKind::kParameter, flow.sink()});
+      auto source = ParseIdOfKind(flow.source_value_id(), core::IdKind::kValueRef);
+      auto sink =
+          ParseIdOfKind(flow.destination_value_id(), core::IdKind::kValueRef);
+      if (!source.ok())
+        return source.status();
+      if (!sink.ok())
+        return sink.status();
+      auto add_src = graph.AddNode(
+          CpgNode{*source, NodeKind::kParameter, flow.source_value_id()});
+      auto add_sink = graph.AddNode(
+          CpgNode{*sink, NodeKind::kParameter, flow.destination_value_id()});
       if (!add_src.ok())
         return add_src;
       if (!add_sink.ok())
         return add_sink;
       auto status = AddSemanticEdge(
-          &graph, EdgeKind::kFlowsTo, source, sink, std::nullopt,
+          &graph, EdgeKind::kFlowsTo, *source, *sink, std::nullopt,
           {SupportRef{summary_id, flow.provenance_ref()}});
       if (!status.ok())
         return status;
     }
 
-    // ALIASES.
+    // ALIASES. V2 alias facts carry structured locations and a semantic
+    // AliasKind, both projected directly without reverting to strings.
     for (const auto &alias : summary.alias_facts()) {
-      core::StableId left =
-          MakeId(core::IdKind::kMemoryRef, fn + ":" + alias.location_a());
-      core::StableId right =
-          MakeId(core::IdKind::kMemoryRef, fn + ":" + alias.location_b());
-      auto add_left = graph.AddNode(
-          CpgNode{left, NodeKind::kMemoryObject, alias.location_a()});
-      auto add_right = graph.AddNode(
-          CpgNode{right, NodeKind::kMemoryObject, alias.location_b()});
+      auto left = ParseIdOfKind(alias.left().memory_location_id(),
+                                core::IdKind::kMemoryRef);
+      auto right = ParseIdOfKind(alias.right().memory_location_id(),
+                                 core::IdKind::kMemoryRef);
+      if (!left.ok())
+        return left.status();
+      if (!right.ok())
+        return right.status();
+      const std::string &left_diag = alias.left().object().diagnostic_name();
+      const std::string &right_diag = alias.right().object().diagnostic_name();
+      auto add_left = graph.AddNode(CpgNode{
+          *left, NodeKind::kMemoryObject,
+          left_diag.empty() ? alias.left().memory_location_id() : left_diag});
+      auto add_right = graph.AddNode(CpgNode{
+          *right, NodeKind::kMemoryObject,
+          right_diag.empty() ? alias.right().memory_location_id() : right_diag});
       if (!add_left.ok())
         return add_left;
       if (!add_right.ok())
         return add_right;
-      auto status =
-          AddSemanticEdge(&graph, EdgeKind::kAliases, left, right,
-                          ToAliasState(alias.epistemic()),
-                          {SupportRef{summary_id, alias.provenance_ref()}});
+      auto status = AddSemanticEdge(
+          &graph, EdgeKind::kAliases, *left, *right, ToAliasState(alias.kind()),
+          {SupportRef{summary_id, alias.provenance_ref()}});
       if (!status.ok())
         return status;
     }

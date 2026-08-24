@@ -19,6 +19,7 @@
 
 #include "veritas/core/Status.h"
 #include "veritas/summary/LocalSummaryBuilder.h"
+#include "veritas/summary/SummaryV2Builder.h"
 
 namespace veritas::analysis::pipeline {
 class ProgramIr;
@@ -33,6 +34,13 @@ namespace veritas::analysis::llvm {
 class LocalFactExtractor {
  public:
   veritas::StatusOr<std::vector<summary::FunctionLocalFacts>> Extract(
+      pipeline::ProgramIr& program_ir) const;
+
+  // V2 refinement of Extract: produces FunctionLocalFactsV2 with typed
+  // call/memory/value-flow/alias facts. Call sites, values, and memory
+  // locations carry collision-free StableIds via StableValueMapper and
+  // AbstractMemoryBuilder. The V1 Extract path is unchanged.
+  veritas::StatusOr<std::vector<summary::FunctionLocalFactsV2>> ExtractV2(
       pipeline::ProgramIr& program_ir) const;
 };
 

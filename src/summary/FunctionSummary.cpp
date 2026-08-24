@@ -35,4 +35,17 @@ veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
   return core::MakeStableId(core::IdKind::kFunctionSummary, bytes_span);
 }
 
+veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
+    const v2::FunctionSummary& summary) {
+  // Serialize the entire summary to canonical bytes
+  std::string serialized;
+  if (!summary.SerializeToString(&serialized)) {
+    return veritas::Status::Internal("Failed to serialize FunctionSummary");
+  }
+
+  // Compute the StableId from the serialized bytes
+  auto bytes_span = std::as_bytes(std::span(serialized));
+  return core::MakeStableId(core::IdKind::kFunctionSummary, bytes_span);
+}
+
 }  // namespace veritas::summary

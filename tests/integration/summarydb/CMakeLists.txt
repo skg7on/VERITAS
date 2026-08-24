@@ -40,3 +40,12 @@ target_compile_definitions(VeritasDiffTest PRIVATE
 add_dependencies(VeritasDiffTest veritas-diff)
 veritas_add_warnings(VeritasDiffTest)
 gtest_discover_tests(VeritasDiffTest DISCOVERY_TIMEOUT 60)
+
+add_executable(SummaryVersionCompatibilityTest SummaryVersionCompatibilityTest.cpp)
+target_link_libraries(SummaryVersionCompatibilityTest PRIVATE
+  veritas_summarydb
+  veritas::summary
+  GTest::gtest_main
+)
+veritas_add_warnings(SummaryVersionCompatibilityTest)
+gtest_discover_tests(SummaryVersionCompatibilityTest DISCOVERY_TIMEOUT 60)

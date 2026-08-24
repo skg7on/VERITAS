@@ -25,3 +25,16 @@ target_link_libraries(ComponentHashTest PRIVATE
 )
 
 gtest_discover_tests(ComponentHashTest DISCOVERY_TIMEOUT 60)
+
+add_executable(SummaryV2BuilderTest
+  SummaryV2BuilderTest.cpp
+)
+
+target_link_libraries(SummaryV2BuilderTest PRIVATE
+  veritas::summary
+  veritas_analysis_semantic
+  veritas::core
+  GTest::gtest_main
+)
+
+gtest_discover_tests(SummaryV2BuilderTest DISCOVERY_TIMEOUT 60)

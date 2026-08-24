@@ -21,7 +21,7 @@
 #include "veritas/build/AnalysisManifest.h"
 #include "veritas/core/Status.h"
 #include "veritas/cpg/ThinCpg.h"
-#include "veritas/summary/v1/summary.pb.h"
+#include "veritas/summary/v2/summary.pb.h"
 
 namespace veritas::summarydb {
 class SummaryRepository;
@@ -33,10 +33,10 @@ class CpgRepository;
 
 namespace veritas::analysis {
 
-// CompletedProjectAnalysis is the validated summary + CPG pair handed to the
-// publication coordinator.
+// CompletedProjectAnalysis is the validated summary.v2 + CPG pair handed to
+// the publication coordinator.
 struct CompletedProjectAnalysis {
-  std::vector<summary::v1::FunctionSummary> summaries;
+  std::vector<summary::v2::FunctionSummary> summaries;
   ::veritas::cpg::ThinCpg graph;
 };
 

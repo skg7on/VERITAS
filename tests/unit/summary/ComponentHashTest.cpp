@@ -18,6 +18,7 @@
 
 #include "veritas/summary/FunctionSummary.h"
 #include "veritas/summary/v1/summary.pb.h"
+#include "veritas/summary/v2/summary.pb.h"
 
 namespace veritas::summary {
 namespace {
@@ -206,6 +207,76 @@ TEST(FunctionSummaryTest, DifferentSummariesProduceDifferentIds) {
   ASSERT_TRUE(id1.ok());
   ASSERT_TRUE(id2.ok());
   EXPECT_NE(*id1, *id2);
+}
+
+// Helper to create a synthetic v2 summary with a single alias fact.
+v2::FunctionSummary MakeV2SummaryWithAlias(const std::string &provenance) {
+  v2::FunctionSummary summary;
+
+  auto *header = summary.mutable_header();
+  header->set_schema_version("summary.v2");
+  header->set_creation_epoch_ms(0);
+
+  auto *identity = summary.mutable_identity();
+  identity->set_repository_id("repo:sha256:abc");
+  identity->set_revision_id("rev:sha256:def");
+  identity->set_build_variant_id("bv:sha256:ghi");
+  identity->set_function_variant_id("funcvar:sha256:jkl");
+
+  auto *alias = summary.add_alias_facts();
+  alias->mutable_left()->set_memory_location_id("memref:sha256:left");
+  alias->mutable_right()->set_memory_location_id("memref:sha256:right");
+  alias->set_kind(v2::ALIAS_KIND_NO_ALIAS);
+  alias->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  alias->set_provenance_ref(provenance);
+
+  return summary;
+}
+
+TEST(ComponentHashTest, V2ProvenanceChangeChangesOnlyEvidenceHash) {
+  auto before = MakeV2SummaryWithAlias("prov:1");
+  auto after = MakeV2SummaryWithAlias("prov:2");
+
+  auto digests_before = ComputeComponentDigests(before);
+  auto digests_after = ComputeComponentDigests(after);
+
+  ASSERT_EQ(digests_before.size(), digests_after.size());
+
+  for (size_t i = 0; i < digests_before.size(); ++i) {
+    if (digests_before[i].kind == v1::COMPONENT_KIND_ALIAS_FACTS) {
+      // Semantic hash must not change when only provenance changes.
+      EXPECT_EQ(digests_before[i].semantic_hash, digests_after[i].semantic_hash)
+          << "Alias semantic hash should not change when only provenance "
+             "changes";
+
+      // Evidence hash must change when provenance changes.
+      EXPECT_NE(digests_before[i].evidence_hash, digests_after[i].evidence_hash)
+          << "Alias evidence hash should change when provenance changes";
+    } else {
+      EXPECT_EQ(digests_before[i].semantic_hash, digests_after[i].semantic_hash)
+          << "Component " << static_cast<int>(digests_before[i].kind)
+          << " should not change";
+      EXPECT_EQ(digests_before[i].evidence_hash, digests_after[i].evidence_hash)
+          << "Component " << static_cast<int>(digests_before[i].kind)
+          << " should not change";
+    }
+  }
+}
+
+TEST(ComponentHashTest, V2IdenticalSummariesProduceIdenticalDigests) {
+  auto summary1 = MakeV2SummaryWithAlias("prov:1");
+  auto summary2 = MakeV2SummaryWithAlias("prov:1");
+
+  auto digests1 = ComputeComponentDigests(summary1);
+  auto digests2 = ComputeComponentDigests(summary2);
+
+  ASSERT_EQ(digests1.size(), digests2.size());
+
+  for (size_t i = 0; i < digests1.size(); ++i) {
+    EXPECT_EQ(digests1[i].semantic_hash, digests2[i].semantic_hash);
+    EXPECT_EQ(digests1[i].evidence_hash, digests2[i].evidence_hash);
+    EXPECT_EQ(digests1[i].kind, digests2[i].kind);
+  }
 }
 
 } // namespace
