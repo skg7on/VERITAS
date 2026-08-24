@@ -136,6 +136,13 @@ and canonical `returned_member_digest`. Its M9 run binding and selected witness
 must resolve in the returned provenance closure. Complete-empty and
 truncated-empty results are therefore distinct and auditable.
 
+M12C extends `input_snapshot_fingerprint` without changing this completion-fact
+shape. When external providers are explicitly selected, the fingerprint also
+binds their ordered provider run/projection bindings, capability digests,
+mapping versions, and assumption-set digests. Provider selection and exact
+provider provenance are therefore as reproducible and stale-detectable as the
+native CPG/fact snapshot.
+
 `EvidenceBuildInput` explicitly carries the query-completion `facts::Fact`
 values, their M9 `RunFactBinding` values, and the selected witnesses in its
 provenance graph. It is the only typed handoff M10C consumes, so M10C never
@@ -179,10 +186,12 @@ class EvidenceQueryService {
 }
 ```
 
-`BuildEvidenceInput` pins one immutable CPG projection and one M9 read snapshot
-before issuing any subquery. Repository, revision, build variant, analysis
-configuration, analysis run, CPG projection, and fact snapshot must agree for
-every returned member. A backend binding change produces a stable retryable
+`BuildEvidenceInput` pins one immutable native CPG projection, one M9 read
+snapshot, and—when M12 providers are enabled—an ordered set of immutable
+provider run/projection bindings before issuing any subquery. Repository,
+revision, build variant, analysis configuration, analysis run, native
+projection, provider runs/projections, and fact snapshot must agree for every
+returned member. Any selected binding change produces a stable retryable
 failure instead of a mixed handoff.
 
 ---
@@ -275,6 +284,11 @@ JSON.
   completion fact may feed the registered
   `evidence.closed_world.dominating_check_absence.v1` rule.
 * The derived negative fact retains the completion fact as a provenance input.
+* External-provider absence never contributes to closed-world completeness or
+  negative evidence.
+* A selected provider's positive contradiction or unresolved in-scope
+  candidate prevents an unqualified negative result even when the native query
+  is complete-empty.
 
 ---
 
@@ -326,6 +340,12 @@ M10B is complete when the first buffer-overflow `EvidenceBuildInput` can be
 generated from M9 facts and M10A relations without an LLM and without loading
 entire source files into a prompt. M10C is responsible for turning that input
 into an `EvidenceCase`.
+
+M12C later makes this same provider-neutral handoff capable of citing Joern and
+future provider observations. GraphSON/GraphML objects, Joern ordinals, and
+provider-native types never enter `EvidenceBuildInput`; selected provider
+projections, capabilities, assumptions, and observations are represented by
+stable SummaryDB and provenance references.
 
 See the
 [M10C Evidence IR semantic model and serialization specification](m10c-evidence-ir-semantic-model-serialization-design-spec.md)

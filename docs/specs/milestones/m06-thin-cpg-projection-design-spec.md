@@ -41,6 +41,11 @@ an external compiler or LLVM analysis executable
 
 M6 accepts no `.bc`, `.ll`, serialized CPG, Joern export, PhASAR result, LLVM-module pathname, or subprocess output. It consumes borrowed in-memory VERITAS objects only.
 
+M12 does not relax this boundary. It stores a Joern export as a distinct
+provider projection in SummaryDB's Graph Index and exposes a pinned unified
+query view above M6. Provider nodes/edges never enter `CpgProjectionInput`,
+change an M6 `ProjectionID`, or co-publish with native summary bindings.
+
 M6 does not persist:
 
 ```text
@@ -426,3 +431,8 @@ provenance refs
 ```
 
 M6 is complete when Evidence Builder can ask graph questions without knowing whether a relation originated in direct LLVM inspection, M4 extraction, or M5 SVF mapping, while every returned relation remains traceable to its VERITAS provenance.
+
+M12C may later overlay explicitly selected external provider observations at
+the SummaryDB query layer. Those observations retain separate provider
+projection identity, epistemic state, capabilities, assumptions, and
+provenance; they do not become M6 relations.

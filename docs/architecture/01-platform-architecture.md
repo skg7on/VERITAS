@@ -179,18 +179,18 @@ VERITAS accepts inputs at three distinct stages, each with a different fidelity 
    │          │               │        │                 │          │
    ▼          ▼               ▼        ▼                 ▼          ▼
 compile_    .bc / .ll     directory   Joern CPG      PhASAR      future
-commands    single file   of bitcode  export         result      producers
-.json                                 (GraphML/JSON)
+commands    single file   of bitcode  export         result      providers
+.json                                 (GraphSON/GraphML)
    │          │               │        │                 │          │
    └────┬─────┴───────┬───────┘        └─────────┬───────┴──────────┘
         ▼             ▼                          ▼
-  CodeGenIrSource  BitcodeIrSource        ExternalFactsImporter
+  CodeGenIrSource  BitcodeIrSource        Provider Importers
         (Tier 1)        (Tier 2)               (Tier 3)
         │             │                          │
         ▼             ▼                          ▼
-   [ Clang CodeGen +               [ ExternalFact records
-     Link → ProgramIr ]              → fact store
-                                     + provenance store ]
+   [ Clang CodeGen +               [ normalized provider projection
+     Link → ProgramIr ]              → SummaryDB graph index
+                                     + fact/provenance stores ]
         │             │
         └──────┬──────┘
                ▼
@@ -203,9 +203,17 @@ commands    single file   of bitcode  export         result      producers
 
 Three architectural properties define the boundary:
 
-1. **Module-acquisition vs. facts.** Tiers 1 and 2 produce a private `ProgramIr` and then flow through the full analysis pipeline unchanged. Tier 3 injects external observations directly into the fact store; it never influences summaries, SCC propagation, or CPG projection.
+1. **Module acquisition vs. provider observations.** Tiers 1 and 2 produce a
+   private `ProgramIr` and then flow through the full native analysis pipeline.
+   Tier 3 publishes a separate provider projection plus selected semantic facts
+   into SummaryDB. It never mutates M6's native projection or participates in
+   native summaries, SCC propagation, or WPA.
 2. **VERITAS owns analysis.** No adapter runs VERITAS's own analysis pipeline for the caller. Local extraction, SVF, CPG projection, WPA, and provenance derivation are always executed by VERITAS on the module it acquired.
-3. **Identity is derived, never carried.** External IDs (LLVM `Value*`, Joern node IDs, PhASAR fact IDs) never persist in VERITAS artifacts. All references are re-derived to VERITAS stable IDs (see `03-summarydb-storage-architecture.md` §5).
+3. **Semantic identity is derived, never carried.** LLVM pointer identity and
+   Joern/PhASAR ordinals never become semantic graph or fact IDs. Provider-side
+   IDs may be retained only inside hashed provider-record identities and rooted
+   provenance. Canonical references use VERITAS stable IDs (see
+   `03-summarydb-storage-architecture.md` §5).
 
 ---
 
@@ -302,54 +310,83 @@ Source-derived and bitcode-derived summaries of "the same function" live in **di
 
 ---
 
-# 9. Tier 3 — External-Facts Importer
+# 9. Tier 3 — External Provider Projections
 
-Tier 3 accepts already-computed analysis results — Joern CPG exports (GraphML / JSON) and PhASAR results — and maps them into the fact store as provenance-tagged, epistemic-lowered external observations. It never touches the CPG projection stage, SVF, or the summary pipeline.
+Tier 3 accepts already-computed provider artifacts. M12 directly parses Joern
+whole-graph GraphSON/GraphML; independently designed adapters may later accept
+PhASAR or other result schemas. The normalized result is integrated across
+SummaryDB rather than reduced to a stringly vector of terminal facts.
 
 ## 9.1 What imports become
 
-Each imported record becomes an `ExternalFact`:
-
 ```text
-ExternalFact {
-    producer          = joern | phasar
-    external_id       = <opaque producer-side ID>       (kept for provenance only)
-    subject_id        = VERITAS stable ID  ─or─
-                        synthetic external:<producer>:<id>
-    predicate_kind    = one of VERITAS's fact vocab entries
-                        (or opaque `external_observation`)
-    predicate_canonical
-    epistemic         = INFERRED | ASSUMED
-    source_anchor_id  = (optional) VERITAS SourceAnchorID
-    raw_record        = verbatim source record (provenance)
-}
+ProviderArtifact + ProviderRun + ProviderCapabilitySet
+    |
+    +-> ProviderProgramGraph
+    |      canonical program entities/relations
+    |      provider observations and extensions
+    |      -> SummaryDB Graph Index
+    |
+    +-> ExternalFactBatch
+           registered relations.v2 facts
+           run bindings, assumptions, rooted witnesses
+           -> Fact + Provenance Stores
 ```
+
+The Graph Index retains structural topology such as AST and CFG without
+inflating every edge into a fact. Registered semantic relations such as
+`MayCall`, `DefUse`, and control dependence may additionally become facts.
 
 ## 9.2 Rules of admission
 
-1. **Identity bridge.** The importer resolves each external entity to a VERITAS stable ID only via stable inputs: mangled name → `FunctionVariantID`, `file:line` → `SourceAnchorID`. Unresolvable entities receive a synthetic subject `external:<producer>:<external_id>`. VERITAS **never** fabricates a semantic ID from a Joern/PhASAR ordinal.
-2. **Epistemic floor.** External facts enter as `INFERRED` (from a semantic analysis) or `ASSUMED` (accepted as a premise). The `MUST` state is unreachable from external input. This is the P4 / P8 rule made concrete: an inferred premise cannot yield a verified fact.
-3. **Trust policy.** Provenance records `producer_kind = external`, `producer_id = joern | phasar`; deployment-specific trust levels apply per `04-evidence-ir-architecture.md` §58–59. No `EXTERNAL` fact silently becomes a `VERIFIED_FACT`.
-4. **No WPA participation.** External facts are terminal; they are not summary components, so they do not drive incremental invalidation, SCC propagation, or dependency-index rebuilds. They *are* citable by the Evidence Builder and queryable in the fact store.
-5. **Vocabulary normalization.** Joern / PhASAR predicates map into VERITAS's fact vocabulary where a stable equivalence exists (e.g. Joern `CALL` → `CallFact`, `REACHING_DEF` → `ValueFlowFact`). Unmappable predicates persist as opaque `external_observation`, and the raw record is retained for provenance.
+1. **Context binding.** An import must match an existing VERITAS repository,
+   revision, and build-variant binding. Provider metadata cannot create that
+   context by itself. If the raw export has no verifiable source fingerprint,
+   or does not prove compatible build/frontend configuration, import requires
+   explicit user-asserted context assumptions inherited by every observation;
+   a verified source or build mismatch is always rejected.
+2. **Three-level identity.** Provider record, source occurrence, and semantic
+   program entity are distinct. Joern/PhASAR ordinals remain provenance only.
+   Unresolved entities receive canonical hashed external IDs, never fabricated
+   native identities.
+3. **Epistemic floor.** External facts enter as `INFERRED` or `ASSUMED`; `MUST`
+   is rejected. Relation modality (for example `MayCall`) remains separate.
+4. **Provider overlay, not native mutation.** Provider projections do not alter
+   M6, Summary IR, native dependency invalidation, SCCs, or WPA. They may
+   invalidate provider-dependent queries and Evidence cases.
+5. **Capabilities and assumptions are durable.** Overlay availability,
+   frontend limitations, external-call semantics, unresolved resolution, and
+   provider-side truncation accompany affected observations.
+6. **Open-world absence.** A missing provider relation never becomes negative
+   evidence or satisfies a VERITAS closed-world completion rule.
+7. **Extensible vocabulary.** Known constructs normalize into provider-neutral
+   entities and relations. Unknown extensions remain inert, typed, queryable
+   provider observations instead of being dropped.
+8. **Atomicity.** The provider graph, facts, witnesses, history, and current
+   provider binding become visible together or not at all.
 
 ## 9.3 Pipeline
 
 ```text
-[ Joern export | PhASAR result ]
-       │
-       ▼
-   importer  (parse + identity-bridge + vocabulary-normalize)
-       │
-       ▼
-   ExternalFact[]   (epistemic = INFERRED | ASSUMED)
-       │
-       ▼
-   fact store  +  provenance store   (producer_kind = external)
-       │
-       ▼
-   Evidence Builder / veritas-query can cite them
+[ Joern GraphSON | Joern GraphML ]
+       |
+       v
+bounded reader -> RawProviderGraph -> schema/context validation
+       |
+       v
+identity resolution + semantic normalization
+       |
+       +-> ProviderProgramGraph -> SummaryDB Graph Index
+       +-> ExternalFactBatch    -> Fact/Provenance Stores
+       +-> capabilities/extensions/assumptions -> Metadata/History
+       |
+       v
+UnifiedProgramGraphQuery / EvidenceQueryService
 ```
+
+Detailed identity, graph, publication, CLI, security, and acceptance contracts
+are defined by
+`docs/specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md`.
 
 ---
 
@@ -383,27 +420,22 @@ after:   RunLocalAnalysis(ProgramIrSource&) → {ProgramIr, summary_drafts}
 
 `LocalFactExtractor`, SVF, CPG projection, WPA, and provenance derivation are unchanged by the source choice.
 
-## 10.2 `ExternalFactsImporter` — fact injection (Tier 3)
+## 10.2 Provider importer — SummaryDB projection publication (Tier 3)
 
-```cpp
-namespace veritas::facts::external {
-
-enum class ExternalProducer { Joern, Phasar };
-
-class JoernCpgImporter { /* ImportGraphML / ImportJson  → vector<ExternalFact> */ };
-class PhasarResultImporter { /* Import                    → vector<ExternalFact> */ };
-
-class ExternalIdentityBridge {
- public:
-  StatusOr<core::StableId> Resolve(ExternalProducer, const std::string& external_ref);
-};
-
-}  // namespace veritas::facts::external
+```text
+ProviderGraphReader     -> RawProviderGraph
+ProviderNormalizer      -> ProviderProgramGraph + ExternalFactBatch
+ProviderPublisher       -> atomic SummaryDB provider binding
+UnifiedProgramGraphQuery -> pinned native + selected provider snapshot
 ```
 
-Downstream, the fact-store `Put` path applies the epistemic-floor validation. An attempt to insert an external fact at epistemic `MUST` is rejected at write time (`FailedPrecondition`).
+The reader boundary owns GraphSON/GraphML-specific types. The normalizer emits
+provider-neutral stable records. The publisher validates graph identity,
+expected/completed fact components, rooted witnesses, and epistemic floor
+before one cross-layer visibility transaction.
 
-Concrete signatures and testing tables for these interfaces live in `docs/specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md` (milestone-scoped spec).
+M12's concrete contracts and tests live in
+`docs/specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md`.
 
 ---
 
@@ -422,7 +454,7 @@ VERITAS carries a set of platform-wide invariants. Analysis-specific invariants 
 | B7 | Epistemic state and confidence are separate. | `MAY` is not "low confidence"; `INFERRED` is not "verified." |
 | B8 | Publication is atomic at metadata bindings, not at object mutation. | Readers must never observe a half-written summary revision. |
 | B9 | Deterministic analysis is reproducible for the same inputs. | Enables stable hashes, diffing, regression analysis. |
-| B10 | The only public **source** input is a project directory containing `compile_commands.json`. External **LLVM IR artifacts** (`.bc` / `.ll` / bitcode directory) are additionally accepted as a **module** input through the IR adapter; they enter at module acquisition (skipping Clang CodeGen) and never bypass VERITAS's own analysis or identity/provenance derivation. External **analysis results** (Joern export, PhASAR result) are accepted only through the external-facts importer as epistemic-lowered observations. | Prevents external preprocessing artifacts from becoming public contracts or reproducibility gaps, while allowing binary-only and cross-tool ingest at controlled boundaries. |
+| B10 | The only public **source** input is a project directory containing `compile_commands.json`. External LLVM IR enters only at module acquisition and still runs VERITAS analysis. External provider artifacts enter only through a context-bound, normalized, epistemic-lowered SummaryDB provider projection; they never mutate native summaries/M6 or bypass identity/provenance validation. | Allows optional cross-tool evidence while preserving reproducibility, native authority, and controlled ingest boundaries. |
 
 B10 is the load-bearing invariant for this document; it is the successor to the pre-adapter statement (which admitted only Tier 1).
 
@@ -544,8 +576,9 @@ The developer surface for the platform is deliberately small:
 ```bash
 veritas-build analyze --project <directory>        # Tier 1: compile_commands.json
 veritas-build analyze --bitcode <path>             # Tier 2: .bc / .ll / directory
-veritas-build import  --joern  <export>            # Tier 3: Joern CPG export
-veritas-build import  --phasar <result>            # Tier 3: PhASAR result
+veritas-build import --joern <export> --project <dir> --output <db>
+    [--format auto|graphson|graphml]
+    [--accept-unverified-context]                   # Tier 3
 
 veritas-query summary   <symbol>
 veritas-query callers   <symbol>
@@ -560,6 +593,9 @@ Contracts:
 
 * `--project` and `--bitcode` are **mutually exclusive** (exactly one is required).
 * External ingestion lives on `veritas-build import` rather than a separate tool; it can be split later if the surface grows.
+* Tier-3 import requires an existing matching repository/revision/build binding.
+* Read commands select native and provider projections explicitly; the ordered
+  selection is part of the immutable query snapshot.
 * All read commands take the current published SummaryDB revision by default and accept `--at <rev>` for historical queries.
 * Fact explanation requires `--run <run-id>`. Canonical `FactID` may be shared
   across runs while its selected witness is occurrence-specific; the current
@@ -620,7 +656,10 @@ Evidence IR semantic modeling and serialization.
 | M10B | Evidence Builder input APIs + first end-to-end demo over M9/M10A facts. |
 | M10C | Validated, canonical Evidence IR with EIR-T, Protobuf, and full-EIR diagnostic JSON serialization. |
 | M11 | External IR adapter (`BitcodeIrSource`, `veritas-build analyze --bitcode`). |
-| M12 | External-facts importer (Joern / PhASAR, `veritas-build import`). |
+| M12A | SummaryDB external-provider graph/fact substrate and atomic publication. |
+| M12B | Direct Joern GraphSON/GraphML importer and normalization. |
+| M12C | Provider fusion, provider-aware queries, and M10B integration. |
+| M12D | Separately designed PhASAR result adapter over the M12A substrate. |
 | M13 | Benchmark-gated Souffle PTA research, independent of the M9-M12 critical path. |
 
 The Review Agent and its verification loop are post-backbone milestones and are
@@ -684,7 +723,7 @@ This single demo demonstrates the entire VERITAS thesis: incremental semantic in
                              │
               ┌──────────────┼──────────────┐
               ▼              ▼              ▼
-     CodeGenIrSource  BitcodeIrSource  ExternalFacts
+     CodeGenIrSource  BitcodeIrSource  ProviderImport
                              │              │
                              ▼              │
                    Static Analysis Frontend │
@@ -705,6 +744,7 @@ This single demo demonstrates the entire VERITAS thesis: incremental semantic in
         └────────────────────┬───────────────────┘
                              │
                   WPA input materializer
+              native Summary IR/facts only
                   run-local relations.v2
                              │
                              ▼
@@ -730,6 +770,10 @@ This single demo demonstrates the entire VERITAS thesis: incremental semantic in
                              ▼
                       Review Result
 ```
+
+The WPA arrow selects only native Summary IR and native WPA inputs. Provider
+projections remain excluded from recursion and rejoin native/global facts only
+through the pinned SummaryDB query snapshot used by Evidence Builder.
 
 The Agent's role is compact: interpret evidence, rank findings, identify missing semantics, infer API contracts, request additional analysis. It does not directly promote any claim to `VERIFIED_DEFECT` or `VERIFIED_SAFE`; those transitions require a deterministic verifier per P8.
 

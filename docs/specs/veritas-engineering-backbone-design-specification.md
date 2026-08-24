@@ -94,12 +94,12 @@ The backbone MUST preserve these invariants.
 | B7 | Epistemic state and confidence are separate. | `MAY` is not low confidence, and `INFERRED` is not verified. |
 | B8 | Publication is atomic at metadata bindings, not object mutation. | Readers must never observe a half-written summary revision. |
 | B9 | Deterministic analysis is reproducible for the same inputs. | Enables stable hashes, diffing, and regression analysis. |
-| B10 | `--project <directory>` is the only public source input and the current pre-M11 contract. M11 adds mutually exclusive `--bitcode <.bc\|.ll\|directory>` as a Tier-2 module-acquisition input; both routes continue through VERITAS-owned local extraction, SVF, Summary IR, WPA, and provenance. No route accepts an SVF artifact or bypasses analysis. M12 external facts are non-authoritative terminal observations. | Preserves owned analysis and reproducibility while admitting controlled module input without confusing it with source or third-party analysis output. |
+| B10 | `--project <directory>` is the only public source input. M11 adds mutually exclusive bitcode module acquisition and still runs VERITAS analysis. M12 accepts external provider artifacts only through context-bound normalization into separate epistemic-lowered SummaryDB provider projections; they never mutate native summaries/M6 or become recursive-WPA inputs. | Preserves owned analysis and reproducibility while admitting optional cross-tool evidence at a controlled boundary. |
 | B11 | Function Summary IR is durable; `relations.v2` and typed dense IDs are run-local. | Preserve one stable WPA contract. |
 | B12 | Compiled Souffle is the normal recursive owner; C++ is conformance or explicitly selected emergency only. | Prevent semantic split and silent fallback. |
 | B13 | Every published derived fact has a generic deterministic finite rooted witness. | Engine-neutral explanation. |
 | B14 | Failed components publish no replacement; prior success remains stale history. | Failure atomicity. |
-| B15 | M9 receives only a complete, rooted, idempotently delivered `AnalysisFactBatch`. | Safe durable publication. |
+| B15 | M9 receives WPA facts only through a complete, rooted, idempotently delivered `AnalysisFactBatch`; later provider producers require their own equally validated typed batch. | Safe durable publication without a raw-fact bypass. |
 
 ---
 
@@ -1671,9 +1671,12 @@ veritas-build analyze --bitcode <file.bc|file.ll|directory>
 It enters at VERITAS-owned module acquisition (skipping only Clang CodeGen),
 then runs the same local extraction, required SVF, Summary IR, WPA, and
 provenance pipeline. It never accepts an SVF artifact or a third-party analysis
-result. M12's separate external-facts import remains non-authoritative and
-terminal: imported observations do not become Summary IR or recursive-WPA
-inputs.
+result. M12's separate provider import directly parses supported Joern
+GraphSON/GraphML into an immutable SummaryDB provider projection plus a rooted
+`ExternalFactBatch`. Imported observations do not become native Summary IR,
+M6 content, or recursive-WPA inputs, but explicitly selected projections may
+participate in unified queries and Evidence construction with their provider,
+capability, assumption, and epistemic records intact.
 
 Expected output:
 

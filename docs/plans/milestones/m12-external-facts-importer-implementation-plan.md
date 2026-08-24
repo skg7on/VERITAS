@@ -1,5 +1,13 @@
 # M12: External-Facts Importer — Implementation Plan
 
+> **Status: Legacy; do not execute.** The approved architecture is consolidated
+> in
+> [`m12-joern-cpg-summarydb-importer-design-spec.md`](../../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md)
+> and replaces this plan's terminal `vector<ExternalFact>` model with the
+> M12A–M12C SummaryDB provider graph/fact pipeline. This plan is retained only
+> until the written specification is approved and replacement implementation
+> plans are authored. M12D/PhASAR requires a separate detailed design.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Accept already-generated analysis results (Joern CPG export, PhASAR result) and map them into VERITAS's fact store as provenance-tagged, epistemic-lowered external observations.

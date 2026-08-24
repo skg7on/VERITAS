@@ -23,7 +23,9 @@ records this hierarchy migration.
 | M10A | Planned; detailed specification and plan required before implementation | — | — | — |
 | M10B | Planned | [plan](milestones/m10b-evidence-builder-input-apis-demo-implementation-plan.md) | [spec](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md) | [#13](https://github.com/skg7on/VERITAS/issues/13) |
 | M10C | Planned | [plan](milestones/m10c-evidence-ir-semantic-model-serialization-implementation-plan.md) | [spec](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md) | — |
-| M11 / M12 | Planned | [M11 plan](milestones/m11-external-ir-adapter-implementation-plan.md); [M12 plan](milestones/m12-external-facts-importer-implementation-plan.md) | [shared M11/M12 spec](../specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md) | [#20](https://github.com/skg7on/VERITAS/issues/20), [#21](https://github.com/skg7on/VERITAS/issues/21) |
+| M11 | Planned | [plan](milestones/m11-external-ir-adapter-implementation-plan.md) | [shared ingest-boundary spec](../specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md) | [#20](https://github.com/skg7on/VERITAS/issues/20) |
+| M12A–M12C | New plans required after written-spec approval | Existing [legacy M12 plan](milestones/m12-external-facts-importer-implementation-plan.md) is superseded for planning purposes | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
+| M12D | Detailed design and plan required | — | PhASAR adapter is intentionally separate from the Joern graph importer | [#21](https://github.com/skg7on/VERITAS/issues/21) |
 
 ## Execution Rule
 

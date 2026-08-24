@@ -24,7 +24,9 @@
 - The first language target is C/C++ through Clang and LLVM.
 - `veritas-build analyze --project <directory>` is the only public source input and the current pre-M11 contract; `<directory>/compile_commands.json` must exist.
 - M11 adds mutually exclusive `veritas-build analyze --bitcode <.bc|.ll|directory>` as a Tier-2 module-acquisition input. It skips only Clang CodeGen and then uses the same VERITAS-owned local extraction, required SVF, Summary IR, WPA, and provenance pipeline; it never accepts an SVF artifact or analysis result.
-- M12 external facts are non-authoritative terminal observations and never become Summary IR or recursive-WPA inputs.
+- M12 external provider graphs/facts are non-authoritative SummaryDB overlays.
+  They never become native Summary IR or recursive-WPA inputs, but their
+  provider-component deltas may invalidate dependent queries/Evidence.
 - SVF is required, lives at `third_party/SVF`, and is pinned to `18fb5650600530a54f0afc22f4df1a10b03d3c02`; no SVF-disabled standard build exists.
 - The first storage stack is RocksDB for immutable objects and SQLite for metadata.
 - Function Summary IR is the durable WPA contract; typed `relations.v2` rows and dense IDs are run-local execution projections.
@@ -34,7 +36,10 @@
 - Component reuse is content-addressed by engine-neutral logical input plus exact executor/toolchain identity.
 - Canonical `FactID` hashes only `relations.v2`, relation name, typed stable semantic cells, and epistemic value; revision/build/run/engine/dense/tuple/rule/witness/provenance context is stored separately and never re-identifies an incoming Fact Bus fact.
 - Every derived fact has a generic deterministic finite witness rooted in stable input fact IDs.
-- `AnalysisFactBatch` is the only M9 input and must prove expected/completed component equality, rooted-input closure, and idempotent Fact Bus delivery.
+- `AnalysisFactBatch` is the only WPA input to M9 and must prove
+  expected/completed component equality, rooted-input closure, and idempotent
+  Fact Bus delivery. M12 later adds a separately typed `ExternalFactBatch` with
+  equivalent publication guarantees for validated provider projections.
 - M9 starts only after all ten M8R executable gates pass without missing, extra, disabled, skipped, failed, or errored tests.
 
 ---
@@ -49,7 +54,7 @@ The backbone should not reimplement mature static-analysis infrastructure unless
 | LLVM IR, SSA, MemorySSA, alias hooks, dominators, range-ish local facts | LLVM 22 libraries | Tier-1 in-process IR generation/linking, M11 Tier-2 module acquisition, private `ProgramIr`, and normalization into Summary IR | Both input tiers remain behind VERITAS-owned module verification, lifetime, extraction, and identity boundaries. |
 | Pointer/value-flow, VFG, and AndersenWaveDiff analysis | Required pinned SVF Git submodule | Direct library invocation, stable value IDs, component hashes, lifecycle cleanup, and uncertainty mapping | SVF supplies mature analysis while VERITAS owns its input module, execution, and outputs. |
 | Recursive relations and transitive WPA facts | Souffle | Fact schemas, tuple IDs, provenance capture, publication | Souffle is designed as a Datalog tool for static analysis; VERITAS should add provenance and epistemic policy around it. |
-| CPG concepts and schema vocabulary | Joern CPG/spec | Thin persistent VERITAS CPG projection | The architecture wants CPG benefits without storing a full instruction-level universal graph for every repo. |
+| CPG concepts and schema vocabulary | Joern CPG/spec | Thin native M6 CPG plus optional normalized SummaryDB provider projections | Native analysis remains authoritative while external provider topology can be queried and fused without becoming M6 content. |
 | Security query idioms and data-flow test comparisons | CodeQL documentation and optional baseline runs | VERITAS-native summaries, dependencies, and evidence | CodeQL is useful as a conceptual and fixture baseline, but VERITAS should not make CodeQL DBs the core SummaryDB. |
 
 The source architecture says "Build a VERITAS CPG, but keep it thin." This document interprets the user's "GPG" wording as "CPG" because the existing docs consistently discuss Code Property Graphs.
@@ -79,14 +84,18 @@ The source architecture says "Build a VERITAS CPG, but keep it thin." This docum
 | M10B | Evidence Builder input APIs and first demo | EIR-ready slices over M9 facts and M10A relations | M6, M9, M10A |
 | M10C | Evidence IR semantic model and serialization | Validated, canonical EIR-L0/L1/L2 with EIR-T, Protobuf, and full-EIR JSON | M10B |
 | M11 | External IR adapter | External bitcode/textual IR through the same summary boundary | M5 |
-| M12 | External facts importer | Provenance-tagged non-authoritative imported facts | M9 |
+| M12A | External-provider substrate | Provider-neutral SummaryDB graph/fact model and atomic publication | M2, M3, M6, M9 |
+| M12B | Joern CPG importer | Direct GraphSON/GraphML parsing, identity, normalization, provenance | M12A |
+| M12C | Provider fusion and Evidence integration | Unified pinned query view and M10B integration | M10B, M12B |
+| M12D | PhASAR result adapter | Separately designed result-fact adapter | M12A |
 | M13 | Benchmark-gated PTA research | Independent Souffle-native PTA comparison against pinned SVF | independent of M9-M12 |
 
 Each milestone should merge independently. Every milestone has tests and a small user-visible CLI behavior.
 
 M11 and M12 remain chronologically placed after M10C, but chronology is not a
-functional dependency: M11 reuses the M5 local/SVF pipeline, while M12 requires
-the M9 fact and provenance stores.
+functional dependency: M11 reuses the M5 local/SVF pipeline; M12A requires the
+M9 fact/provenance stores and M6 storage foundations; M12C integrates the
+provider view with the already-defined M10B snapshot contract.
 
 Detailed milestone design specs live under `docs/specs/milestones/`:
 
@@ -105,6 +114,8 @@ Detailed milestone design specs live under `docs/specs/milestones/`:
 | M10A | Detailed recursive-domain-expansion spec required before implementation |
 | M10B | `docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md` |
 | M10C | `docs/specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md` |
+| M11/M12 boundary | `docs/specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md` |
+| M12A-M12C | `docs/specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md` |
 
 Historical per-milestone implementation plans live under `docs/plans/`. The
 M8R executable plan is

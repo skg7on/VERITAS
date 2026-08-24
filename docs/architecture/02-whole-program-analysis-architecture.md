@@ -165,7 +165,12 @@ ValueFlowEdge {
 
 ## 3.5 Thin CPG projection
 
-The CPG is a compact query graph inspired by Joern's Code Property Graph, but scoped to what VERITAS actually needs. It is a projection over the same summaries and facts, not a parallel source of truth (P7).
+The native CPG is a compact query graph inspired by Joern's Code Property
+Graph, but scoped to what VERITAS actually needs. It is a projection over the
+same native summaries and facts, not a parallel source of truth (P7). M12 may
+store independently versioned, epistemic-lowered provider projections in the
+SummaryDB Graph Index and overlay them only in a pinned query view; they do not
+become this native projection or WPA input.
 
 Nodes:
 
