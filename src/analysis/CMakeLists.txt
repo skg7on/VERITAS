@@ -31,9 +31,17 @@ target_link_libraries(veritas_analysis
     veritas_svf_analysis
     veritas_analysis_pipeline
     veritas_analysis_cpg
+    veritas_analysis_semantic
     veritas_cpg
     veritas_build
     veritas_summarydb
+)
+
+# The versioned external-model bundle is a checked-in source resource. Bake its
+# directory in at configure time so the analyzer loads the exact bundle it was
+# built against (mirrors VERITAS_TESTS_SOURCE_DIR for test fixtures).
+target_compile_definitions(veritas_analysis PRIVATE
+  VERITAS_LOGIC_MODELS_DIR="${CMAKE_SOURCE_DIR}/logic/models"
 )
 
 add_subdirectory(semantic)

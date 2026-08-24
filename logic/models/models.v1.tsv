@@ -1,0 +1,4 @@
+free.dealloc.memory	free	deallocate	argument	may
+malloc.alloc.memory	malloc	allocate	return	may
+memcpy.read.memory	memcpy	read	source	may
+memcpy.write.memory	memcpy	write	destination	may

@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include "veritas/core/Ids.h"
@@ -59,6 +60,13 @@ class StableValueMapper {
 
   // Deterministic kCallSite identity for a call instruction.
   StatusOr<core::StableId> CallSiteIdFor(const ::llvm::CallBase& call) const;
+
+  // The canonical kValueRef identity of a function, derived solely from its
+  // function-variant ID string (or diagnostic name when no origin-map entry
+  // exists). This is the single source of truth for the function-value
+  // encoding: the function-constant path in IdFor and the caller attribution
+  // in SvfMerge both go through it, so the framing lives in exactly one place.
+  static core::StableId FunctionValueRef(std::string_view function_variant_id);
 
  private:
   using OwnerMap =

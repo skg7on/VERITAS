@@ -17,8 +17,10 @@
 
 #include <vector>
 
+#include "veritas/analysis/semantic/ModelBundle.h"
 #include "veritas/analysis/semantic/NormalizedAnalysisFacts.h"
 #include "veritas/summary/v1/summary.pb.h"
+#include "veritas/summary/v2/summary.pb.h"
 
 namespace veritas::analysis::svf {
 
@@ -46,6 +48,27 @@ std::vector<::veritas::summary::v1::FunctionSummary> MergeSvfFacts(
     std::vector<::veritas::summary::v1::FunctionSummary> drafts,
     const semantic::NormalizedAnalysisFacts& svf_facts,
     const ::veritas::analysis::llvm::OriginMap& origin_map);
+
+// Merge SVF-mapped facts into summary.v2 drafts by stable owning function ID.
+//
+//   * Calls attribute to the caller's draft via the caller's stable function
+//     value ref (recomputed from the draft's function-variant ID).
+//   * Memory-effect and alias facts attribute via
+//     location.object.owner_function (a function-variant ID).
+//   * Model effects attach to the modeled function's draft (matched by exact
+//     symbol against the draft identity; external-function models, whose
+//     functions have no local summary, contribute no per-function facts here
+//     and are surfaced to the WPA materializer via the bundle).
+//   * Run-level unknowns attach to every draft (matching V1).
+//
+// Facts with no recoverable per-function owner — value flows and dependencies,
+// whose kValueRef identities carry no owner — remain gated out. Component
+// digests are recomputed after the merge so the resulting summaries are
+// content-addressed over their merged semantic content.
+StatusOr<std::vector<::veritas::summary::v2::FunctionSummary>> MergeSvfFactsV2(
+    std::vector<::veritas::summary::v2::FunctionSummary> drafts,
+    const semantic::NormalizedAnalysisFacts& svf_facts,
+    const semantic::ModelBundle& model_bundle);
 
 }  // namespace veritas::analysis::svf
 

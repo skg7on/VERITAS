@@ -20,5 +20,14 @@ target_link_libraries(SemanticTypesTest PRIVATE
 veritas_add_warnings(SemanticTypesTest)
 gtest_discover_tests(SemanticTypesTest DISCOVERY_TIMEOUT 60)
 
+add_executable(ModelBundleTest ModelBundleTest.cpp)
+target_link_libraries(ModelBundleTest PRIVATE
+  veritas_analysis_semantic
+  veritas::core
+  veritas_test_support
+  GTest::gtest_main
+)
+gtest_discover_tests(ModelBundleTest DISCOVERY_TIMEOUT 60)
+
 add_subdirectory(llvm)
 add_subdirectory(svf)

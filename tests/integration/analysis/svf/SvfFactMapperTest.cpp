@@ -14,6 +14,8 @@
 
 #include "analysis/svf/SvfFactMapper.h"
 
+#include <filesystem>
+
 #include <gtest/gtest.h>
 
 #include <llvm/IR/IRBuilder.h>
@@ -26,6 +28,7 @@
 #include "analysis/svf/SvfMerge.h"
 #include "analysis/svf/SvfSession.h"
 #include "veritas/analysis/ProjectAnalysisRequest.h"
+#include "veritas/analysis/semantic/ModelBundle.h"
 #include "veritas/analysis/semantic/NormalizedAnalysisFacts.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
@@ -294,12 +297,20 @@ TEST(SvfFactMapperTest, LocalAnalysisSvfFactsMergeIntoHashedOwnerSummary) {
   // The on-disk store_load fixture performs a store and a load.
   EXPECT_GT(mapped.facts.memory_effects.size(), 0u);
 
-  auto merged = MergeSvfFacts(std::move(local->summary_drafts), mapped.facts,
-                              local->program_ir.origin_map());
-  ASSERT_EQ(merged.size(), 1u);
-  // Whole-program SVF value flows are gated out of summary.v1 until Task 9;
-  // the draft retains only its local (M4) value flows.
-  EXPECT_EQ(merged[0].value_flows_size(), original_flows);
+  const auto model_dir =
+      testing::TestSourceRoot().parent_path() / "logic" / "models";
+  auto bundle = semantic::ModelBundle::Load(model_dir / "models.v1.tsv",
+                                            model_dir / "models.v1.manifest");
+  ASSERT_TRUE(bundle.ok()) << bundle.status().message();
+
+  auto merged = MergeSvfFactsV2(std::move(local->summary_drafts),
+                                mapped.facts, *bundle);
+  ASSERT_TRUE(merged.ok()) << merged.status().message();
+  ASSERT_EQ(merged->size(), 1u);
+  // Whole-program SVF value flows carry no recoverable per-function owner, so
+  // they stay gated out of the merged summary.v2; the draft retains only its
+  // local (M4) value flows.
+  EXPECT_EQ((*merged)[0].value_flows_size(), original_flows);
 }
 
 } // namespace

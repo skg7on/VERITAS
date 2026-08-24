@@ -21,16 +21,17 @@
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 #include "veritas/cpg/ThinCpg.h"
-#include "veritas/summary/v1/summary.pb.h"
+#include "veritas/summary/v2/summary.pb.h"
 
 namespace veritas::analysis::cpg {
 
 // CpgProjectionInput is the private, engine-neutral input boundary for the M6
-// projection stage. It borrows the live ProgramIr and completed summaries; no
-// native pointer or third-party ID may escape in a node, edge, or diagnostic.
+// projection stage. It borrows the live ProgramIr and completed summary.v2
+// summaries; no native pointer or third-party ID may escape in a node, edge,
+// or diagnostic.
 struct CpgProjectionInput {
   const pipeline::ProgramIr& program_ir;
-  std::span<const summary::v1::FunctionSummary> completed_summaries;
+  std::span<const summary::v2::FunctionSummary> completed_summaries;
   core::StableId revision_id;
   core::StableId build_variant_id;
 };

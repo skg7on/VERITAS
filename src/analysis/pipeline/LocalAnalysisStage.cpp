@@ -18,7 +18,7 @@
 
 #include "analysis/llvm/LocalFactExtractor.h"
 #include "analysis/llvm/ProjectIrBuilder.h"
-#include "veritas/summary/LocalSummaryBuilder.h"
+#include "veritas/summary/SummaryV2Builder.h"
 
 namespace veritas::analysis::pipeline {
 
@@ -31,15 +31,15 @@ StatusOr<LocalAnalysisResult> RunLocalAnalysis(
   }
 
   llvm::LocalFactExtractor fact_extractor;
-  auto local_facts = fact_extractor.Extract(*program_ir);
+  auto local_facts = fact_extractor.ExtractV2(*program_ir);
   if (!local_facts.ok()) {
     return local_facts.status();
   }
 
-  std::vector<summary::v1::FunctionSummary> drafts;
+  std::vector<summary::v2::FunctionSummary> drafts;
   drafts.reserve(local_facts->size());
   for (const auto& facts : *local_facts) {
-    auto summary = summary::BuildLocalSummary(facts, manifest.context);
+    auto summary = summary::BuildLocalSummaryV2(facts, manifest.context);
     if (!summary.ok()) {
       return summary.status();
     }

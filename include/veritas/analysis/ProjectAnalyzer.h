@@ -57,6 +57,11 @@ struct UnknownFact {
 struct ProjectAnalysisResult {
   AnalysisCompletion completion;
   std::string program_context_id;
+  // The exact revision and build-variant context the summaries were published
+  // under, so version-aware readers (e.g. ListCurrentSummaryArtifacts) cite the
+  // same coordinates the publication coordinator staged.
+  std::string revision_id;
+  std::string build_variant_id;
   std::vector<std::string> published_summary_ids;
   std::vector<UnknownFact> unknowns;
   std::string projection_id;

@@ -56,6 +56,16 @@ void AppendInt(std::string* out, std::int64_t value) {
   out->push_back(';');
 }
 
+// The function-constant framing of a value-ref: tag 'f' followed by the
+// length-prefixed function-variant ID. This is the single place the function
+// value-ref encoding lives; both FunctionValueRef and AppendFunction build on
+// it so a future change to the encoding happens in exactly one spot.
+void AppendFunctionValueRefFraming(std::string* out,
+                                   std::string_view function_variant_id) {
+  AppendTag(out, 'f');
+  AppendString(out, function_variant_id);
+}
+
 // Recursive canonical type serialization. Deterministic for a module; the
 // structural payload is keyed on the TypeID so distinct type kinds can never
 // collide.
@@ -150,6 +160,16 @@ StableValueMapper::StableValueMapper(const ::llvm::Module& module,
   }
 }
 
+core::StableId StableValueMapper::FunctionValueRef(
+    std::string_view function_variant_id) {
+  std::string bytes;
+  AppendTag(&bytes, 'V');
+  AppendFunctionValueRefFraming(&bytes, function_variant_id);
+  return core::MakeStableId(
+      core::IdKind::kValueRef,
+      std::as_bytes(std::span(bytes.data(), bytes.size())));
+}
+
 StatusOr<core::StableId> StableValueMapper::IdFor(
     const ::llvm::Value& value) const {
   std::string bytes;
@@ -234,8 +254,12 @@ void StableValueMapper::AppendGlobal(std::string* out,
 
 void StableValueMapper::AppendFunction(std::string* out,
                                        const ::llvm::Function& fn) const {
-  AppendTag(out, 'f');
-  AppendOwnerVariant(out, &fn);
+  const auto it = owner_variants_.find(&fn);
+  if (it == owner_variants_.end()) {
+    AppendFunctionValueRefFraming(out, fn.getName().str());
+    return;
+  }
+  AppendFunctionValueRefFraming(out, it->second);
 }
 
 void StableValueMapper::AppendConstant(std::string* out,
