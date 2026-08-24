@@ -236,13 +236,25 @@ Each relation has a registry entry specifying column names, types, key columns, 
 
 ## 8. Abstract Memory Model
 
-The minimum V2 memory identity is:
+The minimum V2 memory location is:
 
 ```text
 MemoryLocation = AbstractObject + AccessPath + ByteRange
 ```
 
 `AbstractObject` distinguishes global, stack, heap, argument, function, external, and unknown objects. `AccessPath` represents declared fields, array elements or ranges, and an explicit unknown suffix. `ByteRange` records known offset and size when available and an explicit unknown range otherwise.
+
+Memory *identity* is narrower than the memory location value:
+
+```text
+MemoryLocationId = hash(AbstractObject + AccessPath)
+```
+
+`ByteRange` is an attribute of an access, not of the object being accessed, and is excluded from identity. No distinction is lost: a constant byte offset is already determined by the access path, so two accesses at different offsets keep different identities through their paths. Only the access size leaves identity, and the size describes the accessing instruction rather than the object.
+
+This exclusion is required for the relation schema to be coherent. `DirectRead`/`DirectWrite` carry `range_kind`, `offset`, and `size` as columns beside `memory_id`, which would be redundant if identity already encoded them, and `MayWrite(function_id, memory_id, epistemic)` carries no range at all — with the range folded into identity, two writes at different offsets in one object would derive two distinct `MayWrite` facts and the question "does `f` write object `o`?" would have no single answer. Excluding it also makes a producer that knows the access size (local extraction) and one that does not (SVF, which passes an unknown size) agree on identity for the same object instead of splitting it in two.
+
+The byte range remains recorded on the location and is hashed independently by the summary component digest, so per-access precision is preserved.
 
 Allocation sites and stack objects receive stable identities derived from their owning function, stable source or semantic anchor, allocation kind, and a deterministic local fingerprint. Multiple unnamed allocations in the same function must never collapse into one object.
 

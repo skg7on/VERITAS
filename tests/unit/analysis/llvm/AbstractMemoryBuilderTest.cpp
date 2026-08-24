@@ -25,6 +25,7 @@
 
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -58,15 +59,18 @@ OriginMap OriginMapFor(const ::llvm::Module& module) {
   return origin_map;
 }
 
-const ::llvm::Value* FindFirstGep(const ::llvm::Module& module,
-                                const char* function_name) {
+// Returns the `index`-th GEP in `function_name`, in instruction order.
+const ::llvm::Value* FindGep(const ::llvm::Module& module,
+                             const char* function_name, std::size_t index) {
   const ::llvm::Function* function = module.getFunction(function_name);
   if (!function)
     return nullptr;
+  std::size_t seen = 0;
   for (const auto& block : *function) {
     for (const auto& inst : block) {
       if (const auto* gep = ::llvm::dyn_cast<::llvm::GetElementPtrInst>(&inst)) {
-        return gep;
+        if (seen++ == index)
+          return gep;
       }
     }
   }
@@ -98,7 +102,8 @@ struct MemoryFixture {
         pointer(ptr) {}
 };
 
-MemoryFixture BuildFixture(const char* ir, const char* function_name) {
+MemoryFixture BuildFixture(const char* ir, const char* function_name,
+                           std::size_t gep_index = 0) {
   auto context = std::make_unique<::llvm::LLVMContext>();
   ::llvm::SMDiagnostic error;
   auto module = ::llvm::parseAssemblyString(ir, error, *context);
@@ -107,7 +112,7 @@ MemoryFixture BuildFixture(const char* ir, const char* function_name) {
     std::abort();
   }
   module->setDataLayout(kDataLayout);
-  const ::llvm::Value* gep = FindFirstGep(*module, function_name);
+  const ::llvm::Value* gep = FindGep(*module, function_name, gep_index);
   auto layout = std::make_unique<::llvm::DataLayout>(module->getDataLayout());
   auto origins = std::make_unique<OriginMap>(OriginMapFor(*module));
   return MemoryFixture(std::move(context), std::move(module),
@@ -161,6 +166,58 @@ MemoryFixture VariableIndexFixture() {
       ret void
     }
   )", "indexed");
+}
+
+MemoryFixture TwoFieldFixture(std::size_t gep_index) {
+  // Two same-sized fields at different byte offsets (0 and 4) in one object,
+  // so identity can only tell them apart through the access path.
+  return BuildFixture(R"(
+    %Pair = type { i32, i32 }
+    define void @store_both(ptr %rec) {
+      %a = getelementptr inbounds %Pair, ptr %rec, i32 0, i32 0
+      store i32 0, ptr %a
+      %b = getelementptr inbounds %Pair, ptr %rec, i32 0, i32 1
+      store i32 0, ptr %b
+      ret void
+    }
+  )", "store_both", gep_index);
+}
+
+// The local extraction path supplies a load/store access size, while the SVF
+// path supplies std::nullopt for the very same pointer. Memory identity is the
+// abstract object plus its access path; the byte range is an attribute of the
+// access, not of the object. Both callers must therefore name one location.
+TEST(AbstractMemoryBuilderTest, MemoryIdentityIgnoresByteRange) {
+  auto access = FieldStoreFixture();
+  auto sized = access.builder.LocationFor(*access.pointer, 4);
+  auto unsized = access.builder.LocationFor(*access.pointer, std::nullopt);
+  ASSERT_TRUE(sized.ok());
+  ASSERT_TRUE(unsized.ok());
+
+  EXPECT_EQ(core::ToString(sized->id), core::ToString(unsized->id));
+
+  // The range is still carried on the location, and the two remain
+  // distinguishable as accesses even though they share an identity.
+  EXPECT_EQ(sized->byte_range.offset, 4);
+  EXPECT_EQ(sized->byte_range.size, 4u);
+  EXPECT_EQ(unsized->byte_range, ByteRange::Unknown());
+}
+
+// Guards the collapse risk of dropping the byte range from identity: the two
+// fields have the same size and differ only by offset, which the access path
+// must still encode.
+TEST(AbstractMemoryBuilderTest, DistinctFieldOffsetsKeepDistinctIdentities) {
+  auto first = TwoFieldFixture(0);
+  auto second = TwoFieldFixture(1);
+  auto first_location = first.builder.LocationFor(*first.pointer, 4);
+  auto second_location = second.builder.LocationFor(*second.pointer, 4);
+  ASSERT_TRUE(first_location.ok());
+  ASSERT_TRUE(second_location.ok());
+
+  EXPECT_EQ(first_location->byte_range.offset, 0);
+  EXPECT_EQ(second_location->byte_range.offset, 4);
+  EXPECT_NE(core::ToString(first_location->id),
+            core::ToString(second_location->id));
 }
 
 TEST(AbstractMemoryBuilderTest, PreservesFieldAndByteRange) {

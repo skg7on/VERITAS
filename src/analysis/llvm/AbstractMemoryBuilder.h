@@ -38,6 +38,12 @@ class StableValueMapper;
 // element types with the DataLayout, appending kUnknown (and an unknown byte
 // range) whenever an index is not a compile-time constant. LLVM names never
 // participate in object or memory-location identity.
+//
+// Memory-location identity covers the abstract object and the access path
+// only; the byte range is an attribute of the access and is excluded. A
+// constant byte offset is already determined by the access path, so no
+// distinction is lost, while a caller that knows the access size and one that
+// passes std::nullopt for the same pointer still agree on identity.
 class AbstractMemoryBuilder {
  public:
   AbstractMemoryBuilder(const ::llvm::DataLayout& layout,
