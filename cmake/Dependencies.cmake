@@ -34,8 +34,60 @@
 # -----------------------------------------------------------------------------
 # Z3 — SMT solver, required by SVF (transitively) and by future proof engines.
 # -----------------------------------------------------------------------------
-find_package(Z3 REQUIRED CONFIG)
-if(Z3_VERSION_STRING)
+# Prefer the upstream CONFIG package (honors -DZ3_DIR / CMAKE_PREFIX_PATH); it
+# defines the z3::libz3 imported target and the Z3_* version variables.
+find_package(Z3 CONFIG QUIET)
+
+# Fall back to a manual header + library search for platforms whose Z3 package
+# ships no Z3Config.cmake (e.g. Ubuntu's libz3-dev provides z3.h and libz3.so
+# but no CMake config), where find_package(Z3 CONFIG) fails.
+if(NOT Z3_FOUND)
+  find_path(VERITAS_Z3_INCLUDE_DIR NAMES z3.h z3++.h
+            HINTS ${Z3_DIR} $ENV{Z3_HOME}
+            PATH_SUFFIXES include)
+  find_library(VERITAS_Z3_LIBRARY NAMES z3 libz3
+               HINTS ${Z3_DIR} $ENV{Z3_HOME}
+               PATH_SUFFIXES lib lib64 bin)
+
+  if(VERITAS_Z3_INCLUDE_DIR AND VERITAS_Z3_LIBRARY)
+    if(NOT TARGET z3::libz3)
+      add_library(z3::libz3 UNKNOWN IMPORTED)
+      set_target_properties(z3::libz3 PROPERTIES
+        IMPORTED_LOCATION "${VERITAS_Z3_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${VERITAS_Z3_INCLUDE_DIR}")
+    endif()
+
+    # Best-effort version for the summary message; not required for linking.
+    set(VERITAS_Z3_VERSION_STRING "unknown")
+    if(EXISTS "${VERITAS_Z3_INCLUDE_DIR}/z3_version.h")
+      file(READ "${VERITAS_Z3_INCLUDE_DIR}/z3_version.h" _z3_ver_h)
+      string(REGEX MATCH "#define Z3_MAJOR_VERSION[ \t]+([0-9]+)" _ "${_z3_ver_h}")
+      set(_z3_major "${CMAKE_MATCH_1}")
+      string(REGEX MATCH "#define Z3_MINOR_VERSION[ \t]+([0-9]+)" _ "${_z3_ver_h}")
+      set(_z3_minor "${CMAKE_MATCH_1}")
+      string(REGEX MATCH "#define Z3_BUILD_NUMBER[ \t]+([0-9]+)" _ "${_z3_ver_h}")
+      set(_z3_patch "${CMAKE_MATCH_1}")
+      if(_z3_major AND _z3_minor AND _z3_patch)
+        set(VERITAS_Z3_VERSION_STRING "${_z3_major}.${_z3_minor}.${_z3_patch}")
+      endif()
+    endif()
+
+    set(Z3_VERSION_STRING "${VERITAS_Z3_VERSION_STRING}")
+    set(Z3_FOUND TRUE)
+    set(VERITAS_Z3_FOUND_MANUALLY TRUE)
+  endif()
+endif()
+
+if(NOT Z3_FOUND)
+  message(FATAL_ERROR
+    "VERITAS: Z3 not found. Install Z3 with CMake config support (a source\n"
+    "build, Homebrew, or vcpkg), pass -DZ3_DIR=<dir containing Z3Config.cmake>,\n"
+    "or install the system libz3-dev package.")
+endif()
+
+if(VERITAS_Z3_FOUND_MANUALLY)
+  message(STATUS "VERITAS: Found Z3 ${Z3_VERSION_STRING} (manual search: ${VERITAS_Z3_LIBRARY})")
+elseif(Z3_VERSION_STRING)
   message(STATUS "VERITAS: Found Z3 ${Z3_VERSION_STRING}")
 else()
   message(STATUS "VERITAS: Found Z3")
