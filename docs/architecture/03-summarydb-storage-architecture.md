@@ -49,9 +49,10 @@ VERITAS separates concerns:
      │             │         │         │              │
      ▼             ▼         ▼         ▼              ▼
  Object Store  Metadata  Fact Store  Graph Index  Dependency Index
-  (immutable    (versions   (normalized   (CPG        (reverse
-   summaries)   builds      relations)    projection)  invalidation)
-                configs)
+  (immutable    (versions   (normalized   (native +    (reverse
+   summaries +  builds      relations)    provider     invalidation)
+   provider     configs +                  projections)
+   artifacts)   providers)
      │             │         │         │              │
      └─────────────┴─────────┼─────────┴──────────────┘
                              │
@@ -69,10 +70,10 @@ The seven physical layers:
 
 | Layer | Responsibility | Reference backend (V1) |
 | --- | --- | --- |
-| Object Store | canonical immutable summaries (CAS) | RocksDB |
-| Metadata Store | versions, builds, configurations, ownership | SQLite |
-| Fact Store | normalized semantic relations, current + historical | SQLite (later PostgreSQL) |
-| Graph Index | CPG adjacency indexes for query | SQLite + in-memory graph |
+| Object Store | canonical immutable summaries and provider artifacts/descriptors (CAS) | RocksDB |
+| Metadata Store | versions, builds, configurations, ownership, provider runs/capabilities/bindings | SQLite |
+| Fact Store | normalized native and external semantic relations, current + historical | SQLite (later PostgreSQL) |
+| Graph Index | native CPG and provider-projection adjacency indexes for query | SQLite + in-memory graph |
 | Dependency Index | reverse invalidation edges | SQLite |
 | Evidence Cache | materialized slices per claim | RocksDB |
 | History Store | semantic diffs across revisions | SQLite |
@@ -114,6 +115,9 @@ Storage-specific invariants layered on the platform's P1–P8:
 | S10 | Function Summary IR is the durable WPA boundary; `relations.v2`, dense IDs, and engine-native tuples are run-local projections. | Portable, replayable derivations. |
 | S11 | A WPA component becomes visible only after result, schema, stable-ID, and rooted-witness validation succeeds. | Failure atomicity; no partial replacement. |
 | S12 | Fact Bus publication is complete and idempotent by canonical `(RunId, BatchId)` identity. | Safe retry and multi-sink delivery. |
+| S13 | Native and external provider projections have distinct immutable identities/current bindings and meet only in a pinned query view. | Unification without producer or authority loss. |
+| S14 | A provider graph, its external fact bindings/witnesses, and current provider binding publish atomically. | Readers never observe half-imported external evidence. |
+| S15 | Provider-component deltas may invalidate dependent queries/Evidence but never schedule native summary/WPA work. | Optional evidence cannot perturb native analysis. |
 
 ---
 
@@ -357,6 +361,11 @@ getAliases(V)              → { MustAlias | MayAlias | NoAlias | UnknownAlias }
 getRanges(V)
 getStateTransitions(F)
 
+openProgramGraphSnapshot(native_projection, provider_projections[])
+getProviderObservations(EntityOrRelation)
+getProviderCapabilities(ProviderProjectionID)
+compareProviders(EntityOrRelation)
+
 getDependencySet(F)
 getImpactSet(Change)
 
@@ -409,12 +418,15 @@ class FactStore {
   virtual StatusOr<Explain> Explain(RunId, FactID, ExplainBudget) const = 0;
 };
 
-// CPG adjacency indexes for graph queries.
+// Native CPG and provider-projection adjacency indexes for graph queries.
 class GraphIndex {
  public:
   virtual ~GraphIndex() = default;
-  virtual Status           Publish(ProjectionID, const ThinCpg&) = 0;
-  virtual StatusOr<Trav>   Traverse(TraversalQuery, QueryBudget) const = 0;
+  virtual Status           PublishNative(ProjectionID, const ThinCpg&) = 0;
+  virtual Status           PublishProvider(ProviderProjectionID,
+                                           const ProviderProgramGraph&) = 0;
+  virtual StatusOr<Trav>   Traverse(ProgramGraphSnapshot,
+                                    TraversalQuery, QueryBudget) const = 0;
 };
 
 // Reverse invalidation index, keyed by (producer_id, component).
@@ -475,9 +487,12 @@ The in-memory backend enforces the same invariants (S1–S12) as the durable bac
 
 ## 9.4 Serialization
 
-* Summary bodies and fact tuples use **Protobuf** as the canonical serialization.
+* Summary bodies, fact tuples, and provider-neutral graph records use
+  **Protobuf** as the canonical serialization.
 * Canonical Protobuf encoding rules (`CanonicalEncode`) produce byte-identical output for semantically-identical inputs — sorted maps, sorted repeated fields where semantics allow, UTF-8, deterministic sub-message ordering.
-* Textual formats (JSON) are for diagnostics only, not durable state.
+* Textual formats (JSON) are for diagnostics or provider input only, not
+  durable canonical state. Joern GraphSON/GraphML is normalized before
+  publication.
 
 ## 9.5 What is deliberately NOT the SummaryDB
 
@@ -541,6 +556,28 @@ Successful component reuse is content-addressed by
 engine-neutral; exact executor provenance prevents C++ or a different Souffle
 build from satisfying a production run. Every new `AnalysisRun` retains its own
 manifest and result reference, so cache reuse never merges run history.
+
+## 10.6 External provider projection publication
+
+M12 provider publication is independent of native summary/M6 publication but
+atomic across every provider-visible layer:
+
+```text
+1. ObjectStore.PutIfAbsent(provider artifact descriptor / optional raw blob)
+2. build and validate ProviderProgramGraph + ExternalFactBatch in staging
+3. begin shared metadata/fact/graph transaction
+4. insert provider run, capability, projection, and historical rows
+5. publish provider graph nodes/relations/observations and adjacency indexes
+6. publish canonical facts, run bindings, assumptions, and rooted witnesses
+7. record provider-component Evidence/query dependencies and stale markers
+8. swap current (repository, revision, build, provider, config) binding
+9. commit
+```
+
+Failure before commit leaves the prior provider binding current and exposes no
+partial graph or fact batch. Native summary and `ThinCpg` bindings are not part
+of this transaction. Equivalent normalized content may reuse a provider
+projection while retaining distinct artifact/run provenance.
 
 ---
 
@@ -672,7 +709,13 @@ INVALID
 REBUILT
 ```
 
-The Dependency Index drives freshness: an Evidence case records the summaries and facts it cited (`depends_on { summary(...), fact(...), type_layout(...) }`), and any component-delta on those inputs marks the case `STALE` via the scheduler's `EVIDENCE_INVALIDATION` work items.
+The Dependency Index drives freshness: an Evidence case records the summaries,
+facts, and selected provider components it cited
+(`depends_on { summary(...), fact(...), type_layout(...),
+provider_component(...) }`). A component delta marks the case `STALE` via the
+scheduler's `EVIDENCE_INVALIDATION` work items. Provider deltas invalidate only
+dependent query/Evidence caches; they do not schedule native summary or WPA
+work.
 
 `STALE` Evidence is served with a warning; `INVALID` Evidence is refused and re-derived on next request.
 
@@ -741,13 +784,17 @@ findDominatingChecks(memcpy)
 getCallPath(entry, memcpy)
 getRelevantSummaries(path)
 explainFact(run_id, fact_id)
+getProviderObservations(entity_or_relation)
+getProviderCapabilities(provider_projection_id)
 ```
 
 M10B's Evidence Builder input layer assembles the answers into a typed,
 completeness-aware input. M10C validates and converts that input into an
 `EvidenceCase`. See `04-evidence-ir-architecture.md` for the full IR and the
 M10C milestone specification for the concrete semantic and serialization
-boundary.
+boundary. When M12 providers are selected, M10B pins their exact projection,
+capability, mapping, and assumption digests in the input snapshot fingerprint;
+provider-native formats and IDs never cross the Evidence API.
 
 ---
 

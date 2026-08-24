@@ -239,8 +239,10 @@ After M8R.5 qualifies the M9 handoff:
   conformance suites.
 * M10B builds Evidence Builder APIs and the first security demo over M9 facts
   and M10A relations.
-* M11 and M12 preserve the same Summary IR, execution-projection, and trust
-  boundaries for external IR and external facts.
+* M11 preserves the native Summary IR/execution path for external LLVM IR;
+  M12 preserves the same trust boundary by storing external provider graphs and
+  facts as separate epistemic-lowered SummaryDB projections that never become
+  native WPA inputs.
 * M13 evaluates a Souffle-native points-to/call-graph kernel against pinned SVF
   only under separately approved correctness, precision, performance, and
   model-coverage thresholds. M13 is independent of the M9-M12 critical path.

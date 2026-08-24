@@ -496,9 +496,14 @@ Build Evidence APIs over M9 facts and M10A relations. The buffer-safety demonstr
 
 Accept bitcode and textual IR while preserving the same local analysis, summary-v2, relational projection, and WPA contracts.
 
-### M12 — External Facts Importer
+### M12A–M12D — External Provider Ingestion
 
-Admit third-party facts with explicit origin, fidelity, and epistemic floors. Imported facts remain non-authoritative and cannot silently participate in WPA invalidation.
+M12A introduces the SummaryDB provider graph/fact substrate, M12B directly
+imports Joern GraphSON/GraphML, M12C adds provider fusion and Evidence
+integration, and M12D reserves a separately designed PhASAR result adapter.
+Imported observations remain non-authoritative and cannot silently participate
+in native summary or WPA invalidation. The canonical design is
+`m12-joern-cpg-summarydb-importer-design-spec.md`.
 
 ### M13 — Benchmark-gated PTA Research
 

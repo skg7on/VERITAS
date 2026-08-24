@@ -1,19 +1,26 @@
 # VERITAS SummaryDB Ingest Adapter — Milestone Spec
 
-**Status:** Milestone spec (M11 + M12). Superseded for architectural content by `docs/architecture/01-platform-architecture.md`.
-**Date:** 2026-08-16
-**Scope:** Concrete interface signatures, CLI contract, error handling, and testing for the two-tier ingest adapter delivered by milestones M11 (external IR adapter) and M12 (external-facts importer).
+**Status:** Milestone overview. M11 signatures remain normative; M12 details are
+superseded by `m12-joern-cpg-summarydb-importer-design-spec.md`.
+**Date:** 2026-08-24
+**Scope:** Shared boundary between M11 native analysis of external LLVM IR and
+M12 SummaryDB ingestion of external provider graphs/facts.
 
 Architectural framing lives in `docs/architecture/01-platform-architecture.md`:
 
 - §6 — the three-tier adapter picture.
 - §7 — Tier 1: `compile_commands.json` project directory (`CodeGenIrSource`).
 - §8 — Tier 2: bitcode / textual IR (`BitcodeIrSource`) with T0 / T1 / T2 fidelity.
-- §9 — Tier 3: external-facts importer (Joern / PhASAR) with epistemic floor.
-- §10 — adapter interface contract (`ProgramIrSource`, `ExternalFactsImporter`).
+- §9 — Tier 3: SummaryDB provider projection + external fact ingestion.
+- §10 — adapter interface contracts (`ProgramIrSource`, provider importer).
 - §11 — invariant B10 in its current form.
 
-This spec fixes the milestone-scoped C++ signatures, CLI contract, error policy, and test matrix. It is the reference for `docs/plans/milestones/m11-external-ir-adapter-implementation-plan.md` and `docs/plans/milestones/m12-external-facts-importer-implementation-plan.md`.
+This spec fixes M11's milestone-scoped signatures and records the shared
+boundary. The dedicated
+[`M12 Joern CPG SummaryDB importer specification`](m12-joern-cpg-summarydb-importer-design-spec.md)
+owns M12A–M12C identity, normalized graph, SummaryDB placement, external fact
+batch, fusion, security, CLI, and test contracts. The existing M12 plan must be
+replaced after that written specification is approved.
 
 ---
 
@@ -67,47 +74,27 @@ M4's `RunLocalAnalysis` is refactored to accept a `ProgramIrSource&`; `LocalFact
 
 ---
 
-## 2. External-Facts Importer — component signatures (M12)
+## 2. External Provider Ingestion — boundary summary (M12)
 
-```cpp
-namespace veritas::facts::external {
-
-enum class ExternalProducer { Joern, Phasar };
-
-// One imported observation; never a FunctionSummary.
-struct ExternalFact {
-  ExternalProducer producer;
-  std::string external_id;          // Joern node ID / PhASAR fact ID
-  core::StableId subject_id;        // VERITAS entity if resolved,
-                                    // else synthetic external:<prod>:<id>
-  std::string predicate_kind;       // normalized VERITAS predicate vocabulary
-  std::string predicate_canonical;
-  EpistemicState epistemic;         // always INFERRED or ASSUMED, never MUST
-  std::optional<core::StableId> source_anchor_id;
-  std::string raw_record;           // verbatim source record for provenance
-};
-
-class JoernCpgImporter {
- public:
-  StatusOr<std::vector<ExternalFact>> ImportGraphML(const std::filesystem::path&);
-  StatusOr<std::vector<ExternalFact>> ImportJson(const std::filesystem::path&);
-};
-
-class PhasarResultImporter {
- public:
-  StatusOr<std::vector<ExternalFact>> Import(const std::filesystem::path&);
-};
-
-// Resolves external entities to VERITAS IDs where a stable bridge exists.
-class ExternalIdentityBridge {
- public:
-  StatusOr<core::StableId> Resolve(ExternalProducer, const std::string& external_ref);
-};
-
-}  // namespace veritas::facts::external
+```text
+Joern GraphSON / GraphML
+    -> bounded provider reader
+    -> RawProviderGraph
+    -> schema/context validation
+    -> identity resolution + semantic normalization
+    -> ProviderProgramGraph + ExternalFactBatch
+    -> atomic SummaryDB provider publication
 ```
 
-Admission rules (identity bridge, epistemic floor, producer/trust, no-WPA-participation, vocabulary normalization) are stated in `docs/architecture/01-platform-architecture.md` §9.2 and are enforced at fact-store write time.
+The imported projection is stored across SummaryDB's Object, Metadata, Graph,
+Fact/Provenance, Evidence Cache, and History layers. It does not mutate the M6
+`ThinCpg`, native summary bindings, or WPA inputs. Provider and native
+observations share a semantic query view while retaining separate authority,
+epistemic state, capabilities, assumptions, and witnesses.
+
+M12 adds `ExternalFactBatch`; it does not publish raw vectors of stringly
+`ExternalFact` records. Joern ordinals remain provenance only and unresolved
+subjects receive canonical hashed `ExternalEntityID` values.
 
 ---
 
@@ -116,12 +103,18 @@ Admission rules (identity bridge, epistemic floor, producer/trust, no-WPA-partic
 ```text
 veritas-build analyze --project <dir>      # existing → CodeGenIrSource
 veritas-build analyze --bitcode <path>     # IR adapter → BitcodeIrSource (file or directory)
-veritas-build import  --joern  <export>    # external importer → JoernCpgImporter
-veritas-build import  --phasar <result>    # external importer → PhasarResultImporter
+veritas-build import --joern <export> --project <dir> --output <db>
+    [--format auto|graphson|graphml] [--accept-unverified-context]
 ```
 
 - `--project` and `--bitcode` are mutually exclusive.
-- External ingestion lives on `veritas-build` (a new `import` subcommand) rather than a fifth tool binary; it can be split into a separate tool later if it grows.
+- M12 import requires an existing matching repository/revision/build binding in
+  the selected SummaryDB.
+- A raw export without verifiable source and build/frontend fingerprints
+  requires explicit `--accept-unverified-context` assumptions for the missing
+  dimensions; a verified mismatch is never overridable.
+- PhASAR moves to independently designed M12D and does not share Joern's graph
+  parser API.
 
 ---
 
@@ -133,8 +126,11 @@ veritas-build import  --phasar <result>    # external importer → PhasarResultI
 | LLVM version mismatch | `FailedPrecondition`, clear message (never silent downgrade) |
 | **T2 stripped bitcode** | `FailedPrecondition` — "no stable symbol identity; keep symbols or rebuild with `-g`" |
 | Duplicate symbol during link | fatal, reported (never silently merged) |
-| Identity bridge can't resolve | `external:<prod>:<id>` synthetic subject + provenance flag (not an error) |
-| Joern/PhASAR parse or schema-version error | `InvalidArgument`, **atomic** — no partial facts published |
+| Identity bridge is ambiguous/unresolved | hashed `ExternalEntityID` + explicit unknown; not an error |
+| Joern parse error | `InvalidArgument`, atomic — no partial provider state |
+| Unsupported Joern/CPG schema | `FailedPrecondition`, no publication |
+| Repository/revision/build mismatch | `FailedPrecondition`, no publication |
+| Import resource budget exhausted | `ResourceExhausted`, no publication |
 | External → `MUST` upgrade attempt | rejected at fact-store validation (epistemic floor enforced) |
 
 ---
@@ -151,19 +147,26 @@ veritas-build import  --phasar <result>    # external importer → PhasarResultI
 - Determinism: same bitcode twice → identical summaries + `ProjectionID`.
 - LLVM version mismatch → clean error.
 
-### External importer
+### External provider importer
 
-- Joern `CALL` edge → `CallFact` (producer=joern, epistemic=INFERRED).
-- PhASAR result → `ValueFlowFact` (or opaque observation), epistemic=INFERRED.
-- Identity bridge resolves mangled name → `FunctionVariantID`.
-- Unresolvable entity → synthetic `external:` ID.
-- Malformed file → atomic failure, no partial facts.
-- External fact never reaches `MUST` / never becomes `VERIFIED_FACT`.
+- Equivalent GraphSON/GraphML exports produce the same normalized provider
+  projection identity.
+- Joern `CALL` maps to `MayCall` with `INFERRED` epistemic state.
+- Joern `REACHING_DEF` maps to a rooted value-flow fact.
+- Structural AST/CFG topology is queryable without one fact per graph edge.
+- Identity bridge resolves stable entities and preserves ambiguous/unresolved
+  subjects without fabricated semantic IDs.
+- Malformed, mismatched, over-budget, or invalid input fails atomically.
+- Provider publication never advances native summary/M6 bindings or schedules
+  native WPA.
+- Imported absence never produces negative evidence.
+- Full cases are specified in M12 §22.
 
 ### Boundary scans (mirroring existing M6 tests)
 
 - Installed public headers contain no Joern/PhASAR/bitcode-parser native types.
-- The importer and IR adapter are isolated from the CPG projection and SVF stages.
+- The provider importer and IR adapter are isolated from the M6 projection and
+  SVF stages.
 
 ---
 
@@ -172,7 +175,10 @@ veritas-build import  --phasar <result>    # external importer → PhasarResultI
 ### Milestones (after M10C in the M0-M12 chronology)
 
 - **M11 — External IR adapter** (depends on **M5**): `BitcodeIrSource`, `--bitcode` CLI. Reuses M4 extractor + M5 SVF unchanged.
-- **M12 — External-facts importer** (depends on **M9**): Joern/PhASAR importers + `veritas-build import`. Needs the fact + provenance stores.
+- **M12A — SummaryDB external-provider substrate** (depends on **M2/M3/M6/M9**).
+- **M12B — Joern GraphSON/GraphML importer** (depends on **M12A**).
+- **M12C — Provider fusion and Evidence integration** (depends on **M10B/M12B**).
+- **M12D — PhASAR result adapter** (depends on **M12A**; separate detailed design required).
 
 ### Existing docs consulted during implementation
 
@@ -180,3 +186,4 @@ veritas-build import  --phasar <result>    # external importer → PhasarResultI
 2. `docs/specs/veritas-engineering-backbone-design-specification.md` — invariant B10 as rewritten to admit Tier 2 and Tier 3.
 3. `docs/specs/milestones/m04-clang-llvm-project-analysis-design-spec.md` — the extraction pipeline reused by both tiers.
 4. `docs/specs/milestones/m06-thin-cpg-projection-design-spec.md` — the CPG projection stage is unchanged; external artifacts never enter it.
+5. `docs/specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md` — canonical M12A–M12C design and acceptance contract.

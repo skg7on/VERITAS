@@ -29,7 +29,7 @@ This milestone turns SummaryDB from a cache into a proof-producing semantic infr
 
 ---
 
-# 2. Only Input Contract: `AnalysisFactBatch`
+# 2. Only WPA Input Contract: `AnalysisFactBatch`
 
 M9 accepts one immutable `AnalysisFactBatch` constructed from a successful
 `WpaRunResult`:
@@ -60,7 +60,15 @@ The producer and Fact Bus must prove before M9 persistence:
   publication.
 
 Raw `FactTuple` vectors, partial component results, and mixed-run envelopes are
-not M9 inputs.
+not WPA inputs to M9.
+
+M12 adds a separately typed `ExternalFactBatch` for a completely validated
+external provider projection. It uses canonical M9 facts, run bindings, finite
+rooted witnesses, expected/completed component equality, atomic publication,
+and idempotent `(ProviderRunId, BatchId)` delivery. It is not constructed from
+`WpaRunResult` and cannot enter through a raw `PublishFacts` bypass. Thus
+`AnalysisFactBatch` remains the sole WPA contract without incorrectly making it
+the only future producer contract accepted by the Fact Store.
 
 ---
 
@@ -311,4 +319,6 @@ summary refs
 
 M9 is complete when every accepted `AnalysisFactBatch` is published atomically,
 idempotently, and explainably through stable APIs, with run history and stale
-state preserved.
+state preserved. The M12 external-provider contract is a later extension over
+these completed storage/provenance guarantees and is defined by
+`m12-joern-cpg-summarydb-importer-design-spec.md`.

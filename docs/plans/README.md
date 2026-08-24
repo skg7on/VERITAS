@@ -23,7 +23,11 @@ records this hierarchy migration.
 | M10A | Planned; detailed specification and plan required before implementation | — | — | — |
 | M10B | Planned | [plan](milestones/m10b-evidence-builder-input-apis-demo-implementation-plan.md) | [spec](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md) | [#13](https://github.com/skg7on/VERITAS/issues/13) |
 | M10C | Planned | [plan](milestones/m10c-evidence-ir-semantic-model-serialization-implementation-plan.md) | [spec](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md) | — |
-| M11 / M12 | Planned | [M11 plan](milestones/m11-external-ir-adapter-implementation-plan.md); [M12 plan](milestones/m12-external-facts-importer-implementation-plan.md) | [shared M11/M12 spec](../specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md) | [#20](https://github.com/skg7on/VERITAS/issues/20), [#21](https://github.com/skg7on/VERITAS/issues/21) |
+| M11 | Planned | [plan](milestones/m11-external-ir-adapter-implementation-plan.md) | [shared ingest-boundary spec](../specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md) | [#20](https://github.com/skg7on/VERITAS/issues/20) |
+| M12A | Approved / pending implementation | [SummaryDB provider substrate plan](milestones/m12a-summarydb-external-provider-substrate-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
+| M12B | Approved / pending implementation | [Joern GraphSON/GraphML importer plan](milestones/m12b-joern-graphson-graphml-importer-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
+| M12C | Approved / pending implementation | [provider fusion/Evidence plan](milestones/m12c-provider-fusion-evidence-integration-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
+| M12D | Detailed design and plan required | — | PhASAR adapter is intentionally separate from the Joern graph importer | [#21](https://github.com/skg7on/VERITAS/issues/21) |
 
 ## Execution Rule
 
