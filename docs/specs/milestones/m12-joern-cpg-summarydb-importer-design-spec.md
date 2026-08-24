@@ -1,6 +1,6 @@
 # M12 Joern CPG SummaryDB Importer Design Spec
 
-**Status:** Draft for written review; architecture approved 2026-08-24
+**Status:** Approved 2026-08-24
 **Milestone:** M12A–M12C; M12D is a separately scoped PhASAR follow-up
 **Depends on:** M2 identity, M3 object store, M6 graph storage/query foundations,
 M9 fact/provenance publication, and M10B for Evidence integration
