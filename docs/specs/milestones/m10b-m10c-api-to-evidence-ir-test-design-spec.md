@@ -1,6 +1,6 @@
 # M10B–M10C API-to-Evidence-IR Test Design Spec
 
-**Status:** Draft for review
+**Status:** Approved
 **Milestones:** M10B Evidence Builder inputs and M10C Evidence IR semantic serialization
 **Depends on:** M6 thin CPG, M9 fact/provenance store, M10A recursive domain expansion
 **Validates:** M10B issue #13 and M10C issue #70
@@ -188,8 +188,9 @@ Validation rules are:
   provenance reference of kind `kFact`;
 * the completion fact's run, scope, budget, completeness, reasons, count, and
   returned-member digest exactly match the result metadata and payload;
-* every `query_provenance_id` in `EvidenceBuildInput` resolves to its completion
-  fact, run binding, and selected witness in the handoff's provenance closure;
+* every `query_provenance_id` in `EvidenceBuildInput` resolves to its explicit
+  completion fact and run binding plus a selected witness in the handoff's
+  provenance closure;
 * `examined_items` counts candidates assessed by the query and is at least the
   number of returned facts or path members;
 * truncation reasons are unique and serialized in enum order; and
@@ -250,9 +251,9 @@ fact snapshot
 
 Backends changing their current binding during assembly cannot produce a mixed
 input. The service either holds a snapshot/read transaction or returns a stable
-retryable failure. The handoff contains the query completion facts and selected
-witnesses; M10C does not perform a second provenance lookup. M10C independently
-rejects a mixed or unresolved input.
+retryable failure. The handoff contains the query completion facts and run
+bindings plus their selected witnesses; M10C does not perform a second
+provenance lookup. M10C independently rejects a mixed or unresolved input.
 
 ---
 

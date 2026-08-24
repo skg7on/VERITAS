@@ -1,6 +1,6 @@
 # M10B Evidence Builder Input APIs and First Demo Design Spec
 
-**Status:** Draft
+**Status:** Approved
 **Milestone:** M10B
 **Depends on:** M6 thin CPG, M9 fact/provenance store, M10A recursive domain expansion
 **Feeds:** M10C Evidence IR semantic model and serialization, then future Review Agent tools
@@ -64,15 +64,22 @@ FlowSlice {
     contradicting_facts
     unknowns
     provenance_refs
-    truncation
+    metadata
 }
 ```
 
 ```text
 EvidenceFactSet {
     facts
-    completeness = COMPLETE | TRUNCATED
+    metadata
+}
+
+QueryResultMetadata {
+    completeness = UNSPECIFIED | COMPLETE | TRUNCATED
     truncation_reasons
+    examined_items
+    analysis_run_id
+    query_provenance_id
 }
 
 ClaimSeed {
@@ -92,6 +99,8 @@ EvidenceBuildInput {
     aliases
     dominating_checks
     unknowns
+    query_completion_facts
+    query_completion_bindings
     provenance
 }
 ```
@@ -107,14 +116,33 @@ EvidenceQueryBudget {
     max_depth
     max_nodes
     max_paths
+    max_facts_per_query
     max_provenance_depth
 }
 ```
 
-Budget truncation is visible. A truncated slice must not masquerade as complete
-evidence. Every fact lookup returns an `EvidenceFactSet`; complete-empty and
-truncated-empty results are distinct. `EvidenceBuildInput` is the only typed
-handoff M10C consumes, so M10C never parses M10B's diagnostic JSON.
+All budget limits are positive. Reaching a limit exactly is complete when the
+backend proves there is no additional matching result; discovering one more
+result returns the canonical prefix and reports the corresponding stable
+truncation reason. Budget truncation is visible, and a truncated slice must not
+masquerade as complete evidence.
+
+Every flow or fact result carries the same `QueryResultMetadata` shape.
+`query_provenance_id` is a `core::IdKind::kFact` reference to an M9-backed
+`evidence.query_completion.v1` completion fact. The completion fact records the
+query kind, ordered scope, budget, implementation version,
+`input_snapshot_fingerprint`, completeness, ordered reasons, examined count,
+and canonical `returned_member_digest`. Its M9 run binding and selected witness
+must resolve in the returned provenance closure. Complete-empty and
+truncated-empty results are therefore distinct and auditable.
+
+`EvidenceBuildInput` explicitly carries the query-completion `facts::Fact`
+values, their M9 `RunFactBinding` values, and the selected witnesses in its
+provenance graph. It is the only typed handoff M10C consumes, so M10C never
+parses M10B's diagnostic JSON or performs a second provenance lookup. The
+[M10B–M10C API-to-Evidence-IR test contract](m10b-m10c-api-to-evidence-ir-test-design-spec.md)
+defines the exact metadata validation, query-completion relation, case IDs,
+oracles, and milestone ownership.
 
 ---
 
@@ -129,11 +157,16 @@ class EvidenceQueryService {
       core::StableId dst,
       EvidenceQueryBudget budget) const;
 
-  StatusOr<EvidenceFactSet> GetRanges(core::StableId value_ref) const;
-  StatusOr<EvidenceFactSet> GetCapacities(core::StableId memory_ref) const;
-  StatusOr<EvidenceFactSet> GetAliases(core::StableId memory_ref) const;
-  StatusOr<EvidenceFactSet> GetUnknowns(core::StableId scope_ref) const;
-  StatusOr<EvidenceFactSet> GetDominatingChecks(core::StableId callsite_ref) const;
+  StatusOr<EvidenceFactSet> GetRanges(
+      core::StableId value_ref, EvidenceQueryBudget budget) const;
+  StatusOr<EvidenceFactSet> GetCapacities(
+      core::StableId memory_ref, EvidenceQueryBudget budget) const;
+  StatusOr<EvidenceFactSet> GetAliases(
+      core::StableId memory_ref, EvidenceQueryBudget budget) const;
+  StatusOr<EvidenceFactSet> GetUnknowns(
+      core::StableId scope_ref, EvidenceQueryBudget budget) const;
+  StatusOr<EvidenceFactSet> GetDominatingChecks(
+      core::StableId callsite_ref, EvidenceQueryBudget budget) const;
   StatusOr<facts::ProvenanceGraph> Explain(
       core::StableId run_id,
       core::StableId fact_id,
@@ -146,16 +179,27 @@ class EvidenceQueryService {
 }
 ```
 
+`BuildEvidenceInput` pins one immutable CPG projection and one M9 read snapshot
+before issuing any subquery. Repository, revision, build variant, analysis
+configuration, analysis run, CPG projection, and fact snapshot must agree for
+every returned member. A backend binding change produces a stable retryable
+failure instead of a mixed handoff.
+
 ---
 
 # 5. Demo Fixture
 
-Files:
+Use isolated project fixtures so test setup, rather than a fixture-specific CLI
+flag, selects one deterministic finding:
 
 ```text
-tests/fixtures/cpp/overflow/packet.h
-tests/fixtures/cpp/overflow/unsafe_packet.cpp
-tests/fixtures/cpp/overflow/safe_packet.cpp
+tests/fixtures/projects/evidence_overflow_unsafe/...
+tests/fixtures/projects/evidence_overflow_safe/...
+tests/fixtures/projects/evidence_overflow_non_dominating/...
+tests/fixtures/projects/evidence_overflow_mixed_paths/...
+tests/fixtures/projects/evidence_overflow_opaque_validator/...
+tests/fixtures/projects/evidence_overflow_alias_uncertain/...
+tests/fixtures/projects/evidence_overflow_summary/...
 ```
 
 Unsafe shape:
@@ -166,17 +210,20 @@ void copy_payload(Packet* p, Buffer* b) {
 }
 ```
 
-Safe shape:
+Safe dominating shape:
 
 ```cpp
 void copy_payload(Packet* p, Buffer* b) {
-  if (p->length <= b->capacity) {
+  if (p->length <= sizeof(b->data)) {
     memcpy(b->data, p->payload, p->length);
   }
 }
 ```
 
-The exact fixture can be adjusted for compile simplicity, but it must produce the semantic pattern above.
+The remaining projects isolate a sibling-branch non-dominating check, mixed
+checked and unchecked paths, an unmodeled external validator, uncertain alias,
+and a cross-translation-unit summary flow. Exact fixture requirements and
+forbidden outcomes are governed by section 6 of the companion test contract.
 
 ---
 
@@ -187,7 +234,10 @@ veritas-query evidence overflow \
     --sink memcpy \
     --format json \
     --max-depth 8 \
-    --max-paths 5
+    --max-nodes 256 \
+    --max-paths 5 \
+    --max-facts 64 \
+    --max-provenance-depth 8
 ```
 
 Output includes:
@@ -219,25 +269,30 @@ JSON.
 * Facts keep epistemic state.
 * Provenance refs are included, but recursive provenance expansion is budgeted.
 * Source text is optional and requested by reference, not copied by default.
+* A complete empty open-world query becomes an unknown or omission.
+* A truncated empty query never becomes negative evidence.
+* Only a complete, scoped dominating-check query with a matching query
+  completion fact may feed the registered
+  `evidence.closed_world.dominating_check_absence.v1` rule.
+* The derived negative fact retains the completion fact as a provenance input.
 
 ---
 
 # 8. Acceptance Tests
 
-Required tests:
+The M10B completion gate is the companion contract's 23 owned cases:
 
 ```text
-unsafe fixture returns packet.length -> memcpy.size flow
-unsafe fixture returns range wider than capacity
-unsafe fixture reports no dominating bounds check
-safe fixture reports dominating bounds check
-flow slice includes summary IDs and provenance IDs
-unknown external validation remains unknown
-path budget truncates explicitly
-complete-empty and truncated-empty fact results remain distinguishable
-typed EvidenceBuildInput contains every required query result and provenance graph
-JSON output is deterministic for golden fixture
+AC-001 through AC-006     contract and deterministic diagnostic JSON
+QRY-001 through QRY-010  semantic queries, budgets, aliases, and provenance
+HND-001 through HND-006  immutable typed handoff and snapshot consistency
+DEM-001                  M10B slice-JSON compatibility
 ```
+
+Every case asserts typed required and forbidden outputs before any golden
+comparison. The focused cases run under the `evidence-contract` and
+`evidence-integration` CTest labels, and M10B completion also requires the full
+repository suite.
 
 ---
 
@@ -252,6 +307,7 @@ Provenance refs
 Unknown refs
 Summary refs
 Source anchors
+Query completion facts, run bindings, and selected witnesses
 ```
 
 M10C can then wrap these into:
