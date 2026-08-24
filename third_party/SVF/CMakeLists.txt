@@ -209,8 +209,16 @@ message(
 # SVF Z3 dependency finding
 # =================================================================================
 
-# Find the local FindZ3.cmake package; internally finds system Z3; falls back to manual search
-find_package(Z3 REQUIRED CONFIG)
+# Locate Z3 via SVF's own FindZ3.cmake, which tries the upstream CONFIG package
+# first and falls back to a manual header + library search. Include it directly
+# rather than via find_package(Z3) MODULE mode: MODULE mode resolves against
+# CMAKE_MODULE_PATH and can pick up an unrelated FindZ3.cmake (e.g. LLVM's) that
+# neither sets Z3_CXX_INCLUDE_DIRS nor covers platforms whose Z3 package ships no
+# Z3Config.cmake (e.g. Ubuntu's libz3-dev provides z3.h and libz3.so only).
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/Modules/FindZ3.cmake")
+if(NOT Z3_FOUND)
+  message(FATAL_ERROR "SVF requires Z3, but it was not found.")
+endif()
 
 # Ensure Z3_CXX_INCLUDE_DIRS is set (Z3Config.cmake may not set it)
 if(TARGET z3::libz3)
