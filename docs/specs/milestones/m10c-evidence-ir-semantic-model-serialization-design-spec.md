@@ -88,6 +88,7 @@ The following documents have distinct authority:
 | EIR meaning, epistemic policy, abstraction levels, and lifecycle | `docs/architecture/04-evidence-ir-architecture.md` |
 | EIR-T lexical grammar, syntax, and well-formedness rules | `docs/specs/veritas-evidence-ir-formal-specification.md` |
 | Evidence query and slice input contract | `docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md` |
+| Executable API-to-Evidence-IR cases, fixtures, and oracles | `docs/specs/milestones/m10b-m10c-api-to-evidence-ir-test-design-spec.md` |
 | M10C implementation subset and integration choices | This specification |
 
 The draft formal grammar does not currently serialize `schema_version`, EIR
@@ -278,7 +279,6 @@ M10C consumes an immutable request:
 namespace veritas::evidence {
 
 enum class EvidenceLevel { kL0, kL1, kL2 };
-enum class QueryCompleteness { kComplete, kTruncated };
 
 struct ClaimSeed {
   core::StableId finding_id;
@@ -289,12 +289,6 @@ struct ClaimSeed {
   core::StableId sink_ref;
 };
 
-struct EvidenceFactSet {
-  std::vector<facts::Fact> facts;
-  QueryCompleteness completeness;
-  std::vector<TruncationReason> truncation_reasons;
-};
-
 struct EvidenceBuildInput {
   ClaimSeed claim_seed;
   FlowSlice flow_slice;
@@ -303,6 +297,8 @@ struct EvidenceBuildInput {
   EvidenceFactSet aliases;
   EvidenceFactSet dominating_checks;
   EvidenceFactSet unknowns;
+  std::vector<facts::Fact> query_completion_facts;
+  std::vector<facts::RunFactBinding> query_completion_bindings;
   facts::ProvenanceGraph provenance;
 };
 
@@ -323,14 +319,27 @@ class EvidenceCaseBuilder {
 M10B exposes the typed `ClaimSeed` and `EvidenceBuildInput` handoff using
 values already required in its diagnostic output. M10B must expose those
 values without requiring M10C to parse diagnostic JSON. It must also expose
-capacity results and a completeness/truncation state for every fact lookup;
-the current vector-only M10B API cannot distinguish a complete empty result
-from an incomplete empty result.
+capacity results and the shared M10B `QueryResultMetadata` for the flow slice
+and every fact lookup. That metadata carries completeness, stable truncation
+reasons, examined count, analysis run, and an M9-backed query-completion fact
+ID. The handoff has explicit completion-fact and run-binding collections, and
+its provenance graph contains the selected witnesses; M10C never performs a
+second query or provenance lookup. Completion validation includes the full
+shared budget, including M10B's `max_facts_per_query` limit.
 
-The M10B design and plan must be amended before implementation so ranges,
-capacities, aliases, dominating checks, unknowns, and provenance can be bundled
-into this immutable input. This is an additive handoff correction, not a move
-of EIR assembly into M10B.
+Complete-empty and truncated-empty results remain distinguishable through
+assembly. M10C V1 applies the following absence policy:
+
+* complete empty open-world range, capacity, alias, and external-semantics
+  queries become explicit `Unknown` or `Omission` members;
+* every truncated empty result becomes an explicit `Unknown` or `Omission` and
+  can never produce negative evidence;
+* only a complete, scoped dominating-bounds-check result whose matching
+  `evidence.query_completion.v1` fact proves coverage of all admitted paths may
+  produce negative evidence; and
+* that negative fact is derived by
+  `evidence.closed_world.dominating_check_absence.v1` and retains the query
+  completion fact as a provenance input.
 
 `EvidenceCaseBuilder` is an assembler, not a second analysis engine. It maps
 the supplied slice and referenced M9/M10A facts through a versioned predicate
@@ -606,6 +615,21 @@ parse errors report stable line and column
 binary CLI output is failure-atomic
 overflow EIR-T output matches the canonical golden fixture
 ```
+
+The stable executable requirements are the companion contract's 31 M10C-owned
+cases:
+
+```text
+BLD-001 through BLD-010  conservative M10B-to-EIR assembly and projection
+VID-001 through VID-008  validation and semantic identity
+REP-001 through REP-008  EIR-T, Protobuf, and full-EIR JSON equivalence
+DEM-002 through DEM-006  public CLI and deterministic demonstrations
+```
+
+M10C also reruns all 23 M10B-owned `AC`, `QRY`, `HND`, and `DEM-001` cases as
+prerequisite compatibility tests. Case-level required and forbidden outputs in
+the companion contract are normative; the prose list above is a summary, not
+a replacement oracle.
 
 The canonical overflow golden case includes:
 
