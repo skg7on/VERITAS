@@ -117,4 +117,39 @@ StatusOr<std::vector<KeyField>> DecodeFields(std::string_view encoded) {
   return fields;
 }
 
+StatusOr<DecodedKey> DecodeKey(std::string_view encoded) {
+  if (!encoded.starts_with(kSemanticKeyVersion)) {
+    return Status::InvalidArgument("semantic key has no version prefix");
+  }
+  auto fields = DecodeFields(encoded.substr(kSemanticKeyVersion.size()));
+  if (!fields.ok())
+    return fields.status();
+  if (fields->size() < 2) {
+    return Status::InvalidArgument("semantic key has no relation and arity");
+  }
+  if ((*fields)[0].tag != KeyFieldTag::kSymbol ||
+      (*fields)[1].tag != KeyFieldTag::kUnsigned) {
+    return Status::InvalidArgument("semantic key header is malformed");
+  }
+
+  std::size_t arity = 0;
+  const std::string& arity_text = (*fields)[1].value;
+  if (arity_text.empty())
+    return Status::InvalidArgument("semantic key arity is empty");
+  for (const char digit : arity_text) {
+    if (digit < '0' || digit > '9')
+      return Status::InvalidArgument("semantic key arity is not numeric");
+    arity = arity * 10 + static_cast<std::size_t>(digit - '0');
+  }
+
+  DecodedKey decoded;
+  decoded.relation_name = (*fields)[0].value;
+  decoded.cells.assign(fields->begin() + 2, fields->end());
+  if (decoded.cells.size() != arity) {
+    return Status::InvalidArgument(
+        "semantic key arity does not match its cell count");
+  }
+  return decoded;
+}
+
 }  // namespace veritas::facts

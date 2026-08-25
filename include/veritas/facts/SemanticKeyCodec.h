@@ -77,6 +77,16 @@ std::string EncodeKeyHeader(std::string_view relation_name, std::size_t arity);
 // shorter valid one.
 StatusOr<std::vector<KeyField>> DecodeFields(std::string_view encoded);
 
+struct DecodedKey {
+  std::string relation_name;
+  std::vector<KeyField> cells;
+};
+
+// Decodes a whole key: version prefix, relation, arity, then cells. Rejects a
+// missing or wrong version prefix and an arity that disagrees with the cell
+// count -- otherwise a truncated key could impersonate a shorter valid fact.
+StatusOr<DecodedKey> DecodeKey(std::string_view encoded);
+
 }  // namespace veritas::facts
 
 #endif  // VERITAS_FACTS_SEMANTIC_KEY_CODEC_H_

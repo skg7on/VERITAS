@@ -67,3 +67,11 @@ target_link_libraries(CppRuleEvaluatorTest PRIVATE
 )
 veritas_add_warnings(CppRuleEvaluatorTest)
 gtest_discover_tests(CppRuleEvaluatorTest DISCOVERY_TIMEOUT 60)
+
+add_executable(RelationIoTest RelationIoTest.cpp)
+target_link_libraries(RelationIoTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(RelationIoTest)
+gtest_discover_tests(RelationIoTest DISCOVERY_TIMEOUT 60)

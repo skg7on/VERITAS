@@ -16,6 +16,7 @@ add_library(veritas_wpa
   CallGraph.cpp
   CppRuleEvaluator.cpp
   FixpointDomain.cpp
+  RelationIo.cpp
   FixpointEngine.cpp
   SccStateRepository.cpp
   SccGraph.cpp

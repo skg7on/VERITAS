@@ -121,5 +121,35 @@ TEST(SemanticKeyCodecTest, HeaderSeparatesRelationsOfEqualArity) {
             EncodeKeyHeader("ReachableCall", 4));
 }
 
+// A witness read back from an engine arrives as a key, so a key must decode to
+// exactly the relation and cells it was built from.
+TEST(SemanticKeyCodecTest, RoundTripsAWholeKey) {
+  const std::string key = EncodeKeyHeader("ReachableCall", 3) +
+                          EncodeIdField("func:sha256:aa") +
+                          EncodeIdField("func:sha256:bb") + EncodeEnumField(1);
+  auto decoded = DecodeKey(key);
+  ASSERT_TRUE(decoded.ok());
+  EXPECT_EQ(decoded->relation_name, "ReachableCall");
+  ASSERT_EQ(decoded->cells.size(), 3u);
+  EXPECT_EQ(decoded->cells[0].tag, KeyFieldTag::kId);
+  EXPECT_EQ(decoded->cells[0].value, "func:sha256:aa");
+  EXPECT_EQ(decoded->cells[2].tag, KeyFieldTag::kEnum);
+  EXPECT_EQ(decoded->cells[2].value, "1");
+}
+
+// A key whose declared arity disagrees with its cell count is malformed. If it
+// decoded anyway, a truncated key could impersonate a shorter valid fact.
+TEST(SemanticKeyCodecTest, RejectsArityMismatch) {
+  const std::string key = EncodeKeyHeader("ReachableCall", 3) +
+                          EncodeIdField("func:sha256:aa");
+  EXPECT_FALSE(DecodeKey(key).ok());
+}
+
+TEST(SemanticKeyCodecTest, RejectsKeyWithoutVersionPrefix) {
+  EXPECT_FALSE(DecodeKey(EncodeSymbolField("ReachableCall") +
+                         EncodeUnsignedField(0))
+                   .ok());
+}
+
 }  // namespace
 }  // namespace veritas::facts
