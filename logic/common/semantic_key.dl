@@ -32,13 +32,16 @@
 // the production Souffle executor in M8R.4; this file pins the contract the
 // bundles below are written against.
 //
-// Deviation from the M8R plan, which lists three functors (symbol, number,
-// unsigned): the codec distinguishes five domains, because a stable id and a
-// plain symbol with identical text are different semantic content, as are an
-// enum ordinal and a bare number. Collapsing them into one symbol functor
-// would make a string cell reading "memref:sha256:x" collide with an id cell
-// of the same text. The header functor is likewise split out so the relation
-// name and arity cannot be confused with a leading data field.
+// This ABI is six functors. The M8R plan originally specified three (symbol,
+// number, unsigned) and was amended to match after review.
+//
+// The codec distinguishes five domains, so the Datalog side needs a primitive
+// per tag or it cannot produce byte-identical keys. Collapsing stable ids into
+// the symbol functor would let a symbol cell reading "memref:sha256:x" produce
+// the same key as an id cell with that text; collapsing enum ordinals into the
+// number functor would erase the difference between an epistemic state and a
+// plain integer. The header is separate so the relation name and arity cannot
+// be confused with a leading data field.
 
 .functor veritas_key_header_v1(relation:symbol, arity:unsigned):symbol stateful
 .functor veritas_key_id_v1(value:symbol):symbol stateful

@@ -1610,12 +1610,26 @@ ReachableCall(f, h, e) :-
 `semantic_key.dl` declares the pinned Soufflé 2.5 stateful functor ABI:
 
 ```souffle
+.functor veritas_key_header_v1(relation:symbol, arity:unsigned):symbol stateful
+.functor veritas_key_id_v1(value:symbol):symbol stateful
 .functor veritas_key_field_symbol_v1(value:symbol):symbol stateful
 .functor veritas_key_field_number_v1(value:number):symbol stateful
 .functor veritas_key_field_unsigned_v1(value:unsigned):symbol stateful
+.functor veritas_key_field_enum_v1(value:number):symbol stateful
 ```
 
-`SouffleSemanticKeyFunctor.cpp` exports those exact C-linkage names with signature `souffle::RamDomain name(souffle::SymbolTable*, souffle::RecordTable*, souffle::RamDomain)`. Each adapter decodes its typed argument, calls `SemanticKeyCodec` to emit one type-tagged length-prefixed UTF-8 field, and interns the result through the supplied symbol table. The implementations are pure and reentrant. Nested `cat` may join only these self-delimiting encoded fields after an encoded `veritas.semantic-key.v1` prefix and relation name; concatenating raw cells or delimiters is forbidden.
+This ABI is six functors, revised from the three this plan originally
+specified. `SemanticKeyCodec` type-tags five domains, and a Souffle-built key
+must be byte-identical to a C++-built one, so the Datalog side needs a
+primitive per tag. Collapsing stable identifiers into the symbol functor would
+let a symbol cell reading `memref:sha256:x` produce the same key as an
+identifier cell with that text, and collapsing enum ordinals into the number
+functor would erase the distinction between an epistemic state and a plain
+integer. The header is a separate functor so the relation name and arity
+cannot be confused with a leading data field. Reviewed and confirmed before
+M8R.4 implementation.
+
+`SouffleSemanticKeyFunctor.cpp` exports those exact C-linkage names with signature `souffle::RamDomain name(souffle::SymbolTable*, souffle::RecordTable*, ...)`, taking one `RamDomain` argument per declared parameter. Each adapter decodes its typed argument, calls `SemanticKeyCodec` to emit one type-tagged length-prefixed UTF-8 field, and interns the result through the supplied symbol table. The implementations are pure and reentrant. Nested `cat` may join only these self-delimiting encoded fields after a `veritas_key_header_v1` result; concatenating raw cells or delimiters is forbidden.
 
 `epistemic.dl` defines the finite `WeakenEpistemic(left, right, result)` relation for every state admitted by the bundle contract. Add corresponding immediate `Witness` rules for every direct, local-transitive, and successor-support derivation. `SemanticKeyCodecTest` covers empty cells, delimiter-like text, Unicode, digit-prefixed symbols, signed numbers, and unsigned bounds without requiring Soufflé. Task 13 adds the stateful adapter and mandatory generated-program comparison. The may-write bundle follows the same pattern with `DirectWrite`, `DirectCall`, `SupportMayWrite`, and `MayWrite`.
 
@@ -1790,7 +1804,7 @@ endif()
 
 The pinned-build provisioning step writes `souffle-provenance.json` with tag, full source revision, build configuration, compiler identity, and executable SHA-256. CMake validates the exact revision and executable digest, then canonicalizes the manifest plus generated-bundle hashes into `EngineToolchainIdentity`; every Soufflé run manifest records it. A version substring alone is never sufficient qualification.
 
-Build `src/facts/SouffleSemanticKeyFunctor.cpp` and `SemanticKeyCodec.cpp` as the private shared library `veritas-souffle-functors`, exporting only the three `extern "C"` stateful functor symbols declared in `semantic_key.dl`. `veritas_generate_souffle_program(NAME ReachabilityV2 SOURCE logic/reachability/reachability.v2.dl)` and the corresponding `MayWriteV2` call run `souffle -g` into the build tree with the functor library available through pinned `-L`/`-l` arguments. Link the generated programs and `veritas-souffle-worker` to that exact target and set a build-tree rpath so the worker loads the same library at evaluation time. `SemanticKeyFunctorTest` invokes the generated worker, proving symbol resolution and byte equality with `SemanticKeyCodec`; an unresolved or mismatched functor is a hard test failure.
+Build `src/facts/SouffleSemanticKeyFunctor.cpp` and `SemanticKeyCodec.cpp` as the private shared library `veritas-souffle-functors`, exporting only the six `extern "C"` stateful functor symbols declared in `semantic_key.dl`. `veritas_generate_souffle_program(NAME ReachabilityV2 SOURCE logic/reachability/reachability.v2.dl)` and the corresponding `MayWriteV2` call run `souffle -g` into the build tree with the functor library available through pinned `-L`/`-l` arguments. Link the generated programs and `veritas-souffle-worker` to that exact target and set a build-tree rpath so the worker loads the same library at evaluation time. `SemanticKeyFunctorTest` invokes the generated worker, proving symbol resolution and byte equality with `SemanticKeyCodec`; an unresolved or mismatched functor is a hard test failure.
 
 Compile generated sources privately into `veritas-souffle-worker`; the worker selects the registered program from a required component argument and uses `-F`/`-D` directories. No generated source, functor ABI, or Soufflé type is installed as a VERITAS public interface or checked-in generated artifact.
 
