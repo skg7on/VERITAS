@@ -175,6 +175,26 @@
         {"name": "epistemic", "domain": "epistemic"}
       ],
       "allowed_epistemic": ["MUST", "MAY", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "SupportReachableCall",
+      "ownership": "edb",
+      "columns": [
+        {"name": "source_id", "domain": "function_id"},
+        {"name": "target_id", "domain": "function_id"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "INFERRED", "ASSUMED", "UNKNOWN"]
+    },
+    {
+      "name": "SupportMayWrite",
+      "ownership": "edb",
+      "columns": [
+        {"name": "function_id", "domain": "function_id"},
+        {"name": "memory_id", "domain": "memory_id"},
+        {"name": "epistemic", "domain": "epistemic"}
+      ],
+      "allowed_epistemic": ["MUST", "MAY", "INFERRED", "ASSUMED", "UNKNOWN"]
     }
   ]
 }

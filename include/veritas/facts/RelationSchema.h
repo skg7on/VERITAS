@@ -22,6 +22,7 @@
 #define VERITAS_FACTS_RELATION_SCHEMA_H_
 
 #include <compare>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -42,6 +43,9 @@ using MemoryId = DenseId<struct MemoryTag>;
 using CallSiteId = DenseId<struct CallSiteTag>;
 using FactId = DenseId<struct FactTag>;
 
+// Relation ordinals index the registry table and are not durable: fact
+// identity is derived from the relation *name*, so new relations are appended
+// here and existing ordinals are never reused for a different relation.
 enum class RelationId : std::uint16_t {
   kFunctionMap,
   kValueMap,
@@ -60,7 +64,15 @@ enum class RelationId : std::uint16_t {
   kUnsupportedFeature,
   kReachableCall,
   kMayWrite,
+  // Successor-SCC results enter a component as EDB support relations that
+  // mirror the column shape of the IDB relation whose results they carry.
+  kSupportReachableCall,
+  kSupportMayWrite,
 };
+
+// Number of relations in the relations.v2 registry. Single authority for both
+// the registry table and relation-id range validation.
+inline constexpr std::size_t kRelationCountV2 = 19;
 
 // Semantic domain of a relation column. ID domains are carried as a stable ID
 // in a semantic row and as a typed dense ID in an execution row (model IDs are
@@ -90,6 +102,8 @@ enum class RelationOwnership : std::uint8_t {
 struct ColumnSpec {
   std::string name;
   ColumnDomain domain;
+
+  auto operator<=>(const ColumnSpec&) const = default;
 };
 
 struct RelationSchema {

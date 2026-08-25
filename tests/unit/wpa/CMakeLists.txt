@@ -12,6 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+add_executable(CallGraphTest CallGraphTest.cpp)
+target_link_libraries(CallGraphTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(CallGraphTest)
+gtest_discover_tests(CallGraphTest DISCOVERY_TIMEOUT 60)
+
 add_executable(SccGraphTest SccGraphTest.cpp)
 target_link_libraries(SccGraphTest PRIVATE
   veritas::wpa

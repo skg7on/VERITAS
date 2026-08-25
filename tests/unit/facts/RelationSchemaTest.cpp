@@ -48,6 +48,29 @@ TEST(RelationSchemaTest, DirectCallHasTypedV2Columns) {
   EXPECT_EQ(schema.columns[4].domain, ColumnDomain::kEpistemic);
 }
 
+// Successor SCC results enter a component as explicit support relations, so
+// each derived domain needs an EDB relation with the same column shape as the
+// IDB relation it carries results for.
+TEST(RelationSchemaTest, SupportRelationsMirrorTheirIdbShapeAsEdb) {
+  const auto& reachable = RelationsV2().Get(RelationId::kSupportReachableCall);
+  EXPECT_EQ(reachable.name, "SupportReachableCall");
+  EXPECT_EQ(reachable.ownership, RelationOwnership::kEdb);
+  EXPECT_EQ(reachable.columns,
+            RelationsV2().Get(RelationId::kReachableCall).columns);
+
+  const auto& may_write = RelationsV2().Get(RelationId::kSupportMayWrite);
+  EXPECT_EQ(may_write.name, "SupportMayWrite");
+  EXPECT_EQ(may_write.ownership, RelationOwnership::kEdb);
+  EXPECT_EQ(may_write.columns,
+            RelationsV2().Get(RelationId::kMayWrite).columns);
+}
+
+TEST(RelationSchemaTest, ValidatesSupportReachableCallExecutionRow) {
+  ExecutionRow row{RelationId::kSupportReachableCall,
+                   {FunctionId{1}, FunctionId{2}, EpistemicState::kMay}};
+  EXPECT_TRUE(ValidateExecutionRow(row).ok());
+}
+
 TEST(RelationSchemaTest, RejectsCrossDomainDenseId) {
   ExecutionRow row{RelationId::kDirectCall,
                    {MemoryId{1}, FunctionId{1}, FunctionId{2},

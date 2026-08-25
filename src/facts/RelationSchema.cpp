@@ -21,9 +21,7 @@ namespace veritas::facts {
 
 namespace {
 
-constexpr std::size_t kRelationCount = 17;
-
-using RelationTable = std::array<RelationSchema, kRelationCount>;
+using RelationTable = std::array<RelationSchema, kRelationCountV2>;
 
 const RelationTable& Table() {
   static const RelationTable table = {
@@ -103,6 +101,17 @@ const RelationTable& Table() {
                       {"target_id", ColumnDomain::kFunctionId},
                       {"epistemic", ColumnDomain::kEpistemic}}},
       RelationSchema{"MayWrite", RelationOwnership::kIdb,
+                     {{"function_id", ColumnDomain::kFunctionId},
+                      {"memory_id", ColumnDomain::kMemoryId},
+                      {"epistemic", ColumnDomain::kEpistemic}}},
+      // Support relations carry successor-SCC results into a component. They
+      // mirror their IDB counterpart's columns but are EDB: a component cites
+      // them as inputs and never claims ownership of successor results.
+      RelationSchema{"SupportReachableCall", RelationOwnership::kEdb,
+                     {{"source_id", ColumnDomain::kFunctionId},
+                      {"target_id", ColumnDomain::kFunctionId},
+                      {"epistemic", ColumnDomain::kEpistemic}}},
+      RelationSchema{"SupportMayWrite", RelationOwnership::kEdb,
                      {{"function_id", ColumnDomain::kFunctionId},
                       {"memory_id", ColumnDomain::kMemoryId},
                       {"epistemic", ColumnDomain::kEpistemic}}},
