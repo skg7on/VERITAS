@@ -7,6 +7,10 @@ for the project tooling plan. The [documentation information architecture
 migration plan](documentation-information-architecture-migration-implementation-plan.md)
 records this hierarchy migration.
 
+Additional project/tooling plans:
+
+- [Claude Code Evidence IR review plugin](veritas-claude-code-evidence-review-plugin-implementation-plan.md)
+
 | Milestone | Status | Implementation plan | Design specification | Issue |
 | --- | --- | --- | --- | --- |
 | M0 | Implemented | [plan](milestones/m00-project-skeleton-required-svf-toolchain-implementation-plan.md) | — | [#3](https://github.com/skg7on/VERITAS/issues/3) |
