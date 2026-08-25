@@ -12,6 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+add_executable(WpaInputMaterializerTest WpaInputMaterializerTest.cpp)
+target_link_libraries(WpaInputMaterializerTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(WpaInputMaterializerTest)
+gtest_discover_tests(WpaInputMaterializerTest DISCOVERY_TIMEOUT 60)
+
 add_executable(CallGraphTest CallGraphTest.cpp)
 target_link_libraries(CallGraphTest PRIVATE
   veritas::wpa

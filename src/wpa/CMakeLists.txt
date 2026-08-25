@@ -19,6 +19,7 @@ add_library(veritas_wpa
   SccStateRepository.cpp
   SccGraph.cpp
   WpaCoordinator.cpp
+  WpaInputMaterializer.cpp
 )
 
 target_include_directories(veritas_wpa PUBLIC
