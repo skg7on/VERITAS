@@ -1,0 +1,26 @@
+# Memory-effects rule bundle.
+#
+# Identifies the compiled program that evaluates the MayWrite component. The
+# bundle identity participates in run identity and in the component cache key,
+# so a rule change must not reuse a prior compiled result.
+
+bundle_name=memory_effects
+bundle_version=rules.v2
+component=memory-effects
+entry=may_write.v2.dl
+
+# DirectCall is read as well as DirectWrite: the transitive rule walks call
+# edges to carry a callee's writes up to its caller.
+input=FunctionMap
+input=MemoryMap
+input=CallSiteMap
+input=DirectCall
+input=DirectWrite
+input=SupportMayWrite
+
+output=MayWrite
+output=Witness
+
+rule=wpa.memory.may_write.direct.v2
+rule=wpa.memory.may_write.support.v2
+rule=wpa.memory.may_write.transitive.v2

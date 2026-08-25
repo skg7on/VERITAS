@@ -18,6 +18,7 @@ add_library(veritas_facts
   RelationSchema.cpp
   ResultCanonicalizer.cpp
   RuleRegistry.cpp
+  SemanticKeyCodec.cpp
   LegacyFactAdapter.cpp
   FactSchema.cpp
   SummaryFactBuilder.cpp

@@ -1,0 +1,115 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// reachability.v2.dl -- the ReachableCall domain.
+//
+// Three derivations: a direct call edge, a locally transitive step, and a step
+// through a successor SCC's support. Every derivation emits one Witness tuple
+// per input, tagged with the input's argument position, so the canonicalizer
+// can tell a two-input join from two alternative single-input proofs.
+//
+// Rule ids match logic/common/rules.v2.manifest and the compiled registry.
+
+.include "../schema/relations.v2.dl"
+.include "../common/epistemic.dl"
+.include "../common/semantic_key.dl"
+
+.decl ReachableCall(source_id:FunctionId, target_id:FunctionId,
+                    epistemic:Epistemic)
+.output ReachableCall(IO=csv, filename="ReachableCall.csv")
+
+// A call edge makes its callee reachable at the edge's own warrant.
+ReachableCall(f, g, e) :- DirectCall(_, f, g, _, e).
+
+// Composing a call with a reachability fact yields the weaker of the two.
+ReachableCall(f, h, e) :-
+  DirectCall(_, f, g, _, e1),
+  ReachableCall(g, h, e2),
+  WeakenEpistemic(e1, e2, e).
+
+// A successor SCC's result is cited as support, never re-derived here. The
+// component publishes only what its own members reach.
+ReachableCall(f, h, e) :-
+  DirectCall(_, f, g, _, e1),
+  SupportReachableCall(g, h, e2),
+  WeakenEpistemic(e1, e2, e).
+
+// -- Semantic keys ---------------------------------------------------------
+//
+// Keys name semantic content, so every dense id is resolved back through its
+// map relation first. Building them in helper relations keeps the witness
+// rules readable; the nesting is only because cat is binary.
+
+.decl ReachableKey(source_id:FunctionId, target_id:FunctionId,
+                   epistemic:Epistemic, key:symbol)
+ReachableKey(f, g, e,
+  cat(@veritas_key_header_v1("ReachableCall", 3),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(gs), @veritas_key_field_enum_v1(e))))) :-
+  ReachableCall(f, g, e), FunctionMap(f, fs), FunctionMap(g, gs).
+
+.decl DirectCallKey(call_site_id:CallSiteId, caller_id:FunctionId,
+                    callee_id:FunctionId, dispatch:Dispatch,
+                    epistemic:Epistemic, key:symbol)
+DirectCallKey(cs, f, g, d, e,
+  cat(@veritas_key_header_v1("DirectCall", 5),
+  cat(@veritas_key_id_v1(css),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(gs),
+  cat(@veritas_key_field_enum_v1(d), @veritas_key_field_enum_v1(e))))))) :-
+  DirectCall(cs, f, g, d, e), CallSiteMap(cs, css),
+  FunctionMap(f, fs), FunctionMap(g, gs).
+
+.decl SupportReachableKey(source_id:FunctionId, target_id:FunctionId,
+                          epistemic:Epistemic, key:symbol)
+SupportReachableKey(g, h, e,
+  cat(@veritas_key_header_v1("SupportReachableCall", 3),
+  cat(@veritas_key_id_v1(gs),
+  cat(@veritas_key_id_v1(hs), @veritas_key_field_enum_v1(e))))) :-
+  SupportReachableCall(g, h, e), FunctionMap(g, gs), FunctionMap(h, hs).
+
+// -- Witnesses -------------------------------------------------------------
+
+Witness(rk, "wpa.reachability.direct.v2", ik, 0) :-
+  DirectCall(cs, f, g, d, e),
+  ReachableKey(f, g, e, rk),
+  DirectCallKey(cs, f, g, d, e, ik).
+
+Witness(rk, "wpa.reachability.transitive.v2", ik, 0) :-
+  DirectCall(cs, f, g, d, e1),
+  ReachableCall(g, h, e2),
+  WeakenEpistemic(e1, e2, e),
+  ReachableKey(f, h, e, rk),
+  DirectCallKey(cs, f, g, d, e1, ik).
+
+Witness(rk, "wpa.reachability.transitive.v2", ik, 1) :-
+  DirectCall(_, f, g, _, e1),
+  ReachableCall(g, h, e2),
+  WeakenEpistemic(e1, e2, e),
+  ReachableKey(f, h, e, rk),
+  ReachableKey(g, h, e2, ik).
+
+Witness(rk, "wpa.reachability.support.v2", ik, 0) :-
+  DirectCall(cs, f, g, d, e1),
+  SupportReachableCall(g, h, e2),
+  WeakenEpistemic(e1, e2, e),
+  ReachableKey(f, h, e, rk),
+  DirectCallKey(cs, f, g, d, e1, ik).
+
+Witness(rk, "wpa.reachability.support.v2", ik, 1) :-
+  DirectCall(_, f, g, _, e1),
+  SupportReachableCall(g, h, e2),
+  WeakenEpistemic(e1, e2, e),
+  ReachableKey(f, h, e, rk),
+  SupportReachableKey(g, h, e2, ik).

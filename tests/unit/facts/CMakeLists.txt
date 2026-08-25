@@ -94,3 +94,11 @@ target_link_libraries(ResultCanonicalizerTest PRIVATE
 )
 veritas_add_warnings(ResultCanonicalizerTest)
 gtest_discover_tests(ResultCanonicalizerTest DISCOVERY_TIMEOUT 60)
+
+add_executable(SemanticKeyCodecTest SemanticKeyCodecTest.cpp)
+target_link_libraries(SemanticKeyCodecTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(SemanticKeyCodecTest)
+gtest_discover_tests(SemanticKeyCodecTest DISCOVERY_TIMEOUT 60)

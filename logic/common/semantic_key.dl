@@ -1,0 +1,55 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// semantic_key.dl -- the pinned Souffle 2.5 stateful functor ABI for building
+// semantic keys inside a generated program.
+//
+// A witness names its result and input by semantic key, so a key built by
+// Souffle and a key built by the C++ canonicalizer must be the same bytes.
+// These functors are the only sanctioned way to produce key material: each
+// one emits exactly one type-tagged, length-prefixed field via
+// SemanticKeyCodec. Only the resulting encoded fields may then be joined with
+// `cat`, after a header. Concatenating raw cells -- with or without a
+// separator -- is forbidden, because a cell could then move a field boundary.
+//
+// Each functor is pure and reentrant. The C++ side exports these exact
+// C-linkage names with signature
+//
+//   souffle::RamDomain name(souffle::SymbolTable*, souffle::RecordTable*, ...)
+//
+// The implementation and the mandatory generated-program comparison land with
+// the production Souffle executor in M8R.4; this file pins the contract the
+// bundles below are written against.
+//
+// Deviation from the M8R plan, which lists three functors (symbol, number,
+// unsigned): the codec distinguishes five domains, because a stable id and a
+// plain symbol with identical text are different semantic content, as are an
+// enum ordinal and a bare number. Collapsing them into one symbol functor
+// would make a string cell reading "memref:sha256:x" collide with an id cell
+// of the same text. The header functor is likewise split out so the relation
+// name and arity cannot be confused with a leading data field.
+
+.functor veritas_key_header_v1(relation:symbol, arity:unsigned):symbol stateful
+.functor veritas_key_id_v1(value:symbol):symbol stateful
+.functor veritas_key_field_symbol_v1(value:symbol):symbol stateful
+.functor veritas_key_field_number_v1(value:number):symbol stateful
+.functor veritas_key_field_unsigned_v1(value:unsigned):symbol stateful
+.functor veritas_key_field_enum_v1(value:number):symbol stateful
+
+// Every bundle emits the same witness relation. It is relation-independent by
+// construction: the canonicalizer validates and selects proofs without knowing
+// what any particular result means.
+.decl Witness(result_key:symbol, rule_id:symbol, input_key:symbol,
+              input_ordinal:unsigned)
+.output Witness(IO=csv, filename="Witness.csv")
