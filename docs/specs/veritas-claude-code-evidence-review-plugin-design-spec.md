@@ -1,6 +1,6 @@
 # VERITAS Claude Code Evidence Review Plugin Design Spec
 
-**Status:** Draft for written review
+**Status:** Approved
 
 **Scope:** On-demand Evidence IR code review in Claude Code
 
@@ -129,6 +129,7 @@ plugins/veritas-evidence-review/
 │   └── veritas_review/
 │       ├── __init__.py
 │       ├── backend.py
+│       ├── cli.py
 │       ├── controller.py
 │       ├── models.py
 │       ├── validation.py
@@ -149,6 +150,9 @@ an explicit user decision.
 The executable in `bin/` is the only command the skill invokes. It loads the
 Python package relative to `${CLAUDE_PLUGIN_ROOT}` and never imports code from
 the reviewed repository.
+
+`cli.py` parses the public command line, maps typed failures to stable exit
+codes, and keeps structured stdout separate from human-readable stderr.
 
 # 6. Component responsibilities
 
