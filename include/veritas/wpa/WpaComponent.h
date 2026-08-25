@@ -34,6 +34,7 @@
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/AnalysisRun.h"
 #include "veritas/facts/DenseIdMap.h"
+#include "veritas/facts/Witness.h"
 #include "veritas/summary/SummaryArtifact.h"
 
 namespace veritas::wpa {
@@ -58,12 +59,10 @@ struct StableIdMappings {
   facts::DenseIdMap<facts::FactId, core::IdKind::kFact> facts;
 };
 
-// An input fact together with where it came from. Roots terminate every
-// witness chain, so a published result is always traceable to declared inputs.
-struct RootedInputFact {
-  facts::AnalysisFact fact;
-  std::string provenance_ref;
-};
+// Roots terminate every witness chain. This is the facts-layer type, not a
+// parallel definition: the canonicalizer consumes exactly what the
+// materializer produces.
+using RootedInputFact = facts::RootedInputFact;
 
 // The immutable, engine-neutral description of one component execution.
 struct WpaLogicalComponentInput {
@@ -74,6 +73,24 @@ struct WpaLogicalComponentInput {
   std::vector<RootedInputFact> local_roots;
   std::vector<RootedInputFact> successor_roots;
   std::string logical_input_hash;
+};
+
+// The publishable outcome of one component execution.
+//
+// The three hashes answer three different questions. LogicalInputHash keys the
+// content-addressed component cache. FixpointHash covers the complete result
+// including the selected proof. ExternalHash covers only what a predecessor
+// can observe, so re-proving a fact moves FixpointHash while leaving
+// ExternalHash -- and therefore predecessor scheduling -- untouched.
+struct WpaComponentResult {
+  core::StableId scc_id;
+  WpaComponentKind component = WpaComponentKind::kReachability;
+  std::string logical_input_hash;
+  std::string fixpoint_hash;
+  std::string external_hash;
+  std::vector<facts::AnalysisFact> facts;
+  std::vector<facts::WitnessEdge> witnesses;
+  std::vector<std::string> diagnostics;
 };
 
 // Inputs to materialization. `summaries` supplies the whole analysed set; the

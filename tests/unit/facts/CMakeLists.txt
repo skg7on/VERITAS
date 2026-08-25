@@ -75,3 +75,22 @@ target_link_libraries(SouffleExporterTest PRIVATE
 )
 veritas_add_warnings(SouffleExporterTest)
 gtest_discover_tests(SouffleExporterTest DISCOVERY_TIMEOUT 60)
+
+add_executable(WitnessTest WitnessTest.cpp)
+target_link_libraries(WitnessTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+target_compile_definitions(WitnessTest PRIVATE
+  VERITAS_LOGIC_DIR="${PROJECT_SOURCE_DIR}/logic"
+)
+veritas_add_warnings(WitnessTest)
+gtest_discover_tests(WitnessTest DISCOVERY_TIMEOUT 60)
+
+add_executable(ResultCanonicalizerTest ResultCanonicalizerTest.cpp)
+target_link_libraries(ResultCanonicalizerTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(ResultCanonicalizerTest)
+gtest_discover_tests(ResultCanonicalizerTest DISCOVERY_TIMEOUT 60)
