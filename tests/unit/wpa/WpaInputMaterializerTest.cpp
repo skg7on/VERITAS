@@ -204,6 +204,51 @@ TEST(WpaInputMaterializerTest, AttributesModeledEffectsToTheCallingMember) {
             semantic::EpistemicState::kAssumed);
 }
 
+// Clang lowers memcpy to llvm.memcpy.p0.p0.i64, so an exact-symbol lookup
+// finds nothing and the model silently contributes no rows. Falling back to
+// the intrinsic's base name recovers the match. Pinned by
+// LocalAnalysisStageTest.LowersMemcpyToAnIntrinsicCalleeSymbol, which asserts
+// that lowering actually happens.
+TEST(WpaInputMaterializerTest, MatchesModelsThroughLoweredIntrinsicNames) {
+  auto caller = V2Summary("caller");
+  AddCall(&caller, "llvm.memcpy.p0.p0.i64", /*resolved_target=*/"",
+          v2::DISPATCH_KIND_DIRECT, v1::EPISTEMIC_STATE_MUST);
+  const std::vector<summary::SummaryArtifact> artifacts = {caller};
+
+  ModelBundleFixture models;
+  auto bundle = models.Load();
+  ASSERT_TRUE(bundle.ok()) << bundle.status().message();
+
+  auto request = Request(artifacts, WpaComponentKind::kReachability, "caller");
+  request.models = &*bundle;
+  auto input = WpaInputMaterializer::Build(request);
+  ASSERT_TRUE(input.ok()) << input.status().message();
+
+  EXPECT_EQ(CountRows(input->edb, facts::RelationId::kModeledEffect), 2u);
+}
+
+// The fallback strips only the llvm. prefix and the overload suffixes. It must
+// not turn an unrelated symbol into a model match.
+TEST(WpaInputMaterializerTest, DoesNotInventModelMatchesForOtherSymbols) {
+  auto caller = V2Summary("caller");
+  AddCall(&caller, "llvm.lifetime.start.p0", /*resolved_target=*/"",
+          v2::DISPATCH_KIND_DIRECT, v1::EPISTEMIC_STATE_MUST);
+  AddCall(&caller, "memcpy_wrapper", /*resolved_target=*/"",
+          v2::DISPATCH_KIND_DIRECT, v1::EPISTEMIC_STATE_MUST);
+  const std::vector<summary::SummaryArtifact> artifacts = {caller};
+
+  ModelBundleFixture models;
+  auto bundle = models.Load();
+  ASSERT_TRUE(bundle.ok()) << bundle.status().message();
+
+  auto request = Request(artifacts, WpaComponentKind::kReachability, "caller");
+  request.models = &*bundle;
+  auto input = WpaInputMaterializer::Build(request);
+  ASSERT_TRUE(input.ok()) << input.status().message();
+
+  EXPECT_EQ(CountRows(input->edb, facts::RelationId::kModeledEffect), 0u);
+}
+
 // Without a bundle the relation is simply absent; no model is invented.
 TEST(WpaInputMaterializerTest, EmitsNoModeledEffectsWithoutABundle) {
   auto caller = V2Summary("caller");

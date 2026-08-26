@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <map>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -196,6 +197,36 @@ sem::EpistemicState ModeledEpistemic(sem::EpistemicState stated) {
                                               : sem::EpistemicState::kAssumed;
 }
 
+// Model bundles are keyed on library names, but Clang lowers calls it
+// recognizes as builtins to intrinsics: a call to memcpy reaches the summary
+// as llvm.memcpy.p0.p0.i64. An exact lookup then finds nothing and the model
+// contributes no rows, silently, with no error to notice.
+//
+// The fallback strips the llvm. prefix and the overload suffixes, leaving the
+// intrinsic's base name. It applies only to llvm.-prefixed symbols, so an
+// ordinary function is never rewritten into a model match; and a multi-segment
+// intrinsic such as llvm.lifetime.start reduces to "lifetime", which no
+// library model claims.
+std::string_view IntrinsicBaseName(std::string_view symbol) {
+  constexpr std::string_view kPrefix = "llvm.";
+  if (!symbol.starts_with(kPrefix))
+    return {};
+  const std::string_view rest = symbol.substr(kPrefix.size());
+  const auto end = rest.find('.');
+  return end == std::string_view::npos ? rest : rest.substr(0, end);
+}
+
+// Models applicable to a callee, matched on the symbol the bundle records and
+// falling back to the intrinsic base name.
+std::span<const sem::FunctionModel> ModelsForCallee(
+    const sem::ModelBundle &models, std::string_view callee_symbol) {
+  auto direct = models.Lookup(callee_symbol);
+  if (!direct.empty())
+    return direct;
+  const std::string_view base = IntrinsicBaseName(callee_symbol);
+  return base.empty() ? direct : models.Lookup(base);
+}
+
 // The support relation that carries a successor result for this component.
 facts::RelationId SupportRelationFor(WpaComponentKind component) {
   return component == WpaComponentKind::kReachability
@@ -337,7 +368,8 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
       // does not know contributes nothing rather than guessing.
       if (request.models == nullptr)
         continue;
-      for (const auto &model : request.models->Lookup(call.callee_symbol)) {
+      for (const auto &model :
+           ModelsForCallee(*request.models, call.callee_symbol)) {
         facts::SemanticRow modeled;
         modeled.relation = facts::RelationId::kModeledEffect;
         modeled.cells = {model.model_id, member,

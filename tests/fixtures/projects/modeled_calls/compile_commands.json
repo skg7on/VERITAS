@@ -1,0 +1,7 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": ["clang++", "-std=c++20", "-c", "modeled_calls.cpp"],
+    "file": "modeled_calls.cpp"
+  }
+]
