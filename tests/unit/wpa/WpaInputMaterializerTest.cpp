@@ -15,6 +15,8 @@
 #include "veritas/wpa/WpaInputMaterializer.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <cstddef>
 #include <span>
 #include <string>
@@ -134,6 +136,85 @@ WpaMaterializationRequest Request(
   request.summaries = artifacts;
   request.models = nullptr;
   return request;
+}
+
+// Writes a throwaway model bundle so the test does not depend on the shipped
+// models, whose symbols no fixture currently exercises.
+class ModelBundleFixture {
+ public:
+  ModelBundleFixture() {
+    dir_ = std::filesystem::temp_directory_path() /
+           ("veritas_materializer_models_" +
+            std::to_string(reinterpret_cast<std::uintptr_t>(this)));
+    std::filesystem::create_directories(dir_);
+    std::ofstream rows(dir_ / "models.tsv");
+    // Sorted by (symbol, seed), as ModelBundle::Load requires.
+    rows << "memcpy.read.memory\tmemcpy\tread\tsource\tmay\n";
+    rows << "memcpy.write.memory\tmemcpy\twrite\tdestination\tmay\n";
+    rows.close();
+    std::ofstream manifest(dir_ / "models.manifest");
+    manifest << "model_bundle_version=models.test\n";
+  }
+  ~ModelBundleFixture() { std::filesystem::remove_all(dir_); }
+
+  StatusOr<analysis::semantic::ModelBundle> Load() const {
+    return analysis::semantic::ModelBundle::Load(dir_ / "models.tsv",
+                                                 dir_ / "models.manifest");
+  }
+
+ private:
+  std::filesystem::path dir_;
+};
+
+// A model describes an external function that has no summary, so it has no
+// function-variant id and cannot occupy the relation's FunctionId column. The
+// column therefore names the member that invokes the modeled function, which
+// is also why the relation carries no call-site column: attribution is per
+// function, not per call.
+TEST(WpaInputMaterializerTest, AttributesModeledEffectsToTheCallingMember) {
+  auto caller = V2Summary("caller");
+  AddCall(&caller, "memcpy", /*resolved_target=*/"", v2::DISPATCH_KIND_EXTERNAL,
+          v1::EPISTEMIC_STATE_UNKNOWN);
+  const std::vector<summary::SummaryArtifact> artifacts = {caller};
+
+  ModelBundleFixture models;
+  auto bundle = models.Load();
+  ASSERT_TRUE(bundle.ok()) << bundle.status().message();
+
+  auto request = Request(artifacts, WpaComponentKind::kReachability, "caller");
+  request.models = &*bundle;
+  auto input = WpaInputMaterializer::Build(request);
+  ASSERT_TRUE(input.ok()) << input.status().message();
+
+  // Two model rows for memcpy: a read of source and a write of destination.
+  EXPECT_EQ(CountRows(input->edb, facts::RelationId::kModeledEffect), 2u);
+
+  const auto* modeled = FirstRow(input->edb, facts::RelationId::kModeledEffect);
+  ASSERT_NE(modeled, nullptr);
+  // function_id resolves to the caller, not to memcpy.
+  auto function = input->mappings.functions.ToStable(
+      std::get<facts::FunctionId>(modeled->cells[1]));
+  ASSERT_TRUE(function.ok());
+  EXPECT_EQ(*function, FunctionId("caller"));
+
+  // The bundle states `may`, but ModeledEffect admits only MUST or ASSUMED. A
+  // model is an assumption, so it enters as ASSUMED rather than being dropped
+  // or silently coerced to MUST.
+  EXPECT_EQ(std::get<semantic::EpistemicState>(modeled->cells[4]),
+            semantic::EpistemicState::kAssumed);
+}
+
+// Without a bundle the relation is simply absent; no model is invented.
+TEST(WpaInputMaterializerTest, EmitsNoModeledEffectsWithoutABundle) {
+  auto caller = V2Summary("caller");
+  AddCall(&caller, "memcpy", /*resolved_target=*/"", v2::DISPATCH_KIND_EXTERNAL,
+          v1::EPISTEMIC_STATE_UNKNOWN);
+  const std::vector<summary::SummaryArtifact> artifacts = {caller};
+
+  auto input = WpaInputMaterializer::Build(
+      Request(artifacts, WpaComponentKind::kReachability, "caller"));
+  ASSERT_TRUE(input.ok());
+  EXPECT_EQ(CountRows(input->edb, facts::RelationId::kModeledEffect), 0u);
 }
 
 // An indirect MAY target must reach the EDB as a DirectCall row carrying its

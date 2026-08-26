@@ -168,6 +168,34 @@ MemoryEffectsOf(const summary::SummaryArtifact &artifact) {
   return effects;
 }
 
+// Canonical text for a model effect kind. This becomes the ModeledEffect
+// effect_kind cell, so the tokens are part of the relation's content.
+std::string_view ModelEffectName(sem::ModelEffectKind kind) {
+  switch (kind) {
+  case sem::ModelEffectKind::kRead:
+    return "read";
+  case sem::ModelEffectKind::kWrite:
+    return "write";
+  case sem::ModelEffectKind::kAllocate:
+    return "allocate";
+  case sem::ModelEffectKind::kDeallocate:
+    return "deallocate";
+  case sem::ModelEffectKind::kUnknown:
+    return "unknown";
+  }
+  return "unknown";
+}
+
+// ModeledEffect admits only MUST or ASSUMED, while a bundle may state any
+// epistemic value -- the shipped models are all `may`. A model is an external
+// assumption that nothing in this run verified, so anything short of MUST
+// enters as ASSUMED. Dropping the row instead would lose the model silently,
+// and promoting it to MUST would claim a warrant the bundle never gave.
+sem::EpistemicState ModeledEpistemic(sem::EpistemicState stated) {
+  return stated == sem::EpistemicState::kMust ? sem::EpistemicState::kMust
+                                              : sem::EpistemicState::kAssumed;
+}
+
 // The support relation that carries a successor result for this component.
 facts::RelationId SupportRelationFor(WpaComponentKind component) {
   return component == WpaComponentKind::kReachability
@@ -300,6 +328,23 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
       }
       local_base_rows.push_back(row);
       semantic_edb.push_back(std::move(row));
+
+      // Applicable models. A model describes an external function, which has
+      // no summary and therefore no dense function id, so the relation's
+      // FunctionId column names the member that invokes it -- the same reason
+      // the relation carries no call-site column. Models are matched on the
+      // callee symbol exactly as the bundle records it; a symbol the bundle
+      // does not know contributes nothing rather than guessing.
+      if (request.models == nullptr)
+        continue;
+      for (const auto &model : request.models->Lookup(call.callee_symbol)) {
+        facts::SemanticRow modeled;
+        modeled.relation = facts::RelationId::kModeledEffect;
+        modeled.cells = {model.model_id, member,
+                         std::string(ModelEffectName(model.effect)),
+                         model.subject, ModeledEpistemic(model.epistemic)};
+        semantic_edb.push_back(std::move(modeled));
+      }
     }
 
     if (!memory_component)
@@ -437,6 +482,11 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
           execution.cells.push_back(*dense);
           break;
         }
+        case facts::ColumnDomain::kModelId:
+          // Models are not dense-mapped; the execution projection carries the
+          // model id as canonical text.
+          execution.cells.push_back(core::ToString(*id));
+          break;
         default:
           return Status::InvalidArgument("stable id in a non-id column");
         }
