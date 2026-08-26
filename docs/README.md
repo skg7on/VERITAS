@@ -2,7 +2,9 @@
 
 VERITAS documentation is organized by document class. Architecture documents
 explain the durable system design, specifications define approved requirements,
-and plans describe implementation work and milestone sequencing.
+plans describe implementation work and milestone sequencing, and developer
+guides explain how to operate and extend the implemented system without
+confusing approved target interfaces with commands that exist today.
 
 ## Primary Reading Order
 
@@ -18,6 +20,9 @@ and plans describe implementation work and milestone sequencing.
    — cross-cutting invariants and milestone dependencies.
 6. [Backbone milestone roadmap](plans/veritas-backbone-milestone-roadmap.md) —
    implementation sequence and current milestones.
+7. [Developer guides and tutorials](guides/README.md) — generating a SummaryDB,
+   extending SummaryDB and Evidence IR, and building analysis or Agent-facing
+   tools.
 
 ## Document Classes
 
@@ -27,6 +32,9 @@ and plans describe implementation work and milestone sequencing.
   design specifications.
 - [Plans](plans/README.md) contains the roadmap, tooling plans, and executable
   milestone plans.
+- [Guides and tutorials](guides/README.md) contains task-oriented manuals and
+  worked examples. Each guide distinguishes the tested implementation from
+  approved target contracts and open design work.
 
 ## Milestones
 
