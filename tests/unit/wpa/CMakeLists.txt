@@ -12,6 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+add_executable(WpaInputMaterializerTest WpaInputMaterializerTest.cpp)
+target_link_libraries(WpaInputMaterializerTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(WpaInputMaterializerTest)
+gtest_discover_tests(WpaInputMaterializerTest DISCOVERY_TIMEOUT 60)
+
+add_executable(CallGraphTest CallGraphTest.cpp)
+target_link_libraries(CallGraphTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(CallGraphTest)
+gtest_discover_tests(CallGraphTest DISCOVERY_TIMEOUT 60)
+
 add_executable(SccGraphTest SccGraphTest.cpp)
 target_link_libraries(SccGraphTest PRIVATE
   veritas::wpa
@@ -43,3 +59,19 @@ target_link_libraries(WpaCoordinatorTest PRIVATE
 )
 veritas_add_warnings(WpaCoordinatorTest)
 gtest_discover_tests(WpaCoordinatorTest DISCOVERY_TIMEOUT 60)
+
+add_executable(CppRuleEvaluatorTest CppRuleEvaluatorTest.cpp)
+target_link_libraries(CppRuleEvaluatorTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(CppRuleEvaluatorTest)
+gtest_discover_tests(CppRuleEvaluatorTest DISCOVERY_TIMEOUT 60)
+
+add_executable(RelationIoTest RelationIoTest.cpp)
+target_link_libraries(RelationIoTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(RelationIoTest)
+gtest_discover_tests(RelationIoTest DISCOVERY_TIMEOUT 60)

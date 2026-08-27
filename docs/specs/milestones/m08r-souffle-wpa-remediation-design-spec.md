@@ -88,11 +88,24 @@ kinds survive the boundary, including the distinct negative statement
 unknown relations according to the versioned rule-bundle contract; they are
 never silently dropped.
 
-Memory identity is:
+A memory location is:
 
 ```text
 MemoryLocation = AbstractObject + AccessPath + ByteRange
 ```
+
+Memory *identity* covers the object and the access path only:
+
+```text
+MemoryLocationId = hash(AbstractObject + AccessPath)
+```
+
+`ByteRange` describes an access, not the object accessed, and is excluded from
+identity. A constant byte offset is already determined by the access path, so
+accesses at different offsets stay distinct; only the access size leaves
+identity. This keeps `MayWrite(function_id, memory_id, epistemic)` answerable
+as a single fact per object and lets a producer that knows the access size
+agree with one that does not. See the authoritative design, section 8.
 
 `RangeKind` is explicitly `KNOWN` or `UNKNOWN`. Known signed offsets and
 unsigned sizes remain lossless, including known zero values. An unknown range

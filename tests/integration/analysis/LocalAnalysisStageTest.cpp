@@ -202,4 +202,31 @@ TEST(LocalAnalysisStageTest, PrivateFunctionsIncludeTranslationUnitIdentity) {
 }
 
 } // namespace
+
+// Pins the callee symbols real extraction produces for the three functions the
+// model bundle describes. `malloc` and `free` survive under their own names,
+// but Clang lowers `memcpy` to the intrinsic `llvm.memcpy.p0.p0.i64`, so a
+// bundle keyed on `memcpy` cannot match it by exact symbol. That mismatch is
+// invisible without a fixture that actually calls these functions -- the model
+// simply contributes nothing and no error is raised.
+TEST(LocalAnalysisStageTest, LowersMemcpyToAnIntrinsicCalleeSymbol) {
+  auto manifest = LoadFixtureManifest("modeled_calls");
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+  auto result = RunLocalAnalysis(*manifest);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+
+  std::set<std::string> callees;
+  for (const auto &draft : result->summary_drafts) {
+    for (const auto &call : draft.calls())
+      callees.insert(call.callee_symbol());
+  }
+
+  EXPECT_TRUE(callees.contains("malloc"));
+  EXPECT_TRUE(callees.contains("free"));
+  EXPECT_FALSE(callees.contains("memcpy"))
+      << "if Clang stops lowering memcpy, the model normalization fallback "
+         "is no longer exercised by this fixture";
+  EXPECT_TRUE(callees.contains("llvm.memcpy.p0.p0.i64"));
+}
+
 } // namespace veritas::analysis::pipeline

@@ -23,6 +23,7 @@
 #ifndef VERITAS_FACTS_ANALYSIS_FACT_H_
 #define VERITAS_FACTS_ANALYSIS_FACT_H_
 
+#include <compare>
 #include <cstdint>
 #include <string>
 #include <variant>
@@ -52,16 +53,25 @@ using ExecutionCellValue =
 struct SemanticRow {
   RelationId relation;
   std::vector<SemanticCellValue> cells;
+
+  auto operator<=>(const SemanticRow&) const = default;
+  bool operator==(const SemanticRow&) const = default;
 };
 
 struct ExecutionRow {
   RelationId relation;
   std::vector<ExecutionCellValue> cells;
+
+  auto operator<=>(const ExecutionRow&) const = default;
+  bool operator==(const ExecutionRow&) const = default;
 };
 
 struct AnalysisFact {
   core::StableId fact_id;
   SemanticRow row;
+
+  auto operator<=>(const AnalysisFact&) const = default;
+  bool operator==(const AnalysisFact&) const = default;
 };
 
 // Validates a semantic row against its relation schema: cell count, per-cell

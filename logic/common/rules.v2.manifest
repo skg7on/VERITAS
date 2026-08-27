@@ -1,0 +1,25 @@
+# rules.v2 bundle manifest.
+#
+# Rule ids are part of the durable witness protocol: a published proof names
+# the rule that produced it, so these ids may not be renamed without a bundle
+# version change.
+#
+# The compiled registry in src/facts/RuleRegistry.cpp is authoritative. This
+# file is the Datalog-side mirror that the rule bundles in logic/reachability
+# and logic/memory_effects cite, and RuleRegistryManifestTest fails if the two
+# disagree.
+#
+# Columns: rule_id <TAB> priority <TAB> derived_relation
+#
+# Priority breaks ties between proofs of equal length: a rule reaching a
+# result directly outranks one going through a successor's support, which
+# outranks a locally transitive derivation. Only the ordering is meaningful.
+
+rule_bundle_version=rules.v2
+
+wpa.reachability.direct.v2	10	ReachableCall
+wpa.reachability.support.v2	20	ReachableCall
+wpa.reachability.transitive.v2	30	ReachableCall
+wpa.memory.may_write.direct.v2	10	MayWrite
+wpa.memory.may_write.support.v2	20	MayWrite
+wpa.memory.may_write.transitive.v2	30	MayWrite

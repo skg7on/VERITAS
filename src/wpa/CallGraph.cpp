@@ -15,9 +15,12 @@
 #include "veritas/wpa/CallGraph.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <set>
 #include <string>
 #include <utility>
+#include <variant>
+#include <vector>
 
 #include "veritas/core/Hash.h"
 
@@ -31,9 +34,65 @@ bool IsPositive(v1::EpistemicState epistemic) {
          epistemic == v1::EPISTEMIC_STATE_MAY;
 }
 
+// Epistemic states that may carry a resolved call edge. INFERRED and ASSUMED
+// name a real target under weaker warrant (a model, or an inference), so they
+// belong in the graph; MUST_NOT and UNKNOWN never assert a target.
+bool IsEdgeAdmissible(v1::EpistemicState epistemic) {
+  return IsPositive(epistemic) ||
+         epistemic == v1::EPISTEMIC_STATE_INFERRED ||
+         epistemic == v1::EPISTEMIC_STATE_ASSUMED;
+}
+
 bool HasFunction(std::span<const core::StableId> functions,
                  const core::StableId &function_id) {
   return std::binary_search(functions.begin(), functions.end(), function_id);
+}
+
+// A call read from either schema version. `admissible` records whether the
+// source schema lets this epistemic state carry a resolved edge: V1 admits
+// only MUST and MAY, while V2 also admits INFERRED and ASSUMED. Normalizing
+// here keeps the graph-building loop identical for both versions and stops a
+// tagged V1 projection from claiming V2 precision.
+struct NormalizedCall {
+  std::string call_site_anchor_id;
+  std::string callee_symbol;
+  std::string resolved_callee;
+  std::string provenance_ref;
+  v1::EpistemicState epistemic;
+  bool admissible;
+};
+
+std::vector<NormalizedCall>
+NormalizeCalls(const summary::SummaryArtifact &artifact) {
+  std::vector<NormalizedCall> calls;
+  if (const auto *v1_summary = std::get_if<v1::FunctionSummary>(&artifact)) {
+    calls.reserve(static_cast<std::size_t>(v1_summary->calls_size()));
+    for (const auto &call : v1_summary->calls()) {
+      calls.push_back(
+          NormalizedCall{.call_site_anchor_id = call.call_site_anchor_id(),
+                         .callee_symbol = call.callee_symbol(),
+                         .resolved_callee =
+                             call.resolved_callee_function_variant_id(),
+                         .provenance_ref = call.provenance_ref(),
+                         .epistemic = call.epistemic(),
+                         .admissible = IsPositive(call.epistemic())});
+    }
+    return calls;
+  }
+
+  const auto &v2_summary = std::get<summary::v2::FunctionSummary>(artifact);
+  calls.reserve(static_cast<std::size_t>(v2_summary.calls_size()));
+  for (const auto &call : v2_summary.calls()) {
+    calls.push_back(
+        NormalizedCall{.call_site_anchor_id = call.call_site_id(),
+                       .callee_symbol = call.callee_symbol(),
+                       .resolved_callee =
+                           call.resolved_callee_function_variant_id(),
+                       .provenance_ref = call.provenance_ref(),
+                       .epistemic = call.epistemic(),
+                       .admissible = IsEdgeAdmissible(call.epistemic())});
+  }
+  return calls;
 }
 
 StatusOr<core::StableId> ParseFunctionVariantId(std::string_view text,
@@ -81,8 +140,9 @@ Status CallGraph::AddCall(CallEdge edge) {
       !HasFunction(functions_, edge.callee)) {
     return Status::NotFound("call graph edge endpoint is not a vertex");
   }
-  if (!IsPositive(edge.epistemic)) {
-    return Status::InvalidArgument("call graph edge requires MUST or MAY");
+  if (!IsEdgeAdmissible(edge.epistemic)) {
+    return Status::InvalidArgument(
+        "call graph edge requires MUST, MAY, INFERRED, or ASSUMED");
   }
   auto unknown_it = unknown_calls_.find(edge.caller);
   if (unknown_it != unknown_calls_.end() &&
@@ -109,11 +169,14 @@ Status CallGraph::AddCall(CallEdge edge) {
       std::ranges::find_if(outgoing, [&](const CallEdge &existing) {
         return existing.call_site_anchor_id == edge.call_site_anchor_id;
       });
+  // One call site may name several targets only when no target is asserted as
+  // the definite one. For the MUST/MAY-only V1 domain this is exactly the
+  // previous "both must be MAY" rule.
   if (same_site != outgoing.end() &&
-      (same_site->epistemic != v1::EPISTEMIC_STATE_MAY ||
-       edge.epistemic != v1::EPISTEMIC_STATE_MAY)) {
+      (same_site->epistemic == v1::EPISTEMIC_STATE_MUST ||
+       edge.epistemic == v1::EPISTEMIC_STATE_MUST)) {
     return Status::InvalidArgument(
-        "multiple call-site targets require MAY call facts");
+        "multiple call-site targets require non-MUST call facts");
   }
   outgoing.push_back(std::move(edge));
   std::ranges::sort(outgoing);
@@ -170,18 +233,29 @@ CallGraph::UnknownCalls(core::StableId caller) const {
 
 StatusOr<CallGraph>
 CallGraph::FromSummaries(std::span<const v1::FunctionSummary> summaries) {
+  std::vector<summary::SummaryArtifact> artifacts;
+  artifacts.reserve(summaries.size());
+  for (const auto &summary : summaries) {
+    artifacts.emplace_back(summary);
+  }
+  return FromSummaries(std::span<const summary::SummaryArtifact>(artifacts));
+}
+
+StatusOr<CallGraph>
+CallGraph::FromSummaries(std::span<const summary::SummaryArtifact> summaries) {
   struct SummaryRef {
     core::StableId function_id;
-    const v1::FunctionSummary *summary;
+    const summary::SummaryArtifact *artifact;
   };
 
   CallGraph graph;
   std::vector<SummaryRef> ordered;
   ordered.reserve(summaries.size());
   std::set<core::StableId> seen;
-  for (const auto &summary : summaries) {
-    auto function_id = ParseFunctionVariantId(
-        summary.identity().function_variant_id(), "invalid summary identity");
+  for (const auto &artifact : summaries) {
+    auto function_id =
+        ParseFunctionVariantId(summary::Identity(artifact).function_variant_id(),
+                               "invalid summary identity");
     if (!function_id.ok())
       return function_id.status();
     if (!seen.insert(*function_id).second) {
@@ -191,19 +265,18 @@ CallGraph::FromSummaries(std::span<const v1::FunctionSummary> summaries) {
     auto status = graph.AddFunction(*function_id);
     if (!status.ok())
       return status;
-    ordered.push_back(SummaryRef{*function_id, &summary});
+    ordered.push_back(SummaryRef{*function_id, &artifact});
   }
   std::ranges::sort(ordered, {}, &SummaryRef::function_id);
 
   for (const auto &entry : ordered) {
-    for (const auto &call : entry.summary->calls()) {
+    std::vector<NormalizedCall> calls = NormalizeCalls(*entry.artifact);
+    for (const auto &call : calls) {
       bool resolved = false;
       core::StableId callee;
-      if (IsPositive(call.epistemic()) &&
-          !call.resolved_callee_function_variant_id().empty()) {
-        auto parsed =
-            ParseFunctionVariantId(call.resolved_callee_function_variant_id(),
-                                   "invalid resolved callee identity");
+      if (call.admissible && !call.resolved_callee.empty()) {
+        auto parsed = ParseFunctionVariantId(call.resolved_callee,
+                                             "invalid resolved callee identity");
         if (!parsed.ok())
           return parsed.status();
         if (HasFunction(graph.Functions(), *parsed)) {
@@ -217,15 +290,15 @@ CallGraph::FromSummaries(std::span<const v1::FunctionSummary> summaries) {
         status = graph.AddCall(
             CallEdge{.caller = entry.function_id,
                      .callee = std::move(callee),
-                     .call_site_anchor_id = call.call_site_anchor_id(),
-                     .epistemic = call.epistemic(),
-                     .provenance_ref = call.provenance_ref()});
+                     .call_site_anchor_id = call.call_site_anchor_id,
+                     .epistemic = call.epistemic,
+                     .provenance_ref = call.provenance_ref});
       } else {
         status = graph.AddUnknownCall(
             UnknownCallEffect{.caller = entry.function_id,
-                              .call_site_anchor_id = call.call_site_anchor_id(),
-                              .callee_symbol = call.callee_symbol(),
-                              .provenance_ref = call.provenance_ref()});
+                              .call_site_anchor_id = call.call_site_anchor_id,
+                              .callee_symbol = call.callee_symbol,
+                              .provenance_ref = call.provenance_ref});
       }
       if (!status.ok())
         return status;
