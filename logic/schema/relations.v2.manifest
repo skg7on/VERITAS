@@ -1,0 +1,43 @@
+# relations.v2 schema manifest.
+#
+# The compiled registry in src/facts/RelationSchema.cpp is authoritative. This
+# file is the Datalog-side mirror that logic/schema/relations.v2.dl declares by
+# hand, and RelationSchemaManifestTest fails if the two disagree.
+#
+# It replaces relations.v2.json, which recorded the same schema but was read by
+# nothing and verified by nothing, so it could drift from the registry silently.
+#
+# Relations appear in RelationId order. Ordinals are not durable -- fact
+# identity is derived from the relation name -- so new relations are appended
+# and existing ordinals are never reused for a different relation.
+#
+# allowed_epistemic lists the epistemic states the relation may carry, in
+# EpistemicState declaration order, or "-" when the relation has no epistemic
+# column. A relation states only what its producer can justify: an unresolved
+# call cannot be MUST, a modeled effect is the model's stated behaviour or an
+# assumption, and the existential flow/reachability relations cannot express
+# MUST_NOT, since proving no path exists is a whole-program property a single
+# row cannot carry.
+#
+# Columns: name <TAB> ownership <TAB> column:domain,... <TAB> allowed_epistemic
+
+relation_schema_version=relations.v2
+FunctionMap	edb	function_id:function_id,function_stable_id:string	-
+ValueMap	edb	value_id:value_id,value_stable_id:string	-
+MemoryMap	edb	memory_id:memory_id,memory_stable_id:string	-
+CallSiteMap	edb	call_site_id:call_site_id,call_site_stable_id:string	-
+FactMap	edb	fact_id:fact_id,fact_stable_id:string	-
+DirectCall	edb	call_site_id:call_site_id,caller_id:function_id,callee_id:function_id,dispatch:dispatch_kind,epistemic:epistemic	MUST,MAY,MUST_NOT,INFERRED,ASSUMED,UNKNOWN
+UnknownCall	edb	call_site_id:call_site_id,caller_id:function_id,reason:string,epistemic:epistemic	MAY,UNKNOWN
+DirectRead	edb	function_id:function_id,memory_id:memory_id,range_kind:byte_range_kind,offset:int64,size:uint64,epistemic:epistemic	MUST,MAY,MUST_NOT,INFERRED,ASSUMED,UNKNOWN
+DirectWrite	edb	function_id:function_id,memory_id:memory_id,range_kind:byte_range_kind,offset:int64,size:uint64,epistemic:epistemic	MUST,MAY,MUST_NOT,INFERRED,ASSUMED,UNKNOWN
+Alias	edb	left_memory_id:memory_id,right_memory_id:memory_id,alias_kind:alias_kind,epistemic:epistemic	MUST,MAY,MUST_NOT,INFERRED,ASSUMED,UNKNOWN
+LocalFlow	edb	function_id:function_id,source_id:value_id,destination_id:value_id,flow_kind:string,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+ParameterFlow	edb	call_site_id:call_site_id,actual_id:value_id,formal_id:value_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+ReturnFlow	edb	call_site_id:call_site_id,return_id:value_id,result_id:value_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+ModeledEffect	edb	model_id:model_id,function_id:function_id,effect_kind:string,subject_id:string,epistemic:epistemic	MUST,ASSUMED
+UnsupportedFeature	edb	node_id:string,feature_kind:string,soundness_policy:string	-
+ReachableCall	idb	source_id:function_id,target_id:function_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+MayWrite	idb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+SupportReachableCall	edb	source_id:function_id,target_id:function_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+SupportMayWrite	edb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN

@@ -340,7 +340,7 @@ git commit -m "feat: add reproducible WPA run manifests"
 - Create: `include/veritas/facts/AnalysisFact.h`
 - Create: `src/facts/RelationSchema.cpp`
 - Create: `src/facts/AnalysisFact.cpp`
-- Create: `logic/schema/relations.v2.json`
+- Create: `logic/schema/relations.v2.manifest`
 - Create: `tests/unit/facts/RelationSchemaTest.cpp`
 - Create: `tests/unit/facts/AnalysisFactTest.cpp`
 - Modify: `src/facts/CMakeLists.txt`
@@ -471,7 +471,11 @@ struct AnalysisFact {
 
 `MakeFact` validates stable-ID kinds through `RelationsV2()`, serializes `relations.v2`, relation name, typed stable semantic cells, and epistemic value, then derives a `kFact` ID. It must not include dense IDs, engine identity, tuple order, rule ID, or witness edges. `ValidateExecutionRow` separately checks each dense-ID domain for the run-local execution projection.
 
-Add every relation and column listed in design sections 7 and 11 to `logic/schema/relations.v2.json`; mark EDB/IDB ownership and allowed epistemic values explicitly. `DirectRead` and `DirectWrite` contain `RangeKind`, signed `Offset`, and unsigned `Size`: `KNOWN` consumes both payload cells, while `UNKNOWN` requires canonical zeros that are ignored. Reject half-known ranges and non-canonical unknown payloads so a known zero range never collapses into unknown.
+Add every relation and column listed in design sections 7 and 11 to `logic/schema/relations.v2.manifest`; mark EDB/IDB ownership and allowed epistemic values explicitly. `DirectRead` and `DirectWrite` contain `RangeKind`, signed `Offset`, and unsigned `Size`: `KNOWN` consumes both payload cells, while `UNKNOWN` requires canonical zeros that are ignored. Reject half-known ranges and non-canonical unknown payloads so a known zero range never collapses into unknown.
+
+This schema mirror is a tab-separated `.manifest`, revised from the `.json` this plan originally named. The JSON was read by nothing — the project has no JSON dependency — so it was a hand-maintained duplicate of the compiled registry with no mechanism to detect drift, which is precisely what a schema mirror must not be. It is now `logic/schema/relations.v2.manifest` in the same format as `logic/common/rules.v2.manifest`, and `RelationSchemaManifestTest` fails if it and `RelationsV2()` disagree in either direction.
+
+"Allowed epistemic values" moved with it. Those sets existed only in the JSON, were enforced nowhere, and had no C++ counterpart at all, so `RelationSchema` gains an `allowed_epistemic` field and the registry becomes their single authority. The manifest mirrors that field like any other, rather than carrying documentation the registry cannot check.
 
 - [ ] **Step 4: Run schema and fact tests**
 
@@ -488,7 +492,7 @@ Expected: typed-domain validation, complete registry lookup, and deterministic f
 - [ ] **Step 5: Commit the V2 relation contract**
 
 ```bash
-git add include/veritas/facts/RelationSchema.h include/veritas/facts/AnalysisFact.h src/facts/RelationSchema.cpp src/facts/AnalysisFact.cpp logic/schema/relations.v2.json tests/unit/facts/RelationSchemaTest.cpp tests/unit/facts/AnalysisFactTest.cpp src/facts/CMakeLists.txt tests/unit/facts/CMakeLists.txt
+git add include/veritas/facts/RelationSchema.h include/veritas/facts/AnalysisFact.h src/facts/RelationSchema.cpp src/facts/AnalysisFact.cpp logic/schema/relations.v2.manifest tests/unit/facts/RelationSchemaTest.cpp tests/unit/facts/AnalysisFactTest.cpp src/facts/CMakeLists.txt tests/unit/facts/CMakeLists.txt
 git commit -m "feat: add typed V2 relation schema"
 ```
 
@@ -1259,7 +1263,10 @@ git commit -m "feat: publish modeled Function Summary IR v2"
 - Modify: `src/wpa/SccGraph.cpp`
 - Modify: `include/veritas/facts/RelationSchema.h`
 - Modify: `src/facts/RelationSchema.cpp`
-- Modify: `logic/schema/relations.v2.json`
+- Modify: `logic/schema/relations.v2.manifest`
+- Modify: `logic/schema/relations.v2.dl`
+- Modify: `tests/unit/facts/RelationSchemaTest.cpp`
+- Modify: `tests/unit/facts/CMakeLists.txt`
 - Modify: `src/wpa/CMakeLists.txt`
 - Create: `tests/unit/wpa/WpaInputMaterializerTest.cpp`
 - Create: `tests/unit/wpa/CallGraphTest.cpp`
@@ -1378,7 +1385,7 @@ Expected: stable/dense round trips, V2 call semantics, successor support, input 
 - [ ] **Step 5: Commit the per-SCC relational projection**
 
 ```bash
-git add include/veritas/wpa/WpaComponent.h include/veritas/wpa/WpaInputMaterializer.h src/wpa/WpaInputMaterializer.cpp include/veritas/wpa/CallGraph.h src/wpa/CallGraph.cpp include/veritas/wpa/SccGraph.h src/wpa/SccGraph.cpp include/veritas/facts/RelationSchema.h src/facts/RelationSchema.cpp logic/schema/relations.v2.json src/wpa/CMakeLists.txt tests/unit/wpa/WpaInputMaterializerTest.cpp tests/unit/wpa/CallGraphTest.cpp tests/unit/wpa/SccGraphTest.cpp tests/unit/wpa/CMakeLists.txt
+git add include/veritas/wpa/WpaComponent.h include/veritas/wpa/WpaInputMaterializer.h src/wpa/WpaInputMaterializer.cpp include/veritas/wpa/CallGraph.h src/wpa/CallGraph.cpp include/veritas/wpa/SccGraph.h src/wpa/SccGraph.cpp include/veritas/facts/RelationSchema.h src/facts/RelationSchema.cpp logic/schema/relations.v2.manifest src/wpa/CMakeLists.txt tests/unit/wpa/WpaInputMaterializerTest.cpp tests/unit/wpa/CallGraphTest.cpp tests/unit/wpa/SccGraphTest.cpp tests/unit/wpa/CMakeLists.txt
 git commit -m "feat: materialize typed SCC WPA inputs"
 ```
 

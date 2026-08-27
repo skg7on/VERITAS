@@ -25,6 +25,9 @@ target_link_libraries(RelationSchemaTest PRIVATE
   veritas::facts
   GTest::gtest_main
 )
+target_compile_definitions(RelationSchemaTest PRIVATE
+  VERITAS_LOGIC_DIR="${PROJECT_SOURCE_DIR}/logic"
+)
 veritas_add_warnings(RelationSchemaTest)
 gtest_discover_tests(RelationSchemaTest DISCOVERY_TIMEOUT 60)
 

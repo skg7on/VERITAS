@@ -27,6 +27,8 @@
 #include <string>
 #include <vector>
 
+#include "veritas/analysis/semantic/SemanticTypes.h"
+
 namespace veritas::facts {
 
 // Run-local typed dense ID. Dense IDs are meaningful only within one
@@ -110,6 +112,13 @@ struct RelationSchema {
   std::string name;
   RelationOwnership ownership;
   std::vector<ColumnSpec> columns;
+
+  // Epistemic states this relation may carry, in EpistemicState declaration
+  // order. Empty for relations with no epistemic column. A relation states
+  // only what its producer can justify: UnknownCall cannot be MUST, and a
+  // modeled effect is either the model's stated behaviour or an assumption,
+  // never a proof about the callee's body.
+  std::vector<analysis::semantic::EpistemicState> allowed_epistemic;
 };
 
 class RelationRegistry {

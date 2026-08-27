@@ -15,8 +15,10 @@
 // relations.v2.dl -- Souffle declarations for the relations.v2 execution
 // projection.
 //
-// Column order and domains mirror logic/schema/relations.v2.json and the
-// compiled registry in src/facts/RelationSchema.cpp. Cells carry run-local
+// Column order and domains mirror logic/schema/relations.v2.manifest and the
+// compiled registry in src/facts/RelationSchema.cpp, which is authoritative;
+// RelationSchemaManifestTest fails if the manifest and the registry disagree.
+// Cells carry run-local
 // dense ids, never stable ids: the *Map relations below let a consumer
 // reconstruct semantic identity without dense numbers escaping the run.
 //
