@@ -111,3 +111,31 @@ set(VERITAS_VENDORED_SOUFFLE_EXECUTABLE "$<TARGET_FILE:souffle>")
 # into public VERITAS headers.
 add_library(veritas_third_party_souffle INTERFACE)
 target_link_libraries(veritas_third_party_souffle INTERFACE libsouffle)
+
+# The private semantic-key functor library. It exports only the six extern "C"
+# stateful functor symbols declared in logic/common/semantic_key.dl, with the
+# signature the generated programs call:
+#
+#   souffle::RamDomain name(souffle::SymbolTable*, souffle::RecordTable*, ...)
+#
+# It recompiles SemanticKeyCodec.cpp directly (rather than linking veritas_facts)
+# so the library is self-contained: it carries no VERITAS -fno-exceptions /
+# -fno-rtti settings, and needs no VERITAS library at runtime. The generated
+# Souffle program and veritas-souffle-worker link against it via pinned
+# -L/-l arguments; no Souffle type or functor ABI is exposed under include/.
+add_library(veritas_souffle_functors SHARED
+  ${CMAKE_SOURCE_DIR}/src/facts/SouffleSemanticKeyFunctor.cpp
+  ${CMAKE_SOURCE_DIR}/src/facts/SemanticKeyCodec.cpp
+)
+set_target_properties(veritas_souffle_functors PROPERTIES
+  OUTPUT_NAME "veritas-souffle-functors"
+)
+target_include_directories(veritas_souffle_functors PRIVATE
+  ${CMAKE_SOURCE_DIR}/include
+  ${VERITAS_SOUFFLE_SOURCE_DIR}/src/include
+)
+target_compile_features(veritas_souffle_functors PRIVATE cxx_std_17)
+# Re-enable RTTI and exceptions for the functor library too: it links against
+# the Souffle ABI (SymbolTable/RecordTable), which VERITAS's global
+# -fno-rtti -fno-exceptions must not reach.
+target_compile_options(veritas_souffle_functors PRIVATE -frtti -fexceptions)
