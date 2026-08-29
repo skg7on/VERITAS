@@ -426,12 +426,12 @@ endif (MSVC)
 
 if (APPLE)
   if ("${CMAKE_HOST_SYSTEM_PROCESSOR}" STREQUAL "arm64")
-    # work around a known issue with xcode15 linker
-    # c++ exceptions handling is broken otherwise
-    set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,-ld_classic")
-    target_link_options(libsouffle PUBLIC "-ld_classic")
-    target_link_options(compiled PUBLIC "-ld_classic")
-    target_link_options(souffleprof PUBLIC "-ld_classic")
+    # VERITAS (vendored build integration): upstream adds an Xcode-15 linker
+    # workaround here (`-Wl,-ld_classic` and `target_link_options(... "-ld_classic")`)
+    # because C++ exception handling was broken under the Xcode 15 linker. On the
+    # VERITAS toolchain (llvm@17 clang 17 + macOS SDK 26 + -fuse-ld=lld) the flag
+    # is obsolete and harmful: lld interprets `-ld_classic` as `-l d_classic` and
+    # fails to link. Disabled; see cmake/VeritasSouffle.cmake.
   endif()
 endif()
 

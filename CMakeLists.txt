@@ -109,6 +109,8 @@ option(VERITAS_BUILD_TESTS "Build VERITAS unit and integration tests"           
 option(VERITAS_BUILD_TOOLS "Build VERITAS CLI binaries (veritas-build, ...)"    ON)
 option(VERITAS_ENABLE_SOUFFLE
   "Enable optional Souffle WPA execution when the executable is available" ON)
+option(VERITAS_BUILD_SOUFFLE
+  "Build the vendored Souffle from third_party/Souffle (M8R.4 prerequisite)" OFF)
 
 # Position-independent code is required when producing shared libraries and
 # is harmless for static builds. Set it globally so every target (including
@@ -152,6 +154,15 @@ include(VeritasSVF)
 
 # Verify the required SVF build contract.
 include(tests/RequiredSvfContract)
+
+# Souffle is vendored at third_party/Souffle and built from source behind
+# VERITAS_BUILD_SOUFFLE. This is the M8R.4 prerequisite: a vendored, pinned
+# checkout makes the source revision verifiable by construction. OFF by default
+# until M8R.4 flips Souffle to the mandatory production engine; when enabled,
+# Souffle still builds on demand (EXCLUDE_FROM_ALL), not in the default target.
+if(VERITAS_BUILD_SOUFFLE)
+  include(VeritasSouffle)
+endif()
 
 # Remaining VERITAS dependencies: Z3, Protobuf, RocksDB, SQLite3, and
 # GoogleTest (when tests are enabled). Souffle execution is an optional M8
@@ -203,6 +214,7 @@ message(STATUS "  Build tests          : ${VERITAS_BUILD_TESTS}")
 message(STATUS "  Build tools          : ${VERITAS_BUILD_TOOLS}")
 message(STATUS "  Enable Souffle       : ${VERITAS_ENABLE_SOUFFLE}")
 message(STATUS "  Souffle available    : ${VERITAS_HAS_SOUFFLE}")
+message(STATUS "  Build Souffle (src)  : ${VERITAS_BUILD_SOUFFLE}")
 message(STATUS "  LLVM version         : ${LLVM_PACKAGE_VERSION}")
 message(STATUS "  Binary root          : ${CMAKE_BINARY_DIR}")
 message(STATUS "  SVF binary dir       : ${VERITAS_SVF_BINARY_DIR}")
