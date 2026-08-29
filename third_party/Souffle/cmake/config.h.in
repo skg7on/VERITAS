@@ -1,0 +1,6 @@
+#pragma once
+
+namespace souffle {
+constexpr char const* PACKAGE_VERSION = "${PACKAGE_VERSION}";
+constexpr char const* GIT_PACKAGE_VERSION = "${GIT_PACKAGE_VERSION}";
+}

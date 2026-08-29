@@ -20,7 +20,7 @@
 
 **Identity Model:** `RepositoryID → RevisionID → BuildVariantID → FunctionSymbolID → FunctionVariantID → FunctionBodyID → FunctionSummaryID`. All IDs are semantic (not file-line based), content-derived, canonicalized. Format: `<kind>:sha256:<digest>`.
 
-**Analysis Stack (V1):** C++20, CMake 3.23+, LLVM/Clang 22+ libraries, required pinned SVF (`third_party/SVF@18fb5650…`), Z3, Protobuf, RocksDB, SQLite, Soufflé, GoogleTest. SVF is mandatory for L1 Andersen pointer analysis; no `VERITAS_ENABLE_SVF` toggle exists.
+**Analysis Stack (V1):** C++20, CMake 3.23+, LLVM/Clang 22+ libraries, required pinned SVF (`third_party/SVF@18fb5650…`), Z3, Protobuf, RocksDB, SQLite, vendored pinned Soufflé (`third_party/Souffle@5682a9f…`, tag 2.5), GoogleTest. SVF is mandatory for L1 Andersen pointer analysis; no `VERITAS_ENABLE_SVF` toggle exists. Soufflé is currently an optional M8 accelerator; M8R.4 makes the vendored build the mandatory production WPA engine.
 
 **Milestones M0–M12:** Skeleton + toolchain → project ingestion → identity + metadata → Summary IR + CAS → Clang/LLVM local extraction → required in-process SVF → thin CPG projection → reverse-dep index + incremental scheduler → SCC WPA + Soufflé → provenance fact store + explain API → Evidence Builder input APIs + buffer-overflow demo → Evidence IR semantic model + serialization → external IR adapter (bitcode) → SummaryDB external-provider substrate → direct Joern GraphSON/GraphML importer → provider fusion/Evidence integration; PhASAR remains a separately designed provider adapter.
 
@@ -46,8 +46,9 @@ cmake --build --preset default
 - `LLVM_PROJECT_BUILD_DIR` is optional. When set, `cmake/VeritasLLVM.cmake` derives `LLVM_DIR` and `Clang_DIR` from that tree; otherwise `find_package(LLVM/Clang CONFIG)` falls back to explicit `LLVM_DIR` / `Clang_DIR` or system paths.
 - The **host C/C++ compiler** is auto-detected by CMake (or set via `CC`/`CXX` / `CMAKE_C_COMPILER`) and is independent of the LLVM library version: `LLVM_PROJECT_BUILD_DIR` supplies only the LLVM/Clang **headers and libraries**, never the compiler. On the current dev machine the host compiler is llvm@17 (clang 17.0.6) against LLVM 24.x libraries — that skew is intentional. VERITAS code is compiled as C++20.
 - SVF is vendored at `third_party/SVF/` and always builds. Its build tree lives at `build/svf-build/` and stays out of the default `all` target — `SvfCore`/`SvfLLVM` build on demand through the private `veritas_third_party_svf` wrapper.
+- Soufflé is vendored at `third_party/Souffle/` at the pinned revision and builds from source behind `VERITAS_BUILD_SOUFFLE` (default `OFF` until M8R.4). Its build tree lives at `build/souffle-build/`; the `souffle` executable and `libsouffle` build on demand. Building Soufflé from source requires Bison >= 3.2 and Flex (`brew install bison flex` on macOS) — see `docs/third_party/Souffle.md`.
 - `BUILD_SHARED_LIBS` defaults to `ON`; VERITAS and SVF both build shared. `--preset static-release` opts out.
-- Other options: `VERITAS_BUILD_TESTS` (ON), `VERITAS_BUILD_TOOLS` (ON).
+- Other options: `VERITAS_BUILD_TESTS` (ON), `VERITAS_BUILD_TOOLS` (ON), `VERITAS_BUILD_SOUFFLE` (OFF).
 - Non-Ninja generators still configure but emit a warning; only Ninja is exercised in CI.
 
 ---
