@@ -1,0 +1,48 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// epistemic.dl -- how epistemic state combines along a derivation.
+//
+// A conclusion is never better warranted than the weakest step used to reach
+// it. Composing two facts therefore yields whichever input carries the weaker
+// warrant.
+//
+// The weakening order is part of the rules.v2 bundle contract:
+//
+//   MUST  <  MAY  <  INFERRED  <  ASSUMED  <  UNKNOWN
+//
+// MUST is observed and definite. MAY is observed as possible. INFERRED is
+// derived from analysed evidence. ASSUMED rests on an external model that
+// nothing in this run verified, so it ranks weaker than INFERRED. UNKNOWN
+// carries no information at all.
+//
+// MUST_NOT (2) is deliberately absent. It is a negative statement and never
+// participates in a positive derivation; a rule that encounters it produces
+// no tuple rather than silently coercing it to a positive state. Changing any
+// of this changes published fact content and requires a bundle version bump.
+
+.decl EpistemicRank(state:Epistemic, rank:number)
+EpistemicRank(0, 0).  // MUST
+EpistemicRank(1, 1).  // MAY
+EpistemicRank(3, 2).  // INFERRED
+EpistemicRank(4, 3).  // ASSUMED
+EpistemicRank(5, 4).  // UNKNOWN
+
+// Total over every state the bundle admits. Declaring it by rank rather than
+// enumerating 25 tuples keeps the order in one place.
+.decl WeakenEpistemic(left:Epistemic, right:Epistemic, result:Epistemic)
+WeakenEpistemic(l, r, l) :-
+  EpistemicRank(l, lr), EpistemicRank(r, rr), lr >= rr.
+WeakenEpistemic(l, r, r) :-
+  EpistemicRank(l, lr), EpistemicRank(r, rr), rr > lr.

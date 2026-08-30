@@ -25,8 +25,6 @@ namespace veritas::facts {
 
 namespace {
 
-constexpr std::size_t kRelationCount = 17;
-
 enum class CellTag : std::uint8_t {
   kStableId = 0,
   kInt64 = 1,
@@ -63,7 +61,7 @@ void AppendI64(std::vector<std::byte>& out, std::int64_t value) {
 }
 
 bool IsValidRelation(RelationId id) {
-  return static_cast<std::size_t>(id) < kRelationCount;
+  return static_cast<std::size_t>(id) < kRelationCountV2;
 }
 
 bool IsRangeRelation(RelationId id) {

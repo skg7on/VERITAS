@@ -16,10 +16,14 @@ add_library(veritas_facts
   AnalysisRun.cpp
   AnalysisFact.cpp
   RelationSchema.cpp
+  ResultCanonicalizer.cpp
+  RuleRegistry.cpp
+  SemanticKeyCodec.cpp
   LegacyFactAdapter.cpp
   FactSchema.cpp
   SummaryFactBuilder.cpp
   SouffleExporter.cpp
+  Witness.cpp
   SouffleRunner.cpp
 )
 

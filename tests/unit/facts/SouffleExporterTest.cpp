@@ -480,5 +480,94 @@ TEST_F(SouffleExporterTest, ReconstructsLongSparseProofChain) {
   EXPECT_EQ(reconstructed->size(), kFunctionCount);
 }
 
+// Canonical proof reconstruction decides which rule and which inputs prove
+// each derived fact, and MakeDerivedFact hashes both into the fact's tuple ID.
+// Selection is therefore identity-bearing: a different proof is a different
+// fact, and a changed rule ID silently re-identifies every fact derived by it.
+//
+// The other tests here assert only how many facts came back, so none of that
+// is pinned. This fingerprints the full selected proof forest -- relation,
+// columns, epistemic, rule ID, and ordered input IDs -- so any change to
+// selection or to a rule ID fails loudly instead of quietly renaming facts.
+TEST_F(SouffleExporterTest, CanonicalProofSelectionIsPinned) {
+  const std::vector<std::string> functions = {"F0", "F1", "F2"};
+
+  std::vector<FactTuple> base_facts;
+  base_facts.push_back(BaseFact(FactRelation::kDirectCall,
+                                {functions[0], functions[1]}, "call:f-g"));
+  base_facts.push_back(BaseFact(FactRelation::kDirectCall,
+                                {functions[1], functions[2]}, "call:g-h"));
+  // A direct edge that competes with the transitive proof of f -> h.
+  base_facts.push_back(BaseFact(FactRelation::kDirectCall,
+                                {functions[0], functions[2]}, "call:f-h"));
+  base_facts.push_back(BaseFact(FactRelation::kDirectWrite,
+                                {functions[2], "X"}, "write:X"));
+
+  std::vector<FactTuple> semantics;
+  for (const auto &function : functions) {
+    // F2 reaches nothing further, so only F0 and F1 have a ReachableCall to
+    // prove; asking for F2 -> F2 would demand a self-loop that no edge backs.
+    if (function != functions[2]) {
+      auto reachable = MakeDerivedFact(
+          FactRelation::kReachableCall, {function, functions[2]},
+          summary::v1::EPISTEMIC_STATE_MUST, "test.semantic.placeholder.v1",
+          {base_facts.front().tuple_id});
+      ASSERT_TRUE(reachable.ok()) << reachable.status().message();
+      semantics.push_back(std::move(*reachable));
+    }
+
+    auto may_write = MakeDerivedFact(
+        FactRelation::kMayWrite, {function, "X"},
+        summary::v1::EPISTEMIC_STATE_MUST, "test.semantic.placeholder.v1",
+        {base_facts.back().tuple_id});
+    ASSERT_TRUE(may_write.ok()) << may_write.status().message();
+    semantics.push_back(std::move(*may_write));
+  }
+
+  auto reconstructed =
+      SouffleExporter::ReconstructCanonicalProofs(base_facts, semantics);
+  ASSERT_TRUE(reconstructed.ok()) << reconstructed.status().message();
+
+  std::vector<std::string> fingerprint;
+  for (const auto &fact : *reconstructed) {
+    auto name = FactRelationName(fact.relation);
+    ASSERT_TRUE(name.ok());
+    std::string line(*name);
+    for (const auto &column : fact.columns)
+      line += "|" + column;
+    line += "|e" + std::to_string(static_cast<int>(fact.epistemic));
+    line += "|" + fact.rule_id;
+    for (const auto &input : fact.input_tuple_ids)
+      line += "|" + core::ToString(input);
+    line += "|=>" + core::ToString(fact.tuple_id);
+    fingerprint.push_back(std::move(line));
+  }
+  std::ranges::sort(fingerprint);
+
+  // Golden values captured from the reconstruction this test was written to
+  // pin. F0 -> F2 selects the direct edge over the two-step transitive proof,
+  // which is the shortest-proof rule doing its job.
+  const std::vector<std::string> expected = {
+      "MayWrite|F0|X|e1|m8.may_write.transitive.v1|"
+      "fact:sha256:048f836fc31d4f482e56a6de18fe9eed3bd9a0fa3ed825298d675f998ce6b108|"
+      "fact:sha256:ab8c9f952f43a4b700c7824e758f430be944a355d315a1029681eb820c0b8bdc|"
+      "=>fact:sha256:f9d2310e46f6b1b8fc542420ba8f3f2c61df81c7e0257882fdd10572d3d9010a",
+      "MayWrite|F1|X|e1|m8.may_write.transitive.v1|"
+      "fact:sha256:686a5ae0333dff4d94534f42049e231baa96e6b27362290c94966da7d24dbb90|"
+      "fact:sha256:ab8c9f952f43a4b700c7824e758f430be944a355d315a1029681eb820c0b8bdc|"
+      "=>fact:sha256:4ae3b82446131f5844ecc3c7f80b11318cb47504849a9efc43ca85690fb97d3e",
+      "MayWrite|F2|X|e1|m8.may_write.direct.v1|"
+      "fact:sha256:943c0ce6de522f71bddbdf8e2732669959a7c16b8e7ec71aa1c7c82d4884b048|"
+      "=>fact:sha256:ab8c9f952f43a4b700c7824e758f430be944a355d315a1029681eb820c0b8bdc",
+      "ReachableCall|F0|F2|e1|m8.reachable.direct.v1|"
+      "fact:sha256:048f836fc31d4f482e56a6de18fe9eed3bd9a0fa3ed825298d675f998ce6b108|"
+      "=>fact:sha256:e35a67eda2d789316d4fa5786043f12855e54bc810a289fdd15ba7cdc850a88d",
+      "ReachableCall|F1|F2|e1|m8.reachable.direct.v1|"
+      "fact:sha256:686a5ae0333dff4d94534f42049e231baa96e6b27362290c94966da7d24dbb90|"
+      "=>fact:sha256:6b91a1b3f8f8b88f4f4b02832a9c8ddfd43e8b8e0535c23068a29ff188cf9c72",
+  };
+  EXPECT_EQ(fingerprint, expected);
+}
+
 } // namespace
 } // namespace veritas::facts

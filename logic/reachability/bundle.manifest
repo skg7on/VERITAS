@@ -1,0 +1,26 @@
+# Reachability rule bundle.
+#
+# Identifies the compiled program that evaluates the ReachableCall component.
+# The bundle identity participates in run identity and in the component cache
+# key, so a rule change must not reuse a prior compiled result.
+
+bundle_name=reachability
+bundle_version=rules.v2
+component=reachability
+entry=reachability.v2.dl
+
+# Relations this bundle reads. SupportReachableCall carries successor results
+# in as EDB; the bundle never reads the IDB ReachableCall of another component.
+input=FunctionMap
+input=CallSiteMap
+input=DirectCall
+input=SupportReachableCall
+
+# Relations this bundle writes.
+output=ReachableCall
+output=Witness
+
+# Rule ids emitted in Witness tuples. Must match logic/common/rules.v2.manifest.
+rule=wpa.reachability.direct.v2
+rule=wpa.reachability.support.v2
+rule=wpa.reachability.transitive.v2

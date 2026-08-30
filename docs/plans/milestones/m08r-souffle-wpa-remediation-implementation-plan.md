@@ -340,7 +340,7 @@ git commit -m "feat: add reproducible WPA run manifests"
 - Create: `include/veritas/facts/AnalysisFact.h`
 - Create: `src/facts/RelationSchema.cpp`
 - Create: `src/facts/AnalysisFact.cpp`
-- Create: `logic/schema/relations.v2.json`
+- Create: `logic/schema/relations.v2.manifest`
 - Create: `tests/unit/facts/RelationSchemaTest.cpp`
 - Create: `tests/unit/facts/AnalysisFactTest.cpp`
 - Modify: `src/facts/CMakeLists.txt`
@@ -471,7 +471,11 @@ struct AnalysisFact {
 
 `MakeFact` validates stable-ID kinds through `RelationsV2()`, serializes `relations.v2`, relation name, typed stable semantic cells, and epistemic value, then derives a `kFact` ID. It must not include dense IDs, engine identity, tuple order, rule ID, or witness edges. `ValidateExecutionRow` separately checks each dense-ID domain for the run-local execution projection.
 
-Add every relation and column listed in design sections 7 and 11 to `logic/schema/relations.v2.json`; mark EDB/IDB ownership and allowed epistemic values explicitly. `DirectRead` and `DirectWrite` contain `RangeKind`, signed `Offset`, and unsigned `Size`: `KNOWN` consumes both payload cells, while `UNKNOWN` requires canonical zeros that are ignored. Reject half-known ranges and non-canonical unknown payloads so a known zero range never collapses into unknown.
+Add every relation and column listed in design sections 7 and 11 to `logic/schema/relations.v2.manifest`; mark EDB/IDB ownership and allowed epistemic values explicitly. `DirectRead` and `DirectWrite` contain `RangeKind`, signed `Offset`, and unsigned `Size`: `KNOWN` consumes both payload cells, while `UNKNOWN` requires canonical zeros that are ignored. Reject half-known ranges and non-canonical unknown payloads so a known zero range never collapses into unknown.
+
+This schema mirror is a tab-separated `.manifest`, revised from the `.json` this plan originally named. The JSON was read by nothing — the project has no JSON dependency — so it was a hand-maintained duplicate of the compiled registry with no mechanism to detect drift, which is precisely what a schema mirror must not be. It is now `logic/schema/relations.v2.manifest` in the same format as `logic/common/rules.v2.manifest`, and `RelationSchemaManifestTest` fails if it and `RelationsV2()` disagree in either direction.
+
+"Allowed epistemic values" moved with it. Those sets existed only in the JSON, were enforced nowhere, and had no C++ counterpart at all, so `RelationSchema` gains an `allowed_epistemic` field and the registry becomes their single authority. The manifest mirrors that field like any other, rather than carrying documentation the registry cannot check.
 
 - [ ] **Step 4: Run schema and fact tests**
 
@@ -488,7 +492,7 @@ Expected: typed-domain validation, complete registry lookup, and deterministic f
 - [ ] **Step 5: Commit the V2 relation contract**
 
 ```bash
-git add include/veritas/facts/RelationSchema.h include/veritas/facts/AnalysisFact.h src/facts/RelationSchema.cpp src/facts/AnalysisFact.cpp logic/schema/relations.v2.json tests/unit/facts/RelationSchemaTest.cpp tests/unit/facts/AnalysisFactTest.cpp src/facts/CMakeLists.txt tests/unit/facts/CMakeLists.txt
+git add include/veritas/facts/RelationSchema.h include/veritas/facts/AnalysisFact.h src/facts/RelationSchema.cpp src/facts/AnalysisFact.cpp logic/schema/relations.v2.manifest tests/unit/facts/RelationSchemaTest.cpp tests/unit/facts/AnalysisFactTest.cpp src/facts/CMakeLists.txt tests/unit/facts/CMakeLists.txt
 git commit -m "feat: add typed V2 relation schema"
 ```
 
@@ -1259,7 +1263,10 @@ git commit -m "feat: publish modeled Function Summary IR v2"
 - Modify: `src/wpa/SccGraph.cpp`
 - Modify: `include/veritas/facts/RelationSchema.h`
 - Modify: `src/facts/RelationSchema.cpp`
-- Modify: `logic/schema/relations.v2.json`
+- Modify: `logic/schema/relations.v2.manifest`
+- Modify: `logic/schema/relations.v2.dl`
+- Modify: `tests/unit/facts/RelationSchemaTest.cpp`
+- Modify: `tests/unit/facts/CMakeLists.txt`
 - Modify: `src/wpa/CMakeLists.txt`
 - Create: `tests/unit/wpa/WpaInputMaterializerTest.cpp`
 - Create: `tests/unit/wpa/CallGraphTest.cpp`
@@ -1378,7 +1385,7 @@ Expected: stable/dense round trips, V2 call semantics, successor support, input 
 - [ ] **Step 5: Commit the per-SCC relational projection**
 
 ```bash
-git add include/veritas/wpa/WpaComponent.h include/veritas/wpa/WpaInputMaterializer.h src/wpa/WpaInputMaterializer.cpp include/veritas/wpa/CallGraph.h src/wpa/CallGraph.cpp include/veritas/wpa/SccGraph.h src/wpa/SccGraph.cpp include/veritas/facts/RelationSchema.h src/facts/RelationSchema.cpp logic/schema/relations.v2.json src/wpa/CMakeLists.txt tests/unit/wpa/WpaInputMaterializerTest.cpp tests/unit/wpa/CallGraphTest.cpp tests/unit/wpa/SccGraphTest.cpp tests/unit/wpa/CMakeLists.txt
+git add include/veritas/wpa/WpaComponent.h include/veritas/wpa/WpaInputMaterializer.h src/wpa/WpaInputMaterializer.cpp include/veritas/wpa/CallGraph.h src/wpa/CallGraph.cpp include/veritas/wpa/SccGraph.h src/wpa/SccGraph.cpp include/veritas/facts/RelationSchema.h src/facts/RelationSchema.cpp logic/schema/relations.v2.manifest src/wpa/CMakeLists.txt tests/unit/wpa/WpaInputMaterializerTest.cpp tests/unit/wpa/CallGraphTest.cpp tests/unit/wpa/SccGraphTest.cpp tests/unit/wpa/CMakeLists.txt
 git commit -m "feat: materialize typed SCC WPA inputs"
 ```
 
@@ -1610,12 +1617,26 @@ ReachableCall(f, h, e) :-
 `semantic_key.dl` declares the pinned Soufflé 2.5 stateful functor ABI:
 
 ```souffle
+.functor veritas_key_header_v1(relation:symbol, arity:unsigned):symbol stateful
+.functor veritas_key_id_v1(value:symbol):symbol stateful
 .functor veritas_key_field_symbol_v1(value:symbol):symbol stateful
 .functor veritas_key_field_number_v1(value:number):symbol stateful
 .functor veritas_key_field_unsigned_v1(value:unsigned):symbol stateful
+.functor veritas_key_field_enum_v1(value:number):symbol stateful
 ```
 
-`SouffleSemanticKeyFunctor.cpp` exports those exact C-linkage names with signature `souffle::RamDomain name(souffle::SymbolTable*, souffle::RecordTable*, souffle::RamDomain)`. Each adapter decodes its typed argument, calls `SemanticKeyCodec` to emit one type-tagged length-prefixed UTF-8 field, and interns the result through the supplied symbol table. The implementations are pure and reentrant. Nested `cat` may join only these self-delimiting encoded fields after an encoded `veritas.semantic-key.v1` prefix and relation name; concatenating raw cells or delimiters is forbidden.
+This ABI is six functors, revised from the three this plan originally
+specified. `SemanticKeyCodec` type-tags five domains, and a Souffle-built key
+must be byte-identical to a C++-built one, so the Datalog side needs a
+primitive per tag. Collapsing stable identifiers into the symbol functor would
+let a symbol cell reading `memref:sha256:x` produce the same key as an
+identifier cell with that text, and collapsing enum ordinals into the number
+functor would erase the distinction between an epistemic state and a plain
+integer. The header is a separate functor so the relation name and arity
+cannot be confused with a leading data field. Reviewed and confirmed before
+M8R.4 implementation.
+
+`SouffleSemanticKeyFunctor.cpp` exports those exact C-linkage names with signature `souffle::RamDomain name(souffle::SymbolTable*, souffle::RecordTable*, ...)`, taking one `RamDomain` argument per declared parameter. Each adapter decodes its typed argument, calls `SemanticKeyCodec` to emit one type-tagged length-prefixed UTF-8 field, and interns the result through the supplied symbol table. The implementations are pure and reentrant. Nested `cat` may join only these self-delimiting encoded fields after a `veritas_key_header_v1` result; concatenating raw cells or delimiters is forbidden.
 
 `epistemic.dl` defines the finite `WeakenEpistemic(left, right, result)` relation for every state admitted by the bundle contract. Add corresponding immediate `Witness` rules for every direct, local-transitive, and successor-support derivation. `SemanticKeyCodecTest` covers empty cells, delimiter-like text, Unicode, digit-prefixed symbols, signed numbers, and unsigned bounds without requiring Soufflé. Task 13 adds the stateful adapter and mandatory generated-program comparison. The may-write bundle follows the same pattern with `DirectWrite`, `DirectCall`, `SupportMayWrite`, and `MayWrite`.
 
@@ -1790,7 +1811,7 @@ endif()
 
 The pinned-build provisioning step writes `souffle-provenance.json` with tag, full source revision, build configuration, compiler identity, and executable SHA-256. CMake validates the exact revision and executable digest, then canonicalizes the manifest plus generated-bundle hashes into `EngineToolchainIdentity`; every Soufflé run manifest records it. A version substring alone is never sufficient qualification.
 
-Build `src/facts/SouffleSemanticKeyFunctor.cpp` and `SemanticKeyCodec.cpp` as the private shared library `veritas-souffle-functors`, exporting only the three `extern "C"` stateful functor symbols declared in `semantic_key.dl`. `veritas_generate_souffle_program(NAME ReachabilityV2 SOURCE logic/reachability/reachability.v2.dl)` and the corresponding `MayWriteV2` call run `souffle -g` into the build tree with the functor library available through pinned `-L`/`-l` arguments. Link the generated programs and `veritas-souffle-worker` to that exact target and set a build-tree rpath so the worker loads the same library at evaluation time. `SemanticKeyFunctorTest` invokes the generated worker, proving symbol resolution and byte equality with `SemanticKeyCodec`; an unresolved or mismatched functor is a hard test failure.
+Build `src/facts/SouffleSemanticKeyFunctor.cpp` and `SemanticKeyCodec.cpp` as the private shared library `veritas-souffle-functors`, exporting only the six `extern "C"` stateful functor symbols declared in `semantic_key.dl`. `veritas_generate_souffle_program(NAME ReachabilityV2 SOURCE logic/reachability/reachability.v2.dl)` and the corresponding `MayWriteV2` call run `souffle -g` into the build tree with the functor library available through pinned `-L`/`-l` arguments. Link the generated programs and `veritas-souffle-worker` to that exact target and set a build-tree rpath so the worker loads the same library at evaluation time. `SemanticKeyFunctorTest` invokes the generated worker, proving symbol resolution and byte equality with `SemanticKeyCodec`; an unresolved or mismatched functor is a hard test failure.
 
 Compile generated sources privately into `veritas-souffle-worker`; the worker selects the registered program from a required component argument and uses `-F`/`-D` directories. No generated source, functor ABI, or Soufflé type is installed as a VERITAS public interface or checked-in generated artifact.
 

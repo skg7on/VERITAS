@@ -191,6 +191,33 @@ Status ReadDerivedFile(
   return Status::Ok();
 }
 
+// One recursive M8 domain. A derived relation is proved directly by its base
+// relation stating the same fact, or transitively by composing a call edge
+// with a proof of the remainder. Both M8 domains share that shape; only the
+// base relation and the rule ids differ, so they belong in a table rather
+// than in branches. Rule ids are the durable M8 v1 identities and must not
+// change: a derived fact's tuple ID is hashed over its rule and inputs.
+struct DerivationDomain {
+  FactRelation derived;
+  FactRelation base;
+  std::string_view direct_rule;
+  std::string_view transitive_rule;
+};
+
+constexpr std::array kDerivationDomains{
+    DerivationDomain{FactRelation::kReachableCall, FactRelation::kDirectCall,
+                     "m8.reachable.direct.v1", "m8.reachable.transitive.v1"},
+    DerivationDomain{FactRelation::kMayWrite, FactRelation::kDirectWrite,
+                     "m8.may_write.direct.v1", "m8.may_write.transitive.v1"},
+};
+
+// Returns nullptr for a relation this reconstructor does not derive.
+const DerivationDomain *DomainFor(FactRelation derived) {
+  const auto it = std::ranges::find(kDerivationDomains, derived,
+                                    &DerivationDomain::derived);
+  return it == kDerivationDomains.end() ? nullptr : &*it;
+}
+
 struct ProofCandidate {
   std::string_view rule_id;
   std::vector<core::StableId> inputs;
@@ -291,14 +318,17 @@ private:
         proof_keys.insert({columns.relation, columns.columns, epistemic});
     }
 
+    // Transitive derivation always walks call edges, whichever domain is
+    // being proved, so calls stay indexed by caller. Direct derivation reads
+    // whichever base relation the domain declares, indexed by the exact
+    // columns it must match.
     std::map<std::string, std::vector<const FactTuple *>> calls_by_source;
-    std::map<std::vector<std::string>, std::vector<const FactTuple *>>
-        writes_by_columns;
+    std::map<SemanticColumnsKey, std::vector<const FactTuple *>>
+        base_by_columns;
     for (const auto &fact : base_facts_) {
       if (fact.relation == FactRelation::kDirectCall)
         calls_by_source[fact.columns[0]].push_back(&fact);
-      if (fact.relation == FactRelation::kDirectWrite)
-        writes_by_columns[fact.columns].push_back(&fact);
+      base_by_columns[{fact.relation, fact.columns}].push_back(&fact);
     }
     std::map<SemanticColumnsKey, std::vector<const FactTuple *>>
         support_by_columns;
@@ -318,13 +348,18 @@ private:
 
     std::map<SemanticKey, std::vector<DeferredProofCandidate>> dependents;
     for (const auto &key : proof_keys) {
-      if (key.relation == FactRelation::kMayWrite) {
-        auto writes = writes_by_columns.find(key.columns);
-        if (writes != writes_by_columns.end()) {
-          for (const auto *write : writes->second) {
-            if (write->epistemic == key.epistemic) {
-              enqueue(key, "m8.may_write.direct.v1", {write->tuple_id}, 0u);
-            }
+      const DerivationDomain *domain = DomainFor(key.relation);
+      if (domain == nullptr)
+        continue;
+
+      // Direct: the domain's base relation stating exactly this fact. Both
+      // domains share this shape -- a DirectCall from f to g directly proves
+      // ReachableCall(f, g), just as a DirectWrite proves MayWrite.
+      auto directs = base_by_columns.find({domain->base, key.columns});
+      if (directs != base_by_columns.end()) {
+        for (const auto *base : directs->second) {
+          if (base->epistemic == key.epistemic) {
+            enqueue(key, domain->direct_rule, {base->tuple_id}, 0u);
           }
         }
       }
@@ -333,23 +368,10 @@ private:
       if (calls == calls_by_source.end())
         continue;
       for (const auto *call : calls->second) {
-        const std::string_view direct_rule =
-            key.relation == FactRelation::kReachableCall
-                ? "m8.reachable.direct.v1"
-                : "m8.may_write.direct.v1";
-        if (key.relation == FactRelation::kReachableCall &&
-            call->columns[1] == key.columns[1] &&
-            call->epistemic == key.epistemic) {
-          enqueue(key, direct_rule, {call->tuple_id}, 0u);
-        }
-
         SemanticColumnsKey sub_columns{
             .relation = key.relation,
             .columns = {call->columns[1], key.columns[1]}};
-        const std::string_view transitive_rule =
-            key.relation == FactRelation::kReachableCall
-                ? "m8.reachable.transitive.v1"
-                : "m8.may_write.transitive.v1";
+        const std::string_view transitive_rule = domain->transitive_rule;
         auto supports = support_by_columns.find(sub_columns);
         if (supports != support_by_columns.end()) {
           for (const auto *support : supports->second) {
@@ -633,8 +655,7 @@ StatusOr<std::vector<FactTuple>> SouffleExporter::ReconstructCanonicalProofs(
     auto valid = ValidateFactTuple(fact);
     if (!valid.ok())
       return valid;
-    if (fact.relation != FactRelation::kReachableCall &&
-        fact.relation != FactRelation::kMayWrite) {
+    if (DomainFor(fact.relation) == nullptr) {
       return Status::InvalidArgument(
           "canonical proof support requires a derived M8 relation");
     }
@@ -649,8 +670,7 @@ StatusOr<std::vector<FactTuple>> SouffleExporter::ReconstructCanonicalProofs(
     auto valid = ValidateFactTuple(fact);
     if (!valid.ok())
       return valid;
-    if (fact.relation != FactRelation::kReachableCall &&
-        fact.relation != FactRelation::kMayWrite) {
+    if (DomainFor(fact.relation) == nullptr) {
       return Status::InvalidArgument(
           "canonical proof reconstruction requires a derived M8 relation");
     }

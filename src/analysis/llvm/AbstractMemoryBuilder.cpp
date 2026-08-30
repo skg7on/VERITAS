@@ -308,8 +308,14 @@ StatusOr<semantic::MemoryLocation> AbstractMemoryBuilder::LocationFor(
   else
     byte_range = semantic::ByteRange::Unknown();
 
-  // 6. Build the memory location (kMemoryRef) identity from the object, the
-  // access path, and the byte range.
+  // 6. Build the memory location (kMemoryRef) identity from the object and the
+  // access path only. The byte range is deliberately excluded: a constant byte
+  // offset is already a function of the access path, and the access size
+  // describes the accessing instruction rather than the object. Folding the
+  // range into identity split one object into a known-range identity (local
+  // extraction, which knows the load/store size) and an unknown-range identity
+  // (SVF, which does not), and split MayWrite by offset. The range is still
+  // carried on the location and hashed independently by ComponentHash.
   std::string location_bytes;
   AppendTag(&location_bytes, 'M');
   AppendString(&location_bytes, core::ToString(object.id));
@@ -318,13 +324,6 @@ StatusOr<semantic::MemoryLocation> AbstractMemoryBuilder::LocationFor(
     AppendInt(&location_bytes, static_cast<std::int64_t>(segment.kind));
     AppendInt(&location_bytes, segment.first);
     AppendInt(&location_bytes, segment.last);
-  }
-  if (byte_range.offset.has_value() && byte_range.size.has_value()) {
-    AppendTag(&location_bytes, 'R');
-    AppendInt(&location_bytes, *byte_range.offset);
-    AppendUInt(&location_bytes, *byte_range.size);
-  } else {
-    AppendTag(&location_bytes, 'U');
   }
 
   semantic::MemoryLocation location;

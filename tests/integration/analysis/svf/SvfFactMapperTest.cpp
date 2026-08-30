@@ -313,5 +313,80 @@ TEST(SvfFactMapperTest, LocalAnalysisSvfFactsMergeIntoHashedOwnerSummary) {
   EXPECT_EQ((*merged)[0].value_flows_size(), original_flows);
 }
 
-} // namespace
+// Local extraction and SVF both observe the same store. Since memory identity
+// no longer includes the byte range, they now agree on memory_location_id --
+// and that exposed a disagreement the differing ids had been hiding: local
+// states the effect MUST (LocalFactExtractor), SVF states it MAY
+// (SvfFactMapper). Publishing both derives MayWrite(f, o, MUST) and
+// MayWrite(f, o, MAY) for one object, where the first strictly implies the
+// second, leaving "does f must-write o" with two answers.
+//
+// The weaker duplicate is dropped. An SVF effect for a location the local
+// pass never reported is still kept: this suppresses redundancy, not
+// discovery.
+TEST(SvfMergeTest, DropsSvfEffectAlreadyStatedMoreStronglyByLocalPass) {
+  const auto function_id = core::MakeStableId(
+      core::IdKind::kFunctionVariant, std::as_bytes(std::span("f", 1)));
+  const auto shared = core::MakeStableId(core::IdKind::kMemoryRef,
+                                         std::as_bytes(std::span("shared", 6)));
+  const auto svf_only = core::MakeStableId(
+      core::IdKind::kMemoryRef, std::as_bytes(std::span("svfonly", 7)));
+  const auto object_id = core::MakeStableId(core::IdKind::kAbstractObject,
+                                            std::as_bytes(std::span("obj", 3)));
+  const auto operation = core::MakeStableId(core::IdKind::kValueRef,
+                                            std::as_bytes(std::span("op", 2)));
+
+  summary::v2::FunctionSummary draft;
+  draft.mutable_header()->set_schema_version("summary.v2");
+  draft.mutable_identity()->set_function_variant_id(core::ToString(function_id));
+  auto* local = draft.add_memory_effects();
+  local->set_kind(summary::v1::EFFECT_KIND_WRITE);
+  local->set_epistemic(summary::v1::EPISTEMIC_STATE_MUST);
+  local->mutable_location()->set_memory_location_id(core::ToString(shared));
+
+  auto MakeEffect = [&](const core::StableId& location_id) {
+    semantic::NormalizedMemoryEffect effect;
+    effect.operation = operation;
+    effect.location.id = location_id;
+    effect.location.object.id = object_id;
+    effect.location.object.kind = semantic::AbstractObjectKind::kHeap;
+    effect.location.object.owner_function = function_id;
+    effect.location.byte_range = semantic::ByteRange::Unknown();
+    effect.kind = semantic::MemoryEffectKind::kMayWrite;
+    effect.epistemic = semantic::EpistemicState::kMay;
+    effect.provenance_ref = "svf:store";
+    return effect;
+  };
+
+  semantic::NormalizedAnalysisFacts facts;
+  facts.memory_effects.push_back(MakeEffect(shared));
+  facts.memory_effects.push_back(MakeEffect(svf_only));
+
+  const auto model_dir =
+      testing::TestSourceRoot().parent_path() / "logic" / "models";
+  auto bundle = semantic::ModelBundle::Load(model_dir / "models.v1.tsv",
+                                            model_dir / "models.v1.manifest");
+  ASSERT_TRUE(bundle.ok()) << bundle.status().message();
+
+  std::vector<summary::v2::FunctionSummary> drafts;
+  drafts.push_back(std::move(draft));
+  auto merged = MergeSvfFactsV2(std::move(drafts), facts, *bundle);
+  ASSERT_TRUE(merged.ok()) << merged.status().message();
+  ASSERT_EQ(merged->size(), 1u);
+
+  int shared_count = 0;
+  int svf_only_count = 0;
+  for (const auto& effect : (*merged)[0].memory_effects()) {
+    if (effect.location().memory_location_id() == core::ToString(shared))
+      ++shared_count;
+    if (effect.location().memory_location_id() == core::ToString(svf_only))
+      ++svf_only_count;
+  }
+  EXPECT_EQ(shared_count, 1) << "weaker SVF duplicate was not dropped";
+  EXPECT_EQ((*merged)[0].memory_effects(0).epistemic(),
+            summary::v1::EPISTEMIC_STATE_MUST);
+  EXPECT_EQ(svf_only_count, 1) << "SVF-only discovery must be preserved";
+}
+
+}  // namespace
 } // namespace veritas::analysis::svf

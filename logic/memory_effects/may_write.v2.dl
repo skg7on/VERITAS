@@ -1,0 +1,124 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// may_write.v2.dl -- the MayWrite domain.
+//
+// Same three derivations as reachability: a direct write, a write reached
+// through a call, and one reached through a successor SCC's support.
+//
+// MayWrite is keyed on the memory location alone and carries no byte range.
+// That is why memory identity excludes the range: with the range folded into
+// the id, two writes at different offsets in one object would derive two
+// distinct MayWrite facts and "does f write object o" would have no single
+// answer. DirectWrite keeps range_kind, offset, and size as its own columns.
+
+.include "../schema/relations.v2.dl"
+.include "../common/epistemic.dl"
+.include "../common/semantic_key.dl"
+
+.decl MayWrite(function_id:FunctionId, memory_id:MemoryId,
+               epistemic:Epistemic)
+.output MayWrite(IO=csv, filename="MayWrite.csv")
+
+// A member's own write, at its own warrant. The range columns are projected
+// away here; they remain available on DirectWrite.
+MayWrite(f, x, e) :- DirectWrite(f, x, _, _, _, e).
+
+MayWrite(f, x, e) :-
+  DirectCall(_, f, g, _, e1),
+  MayWrite(g, x, e2),
+  WeakenEpistemic(e1, e2, e).
+
+MayWrite(f, x, e) :-
+  DirectCall(_, f, g, _, e1),
+  SupportMayWrite(g, x, e2),
+  WeakenEpistemic(e1, e2, e).
+
+// -- Semantic keys ---------------------------------------------------------
+
+.decl MayWriteKey(function_id:FunctionId, memory_id:MemoryId,
+                  epistemic:Epistemic, key:symbol)
+MayWriteKey(f, x, e,
+  cat(@veritas_key_header_v1("MayWrite", 3),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(xs), @veritas_key_field_enum_v1(e))))) :-
+  MayWrite(f, x, e), FunctionMap(f, fs), MemoryMap(x, xs).
+
+.decl DirectWriteKey(function_id:FunctionId, memory_id:MemoryId,
+                     range_kind:RangeKind, offset:number, size:unsigned,
+                     epistemic:Epistemic, key:symbol)
+DirectWriteKey(f, x, rk, off, sz, e,
+  cat(@veritas_key_header_v1("DirectWrite", 6),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(xs),
+  cat(@veritas_key_field_enum_v1(rk),
+  cat(@veritas_key_field_number_v1(off),
+  cat(@veritas_key_field_unsigned_v1(sz),
+      @veritas_key_field_enum_v1(e)))))))) :-
+  DirectWrite(f, x, rk, off, sz, e), FunctionMap(f, fs), MemoryMap(x, xs).
+
+.decl DirectCallKey(call_site_id:CallSiteId, caller_id:FunctionId,
+                    callee_id:FunctionId, dispatch:Dispatch,
+                    epistemic:Epistemic, key:symbol)
+DirectCallKey(cs, f, g, d, e,
+  cat(@veritas_key_header_v1("DirectCall", 5),
+  cat(@veritas_key_id_v1(css),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(gs),
+  cat(@veritas_key_field_enum_v1(d), @veritas_key_field_enum_v1(e))))))) :-
+  DirectCall(cs, f, g, d, e), CallSiteMap(cs, css),
+  FunctionMap(f, fs), FunctionMap(g, gs).
+
+.decl SupportMayWriteKey(function_id:FunctionId, memory_id:MemoryId,
+                         epistemic:Epistemic, key:symbol)
+SupportMayWriteKey(g, x, e,
+  cat(@veritas_key_header_v1("SupportMayWrite", 3),
+  cat(@veritas_key_id_v1(gs),
+  cat(@veritas_key_id_v1(xs), @veritas_key_field_enum_v1(e))))) :-
+  SupportMayWrite(g, x, e), FunctionMap(g, gs), MemoryMap(x, xs).
+
+// -- Witnesses -------------------------------------------------------------
+
+Witness(rk, "wpa.memory.may_write.direct.v2", ik, 0) :-
+  DirectWrite(f, x, rkind, off, sz, e),
+  MayWriteKey(f, x, e, rk),
+  DirectWriteKey(f, x, rkind, off, sz, e, ik).
+
+Witness(rk, "wpa.memory.may_write.transitive.v2", ik, 0) :-
+  DirectCall(cs, f, g, d, e1),
+  MayWrite(g, x, e2),
+  WeakenEpistemic(e1, e2, e),
+  MayWriteKey(f, x, e, rk),
+  DirectCallKey(cs, f, g, d, e1, ik).
+
+Witness(rk, "wpa.memory.may_write.transitive.v2", ik, 1) :-
+  DirectCall(_, f, g, _, e1),
+  MayWrite(g, x, e2),
+  WeakenEpistemic(e1, e2, e),
+  MayWriteKey(f, x, e, rk),
+  MayWriteKey(g, x, e2, ik).
+
+Witness(rk, "wpa.memory.may_write.support.v2", ik, 0) :-
+  DirectCall(cs, f, g, d, e1),
+  SupportMayWrite(g, x, e2),
+  WeakenEpistemic(e1, e2, e),
+  MayWriteKey(f, x, e, rk),
+  DirectCallKey(cs, f, g, d, e1, ik).
+
+Witness(rk, "wpa.memory.may_write.support.v2", ik, 1) :-
+  DirectCall(_, f, g, _, e1),
+  SupportMayWrite(g, x, e2),
+  WeakenEpistemic(e1, e2, e),
+  MayWriteKey(f, x, e, rk),
+  SupportMayWriteKey(g, x, e2, ik).

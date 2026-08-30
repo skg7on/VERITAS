@@ -23,6 +23,7 @@
 
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
+#include "veritas/summary/SummaryArtifact.h"
 #include "veritas/summary/v1/summary.pb.h"
 
 namespace veritas::wpa {
@@ -50,6 +51,15 @@ class CallGraph {
 public:
   static StatusOr<CallGraph>
   FromSummaries(std::span<const summary::v1::FunctionSummary> summaries);
+
+  // Version-neutral construction. A V2 call with a stable resolved target and
+  // epistemic MUST, MAY, INFERRED, or ASSUMED becomes an edge, so SVF's
+  // indirect and virtual MAY candidates reach the SCC scheduler. An empty or
+  // unresolvable target stays a scoped unknown-call effect and never fans out
+  // to every function. Tagged V1 artifacts keep their MUST/MAY semantics and
+  // cannot fabricate V2 precision.
+  static StatusOr<CallGraph>
+  FromSummaries(std::span<const summary::SummaryArtifact> summaries);
 
   Status AddFunction(core::StableId function_variant_id);
   Status AddCall(CallEdge edge);

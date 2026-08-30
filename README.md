@@ -152,11 +152,12 @@ the working tree, so partially staged changes remain intact.
 
 ## Current State
 
-M0–M8 are implemented and tested. M8R is approved and pending implementation;
-M9–M12 remain planned. The current project pipeline and CLI are available now,
-with the remaining milestones extending provenance, recursive analysis,
-Evidence Builder inputs, Evidence IR semantic modeling and serialization, and
-external inputs.
+M0–M8 are implemented and tested. Within the M8R remediation bridge, M8R.1 and
+M8R.2 are delivered; M8R.3–M8R.5 remain outstanding, and M9–M12 sit behind the
+M8R.5 entry gate. The current project pipeline and CLI are available now, with
+the remaining milestones extending provenance, recursive analysis, Evidence
+Builder inputs, Evidence IR semantic modeling and serialization, and external
+inputs.
 
 **Documentation:** Start at the [documentation index](docs/README.md).
 

@@ -181,6 +181,24 @@ v1::EffectKind ToV1EffectKind(semantic::MemoryEffectKind kind) {
   return v1::EFFECT_KIND_UNKNOWN;
 }
 
+// Lower rank is stronger warrant. Used only to decide whether an SVF effect
+// adds anything to what the local pass already stated for the same location;
+// MUST_NOT is a negative statement and never subsumes a positive one.
+int StrengthRank(v1::EpistemicState epistemic) {
+  switch (epistemic) {
+  case v1::EPISTEMIC_STATE_MUST:
+    return 0;
+  case v1::EPISTEMIC_STATE_MAY:
+    return 1;
+  case v1::EPISTEMIC_STATE_INFERRED:
+    return 2;
+  case v1::EPISTEMIC_STATE_ASSUMED:
+    return 3;
+  default:
+    return 4;
+  }
+}
+
 v2::AbstractObjectKind ToV2ObjectKind(semantic::AbstractObjectKind kind) {
   switch (kind) {
   case semantic::AbstractObjectKind::kGlobal:
@@ -354,6 +372,27 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
     }
 
     // Memory effects: attribute via location.object.owner_function.
+    //
+    // Local extraction and SVF observe the same stores, and since memory
+    // identity excludes the byte range they now agree on the location id. They
+    // do not agree on warrant: the local pass states MUST, SVF states MAY. An
+    // SVF effect the local pass already stated at least as strongly adds
+    // nothing -- MUST implies MAY -- and publishing both would derive
+    // MayWrite(f, o, MUST) alongside MayWrite(f, o, MAY) for one object.
+    // An effect on a location the local pass never reported is SVF discovery
+    // and is always kept.
+    std::map<std::pair<v1::EffectKind, std::string>, v1::EpistemicState>
+        local_effects;
+    for (const auto& existing : draft.memory_effects()) {
+      const auto key = std::make_pair(
+          existing.kind(), existing.location().memory_location_id());
+      auto [it, inserted] = local_effects.emplace(key, existing.epistemic());
+      if (!inserted && StrengthRank(existing.epistemic()) <
+                           StrengthRank(it->second)) {
+        it->second = existing.epistemic();
+      }
+    }
+
     for (const auto& effect : facts.memory_effects) {
       const auto& owner_fn = effect.location.object.owner_function;
       if (!owner_fn.has_value() || core::ToString(*owner_fn) != owner) {
@@ -362,6 +401,14 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
       auto location = ToProtoLocation(effect.location);
       if (!location.ok()) {
         return location.status();
+      }
+      const auto kind = ToV1EffectKind(effect.kind);
+      const auto epistemic = ToV1Epistemic(effect.epistemic);
+      const auto stated = local_effects.find(
+          std::make_pair(kind, location->memory_location_id()));
+      if (stated != local_effects.end() &&
+          StrengthRank(stated->second) <= StrengthRank(epistemic)) {
+        continue;
       }
       auto* out = draft.add_memory_effects();
       out->set_kind(ToV1EffectKind(effect.kind));

@@ -1,0 +1,89 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// relations.v2.dl -- Souffle declarations for the relations.v2 execution
+// projection.
+//
+// Column order and domains mirror logic/schema/relations.v2.manifest and the
+// compiled registry in src/facts/RelationSchema.cpp, which is authoritative;
+// RelationSchemaManifestTest fails if the manifest and the registry disagree.
+// Cells carry run-local
+// dense ids, never stable ids: the *Map relations below let a consumer
+// reconstruct semantic identity without dense numbers escaping the run.
+//
+// The numeric encodings of Epistemic, Dispatch, and RangeKind are the
+// enumerator ordinals of the C++ semantic enums. RelationIo depends on that
+// correspondence to round-trip cells, so these are contract, not convention:
+//
+//   Epistemic  MUST=0 MAY=1 MUST_NOT=2 INFERRED=3 ASSUMED=4 UNKNOWN=5
+//   Dispatch   DIRECT=0 INDIRECT=1 VIRTUAL=2 CALLBACK=3 EXTERNAL=4 UNKNOWN=5
+//   RangeKind  KNOWN=0 UNKNOWN=1
+
+.type FunctionId <: number
+.type ValueId <: number
+.type MemoryId <: number
+.type CallSiteId <: number
+.type FactId <: number
+.type Epistemic <: number
+.type Dispatch <: number
+.type RangeKind <: number
+
+// Dual identity. Every dense id used by a rule appears here paired with its
+// stable id, so a witness can name semantic content rather than run-local
+// numbers.
+.decl FunctionMap(function_id:FunctionId, function_stable_id:symbol)
+.decl ValueMap(value_id:ValueId, value_stable_id:symbol)
+.decl MemoryMap(memory_id:MemoryId, memory_stable_id:symbol)
+.decl CallSiteMap(call_site_id:CallSiteId, call_site_stable_id:symbol)
+.decl FactMap(fact_id:FactId, fact_stable_id:symbol)
+
+.input FunctionMap(IO=csv, filename="FunctionMap.facts")
+.input ValueMap(IO=csv, filename="ValueMap.facts")
+.input MemoryMap(IO=csv, filename="MemoryMap.facts")
+.input CallSiteMap(IO=csv, filename="CallSiteMap.facts")
+.input FactMap(IO=csv, filename="FactMap.facts")
+
+// Calls.
+.decl DirectCall(call_site_id:CallSiteId, caller_id:FunctionId,
+                 callee_id:FunctionId, dispatch:Dispatch, epistemic:Epistemic)
+.decl UnknownCall(call_site_id:CallSiteId, caller_id:FunctionId,
+                  reason:symbol, epistemic:Epistemic)
+
+.input DirectCall(IO=csv, filename="DirectCall.facts")
+.input UnknownCall(IO=csv, filename="UnknownCall.facts")
+
+// Memory.
+.decl DirectRead(function_id:FunctionId, memory_id:MemoryId,
+                 range_kind:RangeKind, offset:number, size:unsigned,
+                 epistemic:Epistemic)
+.decl DirectWrite(function_id:FunctionId, memory_id:MemoryId,
+                  range_kind:RangeKind, offset:number, size:unsigned,
+                  epistemic:Epistemic)
+.decl Alias(left_memory_id:MemoryId, right_memory_id:MemoryId,
+            alias_kind:number, epistemic:Epistemic)
+
+.input DirectRead(IO=csv, filename="DirectRead.facts")
+.input DirectWrite(IO=csv, filename="DirectWrite.facts")
+.input Alias(IO=csv, filename="Alias.facts")
+
+// Successor support. These carry a successor SCC's results into this
+// component as inputs. A component cites them and never claims ownership of
+// them, which is why they are EDB here and not the IDB relation they mirror.
+.decl SupportReachableCall(source_id:FunctionId, target_id:FunctionId,
+                           epistemic:Epistemic)
+.decl SupportMayWrite(function_id:FunctionId, memory_id:MemoryId,
+                      epistemic:Epistemic)
+
+.input SupportReachableCall(IO=csv, filename="SupportReachableCall.facts")
+.input SupportMayWrite(IO=csv, filename="SupportMayWrite.facts")

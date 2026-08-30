@@ -14,11 +14,14 @@
 
 add_library(veritas_wpa
   CallGraph.cpp
+  CppRuleEvaluator.cpp
   FixpointDomain.cpp
+  RelationIo.cpp
   FixpointEngine.cpp
   SccStateRepository.cpp
   SccGraph.cpp
   WpaCoordinator.cpp
+  WpaInputMaterializer.cpp
 )
 
 target_include_directories(veritas_wpa PUBLIC

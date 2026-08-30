@@ -88,11 +88,24 @@ kinds survive the boundary, including the distinct negative statement
 unknown relations according to the versioned rule-bundle contract; they are
 never silently dropped.
 
-Memory identity is:
+A memory location is:
 
 ```text
 MemoryLocation = AbstractObject + AccessPath + ByteRange
 ```
+
+Memory *identity* covers the object and the access path only:
+
+```text
+MemoryLocationId = hash(AbstractObject + AccessPath)
+```
+
+`ByteRange` describes an access, not the object accessed, and is excluded from
+identity. A constant byte offset is already determined by the access path, so
+accesses at different offsets stay distinct; only the access size leaves
+identity. This keeps `MayWrite(function_id, memory_id, epistemic)` answerable
+as a single fact per object and lets a producer that knows the access size
+agree with one that does not. See the authoritative design, section 8.
 
 `RangeKind` is explicitly `KNOWN` or `UNKNOWN`. Known signed offsets and
 unsigned sizes remain lossless, including known zero values. An unknown range
@@ -219,13 +232,30 @@ This table records target status only. Implementers must replace `TBD` with
 reviewed evidence; documentation authors must not infer delivery from partial
 work.
 
+The ten M9 entry labels in section 7 do not exist as CTest labels yet: Task 16
+introduces them. Until then the evidence column records the reviewed merge and
+the full-suite result at that merge, which is what was actually verified. A
+label name must not appear here as evidence before the label exists.
+
 | Gate | Current status | Delivered commit | Exact executable test labels / gate evidence |
 | --- | --- | --- | --- |
-| M8R.1 | Pending | TBD by implementation | TBD by implementation |
-| M8R.2 | Pending | TBD by implementation | TBD by implementation |
+| M8R.1 | Delivered | `fe9439e` (PR #64) | Full suite 232/232 passed, 0 failures, at merge. No M9 gate labels yet; Task 16 defines them. |
+| M8R.2 | Delivered | `4b81cb8` (PR #76) | Full suite 255/255 passed, 0 failures, at merge. No M9 gate labels yet; Task 16 defines them. |
 | M8R.3 | Pending | TBD by implementation | TBD by implementation |
 | M8R.4 | Pending; not shipped | TBD by implementation | TBD by implementation |
 | M8R.5 | Pending | TBD by implementation | `summary-v2`, `indirect-calls`, `stable-identity`, `relations-v2`, `souffle-production`, `engine-conformance`, `witness-closure`, `failure-atomicity`, `run-identity`, `documentation-consistency`; exact test membership and gate command TBD by implementation |
+
+M8R.2 recorded three deferrals. Their disposition, so a later reader does not
+have to reconstruct it from pull-request discussion:
+
+* Memory-effect reconciliation is resolved. Byte range no longer participates
+  in memory identity; see section 3 and the authoritative design, section 8.
+* Model-effect materialization is decided but not delivered: models resolve at
+  WPA materialization time rather than being merged into `summary.v2`, so
+  summary content hashes are unaffected.
+* `NormalizedValueFlow` remains gated out. `LocalFlow`, `ParameterFlow`, and
+  `ReturnFlow` are not consumed by the `ReachableCall` or `MayWrite` domains;
+  M10A is the natural point to revisit it.
 
 # 9. Future milestone topology
 
