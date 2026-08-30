@@ -27,12 +27,19 @@ add_library(veritas_summarydb
   DependencyIndex.cpp
 )
 
-# Embed schema/v1.sql as a compile-time string so ApplySchema has a single
-# source of truth and no runtime file-path dependency.
+# Embed schema/v1.sql and schema/v2.sql as compile-time strings so ApplySchema
+# has a single source of truth and no runtime file-path dependency.
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/schema/v1.sql" VERITAS_SCHEMA_SQL)
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/schema/schema_v1.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/schema_v1.h"
+  @ONLY
+)
+
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/schema/v2.sql" VERITAS_SCHEMA_V2_SQL)
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/schema/schema_v2.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/schema_v2.h"
   @ONLY
 )
 
