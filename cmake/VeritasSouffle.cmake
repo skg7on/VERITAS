@@ -78,6 +78,11 @@ message(STATUS "VERITAS: Souffle revision = ${VERITAS_SOUFFLE_PINNED_REVISION}")
 # macOS toolchain dependency we do not use; SWIG and doxygen are unused.
 set(SOUFFLE_GIT OFF CACHE BOOL "Disable git describe against the parent repo" FORCE)
 set(SOUFFLE_USE_OPENMP OFF CACHE BOOL "Disable OpenMP" FORCE)
+# Souffle defaults to libc++ when the compiler is Clang, but VERITAS itself uses
+# the compiler's default standard library. Forcing libc++ breaks the Ubuntu CI
+# (which has no libc++) and diverges from the rest of the build; leave it off so
+# Souffle uses the platform default (libstdc++ on Linux, libc++ on macOS).
+set(SOUFFLE_USE_LIBCPP OFF CACHE BOOL "Use the platform default standard library" FORCE)
 set(SOUFFLE_SWIG OFF CACHE BOOL "Disable SWIG" FORCE)
 set(SOUFFLE_SWIG_PYTHON OFF CACHE BOOL "Disable Python SWIG" FORCE)
 set(SOUFFLE_SWIG_JAVA OFF CACHE BOOL "Disable Java SWIG" FORCE)
@@ -104,13 +109,14 @@ foreach(_souffle_target IN ITEMS libsouffle souffle souffleprof compiled)
   endif()
 endforeach()
 
-# One upstream build-file patch accompanies the vendored tree:
-# third_party/Souffle/src/CMakeLists.txt disables Souffle 2.5's Xcode-15 linker
-# workaround (`-Wl,-ld_classic` / `target_link_options(... "-ld_classic")`). That
-# flag is obsolete on the VERITAS toolchain (llvm@17 clang 17 + macOS SDK 26 +
-# -fuse-ld=lld) and lld misreads it as `-l d_classic`, failing the `souffle`
-# link. The patch is clearly marked "VERITAS (vendored build integration)" in
-# place; everything else in the tree is byte-identical to the pinned revision.
+# Two upstream build-file patches accompany the vendored tree, both clearly
+# marked "VERITAS (vendored build integration)" in place; everything else is
+# byte-identical to the pinned revision:
+#   * third_party/Souffle/src/CMakeLists.txt disables Souffle 2.5's Xcode-15
+#     linker workaround (`-Wl,-ld_classic` / `target_link_options(... "-ld_classic")`),
+#     which lld misreads as `-l d_classic`.
+#   * third_party/Souffle/CMakeLists.txt disables the forced `-fuse-ld=lld`,
+#     which fails on the CI's clang-only LLVM install (no lld).
 
 # Generator expression resolving to the built Souffle executable.
 set(VERITAS_SOUFFLE_EXECUTABLE "$<TARGET_FILE:souffle>")
