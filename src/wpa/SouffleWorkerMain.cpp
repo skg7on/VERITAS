@@ -66,10 +66,8 @@ int main(int argc, char** argv) {
       input_dir = argv[++i];
     } else if (arg == "-D" && i + 1 < argc) {
       output_dir = argv[++i];
-    } else if (arg.starts_with("--jobs=")) {
-      jobs = static_cast<std::size_t>(
-          std::strtoull(std::string(arg.substr(std::strlen("--jobs="))).c_str(),
-                        nullptr, 10));
+    } else if (arg == "--jobs" && i + 1 < argc) {
+      jobs = static_cast<std::size_t>(std::strtoull(argv[++i], nullptr, 10));
     } else if (arg == "-h" || arg == "--help") {
       PrintUsage(std::cout);
       return 0;

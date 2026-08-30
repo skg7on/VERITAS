@@ -237,6 +237,18 @@ Status RelationIo::WriteInput(const std::filesystem::path& directory,
     files[row.relation].append(line);
   }
 
+  // Every EDB (input) relation must have a facts file, even when the component
+  // produced no rows for it: the compiled bundle's .input directive loads each
+  // input relation unconditionally, so an absent file fails the run. Empty
+  // relations for the other component are simply not read by the bundle.
+  for (std::size_t i = 0; i < facts::kRelationCountV2; ++i) {
+    const auto id = static_cast<facts::RelationId>(i);
+    const auto& schema = facts::RelationsV2().Get(id);
+    if (schema.ownership == facts::RelationOwnership::kEdb) {
+      files.try_emplace(id);
+    }
+  }
+
   for (const auto& [relation, contents] : files) {
     const auto& schema = facts::RelationsV2().Get(relation);
     std::ofstream stream(directory / (schema.name + ".facts"),

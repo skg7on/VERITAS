@@ -20,3 +20,17 @@ target_link_libraries(WpaEndToEndTest PRIVATE
 )
 veritas_add_warnings(WpaEndToEndTest)
 gtest_discover_tests(WpaEndToEndTest DISCOVERY_TIMEOUT 60)
+
+if(VERITAS_BUILD_SOUFFLE)
+  add_executable(WpaExecutorConformanceTest WpaExecutorConformanceTest.cpp)
+  target_link_libraries(WpaExecutorConformanceTest PRIVATE
+    veritas::wpa
+    GTest::gtest_main
+  )
+  target_compile_definitions(WpaExecutorConformanceTest PRIVATE
+    VERITAS_SOUFFLE_WORKER="$<TARGET_FILE:veritas_souffle_worker>"
+  )
+  add_dependencies(WpaExecutorConformanceTest veritas_souffle_worker)
+  veritas_add_warnings(WpaExecutorConformanceTest)
+  gtest_discover_tests(WpaExecutorConformanceTest DISCOVERY_TIMEOUT 60)
+endif()
