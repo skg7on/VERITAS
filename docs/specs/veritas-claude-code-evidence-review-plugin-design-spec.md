@@ -1,6 +1,6 @@
 # VERITAS Claude Code Evidence Review Plugin Design Spec
 
-**Status:** Draft revision for written-spec review
+**Status:** Approved
 
 **Scope:** Explicitly invoked, capability-isolated Evidence IR code review in
 Claude Code
