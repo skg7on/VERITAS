@@ -420,7 +420,10 @@ public:
     }
 
     void insert(const Index& src) {
-        data = src.data;
+        // VERITAS (vendored build integration): std::atomic's copy-assignment is
+        // deleted, so copying `src.data` directly fails to compile under newer
+        // libstdc++ (GCC 14). Store the loaded value instead.
+        data.store(src.data.load());
     }
 
     bool contains(const Tuple& /* t */) const {

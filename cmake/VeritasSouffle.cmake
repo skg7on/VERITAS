@@ -109,14 +109,16 @@ foreach(_souffle_target IN ITEMS libsouffle souffle souffleprof compiled)
   endif()
 endforeach()
 
-# Two upstream build-file patches accompany the vendored tree, both clearly
-# marked "VERITAS (vendored build integration)" in place; everything else is
+# Three upstream patches accompany the vendored tree, all clearly marked
+# "VERITAS (vendored build integration)" in place; everything else is
 # byte-identical to the pinned revision:
 #   * third_party/Souffle/src/CMakeLists.txt disables Souffle 2.5's Xcode-15
 #     linker workaround (`-Wl,-ld_classic` / `target_link_options(... "-ld_classic")`),
 #     which lld misreads as `-l d_classic`.
 #   * third_party/Souffle/CMakeLists.txt disables the forced `-fuse-ld=lld`,
 #     which fails on the CI's clang-only LLVM install (no lld).
+#   * third_party/Souffle/src/interpreter/Index.h replaces an atomic copy
+#     (`data = src.data`) with store/load, which libstdc++ 14 rejects.
 
 # Generator expression resolving to the built Souffle executable.
 set(VERITAS_SOUFFLE_EXECUTABLE "$<TARGET_FILE:souffle>")
