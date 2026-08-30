@@ -21,6 +21,7 @@ add_library(veritas_wpa
   FixpointEngine.cpp
   SccStateRepository.cpp
   SccGraph.cpp
+  SouffleWpaExecutor.cpp
   WpaCoordinator.cpp
   WpaInputMaterializer.cpp
 )

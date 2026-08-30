@@ -35,6 +35,7 @@ enum class StatusCode {
   kNotFound,
   kFailedPrecondition,
   kInternal,
+  kDeadlineExceeded,
 };
 
 class Status {
@@ -53,6 +54,9 @@ class Status {
   }
   static Status Internal(std::string message) {
     return Status(StatusCode::kInternal, std::move(message));
+  }
+  static Status DeadlineExceeded(std::string message) {
+    return Status(StatusCode::kDeadlineExceeded, std::move(message));
   }
 
   bool ok() const { return code_ == StatusCode::kOk; }
