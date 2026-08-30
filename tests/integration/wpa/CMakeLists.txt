@@ -21,7 +21,7 @@ target_link_libraries(WpaEndToEndTest PRIVATE
 veritas_add_warnings(WpaEndToEndTest)
 gtest_discover_tests(WpaEndToEndTest DISCOVERY_TIMEOUT 60)
 
-if(VERITAS_BUILD_SOUFFLE)
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   add_executable(WpaExecutorConformanceTest WpaExecutorConformanceTest.cpp)
   target_link_libraries(WpaExecutorConformanceTest PRIVATE
     veritas::wpa

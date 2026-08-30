@@ -26,11 +26,13 @@
 #   build/                  <- VERITAS build tree
 #   build/souffle-build/    <- Souffle build tree (libsouffle, souffle binary)
 #
-# This module is intentionally OFF by default (see VERITAS_BUILD_SOUFFLE in the
-# top-level CMakeLists.txt) until M8R.4 makes Souffle the mandatory production
-# WPA engine. When enabled it does NOT add Souffle to the default `all` target:
-# the `souffle` executable is built on demand via `cmake --build --target
-# souffle`, or when a VERITAS target links libsouffle.
+# This module is included when VERITAS_WPA_ENGINE=souffle, the production engine.
+# It builds the vendored Souffle and derives production provenance: the source
+# revision is pinned by construction (the tree is committed at the pinned
+# revision), and the executable digest is computed at build time into a
+# generated manifest. Souffle is not added to the default `all` target — the
+# `souffle` executable builds on demand, or when a VERITAS target links
+# libsouffle.
 #
 # Prerequisites:
 #   * Bison >= 3.2 and Flex. macOS system Bison (2.3) is too old; install the
@@ -41,9 +43,10 @@
 #
 # Result:
 #   Targets libsouffle, souffle, souffleprof, and compiled become available.
-#   VERITAS_VENDORED_SOUFFLE_EXECUTABLE is a generator expression for the
-#   built binary (distinct from the M8-era VERITAS_SOUFFLE_EXECUTABLE that
-#   Dependencies.cmake sets via find_program; Task 13 unifies these).
+#   VERITAS_SOUFFLE_EXECUTABLE is a generator expression for the built binary.
+#   VERITAS_SOUFFLE_PINNED_REVISION is the pinned source revision.
+#   The generated ${CMAKE_BINARY_DIR}/souffle-provenance.json records the
+#   revision and the built executable's SHA-256 for the run manifest.
 #   veritas_third_party_souffle is the single private INTERFACE wrapper.
 
 # Verify the vendored Souffle source tree is present.
@@ -61,6 +64,12 @@ set(VERITAS_SOUFFLE_BINARY_DIR "${CMAKE_BINARY_DIR}/souffle-build")
 
 message(STATUS "VERITAS: Souffle source dir = ${VERITAS_SOUFFLE_SOURCE_DIR}")
 message(STATUS "VERITAS: Souffle binary dir = ${VERITAS_SOUFFLE_BINARY_DIR}")
+
+# The pinned source revision (tag 2.5). The vendored tree is committed directly
+# at this revision, so provenance is verifiable by construction: there is no
+# external install whose revision must be discovered and cross-checked.
+set(VERITAS_SOUFFLE_PINNED_REVISION "5682a9f12e2668ecdd26348fe63cc508bc0fcf47")
+message(STATUS "VERITAS: Souffle revision = ${VERITAS_SOUFFLE_PINNED_REVISION}")
 
 # Disable options we do not need for a subproject build. SOUFFLE_GIT in
 # particular must be OFF: its `git describe --tags` would otherwise run against
@@ -104,7 +113,25 @@ endforeach()
 # place; everything else in the tree is byte-identical to the pinned revision.
 
 # Generator expression resolving to the built Souffle executable.
-set(VERITAS_VENDORED_SOUFFLE_EXECUTABLE "$<TARGET_FILE:souffle>")
+set(VERITAS_SOUFFLE_EXECUTABLE "$<TARGET_FILE:souffle>")
+
+# Derive production provenance at build time: the pinned revision and the built
+# executable's SHA-256. The manifest is consumed by Task 15 to populate the run
+# manifest's engine/toolchain identity.
+add_custom_command(
+  OUTPUT "${CMAKE_BINARY_DIR}/souffle-provenance.json"
+  COMMAND ${CMAKE_COMMAND}
+          "-DVERITAS_SOUFFLE_EXECUTABLE=$<TARGET_FILE:souffle>"
+          "-DVERITAS_SOUFFLE_REVISION=${VERITAS_SOUFFLE_PINNED_REVISION}"
+          "-DVERITAS_SOUFFLE_PROVENANCE_OUTPUT=${CMAKE_BINARY_DIR}/souffle-provenance.json"
+          -P "${CMAKE_SOURCE_DIR}/cmake/WriteSouffleProvenance.cmake"
+  DEPENDS souffle
+  COMMENT "Deriving Souffle provenance"
+  VERBATIM
+)
+add_custom_target(veritas_souffle_provenance ALL
+  DEPENDS "${CMAKE_BINARY_DIR}/souffle-provenance.json"
+)
 
 # Single private wrapper. VERITAS code links veritas_third_party_souffle and
 # never references libsouffle directly, so Souffle headers and types never leak
@@ -160,7 +187,7 @@ function(veritas_generate_souffle_program NAME NAMESPACE PROGRAM SOURCE)
   set(_gen_cpp "${VERITAS_SOUFFLE_GEN_DIR}/${PROGRAM}.cpp")
   add_custom_command(
     OUTPUT "${_gen_cpp}"
-    COMMAND "${VERITAS_VENDORED_SOUFFLE_EXECUTABLE}" -g "${_gen_cpp}"
+    COMMAND "${VERITAS_SOUFFLE_EXECUTABLE}" -g "${_gen_cpp}"
             -N "${NAMESPACE}"
             -I "${CMAKE_SOURCE_DIR}/logic/common"
             -I "${CMAKE_SOURCE_DIR}/logic/schema"
