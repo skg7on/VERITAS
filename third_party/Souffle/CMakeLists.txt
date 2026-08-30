@@ -120,8 +120,11 @@ option(SOUFFLE_TEST_DEBUG_REPORT "Enable/Disable generating debug-report for all
 cmake_dependent_option(SOUFFLE_USE_LIBCPP "Link to libc++ instead of libstdc++" ON
     "CMAKE_CXX_COMPILER_ID STREQUAL Clang" OFF)
 
-# Using Clang? Likely want to use `lld` too.
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+# VERITAS (vendored build integration): upstream forces -fuse-ld=lld whenever the
+# compiler is Clang, but the VERITAS CI's LLVM install builds only clang (no
+# lld), so the flag fails at link time. Leave the linker selection to the host
+# toolchain's default; see cmake/VeritasSouffle.cmake.
+if (FALSE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
     set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fuse-ld=lld")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=lld")

@@ -131,9 +131,10 @@ TEST_F(RelationIoTest, WritesOneFilePerEdbRelation) {
 
   EXPECT_TRUE(std::filesystem::exists(directory_ / "DirectCall.facts"));
   EXPECT_TRUE(std::filesystem::exists(directory_ / "FunctionMap.facts"));
-  // A relation with no rows produces no file rather than an empty one, which
-  // is what Souffle expects for an absent input.
-  EXPECT_FALSE(std::filesystem::exists(directory_ / "DirectWrite.facts"));
+  // A relation with no rows still gets an empty facts file: the compiled
+  // bundle's .input directive loads every input relation unconditionally, so
+  // an absent file would fail the run.
+  EXPECT_TRUE(std::filesystem::exists(directory_ / "DirectWrite.facts"));
 }
 
 // The evaluator's own output, written out as an engine would and read back,

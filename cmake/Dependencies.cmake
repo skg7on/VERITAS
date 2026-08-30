@@ -157,17 +157,16 @@ if(VERITAS_BUILD_TESTS)
 endif()
 
 # -----------------------------------------------------------------------------
-# Souffle — optional WPA Datalog execution engine.
+# Souffle — the production recursive WPA engine (selected by VERITAS_WPA_ENGINE).
 # -----------------------------------------------------------------------------
+# The vendored Souffle is built under the `souffle` engine (VeritasSouffle.cmake
+# sets VERITAS_SOUFFLE_EXECUTABLE to the built binary). Under `cpp-emergency`
+# there is no Souffle and VERITAS_HAS_SOUFFLE stays off, so the M8 comparison
+# test and any Souffle-dependent path are skipped.
 set(VERITAS_HAS_SOUFFLE OFF)
-if(VERITAS_ENABLE_SOUFFLE)
-  find_program(VERITAS_SOUFFLE_EXECUTABLE NAMES souffle)
-  if(VERITAS_SOUFFLE_EXECUTABLE)
-    set(VERITAS_HAS_SOUFFLE ON)
-    message(STATUS "VERITAS: Found Souffle ${VERITAS_SOUFFLE_EXECUTABLE}")
-  else()
-    message(STATUS "VERITAS: Souffle not found; C++ WPA remains enabled")
-  endif()
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  set(VERITAS_HAS_SOUFFLE ON)
+  message(STATUS "VERITAS: Souffle is the production WPA engine")
 else()
-  message(STATUS "VERITAS: Souffle execution disabled")
+  message(STATUS "VERITAS: Souffle disabled (cpp-emergency WPA)")
 endif()

@@ -107,10 +107,12 @@ option(BUILD_SHARED_LIBS   "Build VERITAS and SVF as shared libraries"          
 
 option(VERITAS_BUILD_TESTS "Build VERITAS unit and integration tests"           ON)
 option(VERITAS_BUILD_TOOLS "Build VERITAS CLI binaries (veritas-build, ...)"    ON)
-option(VERITAS_ENABLE_SOUFFLE
-  "Enable optional Souffle WPA execution when the executable is available" ON)
-option(VERITAS_BUILD_SOUFFLE
-  "Build the vendored Souffle from third_party/Souffle (M8R.4 prerequisite)" OFF)
+
+# Recursive WPA engine selection. `souffle` builds the vendored Souffle from
+# third_party/Souffle and derives production provenance; `cpp-emergency` is the
+# explicit, degraded Souffle-less configuration. There is no automatic fallback.
+set(VERITAS_WPA_ENGINE "souffle" CACHE STRING "Recursive WPA engine: souffle or cpp-emergency")
+set_property(CACHE VERITAS_WPA_ENGINE PROPERTY STRINGS souffle cpp-emergency)
 
 # Position-independent code is required when producing shared libraries and
 # is harmless for static builds. Set it globally so every target (including
@@ -155,13 +157,17 @@ include(VeritasSVF)
 # Verify the required SVF build contract.
 include(tests/RequiredSvfContract)
 
-# Souffle is vendored at third_party/Souffle and built from source behind
-# VERITAS_BUILD_SOUFFLE. This is the M8R.4 prerequisite: a vendored, pinned
-# checkout makes the source revision verifiable by construction. OFF by default
-# until M8R.4 flips Souffle to the mandatory production engine; when enabled,
-# Souffle still builds on demand (EXCLUDE_FROM_ALL), not in the default target.
-if(VERITAS_BUILD_SOUFFLE)
+# Souffle is vendored at third_party/Souffle and built from source under the
+# production `souffle` engine. A vendored, pinned checkout makes the source
+# revision verifiable by construction. `cpp-emergency` is the explicit degraded
+# Souffle-less configuration and performs no Souffle discovery or provenance
+# lookup. No engine selection is a hard configuration error.
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   include(VeritasSouffle)
+elseif(VERITAS_WPA_ENGINE STREQUAL "cpp-emergency")
+  message(WARNING "VERITAS: building explicit degraded cpp-emergency WPA (no Souffle)")
+else()
+  message(FATAL_ERROR "VERITAS_WPA_ENGINE must be 'souffle' or 'cpp-emergency'")
 endif()
 
 # Remaining VERITAS dependencies: Z3, Protobuf, RocksDB, SQLite3, and
@@ -212,9 +218,8 @@ message(STATUS "  Shared libraries     : ${BUILD_SHARED_LIBS}")
 message(STATUS "  Position-indep. code : ${CMAKE_POSITION_INDEPENDENT_CODE}")
 message(STATUS "  Build tests          : ${VERITAS_BUILD_TESTS}")
 message(STATUS "  Build tools          : ${VERITAS_BUILD_TOOLS}")
-message(STATUS "  Enable Souffle       : ${VERITAS_ENABLE_SOUFFLE}")
+message(STATUS "  WPA engine           : ${VERITAS_WPA_ENGINE}")
 message(STATUS "  Souffle available    : ${VERITAS_HAS_SOUFFLE}")
-message(STATUS "  Build Souffle (src)  : ${VERITAS_BUILD_SOUFFLE}")
 message(STATUS "  LLVM version         : ${LLVM_PACKAGE_VERSION}")
 message(STATUS "  Binary root          : ${CMAKE_BINARY_DIR}")
 message(STATUS "  SVF binary dir       : ${VERITAS_SVF_BINARY_DIR}")

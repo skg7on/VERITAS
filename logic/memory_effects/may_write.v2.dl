@@ -29,7 +29,7 @@
 
 .decl MayWrite(function_id:FunctionId, memory_id:MemoryId,
                epistemic:Epistemic)
-.output MayWrite(IO=csv, filename="MayWrite.csv")
+.output MayWrite(IO=file, filename="MayWrite.csv")
 
 // A member's own write, at its own warrant. The range columns are projected
 // away here; they remain available on DirectWrite.

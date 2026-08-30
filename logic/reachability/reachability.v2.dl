@@ -27,7 +27,7 @@
 
 .decl ReachableCall(source_id:FunctionId, target_id:FunctionId,
                     epistemic:Epistemic)
-.output ReachableCall(IO=csv, filename="ReachableCall.csv")
+.output ReachableCall(IO=file, filename="ReachableCall.csv")
 
 // A call edge makes its callee reachable at the edge's own warrant.
 ReachableCall(f, g, e) :- DirectCall(_, f, g, _, e).

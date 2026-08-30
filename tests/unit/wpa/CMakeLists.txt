@@ -60,6 +60,14 @@ target_link_libraries(WpaCoordinatorTest PRIVATE
 veritas_add_warnings(WpaCoordinatorTest)
 gtest_discover_tests(WpaCoordinatorTest DISCOVERY_TIMEOUT 60)
 
+add_executable(WpaExecutorTest WpaExecutorTest.cpp)
+target_link_libraries(WpaExecutorTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(WpaExecutorTest)
+gtest_discover_tests(WpaExecutorTest DISCOVERY_TIMEOUT 60)
+
 add_executable(CppRuleEvaluatorTest CppRuleEvaluatorTest.cpp)
 target_link_libraries(CppRuleEvaluatorTest PRIVATE
   veritas::wpa
