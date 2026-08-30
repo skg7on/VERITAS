@@ -25,3 +25,21 @@ target_compile_definitions(SouffleRunnerTest PRIVATE
 )
 veritas_add_warnings(SouffleRunnerTest)
 gtest_discover_tests(SouffleRunnerTest DISCOVERY_TIMEOUT 60)
+
+# Proves the six semantic-key functors produce byte-identical keys to
+# SemanticKeyCodec. Links veritas-souffle-functors and libsouffle, so it is
+# built with RTTI/exceptions and only under the production Souffle engine.
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  add_executable(SemanticKeyFunctorTest SemanticKeyFunctorTest.cpp)
+  target_include_directories(SemanticKeyFunctorTest PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${VERITAS_SOUFFLE_SOURCE_DIR}/src/include
+  )
+  target_link_libraries(SemanticKeyFunctorTest PRIVATE
+    veritas_souffle_functors
+    libsouffle
+    GTest::gtest_main
+  )
+  target_compile_options(SemanticKeyFunctorTest PRIVATE -frtti -fexceptions)
+  gtest_discover_tests(SemanticKeyFunctorTest DISCOVERY_TIMEOUT 60)
+endif()
