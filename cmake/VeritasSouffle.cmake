@@ -134,8 +134,79 @@ target_include_directories(veritas_souffle_functors PRIVATE
   ${CMAKE_SOURCE_DIR}/include
   ${VERITAS_SOUFFLE_SOURCE_DIR}/src/include
 )
-target_compile_features(veritas_souffle_functors PRIVATE cxx_std_17)
+# Stays at VERITAS's C++20: it compiles SemanticKeyCodec.cpp (C++20 spaceship
+# operator) and does not instantiate the Souffle WriteStream template whose
+# tcb::make_span backport is C++17-only. Only the generated bundles below need
+# C++17.
 # Re-enable RTTI and exceptions for the functor library too: it links against
 # the Souffle ABI (SymbolTable/RecordTable), which VERITAS's global
 # -fno-rtti -fno-exceptions must not reach.
 target_compile_options(veritas_souffle_functors PRIVATE -frtti -fexceptions)
+
+# ---------------------------------------------------------------------------
+# Compiled rule bundles and the worker
+# ---------------------------------------------------------------------------
+#
+# Each V2 rule bundle is generated with `souffle -g` into the build tree and
+# compiled with __EMBEDDED_SOUFFLE__: that suppresses the generated `main` and
+# registers a ProgramFactory under a name derived from the output filename
+# (v2_reach / v2_maywrite). The worker links both bundles, libsouffle, and the
+# functor library, and selects a program by --component.
+
+set(VERITAS_SOUFFLE_GEN_DIR "${CMAKE_BINARY_DIR}/souffle-gen")
+file(MAKE_DIRECTORY "${VERITAS_SOUFFLE_GEN_DIR}")
+
+function(veritas_generate_souffle_program NAME NAMESPACE PROGRAM SOURCE)
+  set(_gen_cpp "${VERITAS_SOUFFLE_GEN_DIR}/${PROGRAM}.cpp")
+  add_custom_command(
+    OUTPUT "${_gen_cpp}"
+    COMMAND "${VERITAS_VENDORED_SOUFFLE_EXECUTABLE}" -g "${_gen_cpp}"
+            -N "${NAMESPACE}"
+            -I "${CMAKE_SOURCE_DIR}/logic/common"
+            -I "${CMAKE_SOURCE_DIR}/logic/schema"
+            "${SOURCE}"
+    DEPENDS
+      "${SOURCE}"
+      "${CMAKE_SOURCE_DIR}/logic/common/semantic_key.dl"
+      "${CMAKE_SOURCE_DIR}/logic/common/epistemic.dl"
+      "${CMAKE_SOURCE_DIR}/logic/schema/relations.v2.dl"
+    COMMENT "Generating compiled Souffle program ${PROGRAM}"
+    VERBATIM
+  )
+  # Each bundle is compiled as C++17 (the generated code's WriteStream uses the
+  # C++17 tcb::make_span backport) and wrapped in its own namespace so two
+  # bundles can be linked into one worker without symbol collisions.
+  add_library(${NAME} OBJECT "${_gen_cpp}")
+  target_include_directories(${NAME} PRIVATE
+    ${VERITAS_SOUFFLE_SOURCE_DIR}/src/include
+  )
+  set_target_properties(${NAME} PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  target_compile_definitions(${NAME} PRIVATE __EMBEDDED_SOUFFLE__)
+  target_compile_options(${NAME} PRIVATE -frtti -fexceptions)
+endfunction()
+
+veritas_generate_souffle_program(ReachabilityV2 veritas_reachability v2_reach
+  ${CMAKE_SOURCE_DIR}/logic/reachability/reachability.v2.dl)
+veritas_generate_souffle_program(MayWriteV2 veritas_maywrite v2_maywrite
+  ${CMAKE_SOURCE_DIR}/logic/memory_effects/may_write.v2.dl)
+
+add_executable(veritas_souffle_worker
+  ${CMAKE_SOURCE_DIR}/src/wpa/SouffleWorkerMain.cpp
+)
+set_target_properties(veritas_souffle_worker PROPERTIES
+  OUTPUT_NAME "veritas-souffle-worker"
+)
+target_include_directories(veritas_souffle_worker PRIVATE
+  ${VERITAS_SOUFFLE_SOURCE_DIR}/src/include
+)
+# Stays at C++20 (SouffleWorkerMain.cpp uses std::string_view::starts_with); it
+# links the C++17-generated bundles and libsouffle, whose ABI is identical on the
+# same toolchain, and it does not itself instantiate the C++17-only templates.
+target_compile_options(veritas_souffle_worker PRIVATE -frtti -fexceptions)
+target_link_libraries(veritas_souffle_worker PRIVATE
+  ReachabilityV2
+  MayWriteV2
+  libsouffle
+  veritas_souffle_functors
+)

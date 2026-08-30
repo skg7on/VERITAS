@@ -55,4 +55,4 @@
 // what any particular result means.
 .decl Witness(result_key:symbol, rule_id:symbol, input_key:symbol,
               input_ordinal:unsigned)
-.output Witness(IO=csv, filename="Witness.csv")
+.output Witness(IO=file, filename="Witness.csv")
