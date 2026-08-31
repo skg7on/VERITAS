@@ -274,77 +274,82 @@ StatusOr<facts::RawWpaEvaluation> RelationIo::ReadOutput(
 
   // Results arrive dense. Map every id back before it can become a fact.
   std::ifstream results(directory / (derived_schema.name + ".csv"));
-  if (results.is_open()) {
-    std::string line;
-    while (std::getline(results, line)) {
-      if (line.empty())
-        continue;
-      const auto cells = SplitRow(line);
-      if (cells.size() != derived_schema.columns.size()) {
-        return Status::InvalidArgument("result row does not match its schema");
-      }
-      facts::SemanticRow row;
-      row.relation = derived;
-      for (std::size_t i = 0; i < cells.size(); ++i) {
-        auto ordinal = ParseUnsigned(cells[i]);
-        if (!ordinal.ok())
-          return ordinal.status();
-        switch (derived_schema.columns[i].domain) {
-        case facts::ColumnDomain::kFunctionId: {
-          auto stable = input.mappings.functions.ToStable(
-              facts::FunctionId{static_cast<std::uint32_t>(*ordinal)});
-          if (!stable.ok())
-            return stable.status();
-          row.cells.push_back(*stable);
-          break;
-        }
-        case facts::ColumnDomain::kMemoryId: {
-          auto stable = input.mappings.memories.ToStable(
-              facts::MemoryId{static_cast<std::uint32_t>(*ordinal)});
-          if (!stable.ok())
-            return stable.status();
-          row.cells.push_back(*stable);
-          break;
-        }
-        default:
-          row.cells.push_back(static_cast<sem::EpistemicState>(*ordinal));
-          break;
-        }
-      }
-      auto valid = facts::ValidateSemanticRow(row);
-      if (!valid.ok())
-        return valid;
-      raw.results.push_back(std::move(row));
-    }
+  if (!results.is_open()) {
+    return Status::Internal("Souffle worker did not produce the result file");
   }
-
-  std::ifstream witnesses(directory / "Witness.csv");
-  if (witnesses.is_open()) {
-    std::string line;
-    while (std::getline(witnesses, line)) {
-      if (line.empty())
-        continue;
-      const auto cells = SplitRow(line);
-      if (cells.size() != 4) {
-        return Status::InvalidArgument("witness row must have four columns");
-      }
-      auto result_row = RowFromKey(cells[0]);
-      if (!result_row.ok())
-        return result_row.status();
-      auto input_row = RowFromKey(cells[2]);
-      if (!input_row.ok())
-        return input_row.status();
-      auto ordinal = ParseUnsigned(cells[3]);
+  std::string line;
+  while (std::getline(results, line)) {
+    if (line.empty())
+      continue;
+    const auto cells = SplitRow(line);
+    if (cells.size() != derived_schema.columns.size()) {
+      return Status::InvalidArgument("result row does not match its schema");
+    }
+    facts::SemanticRow row;
+    row.relation = derived;
+    for (std::size_t i = 0; i < cells.size(); ++i) {
+      auto ordinal = ParseUnsigned(cells[i]);
       if (!ordinal.ok())
         return ordinal.status();
-
-      raw.witnesses.push_back(facts::WitnessEdge{
-          .result = facts::SemanticKey{std::move(*result_row)},
-          .rule_id = cells[1],
-          .input = facts::SemanticKey{std::move(*input_row)},
-          .input_ordinal = static_cast<std::uint32_t>(*ordinal)});
+      switch (derived_schema.columns[i].domain) {
+      case facts::ColumnDomain::kFunctionId: {
+        auto stable = input.mappings.functions.ToStable(
+            facts::FunctionId{static_cast<std::uint32_t>(*ordinal)});
+        if (!stable.ok())
+          return stable.status();
+        row.cells.push_back(*stable);
+        break;
+      }
+      case facts::ColumnDomain::kMemoryId: {
+        auto stable = input.mappings.memories.ToStable(
+            facts::MemoryId{static_cast<std::uint32_t>(*ordinal)});
+        if (!stable.ok())
+          return stable.status();
+        row.cells.push_back(*stable);
+        break;
+      }
+      default:
+        row.cells.push_back(static_cast<sem::EpistemicState>(*ordinal));
+        break;
+      }
     }
+    auto valid = facts::ValidateSemanticRow(row);
+    if (!valid.ok())
+      return valid;
+    raw.results.push_back(std::move(row));
   }
+  if (results.bad())
+    return Status::Internal("failed reading the Souffle result file");
+
+  std::ifstream witnesses(directory / "Witness.csv");
+  if (!witnesses.is_open()) {
+    return Status::Internal("Souffle worker did not produce Witness.csv");
+  }
+  while (std::getline(witnesses, line)) {
+    if (line.empty())
+      continue;
+    const auto cells = SplitRow(line);
+    if (cells.size() != 4) {
+      return Status::InvalidArgument("witness row must have four columns");
+    }
+    auto result_row = RowFromKey(cells[0]);
+    if (!result_row.ok())
+      return result_row.status();
+    auto input_row = RowFromKey(cells[2]);
+    if (!input_row.ok())
+      return input_row.status();
+    auto ordinal = ParseUnsigned(cells[3]);
+    if (!ordinal.ok())
+      return ordinal.status();
+
+    raw.witnesses.push_back(facts::WitnessEdge{
+        .result = facts::SemanticKey{std::move(*result_row)},
+        .rule_id = cells[1],
+        .input = facts::SemanticKey{std::move(*input_row)},
+        .input_ordinal = static_cast<std::uint32_t>(*ordinal)});
+  }
+  if (witnesses.bad())
+    return Status::Internal("failed reading Witness.csv");
   return raw;
 }
 

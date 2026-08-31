@@ -27,6 +27,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <string_view>
 
 #include "veritas/core/Status.h"
 #include "veritas/facts/AnalysisRun.h"
@@ -57,6 +58,7 @@ class WpaExecutor {
  public:
   virtual ~WpaExecutor() = default;
   virtual facts::EngineIdentity identity() const = 0;
+  virtual std::string_view toolchain_identity() const = 0;
   virtual StatusOr<facts::RawWpaEvaluation> Execute(
       const WpaExecutionEnvelope& input,
       const WpaExecutionLimits& limits) const = 0;
