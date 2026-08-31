@@ -157,11 +157,13 @@ class Reader {
   }
 
   StatusOr<std::uint32_t> ReadU32() {
-    auto value = ReadU64();
-    if (!value.ok()) {
-      return value.status();
+    if (pos_ + sizeof(std::uint32_t) > data_.size()) {
+      return Status::InvalidArgument("result cache object is truncated");
     }
-    return static_cast<std::uint32_t>(*value);
+    std::uint32_t value = 0;
+    std::memcpy(&value, data_.data() + pos_, sizeof(value));
+    pos_ += sizeof(value);
+    return value;
   }
 
  private:
@@ -424,7 +426,7 @@ WpaRunRepository& WpaRunRepository::operator=(WpaRunRepository&&) noexcept =
 
 StatusOr<WpaRunRepository> WpaRunRepository::Open(
     const std::filesystem::path& db_path) {
-  auto store = summarydb::MetadataStore::Open(db_path);
+  auto store = summarydb::MetadataStore::Open(db_path / "metadata.db");
   if (!store.ok()) {
     return store.status();
   }
