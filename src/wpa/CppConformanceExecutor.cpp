@@ -19,7 +19,7 @@
 namespace veritas::wpa {
 
 StatusOr<CppConformanceExecutor> CppConformanceExecutor::Create(
-    facts::EngineIdentity identity) {
+    facts::EngineIdentity identity, std::string toolchain_identity) {
   if (identity == facts::EngineIdentity::kSouffle) {
     return Status::InvalidArgument(
         "CppConformanceExecutor cannot carry the production Souffle identity");
@@ -29,14 +29,19 @@ StatusOr<CppConformanceExecutor> CppConformanceExecutor::Create(
     return Status::InvalidArgument(
         "CppConformanceExecutor requires a recognized non-production identity");
   }
-  return CppConformanceExecutor(identity);
+  return CppConformanceExecutor(identity, std::move(toolchain_identity));
 }
 
-CppConformanceExecutor::CppConformanceExecutor(facts::EngineIdentity identity)
-    : identity_(identity) {}
+CppConformanceExecutor::CppConformanceExecutor(
+    facts::EngineIdentity identity, std::string toolchain_identity)
+    : identity_(identity), toolchain_identity_(std::move(toolchain_identity)) {}
 
 facts::EngineIdentity CppConformanceExecutor::identity() const {
   return identity_;
+}
+
+std::string_view CppConformanceExecutor::toolchain_identity() const {
+  return toolchain_identity_;
 }
 
 StatusOr<facts::RawWpaEvaluation> CppConformanceExecutor::Execute(
@@ -44,6 +49,10 @@ StatusOr<facts::RawWpaEvaluation> CppConformanceExecutor::Execute(
   if (input.run.engine != identity_) {
     return Status::InvalidArgument(
         "envelope engine identity does not match this executor");
+  }
+  if (input.run.engine_toolchain_identity != toolchain_identity_) {
+    return Status::InvalidArgument(
+        "envelope toolchain identity does not match this executor");
   }
   (void)limits;  // The in-process C++ evaluator has no subprocess limits.
   CppRuleEvaluator evaluator;

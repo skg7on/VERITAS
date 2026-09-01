@@ -16,12 +16,14 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <system_error>
 #include <thread>
 #include <vector>
 
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -36,7 +38,7 @@ namespace {
 // the deadline elapses (in which case the child is killed and reaped).
 StatusOr<int> RunWorker(const std::string& program,
                         const std::vector<std::string>& args,
-                        std::chrono::milliseconds timeout) {
+                        const WpaExecutionLimits& limits) {
   std::vector<char*> argv;
   argv.reserve(args.size() + 1);
   for (const std::string& arg : args) {
@@ -49,11 +51,28 @@ StatusOr<int> RunWorker(const std::string& program,
     return Status::Internal("failed to fork the Souffle worker");
   }
   if (child == 0) {
+    if (limits.memory_mb != 0) {
+      constexpr rlim_t kBytesPerMiB = 1024U * 1024U;
+      rlimit address_space{};
+      if (::getrlimit(RLIMIT_AS, &address_space) != 0) {
+        ::_exit(126);
+      }
+      const rlim_t requested =
+          static_cast<rlim_t>(limits.memory_mb) * kBytesPerMiB;
+      if (address_space.rlim_max != RLIM_INFINITY &&
+          requested > address_space.rlim_max) {
+        ::_exit(126);
+      }
+      address_space.rlim_cur = requested;
+      if (::setrlimit(RLIMIT_AS, &address_space) != 0) {
+        ::_exit(126);
+      }
+    }
     ::execv(program.c_str(), argv.data());
     ::_exit(127);  // execv returns only on failure.
   }
 
-  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  const auto deadline = std::chrono::steady_clock::now() + limits.timeout;
   for (;;) {
     int status = 0;
     const pid_t result = ::waitpid(child, &status, WNOHANG);
@@ -70,7 +89,7 @@ StatusOr<int> RunWorker(const std::string& program,
     if (result < 0) {
       return Status::Internal("waitpid on the Souffle worker failed");
     }
-    if (timeout.count() > 0 &&
+    if (limits.timeout.count() > 0 &&
         std::chrono::steady_clock::now() >= deadline) {
       ::kill(child, SIGKILL);
       ::waitpid(child, &status, 0);
@@ -92,11 +111,17 @@ struct DirCleanup {
 
 }  // namespace
 
-SouffleWpaExecutor::SouffleWpaExecutor(std::filesystem::path worker)
-    : worker_(std::move(worker)) {}
+SouffleWpaExecutor::SouffleWpaExecutor(std::filesystem::path worker,
+                                       std::string toolchain_identity)
+    : worker_(std::move(worker)),
+      toolchain_identity_(std::move(toolchain_identity)) {}
 
 facts::EngineIdentity SouffleWpaExecutor::identity() const {
   return facts::EngineIdentity::kSouffle;
+}
+
+std::string_view SouffleWpaExecutor::toolchain_identity() const {
+  return toolchain_identity_;
 }
 
 StatusOr<facts::RawWpaEvaluation> SouffleWpaExecutor::Execute(
@@ -105,6 +130,28 @@ StatusOr<facts::RawWpaEvaluation> SouffleWpaExecutor::Execute(
     return Status::InvalidArgument(
         "envelope engine identity does not match this executor");
   }
+  if (input.run.engine_toolchain_identity != toolchain_identity_) {
+    return Status::InvalidArgument(
+        "envelope toolchain identity does not match this executor");
+  }
+  if (limits.threads != 1) {
+    return Status::InvalidArgument(
+        "the Souffle WPA executor requires exactly one worker thread");
+  }
+  constexpr std::uint64_t kBytesPerMiB = 1024U * 1024U;
+  if (limits.memory_mb >
+      std::numeric_limits<rlim_t>::max() / kBytesPerMiB) {
+    return Status::InvalidArgument("WPA memory limit overflows RLIMIT_AS");
+  }
+#if defined(__APPLE__)
+  // Darwin defines RLIMIT_AS as its advisory RLIMIT_RSS resource but rejects
+  // finite values with EINVAL. Refuse the run instead of silently omitting an
+  // enforcement contract that callers requested.
+  if (limits.memory_mb != 0) {
+    return Status::InvalidArgument(
+        "WPA address-space limits are not supported on this platform");
+  }
+#endif
 
   std::string tmpl =
       (std::filesystem::temp_directory_path() / "veritas-wpa-XXXXXX").string();
@@ -129,9 +176,9 @@ StatusOr<facts::RawWpaEvaluation> SouffleWpaExecutor::Execute(
       "-D",
       work_dir.string(),
       "--jobs",
-      "1",
+      std::to_string(limits.threads),
   };
-  StatusOr<int> run_result = RunWorker(worker_.string(), args, limits.timeout);
+  StatusOr<int> run_result = RunWorker(worker_.string(), args, limits);
   if (!run_result.ok()) {
     return run_result.status();
   }

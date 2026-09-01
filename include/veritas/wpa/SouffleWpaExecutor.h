@@ -24,6 +24,8 @@
 #define VERITAS_WPA_SOUFFLE_WPA_EXECUTOR_H_
 
 #include <filesystem>
+#include <string>
+#include <string_view>
 
 #include "veritas/wpa/WpaExecutor.h"
 
@@ -31,15 +33,18 @@ namespace veritas::wpa {
 
 class SouffleWpaExecutor final : public WpaExecutor {
  public:
-  explicit SouffleWpaExecutor(std::filesystem::path worker);
+  SouffleWpaExecutor(std::filesystem::path worker,
+                     std::string toolchain_identity);
 
   facts::EngineIdentity identity() const override;
+  std::string_view toolchain_identity() const override;
   StatusOr<facts::RawWpaEvaluation> Execute(
       const WpaExecutionEnvelope& input,
       const WpaExecutionLimits& limits) const override;
 
  private:
   std::filesystem::path worker_;
+  std::string toolchain_identity_;
 };
 
 }  // namespace veritas::wpa
