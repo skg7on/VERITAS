@@ -108,6 +108,10 @@ class WpaRunRepository {
 
   Status MarkIncomplete(const facts::AnalysisRunManifest& run);
 
+  // The shared metadata connection, for the incremental scheduler's own
+  // repositories to key off the same database.
+  summarydb::MetadataStore& metadata_store() { return metadata_store_; }
+
   // Test/query accessors.
   StatusOr<WpaRunStatus> RunStatus(core::StableId run_id);
   StatusOr<std::optional<std::string>> ResultObjectKey(

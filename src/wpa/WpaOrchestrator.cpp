@@ -23,7 +23,9 @@
 #include "veritas/facts/Witness.h"
 #include "veritas/wpa/CallGraph.h"
 #include "veritas/wpa/SccGraph.h"
+#include "veritas/wpa/SccStateRepository.h"
 #include "veritas/wpa/WpaComponent.h"
+#include "veritas/wpa/WpaCoordinator.h"
 #include "veritas/wpa/WpaInputMaterializer.h"
 
 namespace veritas::wpa {
@@ -64,11 +66,34 @@ WpaComponentResult MakeResult(const WpaLogicalComponentInput& logical,
   return result;
 }
 
+// Maps the V2 component kind to the V1 protobuf enum the M7 scheduler uses.
+summary::v1::ComponentKind V1Component(WpaComponentKind component) {
+  return component == WpaComponentKind::kReachability
+             ? summary::v1::COMPONENT_KIND_CALLS
+             : summary::v1::COMPONENT_KIND_MEMORY_EFFECTS;
+}
+
+// Builds the minimal V1 SccResult the incremental scheduler needs to compare
+// the externally visible hash; facts are carried by the V2 run repository, not
+// here.
+SccResult ToSccResult(const WpaComponentResult& result) {
+  SccResult scc;
+  scc.scc_id = result.scc_id;
+  scc.component_kind = V1Component(result.component);
+  scc.input_hash = result.logical_input_hash;
+  scc.fixpoint_hash = result.fixpoint_hash;
+  scc.externally_visible_hash = result.external_hash;
+  scc.iteration_count = 1;
+  scc.status = SccStatus::kConverged;
+  return scc;
+}
+
 }  // namespace
 
 WpaOrchestrator::WpaOrchestrator(WpaExecutor& executor,
-                                 WpaRunRepository& repository)
-    : executor_(executor), repository_(repository) {}
+                                 WpaRunRepository& repository,
+                                 SccStateRepository* scc_state)
+    : executor_(executor), repository_(repository), scc_state_(scc_state) {}
 
 StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
   Status begin = repository_.BeginRun(request.run);
@@ -85,6 +110,17 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
   if (!scc_graph.ok()) {
     repository_.MarkIncomplete(request.run);
     return scc_graph.status();
+  }
+
+  SccContext context;
+  context.revision_id = core::ToString(request.run.revision_id);
+  context.build_variant_id = core::ToString(request.run.build_variant_id);
+  if (scc_state_ != nullptr) {
+    Status published = scc_state_->PublishGraph(context, *call_graph, *scc_graph);
+    if (!published.ok()) {
+      repository_.MarkIncomplete(request.run);
+      return published;
+    }
   }
 
   WpaRunResult result;
@@ -175,6 +211,31 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
         return completion.status();
       }
       result.completed_components.push_back(std::move(*completion));
+
+      // Incremental propagation: a changed externally visible hash schedules
+      // the component's predecessors through the M7 scheduler.
+      if (scc_state_ != nullptr) {
+        auto change =
+            scc_state_->StoreState(context, ToSccResult(component_result));
+        if (!change.ok()) {
+          repository_.MarkIncomplete(request.run);
+          return change.status();
+        }
+        if (*change == ExternalChange::kChanged) {
+          runtime::WorklistScheduler scheduler;
+          auto enqueue = WpaCoordinator::EnqueuePredecessorsIfChanged(
+              *change, key.scc_id, V1Component(component), context, {},
+              *scc_graph, &scheduler);
+          if (!enqueue.ok()) {
+            repository_.MarkIncomplete(request.run);
+            return enqueue;
+          }
+          while (!scheduler.Empty()) {
+            result.scheduled_predecessors.push_back(*scheduler.PopNext());
+          }
+        }
+      }
+
       completed_facts[key.scc_id] = std::move(component_result.facts);
     }
   }

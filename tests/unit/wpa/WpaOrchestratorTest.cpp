@@ -29,6 +29,7 @@
 #include "veritas/summary/SummaryArtifact.h"
 #include "veritas/wpa/CallGraph.h"
 #include "veritas/wpa/SccGraph.h"
+#include "veritas/wpa/SccStateRepository.h"
 
 namespace veritas::wpa {
 namespace {
@@ -185,6 +186,61 @@ TEST(WpaOrchestratorTest, FailedComponentPublishesNoResult) {
   auto status = repo->RunStatus(request.run.run_id);
   ASSERT_TRUE(status.ok());
   EXPECT_EQ(*status, WpaRunStatus::kIncomplete);
+
+  std::filesystem::remove_all(db);
+}
+
+// A first run publishes every component's externally visible hash, so the
+// chain's callers are scheduled. Re-running the same input changes nothing, so
+// no predecessor is scheduled again.
+TEST(WpaOrchestratorTest, RepeatedRunSchedulesNoPredecessors) {
+  const auto program = ChainProgram();
+  const auto db = TempDbPath();
+  auto repo = WpaRunRepository::Open(db);
+  ASSERT_TRUE(repo.ok());
+  SccStateRepository scc_state(repo->metadata_store());
+
+  std::vector<core::StableId> order;
+  RecordingExecutor executor(order);
+  WpaOrchestrator orchestrator(executor, *repo, &scc_state);
+
+  const std::array<WpaComponentKind, 1> components = {
+      WpaComponentKind::kReachability};
+  WpaRunRequest request;
+  request.run = MakeManifest(facts::EngineIdentity::kSouffle);
+  request.summaries = program;
+  request.components = components;
+
+  // The V1 scheduler's component-state table references repositories,
+  // revisions, and build variants, so seed them for the run's context.
+  ASSERT_TRUE(repo->metadata_store()
+                  .Execute("INSERT INTO repositories(repository_id, vcs_kind, "
+                           "vcs_revision, source_tree_hash) VALUES(?, ?, ?, ?)",
+                           {"repo:test", "git", "r", "tree"})
+                  .ok());
+  ASSERT_TRUE(repo->metadata_store()
+                  .Execute("INSERT INTO revisions(revision_id, repository_id, "
+                           "vcs_revision) VALUES(?, ?, ?)",
+                           {core::ToString(request.run.revision_id), "repo:test",
+                            "r"})
+                  .ok());
+  ASSERT_TRUE(repo->metadata_store()
+                  .Execute("INSERT INTO build_variants(build_variant_id, "
+                           "target_triple, compiler_id, compiler_version, "
+                           "compile_options_hash, macro_set_hash, "
+                           "include_closure_hash, type_layout_hash) VALUES("
+                           "?, ?, ?, ?, ?, ?, ?, ?)",
+                           {core::ToString(request.run.build_variant_id), "arm64",
+                            "clang", "24", "a", "b", "c", "d"})
+                  .ok());
+
+  auto first = orchestrator.Run(request);
+  ASSERT_TRUE(first.ok()) << first.status().message();
+  EXPECT_FALSE(first->scheduled_predecessors.empty());
+
+  auto second = orchestrator.Run(request);
+  ASSERT_TRUE(second.ok());
+  EXPECT_TRUE(second->scheduled_predecessors.empty());
 
   std::filesystem::remove_all(db);
 }

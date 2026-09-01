@@ -55,15 +55,22 @@ struct WpaRunResult {
   std::vector<runtime::WorkItem> scheduled_predecessors;
 };
 
+class SccStateRepository;
+
 class WpaOrchestrator {
  public:
-  WpaOrchestrator(WpaExecutor& executor, WpaRunRepository& repository);
+  // The optional scc_state enables incremental predecessor scheduling: when a
+  // component's externally visible hash changes, its predecessors are enqueued
+  // through the M7 scheduler and surfaced in scheduled_predecessors.
+  WpaOrchestrator(WpaExecutor& executor, WpaRunRepository& repository,
+                  SccStateRepository* scc_state = nullptr);
 
   StatusOr<WpaRunResult> Run(const WpaRunRequest& request);
 
  private:
   WpaExecutor& executor_;
   WpaRunRepository& repository_;
+  SccStateRepository* scc_state_;
 };
 
 }  // namespace veritas::wpa
