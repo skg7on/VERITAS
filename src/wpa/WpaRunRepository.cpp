@@ -426,6 +426,12 @@ WpaRunRepository& WpaRunRepository::operator=(WpaRunRepository&&) noexcept =
 
 StatusOr<WpaRunRepository> WpaRunRepository::Open(
     const std::filesystem::path& db_path) {
+  std::error_code ec;
+  std::filesystem::create_directories(db_path, ec);
+  if (ec) {
+    return Status::Internal("cannot create WPA run directory: " +
+                            ec.message());
+  }
   auto store = summarydb::MetadataStore::Open(db_path / "metadata.db");
   if (!store.ok()) {
     return store.status();

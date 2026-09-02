@@ -26,6 +26,12 @@
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
 #include "veritas/core/Ids.h"
+#include "veritas/facts/AnalysisRun.h"
+#include "veritas/summary/SummaryArtifact.h"
+#include "veritas/wpa/CppConformanceExecutor.h"
+#include "veritas/wpa/SouffleWpaExecutor.h"
+#include "veritas/wpa/WpaOrchestrator.h"
+#include "veritas/wpa/WpaRunRepository.h"
 
 #include "ProjectAnalyzerInternal.h"
 #include "ProjectPublicationCoordinator.h"
@@ -50,6 +56,13 @@ AnalysisConfig AnalysisConfig::Default() {
       .svf_soft_analysis_budget = svf_config.soft_analysis_budget,
       .svf_max_graph_nodes = svf_config.max_graph_nodes,
       .svf_max_emitted_facts = svf_config.max_emitted_facts,
+      .wpa_engine = WpaEngineMode::kSouffle,
+      .wpa_component_timeout = std::chrono::seconds(30),
+      .wpa_component_memory_mb = 0,
+      .wpa_threads = 1,
+      .rule_bundle_version = "rules.v2",
+      .model_bundle_version = "models.v1",
+      .run_cpp_conformance_oracle = false,
   };
 }
 
@@ -63,6 +76,97 @@ svf::SvfConfig ToSvfConfig(const AnalysisConfig &config) {
       .max_emitted_facts = config.svf_max_emitted_facts,
       .field_sensitive = true,
   };
+}
+
+// Runs the WPA orchestrator over the just-published summaries and records the
+// run identity, engine, and any degraded-mode or failure diagnostic.
+Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &config,
+              const std::vector<summary::v2::FunctionSummary> &summaries,
+              const build::AnalysisManifest &manifest,
+              ProjectAnalysisResult *result) {
+  auto revision = core::ParseStableId(manifest.context.revision_id);
+  if (!revision.ok())
+    return revision.status();
+  auto build_variant = core::ParseStableId(manifest.context.build_variant_id);
+  if (!build_variant.ok())
+    return build_variant.status();
+
+  facts::AnalysisRunDescriptor descriptor;
+  descriptor.revision_id = *revision;
+  descriptor.build_variant_id = *build_variant;
+  descriptor.summary_schema_version = "summary.v2";
+  descriptor.relation_schema_version = "relations.v2";
+  descriptor.rule_bundle_version = config.rule_bundle_version;
+  descriptor.model_bundle_version = config.model_bundle_version;
+  descriptor.svf_configuration_hash = std::string(64, 'a');
+  descriptor.wpa_configuration_hash = std::string(64, 'b');
+  descriptor.engine = config.wpa_engine == WpaEngineMode::kSouffle
+                          ? facts::EngineIdentity::kSouffle
+                          : facts::EngineIdentity::kCppEmergency;
+  descriptor.engine_toolchain_identity =
+      config.wpa_engine == WpaEngineMode::kSouffle ? "souffle-2.5-pinned"
+                                                    : "veritas-cpp-emergency";
+  auto run = facts::MakeAnalysisRun(descriptor);
+  if (!run.ok())
+    return run.status();
+
+  auto repo = wpa::WpaRunRepository::Open(request.output_root / "wpa");
+  if (!repo.ok())
+    return repo.status();
+
+  // The WPA consumes summaries as the variant type; the published drafts are
+  // all v2, so wrap them.
+  std::vector<summary::SummaryArtifact> artifacts;
+  artifacts.reserve(summaries.size());
+  for (const auto &summary : summaries) {
+    artifacts.emplace_back(summary);
+  }
+
+  wpa::WpaExecutionLimits limits;
+  limits.timeout = config.wpa_component_timeout;
+  limits.memory_mb = config.wpa_component_memory_mb;
+  limits.threads = config.wpa_threads;
+
+  const std::array<wpa::WpaComponentKind, 2> components = {
+      wpa::WpaComponentKind::kReachability,
+      wpa::WpaComponentKind::kMemoryEffects};
+
+  wpa::WpaRunRequest wpa_request;
+  wpa_request.run = *run;
+  wpa_request.summaries = artifacts;
+  wpa_request.components = components;
+  wpa_request.limits = limits;
+
+  StatusOr<wpa::WpaRunResult> wpa_result = [&]() -> StatusOr<wpa::WpaRunResult> {
+    if (config.wpa_engine == WpaEngineMode::kSouffle) {
+#ifdef VERITAS_SOUFFLE_WORKER
+      wpa::SouffleWpaExecutor executor(VERITAS_SOUFFLE_WORKER);
+      wpa::WpaOrchestrator orchestrator(executor, *repo);
+      return orchestrator.Run(wpa_request);
+#else
+      return Status::FailedPrecondition(
+          "souffle WPA was requested but the worker is not built");
+#endif
+    }
+    auto executor =
+        wpa::CppConformanceExecutor::Create(facts::EngineIdentity::kCppEmergency);
+    if (!executor.ok())
+      return executor.status();
+    wpa::WpaOrchestrator orchestrator(*executor, *repo);
+    return orchestrator.Run(wpa_request);
+  }();
+
+  result->wpa_engine = config.wpa_engine;
+  if (!wpa_result.ok()) {
+    result->wpa_diagnostics = std::string(wpa_result.status().message());
+    return wpa_result.status();
+  }
+  result->wpa_run_id = core::ToString(wpa_result->run.run_id);
+  result->wpa_diagnostics =
+      config.wpa_engine == WpaEngineMode::kCppEmergency
+          ? "degraded: cpp-emergency WPA"
+          : "";
+  return Status::Ok();
 }
 
 } // namespace
@@ -145,6 +249,7 @@ public:
     auto persist = (*coordinator)->PersistManifestContext(*manifest);
     if (!persist.ok())
       return persist;
+    const std::vector<summary::v2::FunctionSummary> summaries = *merged;
     auto published =
         (*coordinator)
             ->Publish(CompletedProjectAnalysis{std::move(*merged),
@@ -171,6 +276,13 @@ public:
     for (const auto &unknown : svf_result->facts.unknowns) {
       result.unknowns.push_back(
           UnknownFact{unknown.scope, unknown.reason, unknown.provenance_ref});
+    }
+
+    // Run the recursive WPA over the just-published summaries.
+    auto wpa_status = RunWpa(request, config, summaries, *manifest, &result);
+    if (!wpa_status.ok()) {
+      result.wpa_diagnostics = std::string(wpa_status.message());
+      return wpa_status;
     }
     return result;
   }

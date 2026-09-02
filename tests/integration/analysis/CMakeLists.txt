@@ -70,3 +70,23 @@ set_tests_properties(SummaryV2PipelineTest PROPERTIES
 
 add_subdirectory(svf)
 add_subdirectory(cpg)
+
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  add_executable(project_analyzer_wpa_integration_test
+    ProjectAnalyzerWpaTest.cpp
+  )
+
+  target_link_libraries(project_analyzer_wpa_integration_test
+    PRIVATE
+      veritas_analysis
+      veritas_test_support
+      veritas_unit_test_support
+  )
+
+  add_test(NAME ProjectAnalyzerWpaTest
+    COMMAND project_analyzer_wpa_integration_test)
+  set_tests_properties(ProjectAnalyzerWpaTest PROPERTIES
+    TIMEOUT 120
+    LABELS "integration;analysis"
+  )
+endif()

@@ -35,6 +35,7 @@ target_link_libraries(veritas_analysis
     veritas_cpg
     veritas_build
     veritas_summarydb
+    veritas_wpa
 )
 
 # The versioned external-model bundle is a checked-in source resource. Bake its
@@ -43,6 +44,16 @@ target_link_libraries(veritas_analysis
 target_compile_definitions(veritas_analysis PRIVATE
   VERITAS_LOGIC_MODELS_DIR="${CMAKE_SOURCE_DIR}/logic/models"
 )
+
+# The compiled Souffle worker is the production executor; bake its path in so
+# the analyzer can construct the SouffleWpaExecutor. Only defined under the
+# souffle engine.
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  target_compile_definitions(veritas_analysis PRIVATE
+    VERITAS_SOUFFLE_WORKER="$<TARGET_FILE:veritas_souffle_worker>"
+  )
+  add_dependencies(veritas_analysis veritas_souffle_worker)
+endif()
 
 add_subdirectory(semantic)
 add_subdirectory(pipeline)
