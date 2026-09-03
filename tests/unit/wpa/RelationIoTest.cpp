@@ -178,6 +178,28 @@ TEST_F(RelationIoTest, RoundTripsResultsAndWitnesses) {
   EXPECT_EQ(read->witnesses, raw->witnesses);
 }
 
+TEST_F(RelationIoTest, RejectsMissingResultFile) {
+  auto input = BuildInput();
+  ASSERT_TRUE(input.ok());
+  std::ofstream(directory_ / "Witness.csv").close();
+
+  auto read = RelationIo::ReadOutput(directory_, *input);
+
+  ASSERT_FALSE(read.ok());
+  EXPECT_EQ(read.status().code(), StatusCode::kInternal);
+}
+
+TEST_F(RelationIoTest, RejectsMissingWitnessFile) {
+  auto input = BuildInput();
+  ASSERT_TRUE(input.ok());
+  std::ofstream(directory_ / "ReachableCall.csv").close();
+
+  auto read = RelationIo::ReadOutput(directory_, *input);
+
+  ASSERT_FALSE(read.ok());
+  EXPECT_EQ(read.status().code(), StatusCode::kInternal);
+}
+
 // A dense id the component never mapped cannot become a fact.
 TEST_F(RelationIoTest, RejectsResultCellOutsideItsMapping) {
   auto input = BuildInput();

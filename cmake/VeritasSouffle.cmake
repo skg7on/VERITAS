@@ -123,24 +123,6 @@ endforeach()
 # Generator expression resolving to the built Souffle executable.
 set(VERITAS_SOUFFLE_EXECUTABLE "$<TARGET_FILE:souffle>")
 
-# Derive production provenance at build time: the pinned revision and the built
-# executable's SHA-256. The manifest is consumed by Task 15 to populate the run
-# manifest's engine/toolchain identity.
-add_custom_command(
-  OUTPUT "${CMAKE_BINARY_DIR}/souffle-provenance.json"
-  COMMAND ${CMAKE_COMMAND}
-          "-DVERITAS_SOUFFLE_EXECUTABLE=$<TARGET_FILE:souffle>"
-          "-DVERITAS_SOUFFLE_REVISION=${VERITAS_SOUFFLE_PINNED_REVISION}"
-          "-DVERITAS_SOUFFLE_PROVENANCE_OUTPUT=${CMAKE_BINARY_DIR}/souffle-provenance.json"
-          -P "${CMAKE_SOURCE_DIR}/cmake/WriteSouffleProvenance.cmake"
-  DEPENDS souffle
-  COMMENT "Deriving Souffle provenance"
-  VERBATIM
-)
-add_custom_target(veritas_souffle_provenance ALL
-  DEPENDS "${CMAKE_BINARY_DIR}/souffle-provenance.json"
-)
-
 # Single private wrapper. VERITAS code links veritas_third_party_souffle and
 # never references libsouffle directly, so Souffle headers and types never leak
 # into public VERITAS headers.
@@ -244,4 +226,42 @@ target_link_libraries(veritas_souffle_worker PRIVATE
   MayWriteV2
   libsouffle
   veritas_souffle_functors
+)
+
+# Derive production provenance only after every runtime artifact exists. The
+# canonical digest binds the compiler, linked worker, functor ABI, generated
+# rule sources, and the compiler/link/platform context used to produce them.
+add_custom_command(
+  OUTPUT "${CMAKE_BINARY_DIR}/souffle-provenance.json"
+  COMMAND ${CMAKE_COMMAND}
+          "-DVERITAS_SOUFFLE_EXECUTABLE=$<TARGET_FILE:souffle>"
+          "-DVERITAS_SOUFFLE_WORKER=$<TARGET_FILE:veritas_souffle_worker>"
+          "-DVERITAS_SOUFFLE_FUNCTOR_LIBRARY=$<TARGET_FILE:veritas_souffle_functors>"
+          "-DVERITAS_REACHABILITY_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_reach.cpp"
+          "-DVERITAS_MAY_WRITE_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_maywrite.cpp"
+          "-DVERITAS_SOUFFLE_REVISION=${VERITAS_SOUFFLE_PINNED_REVISION}"
+          "-DVERITAS_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}"
+          "-DVERITAS_COMPILER_VERSION=${CMAKE_CXX_COMPILER_VERSION}"
+          "-DVERITAS_COMPILER_PATH=${CMAKE_CXX_COMPILER}"
+          "-DVERITAS_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+          "-DVERITAS_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR}"
+          "-DVERITAS_CMAKE_GENERATOR=${CMAKE_GENERATOR}"
+          "-DVERITAS_BUILD_TYPE=$<CONFIG>"
+          "-DVERITAS_CXX_STANDARD=${CMAKE_CXX_STANDARD}"
+          "-DVERITAS_CXX_FLAGS=${CMAKE_CXX_FLAGS}"
+          "-DVERITAS_EXECUTABLE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+          "-DVERITAS_SOUFFLE_PROVENANCE_OUTPUT=${CMAKE_BINARY_DIR}/souffle-provenance.json"
+          -P "${CMAKE_SOURCE_DIR}/cmake/WriteSouffleProvenance.cmake"
+  DEPENDS
+    souffle
+    veritas_souffle_worker
+    veritas_souffle_functors
+    "${VERITAS_SOUFFLE_GEN_DIR}/v2_reach.cpp"
+    "${VERITAS_SOUFFLE_GEN_DIR}/v2_maywrite.cpp"
+    "${CMAKE_SOURCE_DIR}/cmake/WriteSouffleProvenance.cmake"
+  COMMENT "Deriving canonical Souffle provenance"
+  VERBATIM
+)
+add_custom_target(veritas_souffle_provenance ALL
+  DEPENDS "${CMAKE_BINARY_DIR}/souffle-provenance.json"
 )

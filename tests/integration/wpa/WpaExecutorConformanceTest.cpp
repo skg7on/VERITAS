@@ -66,7 +66,8 @@ facts::AnalysisRunSemanticDescriptor Semantics() {
   return semantics;
 }
 
-facts::AnalysisRunManifest MakeManifest(facts::EngineIdentity engine) {
+facts::AnalysisRunManifest MakeManifest(facts::EngineIdentity engine,
+                                        std::string toolchain_identity) {
   facts::AnalysisRunDescriptor descriptor;
   descriptor.revision_id = core::MakeStableId(
       core::IdKind::kRevision, std::as_bytes(std::span("rev", 3)));
@@ -79,7 +80,7 @@ facts::AnalysisRunManifest MakeManifest(facts::EngineIdentity engine) {
   descriptor.svf_configuration_hash = std::string(64, 'a');
   descriptor.wpa_configuration_hash = std::string(64, 'b');
   descriptor.engine = engine;
-  descriptor.engine_toolchain_identity = "test-toolchain";
+  descriptor.engine_toolchain_identity = std::move(toolchain_identity);
   auto manifest = facts::MakeAnalysisRun(descriptor);
   return std::move(manifest).value();
 }
@@ -153,15 +154,16 @@ TEST(WpaExecutorConformanceTest, EnginesProduceSameCanonicalFacts) {
   ASSERT_TRUE(logical.ok());
 
   const auto souffle_manifest =
-      MakeManifest(facts::EngineIdentity::kSouffle);
+      MakeManifest(facts::EngineIdentity::kSouffle, "souffle-toolchain");
   const auto cpp_manifest =
-      MakeManifest(facts::EngineIdentity::kCppConformance);
+      MakeManifest(facts::EngineIdentity::kCppConformance, "cpp-toolchain");
 
   WpaExecutionEnvelope souffle_envelope{souffle_manifest, *logical};
   WpaExecutionEnvelope cpp_envelope{cpp_manifest, *logical};
 
-  SouffleWpaExecutor souffle(VERITAS_SOUFFLE_WORKER);
-  auto cpp = CppConformanceExecutor::Create(facts::EngineIdentity::kCppConformance);
+  SouffleWpaExecutor souffle(VERITAS_SOUFFLE_WORKER, "souffle-toolchain");
+  auto cpp = CppConformanceExecutor::Create(
+      facts::EngineIdentity::kCppConformance, "cpp-toolchain");
   ASSERT_TRUE(cpp.ok());
 
   const WpaExecutionLimits limits{std::chrono::seconds(30), 0, 1};
