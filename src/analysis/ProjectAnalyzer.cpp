@@ -103,9 +103,10 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
   descriptor.engine = config.wpa_engine == WpaEngineMode::kSouffle
                           ? facts::EngineIdentity::kSouffle
                           : facts::EngineIdentity::kCppEmergency;
-  descriptor.engine_toolchain_identity =
+  const std::string toolchain_identity =
       config.wpa_engine == WpaEngineMode::kSouffle ? "souffle-2.5-pinned"
                                                     : "veritas-cpp-emergency";
+  descriptor.engine_toolchain_identity = toolchain_identity;
   auto run = facts::MakeAnalysisRun(descriptor);
   if (!run.ok())
     return run.status();
@@ -140,7 +141,7 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
   StatusOr<wpa::WpaRunResult> wpa_result = [&]() -> StatusOr<wpa::WpaRunResult> {
     if (config.wpa_engine == WpaEngineMode::kSouffle) {
 #ifdef VERITAS_SOUFFLE_WORKER
-      wpa::SouffleWpaExecutor executor(VERITAS_SOUFFLE_WORKER);
+      wpa::SouffleWpaExecutor executor(VERITAS_SOUFFLE_WORKER, toolchain_identity);
       wpa::WpaOrchestrator orchestrator(executor, *repo);
       return orchestrator.Run(wpa_request);
 #else
@@ -148,8 +149,8 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
           "souffle WPA was requested but the worker is not built");
 #endif
     }
-    auto executor =
-        wpa::CppConformanceExecutor::Create(facts::EngineIdentity::kCppEmergency);
+    auto executor = wpa::CppConformanceExecutor::Create(
+        facts::EngineIdentity::kCppEmergency, toolchain_identity);
     if (!executor.ok())
       return executor.status();
     wpa::WpaOrchestrator orchestrator(*executor, *repo);

@@ -111,6 +111,9 @@ class RecordingExecutor : public WpaExecutor {
   facts::EngineIdentity identity() const override {
     return facts::EngineIdentity::kSouffle;
   }
+  std::string_view toolchain_identity() const override {
+    return "test-toolchain";
+  }
   StatusOr<facts::RawWpaEvaluation> Execute(
       const WpaExecutionEnvelope& envelope, const WpaExecutionLimits&) const override {
     order_.push_back(envelope.logical.scc_id);
@@ -125,6 +128,9 @@ class FailingExecutor : public WpaExecutor {
  public:
   facts::EngineIdentity identity() const override {
     return facts::EngineIdentity::kSouffle;
+  }
+  std::string_view toolchain_identity() const override {
+    return "test-toolchain";
   }
   StatusOr<facts::RawWpaEvaluation> Execute(
       const WpaExecutionEnvelope&, const WpaExecutionLimits&) const override {
