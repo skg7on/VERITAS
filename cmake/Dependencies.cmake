@@ -123,8 +123,19 @@ endif()
 # -----------------------------------------------------------------------------
 # RocksDB — CAS object store backing the Summary IR.
 # -----------------------------------------------------------------------------
-# RocksDB requires zstd::zstd, but the package may provide zstd::libzstd_shared
-# or zstd::libzstd_static instead. Create the alias if needed.
+# RocksDB links zstd::zstd, but the zstd CONFIG package may instead provide
+# zstd::libzstd_shared or zstd::libzstd_static. Find zstd first, then create the
+# zstd::zstd alias if needed.
+#
+# Guard the find_package: LLVM's own config already calls find_package(zstd)
+# and imports the zstd targets, and re-including a partially-imported export
+# set is a hard CMake error, so only search when no zstd target exists yet.
+if(NOT TARGET zstd::zstd
+   AND NOT TARGET zstd::libzstd_shared
+   AND NOT TARGET zstd::libzstd_static)
+  find_package(zstd CONFIG QUIET)
+endif()
+
 if(NOT TARGET zstd::zstd)
   if(TARGET zstd::libzstd_shared)
     add_library(zstd::zstd ALIAS zstd::libzstd_shared)
@@ -133,8 +144,10 @@ if(NOT TARGET zstd::zstd)
     add_library(zstd::zstd ALIAS zstd::libzstd_static)
     message(STATUS "VERITAS: Created zstd::zstd alias for zstd::libzstd_static")
   else()
-    # zstd not found yet, try to find it
-    find_package(zstd REQUIRED CONFIG)
+    message(FATAL_ERROR
+      "VERITAS: zstd not found. RocksDB requires zstd::zstd; install zstd with\n"
+      "CMake config support (Homebrew, vcpkg, or a source build) or pass\n"
+      "-Dzstd_DIR=<dir containing zstdConfig.cmake>.")
   endif()
 endif()
 
