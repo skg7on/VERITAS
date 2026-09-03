@@ -105,3 +105,12 @@ target_link_libraries(SemanticKeyCodecTest PRIVATE
 )
 veritas_add_warnings(SemanticKeyCodecTest)
 gtest_discover_tests(SemanticKeyCodecTest DISCOVERY_TIMEOUT 60)
+
+add_executable(AnalysisFactBusTest AnalysisFactBusTest.cpp)
+target_link_libraries(AnalysisFactBusTest PRIVATE
+  veritas::wpa
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(AnalysisFactBusTest)
+gtest_discover_tests(AnalysisFactBusTest DISCOVERY_TIMEOUT 60)
