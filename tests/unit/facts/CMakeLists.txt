@@ -19,6 +19,7 @@ target_link_libraries(AnalysisRunTest PRIVATE
 )
 veritas_add_warnings(AnalysisRunTest)
 gtest_discover_tests(AnalysisRunTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(AnalysisRunTest run-identity)
 
 add_executable(RelationSchemaTest RelationSchemaTest.cpp)
 target_link_libraries(RelationSchemaTest PRIVATE
@@ -30,6 +31,7 @@ target_compile_definitions(RelationSchemaTest PRIVATE
 )
 veritas_add_warnings(RelationSchemaTest)
 gtest_discover_tests(RelationSchemaTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(RelationSchemaTest relations-v2)
 
 add_executable(AnalysisFactTest AnalysisFactTest.cpp)
 target_link_libraries(AnalysisFactTest PRIVATE
@@ -46,6 +48,7 @@ target_link_libraries(DenseIdMapTest PRIVATE
 )
 veritas_add_warnings(DenseIdMapTest)
 gtest_discover_tests(DenseIdMapTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(DenseIdMapTest stable-identity)
 
 add_executable(LegacyFactAdapterTest LegacyFactAdapterTest.cpp)
 target_link_libraries(LegacyFactAdapterTest PRIVATE
@@ -97,6 +100,7 @@ target_link_libraries(ResultCanonicalizerTest PRIVATE
 )
 veritas_add_warnings(ResultCanonicalizerTest)
 gtest_discover_tests(ResultCanonicalizerTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(ResultCanonicalizerTest witness-closure)
 
 add_executable(SemanticKeyCodecTest SemanticKeyCodecTest.cpp)
 target_link_libraries(SemanticKeyCodecTest PRIVATE
@@ -114,3 +118,4 @@ target_link_libraries(AnalysisFactBusTest PRIVATE
 )
 veritas_add_warnings(AnalysisFactBusTest)
 gtest_discover_tests(AnalysisFactBusTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(AnalysisFactBusTest witness-closure)

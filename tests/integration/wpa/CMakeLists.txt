@@ -45,6 +45,7 @@ if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   )
   veritas_add_warnings(WpaExecutorConformanceTest)
   gtest_discover_tests(WpaExecutorConformanceTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(WpaExecutorConformanceTest engine-conformance)
 
   add_executable(SouffleWpaExecutorTest SouffleWpaExecutorTest.cpp)
   target_link_libraries(SouffleWpaExecutorTest PRIVATE
@@ -64,6 +65,7 @@ if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   )
   veritas_add_warnings(SouffleWpaExecutorTest)
   gtest_discover_tests(SouffleWpaExecutorTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(SouffleWpaExecutorTest souffle-production)
 
   add_test(NAME SouffleProvenanceTest
     COMMAND ${CMAKE_COMMAND}

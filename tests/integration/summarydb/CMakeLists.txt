@@ -49,3 +49,4 @@ target_link_libraries(SummaryVersionCompatibilityTest PRIVATE
 )
 veritas_add_warnings(SummaryVersionCompatibilityTest)
 gtest_discover_tests(SummaryVersionCompatibilityTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(SummaryVersionCompatibilityTest summary-v2)
