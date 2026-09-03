@@ -22,6 +22,10 @@ add_subdirectory(unit)
 add_subdirectory(integration)
 add_subdirectory(ci)
 
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  add_subdirectory(qualification)
+endif()
+
 find_program(VERITAS_BASH_EXECUTABLE bash REQUIRED)
 
 add_test(
