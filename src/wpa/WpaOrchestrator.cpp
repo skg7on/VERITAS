@@ -31,12 +31,17 @@
 namespace veritas::wpa {
 namespace {
 
-// Gathers the facts completed for each successor SCC of `scc_id`, which become
-// the successor support the materializer turns into support relations.
+// Gathers the facts completed for each successor SCC of `scc_id`, restricted to
+// the component's relation domain, which become the successor support the
+// materializer turns into support relations.
 std::vector<facts::AnalysisFact> SuccessorSupport(
-    const SccGraph& scc_graph, core::StableId scc_id,
+    const SccGraph& scc_graph, core::StableId scc_id, WpaComponentKind component,
     const std::map<core::StableId, std::vector<facts::AnalysisFact>>&
         completed_facts) {
+  const facts::RelationId expected =
+      component == WpaComponentKind::kReachability
+          ? facts::RelationId::kReachableCall
+          : facts::RelationId::kMayWrite;
   std::vector<facts::AnalysisFact> support;
   auto successors = scc_graph.Successors(scc_id);
   if (!successors.ok()) {
@@ -44,8 +49,13 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
   }
   for (const auto& successor : *successors) {
     auto it = completed_facts.find(successor);
-    if (it != completed_facts.end()) {
-      support.insert(support.end(), it->second.begin(), it->second.end());
+    if (it == completed_facts.end()) {
+      continue;
+    }
+    for (const auto& fact : it->second) {
+      if (fact.row.relation == expected) {
+        support.push_back(fact);
+      }
     }
   }
   return support;
@@ -148,7 +158,7 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
       // Keep the successor support alive for the duration of Build: the span
       // stored in the request points into this vector.
       std::vector<facts::AnalysisFact> successor_support =
-          SuccessorSupport(*scc_graph, scc_id, completed_facts);
+          SuccessorSupport(*scc_graph, scc_id, component, completed_facts);
       materialization.successor_support = successor_support;
       materialization.models = request.models;
 

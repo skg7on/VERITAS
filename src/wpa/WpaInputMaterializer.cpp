@@ -419,10 +419,16 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
           memory_ids.push_back(*id);
       }
     }
+    // The root is the support relation, not the derived one: the witness cites
+    // SupportReachableCall/SupportMayWrite, and the canonicalizer matches roots
+    // by semantic row.
+    auto support_fact = facts::MakeFact(row);
+    if (!support_fact.ok())
+      return support_fact.status();
     semantic_edb.push_back(std::move(row));
-    fact_ids.push_back(fact.fact_id);
-    successor_roots.push_back(
-        RootedInputFact{.fact = fact, .provenance_ref = "wpa:successor"});
+    fact_ids.push_back(support_fact->fact_id);
+    successor_roots.push_back(RootedInputFact{
+        .fact = std::move(*support_fact), .provenance_ref = "wpa:successor"});
   }
 
   // 5. Build the dense maps. Build() sorts and de-duplicates, so dense numbers
