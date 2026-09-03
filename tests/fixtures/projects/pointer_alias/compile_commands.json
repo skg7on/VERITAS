@@ -1,0 +1,7 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "command": "clang -std=c11 -O0 -g -fno-inline -c @PROJECT_ROOT@/pointer_alias.c -o pointer_alias.o",
+    "file": "pointer_alias.c"
+  }
+]

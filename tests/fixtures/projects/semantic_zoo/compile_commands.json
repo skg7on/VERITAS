@@ -1,0 +1,54 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang", "-std=c11", "-O0", "-g", "-fno-inline",
+      "-I@PROJECT_ROOT@", "-c", "c_memory.c", "-o", "c_memory.o"
+    ],
+    "file": "@PROJECT_ROOT@/c_memory.c"
+  },
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang", "-std=c11", "-O0", "-g", "-fno-inline",
+      "-I@PROJECT_ROOT@", "-c", "c_callbacks.c", "-o", "c_callbacks.o"
+    ],
+    "file": "@PROJECT_ROOT@/c_callbacks.c"
+  },
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-fno-rtti", "-fno-exceptions", "-O0",
+      "-g", "-fno-inline", "-I@PROJECT_ROOT@", "-c", "cpp_memory.cpp",
+      "-o", "cpp_memory.o"
+    ],
+    "file": "@PROJECT_ROOT@/cpp_memory.cpp"
+  },
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-fno-rtti", "-fno-exceptions", "-O0",
+      "-g", "-fno-inline", "-I@PROJECT_ROOT@", "-c", "cpp_dispatch.cpp",
+      "-o", "cpp_dispatch.o"
+    ],
+    "file": "@PROJECT_ROOT@/cpp_dispatch.cpp"
+  },
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-fno-rtti", "-fno-exceptions", "-O0",
+      "-g", "-fno-inline", "-I@PROJECT_ROOT@", "-c", "recursion.cpp",
+      "-o", "recursion.o"
+    ],
+    "file": "@PROJECT_ROOT@/recursion.cpp"
+  },
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-fno-rtti", "-fno-exceptions", "-O0",
+      "-g", "-fno-inline", "-I@PROJECT_ROOT@", "-c", "driver.cpp",
+      "-o", "driver.o"
+    ],
+    "file": "@PROJECT_ROOT@/driver.cpp"
+  }
+]

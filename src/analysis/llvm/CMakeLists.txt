@@ -42,5 +42,6 @@ target_link_libraries(veritas_analysis_llvm
     clangTooling
     clangSerialization
     clangBasic
+    veritas_build
     veritas_summary
 )

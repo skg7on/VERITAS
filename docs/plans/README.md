@@ -10,6 +10,11 @@ records this hierarchy migration.
 Additional project/tooling plans:
 
 - [Claude Code Evidence IR review plugin](veritas-claude-code-evidence-review-plugin-implementation-plan.md)
+- [WPA and SummaryDB qualification corpus](wpa-summarydb-qualification-corpus-implementation-plan.md)
+
+The [WPA and SummaryDB qualification corpus plan](wpa-summarydb-qualification-corpus-implementation-plan.md)
+is the approved, current-baseline execution plan for completing M8R.4
+orchestration and M8R.5 mixed C/C++ qualification.
 
 | Milestone | Status | Implementation plan | Design specification | Issue |
 | --- | --- | --- | --- | --- |

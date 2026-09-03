@@ -57,6 +57,18 @@ struct CanonicalizedResult {
   std::vector<std::string> diagnostics;
 };
 
+struct CanonicalResultHashes {
+  std::string fixpoint_hash;
+  std::string external_hash;
+};
+
+// Computes the canonical content hashes used by CanonicalizedResult. The
+// inputs are sorted internally so callers cannot accidentally hash a
+// producer-dependent iteration order.
+CanonicalResultHashes ComputeCanonicalResultHashes(
+    std::span<const AnalysisFact> facts,
+    std::span<const WitnessEdge> witnesses);
+
 class ResultCanonicalizer {
  public:
   // Fails with InvalidArgument on a malformed row, an unregistered rule, a

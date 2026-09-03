@@ -20,6 +20,7 @@
 
 add_library(veritas_build
   AnalysisManifest.cpp
+  CompileFlags.cpp
   ProjectInput.cpp
   ProjectManifestLoader.cpp
 )
@@ -41,7 +42,7 @@ target_include_directories(veritas_build SYSTEM PRIVATE
 
 target_link_libraries(veritas_build
   PUBLIC veritas_core
-  PRIVATE clangTooling LLVMSupport
+  PRIVATE clangOptions clangTooling LLVMOption LLVMSupport
 )
 
 target_compile_features(veritas_build PUBLIC cxx_std_20)

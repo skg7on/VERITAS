@@ -1,0 +1,10 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang", "-std=c11", "-O0", "-g", "-fno-inline", "-c",
+      "unknown_external.c"
+    ],
+    "file": "unknown_external.c"
+  }
+]
