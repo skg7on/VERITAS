@@ -45,6 +45,7 @@ constexpr std::string_view kUsage =
 struct AnalyzeArguments {
   fs::path project;
   fs::path output;
+  std::string wpa_engine = "souffle";
 };
 
 veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
@@ -114,6 +115,14 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
       if (!value.ok()) return value.status();
       parsed.output = *value;
       output_seen = true;
+    } else if (arg == "--wpa-engine") {
+      auto value = take_value(i, "--wpa-engine");
+      if (!value.ok()) return value.status();
+      if (*value != "souffle" && *value != "cpp-emergency") {
+        return veritas::Status::InvalidArgument(
+            "--wpa-engine must be souffle or cpp-emergency");
+      }
+      parsed.wpa_engine = *value;
     } else {
       return veritas::Status::InvalidArgument("unknown argument: " + arg);
     }
@@ -179,9 +188,12 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
             << (input->output_root / "manifest.json").string() << '\n';
 
   // Run the full M1 -> M4 -> M5 -> M3 analysis and publish summaries.
+  auto config = veritas::analysis::AnalysisConfig::Default();
+  config.wpa_engine = parsed->wpa_engine == "cpp-emergency"
+                          ? veritas::analysis::WpaEngineMode::kCppEmergency
+                          : veritas::analysis::WpaEngineMode::kSouffle;
   veritas::analysis::ProjectAnalyzer analyzer;
-  auto result = analyzer.AnalyzeProject(
-      request, veritas::analysis::AnalysisConfig::Default());
+  auto result = analyzer.AnalyzeProject(request, config);
   if (!result.ok()) return result.status();
 
   std::cout << "Analysis complete\n"
@@ -190,6 +202,12 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
             << "CPG projection: " << result->projection_id << '\n'
             << "CPG nodes: " << result->cpg_node_count << '\n'
             << "CPG edges: " << result->cpg_edge_count << '\n'
+            << "WPA engine: "
+            << (result->wpa_engine == veritas::analysis::WpaEngineMode::kSouffle
+                    ? "souffle"
+                    : "cpp-emergency")
+            << '\n'
+            << "WPA run: " << result->wpa_run_id << '\n'
             << "Unknowns: " << result->unknowns.size() << '\n';
   return veritas::Status::Ok();
 }

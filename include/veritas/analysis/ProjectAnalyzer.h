@@ -37,11 +37,26 @@ enum class AnalysisCompletion {
   kCompleteWithUnknowns,
 };
 
+// The recursive WPA engine. There is no automatic fallback: selecting the C++
+// engine is explicit and separately identified.
+enum class WpaEngineMode : std::uint8_t {
+  kSouffle,
+  kCppEmergency,
+};
+
 // AnalysisConfig provides budget and tuning parameters for project analysis
 struct AnalysisConfig {
   std::chrono::seconds svf_soft_analysis_budget;
   std::size_t svf_max_graph_nodes;
   std::size_t svf_max_emitted_facts;
+
+  WpaEngineMode wpa_engine;
+  std::chrono::milliseconds wpa_component_timeout;
+  std::uint64_t wpa_component_memory_mb;
+  std::uint32_t wpa_threads;
+  std::string rule_bundle_version;
+  std::string model_bundle_version;
+  bool run_cpp_conformance_oracle;
 
   static AnalysisConfig Default();
 };
@@ -67,6 +82,11 @@ struct ProjectAnalysisResult {
   std::string projection_id;
   std::size_t cpg_node_count = 0;
   std::size_t cpg_edge_count = 0;
+  // WPA outcome. Empty when the run did not complete; wpa_diagnostics carries
+  // the failure reason or degraded-mode marker.
+  std::string wpa_run_id;
+  WpaEngineMode wpa_engine = WpaEngineMode::kSouffle;
+  std::string wpa_diagnostics;
 };
 
 // ProjectAnalyzer orchestrates the full M1→M4→M5→M3 analysis pipeline.

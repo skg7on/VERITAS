@@ -144,14 +144,10 @@ Status CallGraph::AddCall(CallEdge edge) {
     return Status::InvalidArgument(
         "call graph edge requires MUST, MAY, INFERRED, or ASSUMED");
   }
-  auto unknown_it = unknown_calls_.find(edge.caller);
-  if (unknown_it != unknown_calls_.end() &&
-      std::ranges::any_of(unknown_it->second, [&](const auto &unknown) {
-        return unknown.call_site_anchor_id == edge.call_site_anchor_id;
-      })) {
-    return Status::InvalidArgument(
-        "call site cannot be both resolved and unknown");
-  }
+
+  // A call site may name some resolved targets and still carry an unknown
+  // flag: a function pointer's points-to set is often partial. Coexistence is
+  // therefore allowed, not an error.
 
   auto &outgoing = outgoing_[edge.caller];
   auto same_target =
@@ -191,14 +187,9 @@ Status CallGraph::AddUnknownCall(UnknownCallEffect effect) {
   if (!HasFunction(functions_, effect.caller)) {
     return Status::NotFound("unknown call caller is not a vertex");
   }
-  auto outgoing_it = outgoing_.find(effect.caller);
-  if (outgoing_it != outgoing_.end() &&
-      std::ranges::any_of(outgoing_it->second, [&](const auto &edge) {
-        return edge.call_site_anchor_id == effect.call_site_anchor_id;
-      })) {
-    return Status::InvalidArgument(
-        "call site cannot be both resolved and unknown");
-  }
+
+  // A call site may carry both resolved (partial) targets and an unknown flag;
+  // see AddCall.
 
   auto &unknowns = unknown_calls_[effect.caller];
   auto same_site =

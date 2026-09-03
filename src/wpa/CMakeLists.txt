@@ -24,6 +24,8 @@ add_library(veritas_wpa
   SouffleWpaExecutor.cpp
   WpaCoordinator.cpp
   WpaInputMaterializer.cpp
+  WpaOrchestrator.cpp
+  WpaRunRepository.cpp
 )
 
 target_include_directories(veritas_wpa PUBLIC

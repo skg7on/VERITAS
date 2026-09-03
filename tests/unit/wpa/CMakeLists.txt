@@ -83,3 +83,19 @@ target_link_libraries(RelationIoTest PRIVATE
 )
 veritas_add_warnings(RelationIoTest)
 gtest_discover_tests(RelationIoTest DISCOVERY_TIMEOUT 60)
+
+add_executable(WpaRunRepositoryTest WpaRunRepositoryTest.cpp)
+target_link_libraries(WpaRunRepositoryTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(WpaRunRepositoryTest)
+gtest_discover_tests(WpaRunRepositoryTest DISCOVERY_TIMEOUT 60)
+
+add_executable(WpaOrchestratorTest WpaOrchestratorTest.cpp)
+target_link_libraries(WpaOrchestratorTest PRIVATE
+  veritas::wpa
+  GTest::gtest_main
+)
+veritas_add_warnings(WpaOrchestratorTest)
+gtest_discover_tests(WpaOrchestratorTest DISCOVERY_TIMEOUT 60)
