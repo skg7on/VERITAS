@@ -462,8 +462,8 @@ const std::string LLVMUtil::getSourceLoc(const Value* val )
     {
         if (SVFUtil::isa<AllocaInst>(inst))
         {
-#if LLVM_VERSION_MAJOR >= 24
-            // LLVM 24 replaced findDbgDeclares (returning DbgDeclareInst*)
+#if LLVM_VERSION_MAJOR >= 23
+            // LLVM 23 replaced findDbgDeclares (returning DbgDeclareInst*)
             // with findDVRDeclares (returning DbgVariableRecord*).
             for (llvm::DbgVariableRecord *DVR : llvm::findDVRDeclares(const_cast<Instruction*>(inst)))
             {
