@@ -71,6 +71,78 @@ set_tests_properties(SummaryV2PipelineTest PROPERTIES
 add_subdirectory(svf)
 add_subdirectory(cpg)
 
+add_executable(WpaEmergencyModeTest
+  WpaEmergencyModeTest.cpp
+)
+target_link_libraries(WpaEmergencyModeTest
+  PRIVATE
+    veritas_analysis
+    veritas_wpa
+    veritas_test_support
+    veritas_unit_test_support
+)
+add_test(NAME WpaEmergencyModeTest COMMAND WpaEmergencyModeTest)
+set_tests_properties(WpaEmergencyModeTest PROPERTIES
+  TIMEOUT 180
+  LABELS "integration;analysis;wpa"
+)
+
+add_executable(SemanticMemorySvfTest
+  SemanticMemorySvfTest.cpp
+)
+target_link_libraries(SemanticMemorySvfTest
+  PRIVATE
+    veritas_wpa_fixture_support
+    veritas_test_support
+    GTest::gtest_main
+)
+veritas_add_warnings(SemanticMemorySvfTest)
+gtest_discover_tests(SemanticMemorySvfTest DISCOVERY_TIMEOUT 180)
+
+add_executable(SemanticMemorySummaryDbTest
+  SemanticMemorySummaryDbTest.cpp
+)
+target_link_libraries(SemanticMemorySummaryDbTest
+  PRIVATE
+    veritas_wpa_fixture_support
+    veritas_test_support
+    GTest::gtest_main
+)
+veritas_add_warnings(SemanticMemorySummaryDbTest)
+gtest_discover_tests(SemanticMemorySummaryDbTest DISCOVERY_TIMEOUT 180)
+
+add_executable(SemanticDispatchSvfTest
+  SemanticDispatchSvfTest.cpp
+)
+target_link_libraries(SemanticDispatchSvfTest
+  PRIVATE
+    veritas_wpa_fixture_support
+    veritas_wpa
+    veritas_test_support
+    GTest::gtest_main
+)
+target_include_directories(SemanticDispatchSvfTest PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+veritas_add_warnings(SemanticDispatchSvfTest)
+gtest_discover_tests(SemanticDispatchSvfTest DISCOVERY_TIMEOUT 180)
+
+add_executable(SemanticZooFixtureTest
+  SemanticZooFixtureTest.cpp
+)
+target_include_directories(SemanticZooFixtureTest PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+target_link_libraries(SemanticZooFixtureTest
+  PRIVATE
+    veritas_analysis_pipeline
+    veritas_build
+    veritas_test_support
+    GTest::gtest_main
+)
+veritas_add_warnings(SemanticZooFixtureTest)
+gtest_discover_tests(SemanticZooFixtureTest DISCOVERY_TIMEOUT 180)
+
 if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   add_executable(project_analyzer_wpa_integration_test
     ProjectAnalyzerWpaTest.cpp

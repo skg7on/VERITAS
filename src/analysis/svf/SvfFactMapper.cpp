@@ -30,7 +30,9 @@
 #include <Graphs/SVFGNode.h>
 #include <Graphs/CallGraph.h>
 #include <Util/Casting.h>
+#include <llvm/BinaryFormat/Dwarf.h>
 #include <llvm/IR/DataLayout.h>
+#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Value.h>
@@ -72,6 +74,97 @@ bool IsPointer(const SVF::SVFValue* var, const SvfSessionView& view) {
   return llvm_value && llvm_value->getType()->isPointerTy();
 }
 
+// At -O0, Clang commonly spills a function-pointer parameter into a stack slot
+// and reloads it before the indirect call. Recover the single stored value so
+// callback classification keys off the stable origin, but stop as soon as the
+// slot shape admits multiple or non-store writers.
+const ::llvm::Value* RecoverSingleStoreSlotValue(const ::llvm::Value* value) {
+  const auto* load = ::llvm::dyn_cast<::llvm::LoadInst>(value);
+  if (!load) {
+    return value;
+  }
+  const auto* slot = ::llvm::dyn_cast<::llvm::AllocaInst>(
+      load->getPointerOperand()->stripPointerCasts());
+  if (!slot) {
+    return value;
+  }
+
+  const ::llvm::Value* stored = nullptr;
+  for (const ::llvm::User* user : slot->users()) {
+    if (const auto* slot_load = ::llvm::dyn_cast<::llvm::LoadInst>(user)) {
+      if (slot_load->getPointerOperand()->stripPointerCasts() != slot) {
+        return value;
+      }
+      continue;
+    }
+    const auto* store = ::llvm::dyn_cast<::llvm::StoreInst>(user);
+    if (!store || store->getPointerOperand()->stripPointerCasts() != slot) {
+      return value;
+    }
+    if (stored != nullptr) {
+      return value;
+    }
+    stored = store->getValueOperand();
+  }
+  return stored != nullptr ? stored : value;
+}
+
+const ::llvm::DIType* StripDebugTypeAliases(const ::llvm::DIType* type) {
+  while (const auto* derived =
+             ::llvm::dyn_cast_or_null<::llvm::DIDerivedType>(type)) {
+    switch (derived->getTag()) {
+      case ::llvm::dwarf::DW_TAG_typedef:
+      case ::llvm::dwarf::DW_TAG_const_type:
+      case ::llvm::dwarf::DW_TAG_volatile_type:
+      case ::llvm::dwarf::DW_TAG_restrict_type:
+      case ::llvm::dwarf::DW_TAG_atomic_type:
+        type = derived->getBaseType();
+        continue;
+      default:
+        return type;
+    }
+  }
+  return type;
+}
+
+bool IsFunctionPointerDebugType(const ::llvm::DIType* type) {
+  type = StripDebugTypeAliases(type);
+  const auto* pointer = ::llvm::dyn_cast_or_null<::llvm::DIDerivedType>(type);
+  if (!pointer || pointer->getTag() != ::llvm::dwarf::DW_TAG_pointer_type) {
+    return false;
+  }
+  return ::llvm::isa_and_nonnull<::llvm::DISubroutineType>(
+      StripDebugTypeAliases(pointer->getBaseType()));
+}
+
+bool IsFunctionPointerFormal(const ::llvm::Argument& argument) {
+  const ::llvm::DISubprogram* subprogram =
+      argument.getParent()->getSubprogram();
+  if (!subprogram || !subprogram->getType()) {
+    return false;
+  }
+  const auto parameter_types = subprogram->getType()->getTypeArray();
+  const unsigned parameter_index = argument.getArgNo() + 1;
+  return parameter_index < parameter_types.size() &&
+         IsFunctionPointerDebugType(parameter_types[parameter_index]);
+}
+
+// A callback is an indirect call whose stable LLVM origin is a formal whose
+// source-level debug type is a pointer to a subroutine. Checking the declared
+// formal type is required with opaque LLVM pointers: merely finding an
+// Argument would also misclassify a data pointer explicitly cast at the call.
+// Loads from globals, tables, and local forwarding slots intentionally remain
+// ordinary indirect calls. Virtual-call classification is handled
+// independently by CallICFGNode::isVirtualCall at the call site.
+bool IsFormalFunctionPointerCall(const ::llvm::CallBase& call) {
+  const ::llvm::Value* origin =
+      RecoverSingleStoreSlotValue(call.getCalledOperand()->stripPointerCasts());
+  origin = origin->stripPointerCasts();
+  const auto* argument = ::llvm::dyn_cast<::llvm::Argument>(origin);
+  return argument && argument->getParent() == call.getFunction() &&
+         IsFunctionPointerFormal(*argument);
+}
+
 // Map an SVF alias result to a semantic AliasKind and independent epistemic
 // state. MustAlias/NoAlias are definite (kMust); MayAlias/PartialAlias are
 // may-results (kMay); anything unexpected degrades to kUnknownAlias/kUnknown.
@@ -108,6 +201,25 @@ struct AliasPointer {
   StableId value_id;  // kValueRef, the dedup/sort key
   semantic::MemoryLocation location;
 };
+
+// Andersen normally reports overlap as MAY even when both pointer values have
+// the same one-element points-to set. That one resolved, non-black-hole
+// object is a proof stronger than overlap alone: both values name the same
+// abstract object in this analysis run. Empty, multi-object, and black-hole
+// sets remain non-proofs and therefore cannot be promoted.
+bool ResolvesToOneProvenObject(const AliasPointer& left,
+                               const AliasPointer& right,
+                               const SvfSessionView& view) {
+  const SVF::PointsTo& left_points = view.andersen->getPts(left.var->getId());
+  const SVF::PointsTo& right_points =
+      view.andersen->getPts(right.var->getId());
+  if (left_points.count() != 1 || right_points.count() != 1 ||
+      left_points != right_points) {
+    return false;
+  }
+  const SVF::NodeID object = *left_points.begin();
+  return object != view.svf_ir->getBlackHoleNode();
+}
 
 // Resolve an SVF pointer var into an AliasPointer, or nullopt when it is not a
 // pointer or cannot be mapped to a stable value/location identity.
@@ -297,6 +409,11 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
         const AliasPointer& right = *ordered[j];
         AliasObservation observation =
             MapAliasResult(view.andersen->alias(left.var, right.var));
+        if (observation.kind == semantic::AliasKind::kMayAlias &&
+            ResolvesToOneProvenObject(left, right, view)) {
+          observation = {semantic::AliasKind::kMustAlias,
+                         semantic::EpistemicState::kMust};
+        }
         if (budget.TryEmit()) {
           facts.aliases.push_back(semantic::NormalizedAlias{
               .left = left.location,
@@ -357,8 +474,11 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
       }
 
       const semantic::DispatchKind dispatch =
-          call_block->isVirtualCall() ? semantic::DispatchKind::kVirtual
-                                      : semantic::DispatchKind::kIndirect;
+          call_block->isVirtualCall()
+              ? semantic::DispatchKind::kVirtual
+              : (IsFormalFunctionPointerCall(*call)
+                     ? semantic::DispatchKind::kCallback
+                     : semantic::DispatchKind::kIndirect);
 
       const SVF::CallGraph::FunctionSet* candidates = nullptr;
       if (callgraph && callgraph->hasIndCSCallees(call_block)) {

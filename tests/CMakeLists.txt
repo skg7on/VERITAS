@@ -26,6 +26,21 @@ function(veritas_m9_entry_test NAME CRITERION)
 endfunction()
 
 add_subdirectory(support)
+
+add_executable(WpaFixtureHarnessTest
+  support/WpaFixtureHarnessTest.cpp
+)
+target_link_libraries(WpaFixtureHarnessTest
+  PRIVATE
+    veritas_wpa_fixture_support
+    GTest::gtest_main
+)
+add_test(NAME WpaFixtureHarnessTest COMMAND WpaFixtureHarnessTest)
+set_tests_properties(WpaFixtureHarnessTest PROPERTIES
+  TIMEOUT 180
+  LABELS "integration;analysis;wpa"
+)
+
 add_subdirectory(unit)
 add_subdirectory(integration)
 add_subdirectory(ci)
