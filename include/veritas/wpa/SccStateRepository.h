@@ -24,8 +24,8 @@
 #include "veritas/summary/v1/summary.pb.h"
 #include "veritas/summarydb/MetadataStore.h"
 #include "veritas/wpa/CallGraph.h"
-#include "veritas/wpa/FixpointEngine.h"
 #include "veritas/wpa/SccGraph.h"
+#include "veritas/wpa/SccResult.h"
 
 namespace veritas::wpa {
 

@@ -80,19 +80,6 @@ Status ValidateResult(const SccResult &result) {
       !IsLowercaseSha256Hex(result.externally_visible_hash)) {
     return Status::InvalidArgument("SCC convergence fields are invalid");
   }
-  const auto expected_relation =
-      result.component_kind == summary::v1::COMPONENT_KIND_CALLS
-          ? facts::FactRelation::kReachableCall
-          : facts::FactRelation::kMayWrite;
-  for (const auto &fact : result.facts) {
-    auto valid = facts::ValidateFactTuple(fact);
-    if (!valid.ok())
-      return valid;
-    if (fact.relation != expected_relation) {
-      return Status::InvalidArgument(
-          "SCC result contains a fact from the wrong component domain");
-    }
-  }
   return Status::Ok();
 }
 

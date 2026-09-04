@@ -86,8 +86,7 @@ protected:
                      .fixpoint_hash = std::move(fixpoint),
                      .externally_visible_hash = std::move(external),
                      .iteration_count = iterations,
-                     .status = SccStatus::kConverged,
-                     .facts = {}};
+                     .status = SccStatus::kConverged};
   }
 
   std::filesystem::path directory_;

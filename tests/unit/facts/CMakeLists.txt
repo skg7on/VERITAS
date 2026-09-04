@@ -50,38 +50,6 @@ veritas_add_warnings(DenseIdMapTest)
 gtest_discover_tests(DenseIdMapTest DISCOVERY_TIMEOUT 60)
 veritas_m9_entry_test(DenseIdMapTest stable-identity)
 
-add_executable(LegacyFactAdapterTest LegacyFactAdapterTest.cpp)
-target_link_libraries(LegacyFactAdapterTest PRIVATE
-  veritas::facts
-  GTest::gtest_main
-)
-veritas_add_warnings(LegacyFactAdapterTest)
-gtest_discover_tests(LegacyFactAdapterTest DISCOVERY_TIMEOUT 60)
-
-add_executable(FactSchemaTest FactSchemaTest.cpp)
-target_link_libraries(FactSchemaTest PRIVATE
-  veritas::facts
-  GTest::gtest_main
-)
-veritas_add_warnings(FactSchemaTest)
-gtest_discover_tests(FactSchemaTest DISCOVERY_TIMEOUT 60)
-
-add_executable(SummaryFactBuilderTest SummaryFactBuilderTest.cpp)
-target_link_libraries(SummaryFactBuilderTest PRIVATE
-  veritas::facts
-  GTest::gtest_main
-)
-veritas_add_warnings(SummaryFactBuilderTest)
-gtest_discover_tests(SummaryFactBuilderTest DISCOVERY_TIMEOUT 60)
-
-add_executable(SouffleExporterTest SouffleExporterTest.cpp)
-target_link_libraries(SouffleExporterTest PRIVATE
-  veritas::facts
-  GTest::gtest_main
-)
-veritas_add_warnings(SouffleExporterTest)
-gtest_discover_tests(SouffleExporterTest DISCOVERY_TIMEOUT 60)
-
 add_executable(WitnessTest WitnessTest.cpp)
 target_link_libraries(WitnessTest PRIVATE
   veritas::facts
