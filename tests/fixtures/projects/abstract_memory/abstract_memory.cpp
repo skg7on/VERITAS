@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Mutual-recursion fixture. is_odd and is_even form a single SCC, so
-// reachability from either requires the local transitive rule to close the
-// cycle, not just a direct call edge.
+// Abstract-memory fixture. write_first writes a single byte of a struct field;
+// caller reaches that write through a resolved call, so may-write facts must
+// flow from write_first up to caller.
 
-int is_even(int n);
+struct Buffer {
+  char data[64];
+};
 
-int is_odd(int n) {
-  return n == 0 ? 0 : is_even(n - 1);
+void write_first(Buffer* b, char c) {
+  b->data[0] = c;
 }
 
-int is_even(int n) {
-  return n == 0 ? 1 : is_odd(n - 1);
+void caller(Buffer* b) {
+  write_first(b, 'x');
 }

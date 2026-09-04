@@ -1,10 +1,7 @@
 [
   {
     "directory": "@PROJECT_ROOT@",
-    "arguments": [
-      "clang", "-std=c11", "-O0", "-g", "-fno-inline", "-c",
-      "callback_dispatch.c"
-    ],
-    "file": "callback_dispatch.c"
+    "arguments": ["clang++", "-std=c++20", "-c", "callback_dispatch.cpp"],
+    "file": "callback_dispatch.cpp"
   }
 ]

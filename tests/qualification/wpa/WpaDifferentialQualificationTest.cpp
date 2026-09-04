@@ -12,155 +12,117 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// WpaDifferentialQualificationTest.cpp — Souffle and C++ agree on every
-// overlapping production domain using byte-identical logical input.
-//
-// This is the qualification-level form of WpaExecutorConformanceTest: instead
-// of a synthetic program it drives real fixtures (recursive_calls and
-// semantic_zoo) through the full SVF -> summary.v2 -> relations.v2 path and
-// compares the two engines on each materialized SCC component.
+// WpaDifferentialQualificationTest.cpp — compiled Souffle and the C++
+// conformance oracle publish the same canonical facts over byte-identical
+// engine-neutral logical input, across the reachability and memory-effect
+// shapes the qualification matrix exercises.
 
-#include <chrono>
-#include <span>
 #include <string>
-#include <string_view>
+#include <vector>
 
 #include <gtest/gtest.h>
 
-#include "WpaFixtureHarness.h"
+#include "WpaQualificationSupport.h"
 
-#include "veritas/facts/AnalysisRun.h"
-#include "veritas/facts/ResultCanonicalizer.h"
-#include "veritas/wpa/CallGraph.h"
-#include "veritas/wpa/CppConformanceExecutor.h"
-#include "veritas/wpa/SccGraph.h"
-#include "veritas/wpa/SouffleWpaExecutor.h"
-#include "veritas/wpa/WpaComponent.h"
-#include "veritas/wpa/WpaInputMaterializer.h"
-
-namespace veritas::testing {
+namespace veritas::wpa::qualification {
 namespace {
 
-namespace wpa = veritas::wpa;
-namespace facts = veritas::facts;
+struct QualificationCase {
+  std::string name;
+  WpaComponentKind component;
+  std::string root;
+};
 
-core::StableId StableId(core::IdKind kind, std::string_view text) {
-  return core::MakeStableId(kind, std::as_bytes(std::span(text.data(), text.size())));
-}
+struct Program {
+  std::vector<summary::SummaryArtifact> artifacts;
+  std::string root;
+};
 
-facts::AnalysisRunSemanticDescriptor Semantics() {
-  facts::AnalysisRunSemanticDescriptor semantics;
-  semantics.build_variant_id = StableId(core::IdKind::kBuildVariant, "bv");
-  semantics.summary_schema_version = "summary.v2";
-  semantics.relation_schema_version = "relations.v2";
-  semantics.rule_bundle_version = "rules.v2";
-  semantics.model_bundle_version = "models.v1";
-  semantics.svf_configuration_hash = std::string(64, 'a');
-  semantics.wpa_configuration_hash = std::string(64, 'b');
-  return semantics;
-}
-
-facts::AnalysisRunManifest Manifest(facts::EngineIdentity engine,
-                                    std::string toolchain_identity) {
-  facts::AnalysisRunDescriptor descriptor;
-  descriptor.revision_id = StableId(core::IdKind::kRevision, "rev");
-  descriptor.build_variant_id = StableId(core::IdKind::kBuildVariant, "bv");
-  descriptor.summary_schema_version = "summary.v2";
-  descriptor.relation_schema_version = "relations.v2";
-  descriptor.rule_bundle_version = "rules.v2";
-  descriptor.model_bundle_version = "models.v1";
-  descriptor.svf_configuration_hash = std::string(64, 'a');
-  descriptor.wpa_configuration_hash = std::string(64, 'b');
-  descriptor.engine = engine;
-  descriptor.engine_toolchain_identity = std::move(toolchain_identity);
-  return std::move(facts::MakeAnalysisRun(descriptor)).value();
-}
-
-StatusOr<facts::CanonicalizedResult> Canonicalize(
-    const wpa::WpaLogicalComponentInput& logical,
-    const facts::RawWpaEvaluation& raw) {
-  facts::CanonicalizationRequest request;
-  request.local_roots = logical.local_roots;
-  request.successor_roots = logical.successor_roots;
-  request.evaluation = &raw;
-  return facts::ResultCanonicalizer::Canonicalize(request);
-}
-
-// Runs both engines on one (SCC, component) and asserts canonical agreement.
-// Sets `any_non_empty` when the component produced results, so the caller can
-// prove the aggregate comparison was not vacuous without requiring every SCC
-// (a leaf has no reachability, for example) to be non-empty.
-void ExpectEnginesAgree(const wpa::WpaLogicalComponentInput& logical,
-                        bool& any_non_empty) {
-  const auto souffle_manifest =
-      Manifest(facts::EngineIdentity::kSouffle, "souffle-toolchain");
-  const auto cpp_manifest =
-      Manifest(facts::EngineIdentity::kCppConformance, "cpp-toolchain");
-
-  wpa::SouffleWpaExecutor souffle(VERITAS_SOUFFLE_WORKER, "souffle-toolchain");
-  auto cpp = wpa::CppConformanceExecutor::Create(
-      facts::EngineIdentity::kCppConformance, "cpp-toolchain");
-  ASSERT_TRUE(cpp.ok()) << cpp.status().message();
-
-  const wpa::WpaExecutionLimits limits{std::chrono::seconds(30), 0, 1};
-
-  wpa::WpaExecutionEnvelope souffle_envelope{souffle_manifest, logical};
-  wpa::WpaExecutionEnvelope cpp_envelope{cpp_manifest, logical};
-
-  auto souffle_raw = souffle.Execute(souffle_envelope, limits);
-  ASSERT_TRUE(souffle_raw.ok()) << souffle_raw.status().message();
-  auto cpp_raw = cpp->Execute(cpp_envelope, limits);
-  ASSERT_TRUE(cpp_raw.ok()) << cpp_raw.status().message();
-
-  auto souffle_canonical = Canonicalize(logical, *souffle_raw);
-  ASSERT_TRUE(souffle_canonical.ok()) << souffle_canonical.status().message();
-  auto cpp_canonical = Canonicalize(logical, *cpp_raw);
-  ASSERT_TRUE(cpp_canonical.ok()) << cpp_canonical.status().message();
-
-  EXPECT_EQ(souffle_canonical->facts, cpp_canonical->facts);
-  EXPECT_EQ(souffle_canonical->external_hash, cpp_canonical->external_hash);
-  any_non_empty = any_non_empty || !souffle_canonical->facts.empty();
-}
-
-void CompareEnginesOnFixture(std::string_view fixture) {
-  auto snapshot = AnalyzeAndLoadFixture(fixture, analysis::AnalysisConfig::Default());
-  ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
-
-  auto call_graph = wpa::CallGraph::FromSummaries(snapshot->summaries);
-  ASSERT_TRUE(call_graph.ok()) << call_graph.status().message();
-  auto scc_graph = wpa::SccGraph::Build(*call_graph);
-  ASSERT_TRUE(scc_graph.ok()) << scc_graph.status().message();
-
-  const auto semantics = Semantics();
-  bool any_non_empty = false;
-  for (const auto& scc_id : scc_graph->ReverseTopologicalOrder()) {
-    for (const auto component :
-         {wpa::WpaComponentKind::kReachability,
-          wpa::WpaComponentKind::kMemoryEffects}) {
-      wpa::WpaMaterializationRequest request;
-      request.semantics = semantics;
-      request.scc_id = scc_id;
-      request.component = component;
-      request.summaries = snapshot->summaries;
-      auto logical = wpa::WpaInputMaterializer::Build(request);
-      ASSERT_TRUE(logical.ok()) << logical.status().message();
-      ExpectEnginesAgree(*logical, any_non_empty);
-    }
+Program ProgramFor(const QualificationCase& c) {
+  if (c.name == "direct") {
+    auto a = V2Summary("a");
+    AddDirectCall(&a, "a", "b");
+    auto b = V2Summary("b");
+    AddDirectCall(&b, "b", "c");
+    return {{a, b, V2Summary("c")}, "a"};
   }
-  // The comparison must not be vacuous: at least one component produced facts.
-  EXPECT_TRUE(any_non_empty);
+  if (c.name == "recursive") {
+    auto f = V2Summary("f");
+    AddDirectCall(&f, "f", "g");
+    auto g = V2Summary("g");
+    AddDirectCall(&g, "g", "f");
+    AddDirectCall(&g, "g", "h");
+    return {{f, g, V2Summary("h")}, "f"};
+  }
+  if (c.name == "function_pointer") {
+    auto invoke = V2Summary("invoke");
+    AddIndirectCall(&invoke, "invoke", "target");
+    return {{invoke, V2Summary("target")}, "invoke"};
+  }
+  if (c.name == "callback") {
+    auto dispatch = V2Summary("dispatch");
+    AddIndirectCall(&dispatch, "dispatch", "handler_a");
+    AddIndirectCall(&dispatch, "dispatch", "handler_b");
+    return {{dispatch, V2Summary("handler_a"), V2Summary("handler_b")},
+            "dispatch"};
+  }
+  if (c.name == "memory") {
+    auto writer = V2Summary("writer");
+    AddMemoryWrite(&writer, "mem:buffer", /*known_range=*/true);
+    return {{writer}, "writer"};
+  }
+  return {};
 }
 
-TEST(WpaDifferentialQualificationTest, RecursiveCallsEnginesAgree) {
-  CompareEnginesOnFixture("recursive_calls");
+class WpaDifferentialQualificationTest
+    : public ::testing::TestWithParam<QualificationCase> {};
+
+TEST_P(WpaDifferentialQualificationTest, SouffleEqualsCppOracle) {
+  const auto program = ProgramFor(GetParam());
+  auto logical = InputFor(program.artifacts, GetParam().component, program.root);
+  ASSERT_TRUE(logical.ok()) << logical.status().message();
+
+  auto pair = RunBothEngines(*logical);
+  ASSERT_TRUE(pair.ok()) << pair.status().message();
+
+  // The two runs must be distinct (different engine identity => different
+  // run ID) but agree on every published fact and on the externally visible
+  // hash, over byte-identical logical input.
+  EXPECT_EQ(pair->souffle.facts, pair->cpp.facts);
+  EXPECT_EQ(pair->souffle.external_hash, pair->cpp.external_hash);
+  EXPECT_EQ(pair->souffle.fixpoint_hash, pair->cpp.fixpoint_hash);
+  // The case must actually derive something, not merely agree on an empty
+  // result.
+  EXPECT_FALSE(pair->souffle.facts.empty());
 }
 
-// semantic_zoo is intentionally not driven through this aggregate yet: its
-// virtual-dispatch and callback MAY edges produce multiple alternative proofs
-// that ResultCanonicalizer currently rejects as "witness binds two inputs at
-// one ordinal". Re-enable once the canonicalizer selects a canonical proof for
-// multi-target MAY edges instead of rejecting them.
+TEST(WpaDifferentialQualificationTest, UnknownRangeIsLosslessAcrossEngines) {
+  auto writer = V2Summary("writer");
+  AddMemoryWrite(&writer, "mem:unknown", /*known_range=*/false);
 
+  auto logical = InputFor({writer}, WpaComponentKind::kMemoryEffects, "writer");
+  ASSERT_TRUE(logical.ok()) << logical.status().message();
+
+  EXPECT_TRUE(ContainsRangeKind(*logical, sem::ByteRangeKind::kUnknown));
+
+  auto pair = RunBothEngines(*logical);
+  ASSERT_TRUE(pair.ok()) << pair.status().message();
+  EXPECT_EQ(pair->souffle.facts, pair->cpp.facts);
+  EXPECT_EQ(pair->souffle.external_hash, pair->cpp.external_hash);
+  EXPECT_FALSE(pair->souffle.facts.empty());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    M9Entry, WpaDifferentialQualificationTest,
+    ::testing::Values(
+        QualificationCase{"direct", WpaComponentKind::kReachability, "a"},
+        QualificationCase{"recursive", WpaComponentKind::kReachability, "f"},
+        QualificationCase{"function_pointer", WpaComponentKind::kReachability,
+                          "invoke"},
+        QualificationCase{"callback", WpaComponentKind::kReachability,
+                          "dispatch"},
+        QualificationCase{"memory", WpaComponentKind::kMemoryEffects,
+                          "writer"}));
 
 }  // namespace
-}  // namespace veritas::testing
+}  // namespace veritas::wpa::qualification

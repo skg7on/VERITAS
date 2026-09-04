@@ -12,16 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Mutual-recursion fixture. is_odd and is_even form a single SCC, so
-// reachability from either requires the local transitive rule to close the
-// cycle, not just a direct call edge.
+// Unknown-external fixture. `process` calls an undefined external symbol, which
+// surfaces as an UNKNOWN dispatch target rather than a resolved call edge.
 
-int is_even(int n);
+extern int vendor_validate(const char* data);
 
-int is_odd(int n) {
-  return n == 0 ? 0 : is_even(n - 1);
-}
-
-int is_even(int n) {
-  return n == 0 ? 1 : is_odd(n - 1);
+int process(const char* input) {
+  return vendor_validate(input);
 }

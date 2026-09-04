@@ -78,6 +78,10 @@ vcpkg_installed/
 Testing/
 .cache/
 
+# Python
+__pycache__/
+*.py[cod]
+
 # Claude Code worktrees
 .claude/worktrees/
 

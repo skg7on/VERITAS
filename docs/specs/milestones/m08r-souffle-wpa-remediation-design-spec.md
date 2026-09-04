@@ -1,6 +1,6 @@
 # M8R Souffle WPA Remediation Bridge Design Spec
 
-**Status:** Approved target; implementation and qualification pending
+**Status:** Delivered
 **Milestone:** M8R.1-M8R.5
 **Historical predecessor:** M8 (implemented; unchanged)
 **Entry gate for:** M9
@@ -16,11 +16,11 @@ engine and an optional file-based Souffle comparison path. This specification
 does not relabel that history. It defines the approved remediation bridge that
 must be delivered after M8 and before M9.
 
-The M8R target has five ordered gates. None is considered delivered merely
-because it is described here. Implementation must fill the delivery record in
-section 8 with reviewed commits and exact executable test labels. In
-particular, this document does **not** claim that M8R.4 production Souffle has
-shipped.
+The M8R target has five ordered gates, all delivered. The delivery record in
+section 8 lists the reviewed merge and the executable test labels for each
+gate. M8R.4 production Souffle has shipped: compiled Souffle is the normal
+production recursive WPA executor, and C++ is only a conformance oracle or an
+explicitly selected `cpp-emergency` engine.
 
 # 2. Architectural boundary and ownership
 
@@ -241,9 +241,9 @@ label name must not appear here as evidence before the label exists.
 | --- | --- | --- | --- |
 | M8R.1 | Delivered | `fe9439e` (PR #64) | Full suite 232/232 passed, 0 failures, at merge. No M9 gate labels yet; Task 16 defines them. |
 | M8R.2 | Delivered | `4b81cb8` (PR #76) | Full suite 255/255 passed, 0 failures, at merge. No M9 gate labels yet; Task 16 defines them. |
-| M8R.3 | Pending | TBD by implementation | TBD by implementation |
-| M8R.4 | Pending; not shipped | TBD by implementation | TBD by implementation |
-| M8R.5 | Pending | TBD by implementation | `summary-v2`, `indirect-calls`, `stable-identity`, `relations-v2`, `souffle-production`, `engine-conformance`, `witness-closure`, `failure-atomicity`, `run-identity`, `documentation-consistency`; exact test membership and gate command TBD by implementation |
+| M8R.3 | Delivered | `638eb1e` (PR #78) | `RelationSchemaTest`, `WpaInputMaterializerTest`, `WpaExecutorConformanceTest` at merge |
+| M8R.4 | Delivered | `8faf463` (PR #83), `654f08b` (PR #87) | `SouffleWpaExecutorTest`, `WpaExecutorConformanceTest`, `ProjectAnalyzerWpaTest`, `SouffleProvenanceTest` at merge |
+| M8R.5 | Delivered | this PR | `wpa-qualification` (five aggregates) plus the ten `m9-entry` criterion labels; `python3 tools/check_m9_entry.py --build-dir build` passes all ten |
 
 M8R.2 recorded three deferrals. Their disposition, so a later reader does not
 have to reconstruct it from pull-request discussion:

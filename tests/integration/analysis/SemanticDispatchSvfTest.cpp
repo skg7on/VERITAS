@@ -209,7 +209,7 @@ void ExpectSingleStableCall(const LocalFixtureSnapshot& snapshot,
 }
 
 TEST(SemanticDispatchSvfTest, DistinguishesDirectIndirectCallbackAndVirtual) {
-  auto callbacks = AnalyzeAndLoadFixture("callback_dispatch",
+  auto callbacks = AnalyzeAndLoadFixture("callback_dispatch_semantic",
                                          analysis::AnalysisConfig::Default());
   ASSERT_TRUE(callbacks.ok()) << callbacks.status().message();
   const std::string callback_left =
@@ -229,7 +229,7 @@ TEST(SemanticDispatchSvfTest, DistinguishesDirectIndirectCallbackAndVirtual) {
                          v2::DISPATCH_KIND_INDIRECT,
                          v1::EPISTEMIC_STATE_UNKNOWN, {});
 
-  auto callback_mapping = MapFixtureWithSvf("callback_dispatch");
+  auto callback_mapping = MapFixtureWithSvf("callback_dispatch_semantic");
   ASSERT_TRUE(callback_mapping.ok()) << callback_mapping.status().message();
   ExpectSvfCallSite(*callback_mapping, "callback_parameter",
                     sem::DispatchKind::kCallback);
@@ -261,7 +261,7 @@ TEST(SemanticDispatchSvfTest, DistinguishesDirectIndirectCallbackAndVirtual) {
 }
 
 TEST(SccGraphTest, FocusedRecursionHasExpectedSccShapes) {
-  auto artifacts = AnalyzeAndLoadFixture("recursive_calls",
+  auto artifacts = AnalyzeAndLoadFixture("recursive_calls_semantic",
                                          analysis::AnalysisConfig::Default());
   ASSERT_TRUE(artifacts.ok()) << artifacts.status().message();
   auto graph = wpa::CallGraph::FromSummaries(artifacts->summaries);
@@ -305,7 +305,7 @@ TEST(SccGraphTest, FocusedRecursionHasExpectedSccShapes) {
 }
 
 TEST(CallGraphTest, UnknownExternalDoesNotFanOut) {
-  auto artifacts = AnalyzeAndLoadFixture("unknown_external",
+  auto artifacts = AnalyzeAndLoadFixture("unknown_external_semantic",
                                          analysis::AnalysisConfig::Default());
   ASSERT_TRUE(artifacts.ok()) << artifacts.status().message();
   auto graph = wpa::CallGraph::FromSummaries(artifacts->summaries);

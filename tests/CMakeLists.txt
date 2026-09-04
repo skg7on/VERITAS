@@ -17,6 +17,14 @@
 # Root of the VERITAS test tree. Only added when VERITAS_BUILD_TESTS=ON, and
 # only after enable_testing() has been called from the top-level CMake file.
 
+# Registers one aggregate M9 gate member: a CTest test named after its
+# executable, carrying the composite m9-entry label and its criterion label.
+# The executable must already exist (created via add_executable).
+function(veritas_m9_entry_test NAME CRITERION)
+  add_test(NAME ${NAME} COMMAND $<TARGET_FILE:${NAME}>)
+  set_tests_properties(${NAME} PROPERTIES LABELS "m9-entry;${CRITERION}")
+endfunction()
+
 add_subdirectory(support)
 
 add_executable(WpaFixtureHarnessTest
@@ -35,8 +43,11 @@ set_tests_properties(WpaFixtureHarnessTest PROPERTIES
 
 add_subdirectory(unit)
 add_subdirectory(integration)
-add_subdirectory(qualification)
 add_subdirectory(ci)
+
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  add_subdirectory(qualification)
+endif()
 
 find_program(VERITAS_BASH_EXECUTABLE bash REQUIRED)
 

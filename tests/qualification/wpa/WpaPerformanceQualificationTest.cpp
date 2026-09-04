@@ -12,83 +12,88 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// WpaPerformanceQualificationTest.cpp — the recursive_calls fixture completes
-// under the checked-in resource ceilings and reproduces its semantic hashes
-// across warmed iterations.
+// WpaPerformanceQualificationTest.cpp — repeated production Souffle analysis
+// of a recursive fixture stays within the checked-in resource ceilings and
+// produces the same WPA run identity every time.
 
-#include <chrono>
-#include <cstdint>
-#include <filesystem>
-#include <string>
-
-#include <gtest/gtest.h>
 #include <sys/resource.h>
 
+#include <algorithm>
+#include <chrono>
+#include <filesystem>
+#include <string>
+#include <vector>
+
+#include <gtest/gtest.h>
+
 #include "ProjectFixture.h"
+#include "veritas/analysis/ProjectAnalysisRequest.h"
 #include "veritas/analysis/ProjectAnalyzer.h"
 
-namespace veritas::testing {
+namespace veritas::analysis {
 namespace {
 
-namespace analysis = veritas::analysis;
+// Mirrors tests/qualification/wpa/performance-ceilings.json. The ceiling is
+// deliberately generous: it must fail on an order-of-magnitude regression, not
+// on ordinary machine noise.
+constexpr long long kMaxMedianWallMs = 30000;
+constexpr long long kMaxPeakRssMb = 2048;
 
-// Checked-in performance ceilings (see the qualification design spec §10).
-constexpr std::int64_t kMaximumWallTimeMs = 30000;
-constexpr std::int64_t kMaximumPeakRssMb = 2048;
-
-std::int64_t PeakRssMb() {
-  struct rusage usage;
+long long CurrentPeakRssMb() {
+  struct rusage usage {};
   getrusage(RUSAGE_SELF, &usage);
+  // ru_maxrss is bytes on macOS (darwin), kilobytes on Linux.
 #if defined(__APPLE__)
-  // Darwin reports ru_maxrss in bytes.
-  return static_cast<std::int64_t>(usage.ru_maxrss) / (1024 * 1024);
+  return static_cast<long long>(usage.ru_maxrss) / (1024 * 1024);
 #else
-  // Linux reports ru_maxrss in kibibytes.
-  return static_cast<std::int64_t>(usage.ru_maxrss) / 1024;
+  return static_cast<long long>(usage.ru_maxrss) / 1024;
 #endif
 }
 
-TEST(WpaPerformanceQualificationTest, RecursiveCallsWithinResourceCeilings) {
-  const std::filesystem::path root = FixtureProject("recursive_calls");
-  const analysis::ProjectAnalysisRequest request{
-      .project_root = root,
-      .output_root = root / ".veritas",
-  };
+ProjectAnalysisRequest FixtureRequest() {
+  const auto root = testing::FixtureProject("recursive_calls");
+  return ProjectAnalysisRequest{.project_root = root,
+                                .output_root = root / ".veritas"};
+}
 
-  analysis::ProjectAnalyzer analyzer;
+TEST(WpaPerformanceQualificationTest, WithinCeilingsAndDeterministic) {
+  constexpr int kIterations = 5;
 
-  // One warm-up run so the first measured iteration is not dominated by
-  // one-time initialization (Souffle worker spawn, SVF registry setup).
-  auto warm = analyzer.AnalyzeProject(request, analysis::AnalysisConfig::Default());
-  ASSERT_TRUE(warm.ok()) << warm.status().message();
+  std::vector<long long> wall_ms;
+  std::vector<std::string> run_ids;
 
-  const auto started = std::chrono::steady_clock::now();
-  auto result = analyzer.AnalyzeProject(request, analysis::AnalysisConfig::Default());
-  const auto elapsed =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - started);
-  ASSERT_TRUE(result.ok()) << result.status().message();
+  for (int i = 0; i < kIterations; ++i) {
+    ProjectAnalyzer analyzer;
+    const auto start = std::chrono::steady_clock::now();
+    auto result = analyzer.AnalyzeProject(FixtureRequest(),
+                                          AnalysisConfig::Default());
+    const auto end = std::chrono::steady_clock::now();
+    ASSERT_TRUE(result.ok()) << result.status().message();
 
-  EXPECT_FALSE(result->wpa_run_id.empty());
-  EXPECT_FALSE(result->published_summary_ids.empty());
+    wall_ms.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(
+                          end - start)
+                          .count());
+    run_ids.push_back(result->wpa_run_id);
 
-  // Resource ceilings: the test fails only when a checked-in ceiling is
-  // exceeded, never on absolute timing.
-  EXPECT_LT(elapsed.count(), kMaximumWallTimeMs)
-      << "wall time " << elapsed.count() << "ms exceeded "
-      << kMaximumWallTimeMs << "ms";
-  const auto peak_rss_mb = PeakRssMb();
-  EXPECT_LT(peak_rss_mb, kMaximumPeakRssMb)
-      << "peak RSS " << peak_rss_mb << "MB exceeded "
-      << kMaximumPeakRssMb << "MB";
-
-  // Warmed iterations must reproduce the same run identity.
-  for (int i = 0; i < 3; ++i) {
-    auto again = analyzer.AnalyzeProject(request, analysis::AnalysisConfig::Default());
-    ASSERT_TRUE(again.ok()) << again.status().message();
-    EXPECT_EQ(again->wpa_run_id, result->wpa_run_id);
+    // Production Souffle is the engine for every run.
+    EXPECT_EQ(result->wpa_engine, WpaEngineMode::kSouffle);
+    // The same semantic input yields the same WPA run identity every time.
+    if (i > 0) {
+      EXPECT_EQ(run_ids[i], run_ids[0]);
+    }
   }
+
+  std::sort(wall_ms.begin(), wall_ms.end());
+  const long long median_wall = wall_ms[wall_ms.size() / 2];
+  EXPECT_LT(median_wall, kMaxMedianWallMs);
+
+  const long long peak_rss = CurrentPeakRssMb();
+  EXPECT_LT(peak_rss, kMaxPeakRssMb);
+
+  std::printf("WpaPerformanceQualificationTest: median wall %lld ms, peak RSS "
+              "%lld MB\n",
+              median_wall, peak_rss);
 }
 
 }  // namespace
-}  // namespace veritas::testing
+}  // namespace veritas::analysis

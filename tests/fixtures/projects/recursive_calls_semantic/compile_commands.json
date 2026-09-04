@@ -1,0 +1,10 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-O0", "-g", "-fno-inline",
+      "-fno-rtti", "-fno-exceptions", "-c", "recursive_calls.cpp"
+    ],
+    "file": "recursive_calls.cpp"
+  }
+]

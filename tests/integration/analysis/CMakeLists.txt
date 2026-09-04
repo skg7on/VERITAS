@@ -159,6 +159,6 @@ if(VERITAS_WPA_ENGINE STREQUAL "souffle")
     COMMAND project_analyzer_wpa_integration_test)
   set_tests_properties(ProjectAnalyzerWpaTest PROPERTIES
     TIMEOUT 120
-    LABELS "integration;analysis"
+    LABELS "integration;analysis;m9-entry;souffle-production"
   )
 endif()

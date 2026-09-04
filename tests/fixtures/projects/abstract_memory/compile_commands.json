@@ -1,7 +1,7 @@
 [
   {
     "directory": "@PROJECT_ROOT@",
-    "command": "clang -std=c11 -O0 -g -fno-inline -c @PROJECT_ROOT@/abstract_memory.c -o abstract_memory.o",
-    "file": "abstract_memory.c"
+    "arguments": ["clang++", "-std=c++20", "-c", "abstract_memory.cpp"],
+    "file": "abstract_memory.cpp"
   }
 ]

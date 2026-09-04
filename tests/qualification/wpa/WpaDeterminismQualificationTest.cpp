@@ -12,68 +12,73 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// WpaDeterminismQualificationTest.cpp — the same input yields the same
-// identities across repeated in-process analyses.
-//
-// IDs are content-derived and insertion-order independent, so analyzing a
-// fixture repeatedly must reproduce the same revision/build-variant context,
-// the same published summary IDs, and the same WPA run ID. This is the
-// relations-v2 qualification: dense/stable mapping and component ownership
-// must not drift across runs.
+// WpaDeterminismQualificationTest.cpp — summary discovery order must not
+// change the materialized logical input, the derived facts, the selected
+// witnesses, or the fixpoint hash. Determinism is a property of the pipeline
+// (materializer + canonicalizer), so this exercises the in-process C++
+// conformance engine over many permutations; the differential test already
+// pins Souffle to the same canonical output.
 
+#include <chrono>
+#include <random>
 #include <string>
-#include <string_view>
+#include <vector>
 
 #include <gtest/gtest.h>
 
-#include "ProjectFixture.h"
-#include "veritas/analysis/ProjectAnalyzer.h"
+#include "WpaQualificationSupport.h"
 
-namespace veritas::testing {
+namespace veritas::wpa::qualification {
 namespace {
 
-namespace analysis = veritas::analysis;
+std::vector<summary::SummaryArtifact> DeterminismProgram() {
+  auto a = V2Summary("a");
+  AddDirectCall(&a, "a", "b");
+  auto b = V2Summary("b");
+  AddDirectCall(&b, "b", "c");
+  auto c = V2Summary("c");
+  AddDirectCall(&c, "c", "d");
+  auto d = V2Summary("d");
+  AddDirectCall(&d, "d", "e");
+  return {a, b, c, d, V2Summary("e")};
+}
 
-// Runs the full M1->M4->M5->M3->WPA pipeline repeatedly on a stable fixture
-// path and asserts every identity field is reproduced exactly.
-void ExpectRepeatedAnalysisDeterministic(std::string_view fixture) {
-  const std::filesystem::path root = FixtureProject(fixture);
-  const analysis::ProjectAnalysisRequest request{
-      .project_root = root,
-      .output_root = root / ".veritas",
-  };
+StatusOr<facts::CanonicalizedResult> RunPermutation(std::uint32_t seed) {
+  auto shuffled = DeterminismProgram();
+  std::mt19937 rng(seed);
+  std::ranges::shuffle(shuffled, rng);
 
-  analysis::ProjectAnalyzer analyzer;
-  auto first = analyzer.AnalyzeProject(request, analysis::AnalysisConfig::Default());
-  ASSERT_TRUE(first.ok()) << first.status().message();
+  auto logical =
+      InputFor(shuffled, WpaComponentKind::kReachability, "a");
+  if (!logical.ok())
+    return logical.status();
 
-  constexpr int kRuns = 5;
-  for (int i = 0; i < kRuns; ++i) {
-    auto again = analyzer.AnalyzeProject(request, analysis::AnalysisConfig::Default());
-    ASSERT_TRUE(again.ok()) << again.status().message();
-    EXPECT_EQ(again->revision_id, first->revision_id);
-    EXPECT_EQ(again->build_variant_id, first->build_variant_id);
-    EXPECT_EQ(again->published_summary_ids, first->published_summary_ids);
-    EXPECT_EQ(again->wpa_run_id, first->wpa_run_id);
-    EXPECT_EQ(again->wpa_engine, first->wpa_engine);
-    EXPECT_EQ(again->wpa_diagnostics, first->wpa_diagnostics);
+  const auto manifest = MakeManifest(facts::EngineIdentity::kCppConformance,
+                                     "cpp-toolchain");
+  WpaExecutionEnvelope envelope{manifest, *logical};
+  auto cpp = CppConformanceExecutor::Create(
+      facts::EngineIdentity::kCppConformance, "cpp-toolchain");
+  if (!cpp.ok())
+    return cpp.status();
+  const WpaExecutionLimits limits{std::chrono::seconds(30), 0, 1};
+  auto raw = cpp->Execute(envelope, limits);
+  if (!raw.ok())
+    return raw.status();
+  return Canonicalize(*logical, *raw);
+}
+
+TEST(WpaDeterminismQualificationTest, AllInputPermutationsHaveOneResult) {
+  auto canonical = RunPermutation(0);
+  ASSERT_TRUE(canonical.ok()) << canonical.status().message();
+
+  for (std::uint32_t seed = 1; seed <= 64; ++seed) {
+    auto permuted = RunPermutation(seed);
+    ASSERT_TRUE(permuted.ok()) << permuted.status().message();
+    EXPECT_EQ(permuted->facts, canonical->facts);
+    EXPECT_EQ(permuted->witnesses, canonical->witnesses);
+    EXPECT_EQ(permuted->fixpoint_hash, canonical->fixpoint_hash);
   }
-
-  // A completed production run must expose a durable identity.
-  EXPECT_FALSE(first->wpa_run_id.empty());
-  EXPECT_FALSE(first->published_summary_ids.empty());
 }
-
-TEST(WpaDeterminismQualificationTest, RecursiveCallsAnalysisIsDeterministic) {
-  ExpectRepeatedAnalysisDeterministic("recursive_calls");
-}
-
-// semantic_zoo is intentionally not driven through this aggregate yet: its
-// virtual-dispatch and callback MAY edges produce multiple alternative proofs
-// that ResultCanonicalizer currently rejects as "witness binds two inputs at
-// one ordinal". Re-enable once the canonicalizer selects a canonical proof for
-// multi-target MAY edges instead of rejecting them.
-
 
 }  // namespace
-}  // namespace veritas::testing
+}  // namespace veritas::wpa::qualification

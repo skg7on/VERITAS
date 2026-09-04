@@ -12,16 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Mutual-recursion fixture. is_odd and is_even form a single SCC, so
-// reachability from either requires the local transitive rule to close the
-// cycle, not just a direct call edge.
+extern "C" void recursive_leaf(int *p) { p[0] = 9; }
 
-int is_even(int n);
-
-int is_odd(int n) {
-  return n == 0 ? 0 : is_even(n - 1);
+extern "C" int recursive_self(int n, int *p) {
+  if (n == 0) {
+    recursive_leaf(p);
+    return 0;
+  }
+  return recursive_self(n - 1, p);
 }
 
-int is_even(int n) {
-  return n == 0 ? 1 : is_odd(n - 1);
+extern "C" int recursive_even(int n, int *p);
+
+extern "C" int recursive_odd(int n, int *p) {
+  return n == 0 ? 0 : recursive_even(n - 1, p);
+}
+
+extern "C" int recursive_even(int n, int *p) {
+  if (n == 0) {
+    recursive_leaf(p);
+    return 1;
+  }
+  return recursive_odd(n - 1, p);
 }

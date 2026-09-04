@@ -14,90 +14,54 @@
 
 # tests/qualification/wpa/CMakeLists.txt
 #
-# The five M8R.5 qualification executables. Each is one aggregate CTest test
-# carrying `wpa-qualification`, `m9-entry`, and its criterion label; individual
-# GoogleTest cases deliberately do not expand either set.
+# The five WPA qualification aggregates (Task 16). Each registers a CTest test
+# named after its executable, carrying both the `wpa-qualification` label and
+# its `m9-entry;<criterion>` label. The whole tree requires the production
+# Souffle engine, which the enclosing tests/CMakeLists.txt gates on.
 
-if(NOT VERITAS_WPA_ENGINE STREQUAL "souffle")
-  return()
-endif()
+function(veritas_qualification_test NAME CRITERION)
+  add_executable(${NAME} ${NAME}.cpp)
+  target_link_libraries(${NAME} PRIVATE
+    veritas::wpa
+    GTest::gtest_main
+  )
+  target_compile_definitions(${NAME} PRIVATE
+    VERITAS_SOUFFLE_WORKER="$<TARGET_FILE:veritas_souffle_worker>"
+  )
+  add_dependencies(${NAME}
+    veritas_souffle_worker
+    veritas_souffle_provenance
+  )
+  veritas_add_warnings(${NAME})
 
-set(_qual_common_libs
-  veritas_wpa_fixture_support
-  veritas::wpa
+  add_test(NAME ${NAME} COMMAND $<TARGET_FILE:${NAME}>)
+  set_tests_properties(${NAME} PROPERTIES
+    LABELS "wpa-qualification;m9-entry;${CRITERION}"
+    SKIP_REGULAR_EXPRESSION "\\[  SKIPPED \\]"
+  )
+endfunction()
+
+veritas_qualification_test(WpaDifferentialQualificationTest engine-conformance)
+veritas_qualification_test(WpaDeterminismQualificationTest relations-v2)
+veritas_qualification_test(WpaFailureQualificationTest failure-atomicity)
+veritas_qualification_test(WpaMigrationQualificationTest run-identity)
+
+# The migration test reads and writes the version-aware SummaryDB.
+target_link_libraries(WpaMigrationQualificationTest PRIVATE veritas::summarydb)
+
+# The performance test drives the full ProjectAnalyzer pipeline rather than the
+# low-level WPA seam.
+add_executable(WpaPerformanceQualificationTest WpaPerformanceQualificationTest.cpp)
+target_link_libraries(WpaPerformanceQualificationTest PRIVATE
+  veritas_analysis
+  veritas_test_support
   GTest::gtest_main
 )
-
-# engine-conformance
-add_executable(WpaDifferentialQualificationTest
-  WpaDifferentialQualificationTest.cpp
-)
-target_link_libraries(WpaDifferentialQualificationTest PRIVATE ${_qual_common_libs})
-target_compile_definitions(WpaDifferentialQualificationTest PRIVATE
-  VERITAS_SOUFFLE_WORKER="$<TARGET_FILE:veritas_souffle_worker>"
-)
-add_dependencies(WpaDifferentialQualificationTest
-  veritas_souffle_worker
-  veritas_souffle_provenance
-)
-veritas_add_warnings(WpaDifferentialQualificationTest)
-add_test(NAME WpaDifferentialQualificationTest COMMAND WpaDifferentialQualificationTest)
-set_tests_properties(WpaDifferentialQualificationTest PROPERTIES
-  TIMEOUT 300
-  LABELS "wpa-qualification;m9-entry;engine-conformance"
-)
-
-# relations-v2
-add_executable(WpaDeterminismQualificationTest
-  WpaDeterminismQualificationTest.cpp
-)
-target_link_libraries(WpaDeterminismQualificationTest PRIVATE ${_qual_common_libs})
-veritas_add_warnings(WpaDeterminismQualificationTest)
-add_test(NAME WpaDeterminismQualificationTest COMMAND WpaDeterminismQualificationTest)
-set_tests_properties(WpaDeterminismQualificationTest PROPERTIES
-  TIMEOUT 300
-  LABELS "wpa-qualification;m9-entry;relations-v2"
-)
-
-# failure-atomicity
-add_executable(WpaFailureQualificationTest
-  WpaFailureQualificationTest.cpp
-)
-target_link_libraries(WpaFailureQualificationTest PRIVATE ${_qual_common_libs})
-target_compile_definitions(WpaFailureQualificationTest PRIVATE
-  VERITAS_SOUFFLE_WORKER="$<TARGET_FILE:veritas_souffle_worker>"
-)
-add_dependencies(WpaFailureQualificationTest
-  veritas_souffle_worker
-  veritas_souffle_provenance
-)
-veritas_add_warnings(WpaFailureQualificationTest)
-add_test(NAME WpaFailureQualificationTest COMMAND WpaFailureQualificationTest)
-set_tests_properties(WpaFailureQualificationTest PROPERTIES
-  TIMEOUT 300
-  LABELS "wpa-qualification;m9-entry;failure-atomicity"
-)
-
-# run-identity
-add_executable(WpaMigrationQualificationTest
-  WpaMigrationQualificationTest.cpp
-)
-target_link_libraries(WpaMigrationQualificationTest PRIVATE ${_qual_common_libs})
-veritas_add_warnings(WpaMigrationQualificationTest)
-add_test(NAME WpaMigrationQualificationTest COMMAND WpaMigrationQualificationTest)
-set_tests_properties(WpaMigrationQualificationTest PROPERTIES
-  TIMEOUT 300
-  LABELS "wpa-qualification;m9-entry;run-identity"
-)
-
-# souffle-production
-add_executable(WpaPerformanceQualificationTest
-  WpaPerformanceQualificationTest.cpp
-)
-target_link_libraries(WpaPerformanceQualificationTest PRIVATE ${_qual_common_libs})
 veritas_add_warnings(WpaPerformanceQualificationTest)
-add_test(NAME WpaPerformanceQualificationTest COMMAND WpaPerformanceQualificationTest)
+add_test(NAME WpaPerformanceQualificationTest
+  COMMAND $<TARGET_FILE:WpaPerformanceQualificationTest>)
 set_tests_properties(WpaPerformanceQualificationTest PROPERTIES
-  TIMEOUT 300
   LABELS "wpa-qualification;m9-entry;souffle-production"
+  SKIP_REGULAR_EXPRESSION "\\[  SKIPPED \\]"
+  TIMEOUT 120
 )

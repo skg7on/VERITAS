@@ -152,7 +152,7 @@ std::string MemoryObservations(
 TEST(SemanticMemorySummaryDbTest, StructuredMemorySurvivesV2Persistence) {
   auto config = analysis::AnalysisConfig::Default();
   config.wpa_engine = analysis::WpaEngineMode::kCppEmergency;
-  auto snapshot = AnalyzeAndLoadFixture("abstract_memory", config);
+  auto snapshot = AnalyzeAndLoadFixture("abstract_memory_semantic", config);
   ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
   EXPECT_TRUE(AllArtifactsAreV2(snapshot->summaries));
   EXPECT_TRUE(HasObjectKinds(snapshot->summaries,
@@ -178,7 +178,7 @@ TEST(SemanticMemorySummaryDbTest, KnownZeroRangeStaysDistinctFromUnknown) {
 TEST(SemanticMemorySummaryDbTest, FixtureOperationsKeepScopedMemoryMeaning) {
   auto config = analysis::AnalysisConfig::Default();
   config.wpa_engine = analysis::WpaEngineMode::kCppEmergency;
-  auto snapshot = AnalyzeAndLoadFixture("abstract_memory", config);
+  auto snapshot = AnalyzeAndLoadFixture("abstract_memory_semantic", config);
   ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
 
   const auto* zero = SummaryForSymbol(*snapshot, "memory_zero_range");
@@ -288,7 +288,7 @@ TEST(SemanticMemorySummaryDbTest, FixtureOperationsKeepScopedMemoryMeaning) {
 TEST(SemanticMemorySummaryDbTest, MemoryAndObjectIdentitiesStayDistinct) {
   auto config = analysis::AnalysisConfig::Default();
   config.wpa_engine = analysis::WpaEngineMode::kCppEmergency;
-  auto snapshot = AnalyzeAndLoadFixture("abstract_memory", config);
+  auto snapshot = AnalyzeAndLoadFixture("abstract_memory_semantic", config);
   ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
 
   std::set<std::string> locations;

@@ -19,6 +19,7 @@ target_link_libraries(WpaInputMaterializerTest PRIVATE
 )
 veritas_add_warnings(WpaInputMaterializerTest)
 gtest_discover_tests(WpaInputMaterializerTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(WpaInputMaterializerTest relations-v2)
 
 add_executable(CallGraphTest CallGraphTest.cpp)
 target_link_libraries(CallGraphTest PRIVATE
@@ -27,6 +28,7 @@ target_link_libraries(CallGraphTest PRIVATE
 )
 veritas_add_warnings(CallGraphTest)
 gtest_discover_tests(CallGraphTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(CallGraphTest indirect-calls)
 
 add_executable(SccGraphTest SccGraphTest.cpp)
 target_link_libraries(SccGraphTest PRIVATE
@@ -99,3 +101,4 @@ target_link_libraries(WpaOrchestratorTest PRIVATE
 )
 veritas_add_warnings(WpaOrchestratorTest)
 gtest_discover_tests(WpaOrchestratorTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(WpaOrchestratorTest failure-atomicity)

@@ -1,3 +1,8 @@
+> **Superseded design input.** This brainstorm predates and is superseded by the
+> approved [M8R Soufflé WPA remediation design spec](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md),
+> which is authoritative for current WPA ownership. The original analysis below
+> is retained unchanged for reference.
+
 Soufflé is explicitly designed for large-scale static analysis: its input relations form the EDB, its rules derive IDB relations to a fixed point, and it can compile a Datalog specification into native parallel C++. It also provides components, provenance, profiling/auto-scheduling, SQLite I/O, and a C++ embedding interface. ([Soufflé][1])
 
 My main idea is:

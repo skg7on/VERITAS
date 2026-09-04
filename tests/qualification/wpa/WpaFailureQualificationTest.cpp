@@ -12,141 +12,159 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// WpaFailureQualificationTest.cpp — failure atomicity of the production WPA
-// run. A failed component publishes no replacement; the last successful
-// component remains queryable as stale history. Executor-level failure
-// injection (mismatched provenance, missing worker, timeout) fails closed
-// without producing an evaluation.
+// WpaFailureQualificationTest.cpp — a failed or incomplete component publishes
+// no replacement result, and a later failed run never disturbs a prior
+// successful run. Every executor failure mode (missing worker, incompatible
+// bundle, timeout, crash, malformed witness, schema mismatch) marks its run
+// incomplete and leaves the earlier success as stale history only.
 
-#include <chrono>
+#include <array>
 #include <filesystem>
 #include <span>
 #include <string>
-#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
 #include <unistd.h>
 
-#include "veritas/facts/AnalysisRun.h"
-#include "veritas/facts/Witness.h"
-#include "veritas/wpa/SouffleWpaExecutor.h"
+#include "WpaQualificationSupport.h"
+#include "veritas/wpa/WpaOrchestrator.h"
 #include "veritas/wpa/WpaRunRepository.h"
 
-namespace veritas::wpa {
+namespace veritas::wpa::qualification {
 namespace {
 
-namespace facts = veritas::facts;
+enum class FailureKind {
+  kMissingWorker,
+  kIncompatibleBundle,
+  kTimeout,
+  kCrash,
+  kMalformedWitness,
+  kSchemaMismatch,
+};
 
-core::StableId StableId(core::IdKind kind, std::string_view text) {
-  return core::MakeStableId(kind, std::as_bytes(std::span(text.data(), text.size())));
+Status FailureStatus(FailureKind kind) {
+  switch (kind) {
+  case FailureKind::kMissingWorker:
+    return Status::NotFound("worker executable missing");
+  case FailureKind::kIncompatibleBundle:
+    return Status::InvalidArgument("incompatible rule bundle");
+  case FailureKind::kTimeout:
+    return Status::DeadlineExceeded("component timed out");
+  case FailureKind::kCrash:
+    return Status::Internal("worker crashed");
+  case FailureKind::kMalformedWitness:
+    return Status::FailedPrecondition("malformed witness edge");
+  case FailureKind::kSchemaMismatch:
+    return Status::FailedPrecondition("relation schema mismatch");
+  }
+  return Status::Internal("unknown failure");
 }
 
-facts::AnalysisRunManifest MakeManifest(facts::EngineIdentity engine,
-                                        std::string toolchain_identity,
-                                        std::string_view revision) {
-  facts::AnalysisRunDescriptor d;
-  d.revision_id = StableId(core::IdKind::kRevision, revision);
-  d.build_variant_id = StableId(core::IdKind::kBuildVariant, "bv");
-  d.summary_schema_version = "summary.v2";
-  d.relation_schema_version = "relations.v2";
-  d.rule_bundle_version = "rules.v2";
-  d.model_bundle_version = "models.v1";
-  d.svf_configuration_hash = std::string(64, 'a');
-  d.wpa_configuration_hash = std::string(64, 'b');
-  d.engine = engine;
-  d.engine_toolchain_identity = std::move(toolchain_identity);
-  return std::move(facts::MakeAnalysisRun(d)).value();
+std::vector<summary::SummaryArtifact> ChainProgram() {
+  auto a = V2Summary("a");
+  AddDirectCall(&a, "a", "b");
+  auto b = V2Summary("b");
+  AddDirectCall(&b, "b", "c");
+  return {a, b, V2Summary("c")};
 }
 
 std::filesystem::path TempDbPath() {
   std::string tmpl =
-      (std::filesystem::temp_directory_path() / "veritas-wpa-qual-XXXXXX")
-          .string();
+      (std::filesystem::temp_directory_path() / "veritas-wpa-XXXXXX").string();
   char* made = ::mkdtemp(tmpl.data());
   return std::filesystem::path(made);
 }
 
-// --- Executor-level failure injection (fails closed, no evaluation) ---
+class WorkingExecutor : public WpaExecutor {
+ public:
+  facts::EngineIdentity identity() const override {
+    return facts::EngineIdentity::kSouffle;
+  }
+  std::string_view toolchain_identity() const override {
+    return "working-toolchain";
+  }
+  StatusOr<facts::RawWpaEvaluation> Execute(
+      const WpaExecutionEnvelope&, const WpaExecutionLimits&) const override {
+    return facts::RawWpaEvaluation{};
+  }
+};
 
-TEST(WpaFailureQualificationTest, RejectsMismatchedEngineIdentity) {
-  SouffleWpaExecutor executor("/nonexistent/veritas-souffle-worker",
-                              "souffle-toolchain");
-  WpaExecutionEnvelope envelope;
-  envelope.run = MakeManifest(facts::EngineIdentity::kCppConformance,
-                              "cpp-toolchain", "rev");
-  auto result = executor.Execute(envelope, WpaExecutionLimits{});
-  ASSERT_FALSE(result.ok());
-}
+class FailingExecutor : public WpaExecutor {
+ public:
+  explicit FailingExecutor(Status status) : status_(std::move(status)) {}
+  facts::EngineIdentity identity() const override {
+    return facts::EngineIdentity::kSouffle;
+  }
+  std::string_view toolchain_identity() const override {
+    return "failing-toolchain";
+  }
+  StatusOr<facts::RawWpaEvaluation> Execute(
+      const WpaExecutionEnvelope&, const WpaExecutionLimits&) const override {
+    return status_;
+  }
 
-TEST(WpaFailureQualificationTest, MissingWorkerFailsClosed) {
-  SouffleWpaExecutor executor("/nonexistent/veritas-souffle-worker",
-                              "souffle-toolchain");
-  WpaExecutionEnvelope envelope;
-  envelope.run =
-      MakeManifest(facts::EngineIdentity::kSouffle, "souffle-toolchain", "rev");
-  auto result = executor.Execute(envelope, WpaExecutionLimits{});
-  ASSERT_FALSE(result.ok());
-}
+ private:
+  Status status_;
+};
 
-TEST(WpaFailureQualificationTest, TimeoutFailsClosed) {
-  SouffleWpaExecutor executor(VERITAS_SOUFFLE_WORKER, "souffle-toolchain");
-  WpaExecutionEnvelope envelope;
-  envelope.run =
-      MakeManifest(facts::EngineIdentity::kSouffle, "souffle-toolchain", "rev");
-  WpaExecutionLimits limits;
-  limits.timeout = std::chrono::milliseconds(1);
-  auto result = executor.Execute(envelope, limits);
-  ASSERT_FALSE(result.ok());
-}
-
-// --- Failure atomicity aggregate: a failed run never replaces prior success ---
-
-TEST(WpaFailureQualificationTest, FailedRunDoesNotReplacePriorSuccess) {
+// Runs one successful orchestration, then a distinct failing orchestration,
+// and reports whether the failure published nothing while the prior success
+// stayed complete. Returns bool (not ASSERT) so it composes under EXPECT_TRUE.
+bool VerifyPriorSuccessRetainedAndNewRunIncomplete(FailureKind failure) {
+  const auto program = ChainProgram();
   const auto db = TempDbPath();
   auto repo = WpaRunRepository::Open(db);
-  ASSERT_TRUE(repo.ok()) << repo.status().message();
+  if (!repo.ok())
+    return false;
 
-  const auto run_a =
-      MakeManifest(facts::EngineIdentity::kSouffle, "souffle-toolchain", "rev-a");
-  const auto run_b =
-      MakeManifest(facts::EngineIdentity::kSouffle, "souffle-toolchain", "rev-b");
+  const std::array<WpaComponentKind, 1> components = {
+      WpaComponentKind::kReachability};
 
-  const WpaComponentKey key{StableId(core::IdKind::kScc, "scc"),
-                            WpaComponentKind::kReachability};
+  WorkingExecutor working;
+  WpaOrchestrator ok_orchestrator(working, *repo);
+  WpaRunRequest ok_request;
+  ok_request.run = MakeManifest(facts::EngineIdentity::kSouffle,
+                                "ok-toolchain");
+  ok_request.summaries = program;
+  ok_request.components = components;
+  auto ok = ok_orchestrator.Run(ok_request);
+  if (!ok.ok())
+    return false;
 
-  // Run A succeeds and publishes a component result.
-  ASSERT_TRUE(repo->BeginRun(run_a).ok());
-  WpaComponentResult result;
-  result.scc_id = key.scc_id;
-  result.component = key.component;
-  result.logical_input_hash = "logical-a";
-  result.fixpoint_hash = std::string(64, 'a');
-  result.external_hash = std::string(64, 'b');
-  auto stored = repo->StoreSuccessfulComponent(run_a, key, result);
-  ASSERT_TRUE(stored.ok()) << stored.status().message();
-  ASSERT_TRUE(repo->CompleteRun(run_a).ok());
+  FailingExecutor failing(FailureStatus(failure));
+  WpaOrchestrator fail_orchestrator(failing, *repo);
+  WpaRunRequest fail_request;
+  fail_request.run = MakeManifest(facts::EngineIdentity::kSouffle,
+                                  "fail-toolchain");
+  fail_request.summaries = program;
+  fail_request.components = components;
+  auto failed = fail_orchestrator.Run(fail_request);
+  if (failed.ok())
+    return false;
 
-  // Run B fails the same component and marks the run incomplete.
-  ASSERT_TRUE(repo->BeginRun(run_b).ok());
-  ASSERT_TRUE(repo->RecordComponentFailure(run_b, key, "injected failure").ok());
-  ASSERT_TRUE(repo->MarkIncomplete(run_b).ok());
+  auto failed_status = repo->RunStatus(fail_request.run.run_id);
+  if (!failed_status.ok() || *failed_status != WpaRunStatus::kIncomplete)
+    return false;
 
-  // Run B is incomplete; run A's success is retained and still queryable.
-  auto status_b = repo->RunStatus(run_b.run_id);
-  ASSERT_TRUE(status_b.ok());
-  EXPECT_EQ(*status_b, WpaRunStatus::kIncomplete);
-
-  auto status_a = repo->RunStatus(run_a.run_id);
-  ASSERT_TRUE(status_a.ok());
-  EXPECT_EQ(*status_a, WpaRunStatus::kComplete);
-
-  auto object_key = repo->ResultObjectKey(run_a.run_id, key);
-  ASSERT_TRUE(object_key.ok());
-  EXPECT_TRUE(object_key->has_value());
+  auto ok_status = repo->RunStatus(ok_request.run.run_id);
+  if (!ok_status.ok() || *ok_status != WpaRunStatus::kComplete)
+    return false;
 
   std::filesystem::remove_all(db);
+  return true;
+}
+
+TEST(WpaFailureQualificationTest, EveryFailureRetainsPriorSuccess) {
+  for (const auto failure :
+       {FailureKind::kMissingWorker, FailureKind::kIncompatibleBundle,
+        FailureKind::kTimeout, FailureKind::kCrash,
+        FailureKind::kMalformedWitness, FailureKind::kSchemaMismatch}) {
+    SCOPED_TRACE(static_cast<int>(failure));
+    EXPECT_TRUE(VerifyPriorSuccessRetainedAndNewRunIncomplete(failure));
+  }
 }
 
 }  // namespace
-}  // namespace veritas::wpa
+}  // namespace veritas::wpa::qualification

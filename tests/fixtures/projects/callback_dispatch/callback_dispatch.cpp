@@ -12,16 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Mutual-recursion fixture. is_odd and is_even form a single SCC, so
-// reachability from either requires the local transitive rule to close the
-// cycle, not just a direct call edge.
+// Callback-dispatch fixture. A function-pointer table routes the indirect call
+// in `dispatch` to `inc` and `dec`, which Andersen's points-to analysis must
+// resolve into two stable MAY call targets.
 
-int is_even(int n);
+typedef int (*Handler)(int);
 
-int is_odd(int n) {
-  return n == 0 ? 0 : is_even(n - 1);
+int inc(int x) {
+  return x + 1;
 }
 
-int is_even(int n) {
-  return n == 0 ? 1 : is_odd(n - 1);
+int dec(int x) {
+  return x - 1;
+}
+
+Handler handlers[2] = {inc, dec};
+
+int dispatch(int which, int value) {
+  return handlers[which](value);
 }

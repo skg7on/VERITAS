@@ -12,151 +12,163 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// WpaMigrationQualificationTest.cpp — historical V1 compatibility projection
-// and native V2 reanalysis preserve function identity and summary content.
+// WpaMigrationQualificationTest.cpp — the tagged V1 projection never
+// fabricates precision it does not carry, and a native V2 reanalysis
+// supersedes the current binding without mutating the immutable V1 bytes.
 
 #include <filesystem>
-#include <memory>
+#include <span>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include <gtest/gtest.h>
 #include <unistd.h>
 
-#include "veritas/summary/SummaryArtifact.h"
+#include "WpaQualificationSupport.h"
 #include "veritas/summarydb/SummaryRepository.h"
 
-namespace veritas::summarydb {
+namespace veritas::wpa::qualification {
 namespace {
 
-namespace v1 = veritas::summary::v1;
-namespace v2 = veritas::summary::v2;
+namespace v1 = summary::v1;
 
-constexpr const char* kRevisionId = "rev:sha256:def";
-constexpr const char* kBuildVariantId = "variant:sha256:ghi";
-constexpr const char* kFunctionVariantId = "funcvar:sha256:jkl";
-
-PublicationContext Context() {
-  PublicationContext context;
-  context.revision_id = kRevisionId;
-  context.build_variant_id = kBuildVariantId;
-  context.function_variant_id = kFunctionVariantId;
-  return context;
-}
-
-summary::v1::FunctionSummary V1Summary() {
-  summary::v1::FunctionSummary summary;
+v1::FunctionSummary V1Summary(std::string_view name) {
+  v1::FunctionSummary summary;
   summary.mutable_header()->set_schema_version("summary.v1");
-  summary.mutable_identity()->set_repository_id("repo:sha256:abc");
-  summary.mutable_identity()->set_revision_id(kRevisionId);
-  summary.mutable_identity()->set_build_variant_id(kBuildVariantId);
-  summary.mutable_identity()->set_function_variant_id(kFunctionVariantId);
-  summary.mutable_identity()->set_function_body_id("funcbody:sha256:mno");
-  auto* range = summary.add_range_facts();
-  range->set_variable("buffer_size");
-  range->set_min_value(0);
-  range->set_max_value(1024);
-  range->set_epistemic(summary::v1::EPISTEMIC_STATE_MUST);
+  summary.mutable_identity()->set_function_variant_id(
+      core::ToString(FunctionId(name)));
   return summary;
 }
 
-summary::v2::FunctionSummary V2Summary() {
-  summary::v2::FunctionSummary summary;
-  summary.mutable_header()->set_schema_version("summary.v2");
-  summary.mutable_identity()->set_repository_id("repo:sha256:abc");
-  summary.mutable_identity()->set_revision_id(kRevisionId);
-  summary.mutable_identity()->set_build_variant_id(kBuildVariantId);
-  summary.mutable_identity()->set_function_variant_id(kFunctionVariantId);
-  summary.mutable_identity()->set_function_body_id("funcbody:sha256:mno");
-  auto* range = summary.add_range_facts();
-  range->set_variable("buffer_size");
-  range->set_min_value(0);
-  range->set_max_value(1024);
-  range->set_epistemic(summary::v1::EPISTEMIC_STATE_MUST);
-  return summary;
+void AddV1ResolvedCall(v1::FunctionSummary* caller, std::string_view callee) {
+  auto* call = caller->add_calls();
+  call->set_callee_symbol(std::string(callee));
+  call->set_resolved_callee_function_variant_id(core::ToString(FunctionId(callee)));
+  call->set_call_site_anchor_id(core::ToString(CallSiteId(std::string(callee))));
+  call->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  call->set_provenance_ref("test:call");
 }
 
-std::unique_ptr<SummaryRepository> OpenRepository() {
-  static int counter = 0;
-  const auto dir =
-      std::filesystem::temp_directory_path() /
-      ("veritas_wpa_migration_test_" + std::to_string(::getpid()) + "_" +
-       std::to_string(counter++));
-  std::filesystem::create_directories(dir);
+void AddV1MemoryWrite(v1::FunctionSummary* function, std::string memory) {
+  auto* effect = function->add_memory_effects();
+  effect->set_kind(v1::EFFECT_KIND_WRITE);
+  effect->set_location(std::move(memory));
+  effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  effect->set_provenance_ref("test:write");
+}
 
-  auto repo_result = SummaryRepository::Open(dir.string());
-  if (!repo_result.ok()) {
-    return nullptr;
+bool ContainsDispatchKind(const WpaLogicalComponentInput& logical,
+                          sem::DispatchKind kind) {
+  for (const auto& row : logical.edb) {
+    for (const auto& cell : row.cells) {
+      if (const auto* dispatch = std::get_if<sem::DispatchKind>(&cell)) {
+        if (*dispatch == kind)
+          return true;
+      }
+    }
   }
-  auto repo = std::move(*repo_result);
+  return false;
+}
 
-  MetadataStore& metadata = repo->metadata_store();
-  bool ok = metadata
-                .Execute("INSERT OR IGNORE INTO repositories (repository_id, "
-                         "vcs_kind, vcs_revision, source_tree_hash) "
-                         "VALUES (?, ?, ?, ?)",
-                         {"repo:sha256:abc", "git", "abc123", "hash123"})
-                .ok();
-  ok = ok && metadata
-                 .Execute("INSERT OR IGNORE INTO revisions (revision_id, "
-                          "repository_id, vcs_revision) VALUES (?, ?, ?)",
-                          {kRevisionId, "repo:sha256:abc", "def456"})
-                 .ok();
-  ok = ok && metadata
-                 .Execute("INSERT OR IGNORE INTO build_variants "
-                          "(build_variant_id, target_triple, compiler_id, "
-                          "compiler_version, compile_options_hash, "
-                          "macro_set_hash, include_closure_hash, "
-                          "type_layout_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                          {kBuildVariantId, "arm64-apple-darwin", "clang",
-                           "17.0.6", "hash1", "hash2", "hash3", "hash4"})
-                 .ok();
-  if (!ok) {
-    return nullptr;
+bool ContainsMemoryRows(const WpaLogicalComponentInput& logical) {
+  for (const auto& row : logical.edb) {
+    if (row.relation == facts::RelationId::kDirectWrite ||
+        row.relation == facts::RelationId::kDirectRead)
+      return true;
   }
-  return repo;
+  return false;
+}
+
+std::filesystem::path TempDbPath() {
+  std::string tmpl =
+      (std::filesystem::temp_directory_path() / "veritas-wpa-XXXXXX").string();
+  char* made = ::mkdtemp(tmpl.data());
+  return std::filesystem::path(made);
+}
+
+TEST(WpaMigrationQualificationTest, V1ProjectionIsTaggedAndNeverFabricates) {
+  auto caller = V1Summary("caller");
+  AddV1ResolvedCall(&caller, "callee");
+  AddV1MemoryWrite(&caller, "opaque:legacy");
+
+  // V1 carries no dispatch kind and no abstract-memory identity, so the
+  // projection must emit an unknown dispatch and no fabricated memory rows.
+  const std::vector<summary::SummaryArtifact> artifacts = {caller, V1Summary("callee")};
+
+  auto reach =
+      InputFor(artifacts, WpaComponentKind::kReachability, "caller");
+  ASSERT_TRUE(reach.ok()) << reach.status().message();
+  EXPECT_TRUE(ContainsDispatchKind(*reach, sem::DispatchKind::kUnknown));
+
+  auto memory =
+      InputFor(artifacts, WpaComponentKind::kMemoryEffects, "caller");
+  ASSERT_TRUE(memory.ok()) << memory.status().message();
+  EXPECT_FALSE(ContainsMemoryRows(*memory));
+}
+
+TEST(WpaMigrationQualificationTest, ReanalysisSupersedesWithoutMutation) {
+  const auto db = TempDbPath();
+  auto opened = summarydb::SummaryRepository::Open(db.string());
+  ASSERT_TRUE(opened.ok()) << opened.status().message();
+  auto repo = std::move(*opened);
+
+  const std::string repository_id =
+      core::ToString(core::MakeStableId(core::IdKind::kRepository,
+                                        std::as_bytes(std::span("repo", 4))));
+  const std::string revision_id =
+      core::ToString(core::MakeStableId(core::IdKind::kRevision,
+                                        std::as_bytes(std::span("rev", 3))));
+  const std::string build_variant_id =
+      core::ToString(core::MakeStableId(core::IdKind::kBuildVariant,
+                                        std::as_bytes(std::span("bv", 2))));
+
+  ASSERT_TRUE(repo->metadata_store()
+                  .Execute("INSERT INTO repositories(repository_id, vcs_kind, "
+                           "vcs_revision, source_tree_hash) VALUES(?, ?, ?, ?)",
+                           {repository_id, "git", "r", "tree"})
+                  .ok());
+  ASSERT_TRUE(repo->metadata_store()
+                  .Execute("INSERT INTO revisions(revision_id, repository_id, "
+                           "vcs_revision) VALUES(?, ?, ?)",
+                           {revision_id, repository_id, "r"})
+                  .ok());
+  ASSERT_TRUE(repo->metadata_store()
+                  .Execute(
+                      "INSERT INTO build_variants(build_variant_id, "
+                      "target_triple, compiler_id, compiler_version, "
+                      "compile_options_hash, macro_set_hash, "
+                      "include_closure_hash, type_layout_hash) "
+                      "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                      {build_variant_id, "arm64", "clang", "24", "a", "b", "c",
+                       "d"})
+                  .ok());
+
+  const std::string function_variant_id = core::ToString(FunctionId("f"));
+
+  auto v1_summary = V1Summary("f");
+  auto published_v1 =
+      repo->PublishProjectSummaries(revision_id, build_variant_id, {v1_summary});
+  ASSERT_TRUE(published_v1.ok()) << published_v1.status().message();
+  const auto v1_bytes = v1_summary.SerializeAsString();
+
+  auto v2_summary = V2Summary("f");
+  auto published_v2 =
+      repo->PublishProjectSummaries(revision_id, build_variant_id, {v2_summary});
+  ASSERT_TRUE(published_v2.ok()) << published_v2.status().message();
+
+  // The current binding is now native V2.
+  auto current = repo->GetCurrentSummaryArtifact(function_variant_id);
+  ASSERT_TRUE(current.ok()) << current.status().message();
+  EXPECT_NE(std::get_if<v2::FunctionSummary>(&*current), nullptr);
+
+  // The immutable V1 object is byte-identical, not mutated by the reanalysis.
+  auto historical = repo->GetSummary((*published_v1)[0]);
+  ASSERT_TRUE(historical.ok()) << historical.status().message();
+  EXPECT_EQ(historical->SerializeAsString(), v1_bytes);
+
+  std::filesystem::remove_all(db);
 }
 
 }  // namespace
-
-TEST(WpaMigrationQualificationTest, V1ProjectsToV2WithoutLosingIdentity) {
-  auto repository = OpenRepository();
-  ASSERT_NE(repository, nullptr);
-
-  auto v1_id = repository->PublishSummary(V1Summary(), Context());
-  ASSERT_TRUE(v1_id.ok());
-  auto v2_id = repository->PublishSummary(V2Summary(), Context());
-  ASSERT_TRUE(v2_id.ok());
-  EXPECT_NE(*v1_id, *v2_id);
-
-  // Historical V1 remains readable as V1.
-  auto historical = repository->GetSummaryArtifact(*v1_id);
-  ASSERT_TRUE(historical.ok());
-  EXPECT_TRUE(std::holds_alternative<v1::FunctionSummary>(*historical));
-
-  // The current binding for the same function identity is now native V2.
-  auto current = repository->GetCurrentSummaryArtifact(kFunctionVariantId);
-  ASSERT_TRUE(current.ok());
-  EXPECT_TRUE(std::holds_alternative<v2::FunctionSummary>(*current));
-}
-
-TEST(WpaMigrationQualificationTest, NativeV2RoundTripsWithoutV1Misparse) {
-  auto repository = OpenRepository();
-  ASSERT_NE(repository, nullptr);
-
-  std::vector<summary::SummaryArtifact> artifacts;
-  artifacts.emplace_back(V2Summary());
-  auto ids = repository->PutImmutableSummaryArtifacts(artifacts);
-  ASSERT_TRUE(ids.ok()) << ids.status().message();
-  ASSERT_EQ(ids->size(), 1u);
-
-  auto artifact = repository->GetSummaryArtifact((*ids)[0]);
-  ASSERT_TRUE(artifact.ok()) << artifact.status().message();
-  EXPECT_TRUE(std::holds_alternative<v2::FunctionSummary>(*artifact));
-
-  // The V1 getter must reject native V2 bytes rather than reinterpret them.
-  auto v1 = repository->GetSummary((*ids)[0]);
-  ASSERT_FALSE(v1.ok());
-}
-
-}  // namespace veritas::summarydb
+}  // namespace veritas::wpa::qualification
