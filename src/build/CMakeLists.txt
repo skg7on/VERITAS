@@ -20,6 +20,7 @@
 
 add_library(veritas_build
   AnalysisManifest.cpp
+  CompileFlags.cpp
   ProjectInput.cpp
   ProjectManifestLoader.cpp
 )

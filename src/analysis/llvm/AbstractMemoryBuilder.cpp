@@ -196,6 +196,42 @@ std::optional<std::uint64_t> AllocationSizeFor(const ::llvm::Value& base,
   return std::nullopt;
 }
 
+// At -O0, Clang spills a pointer parameter to an entry-block alloca before
+// every use. Recover that original value only when the slot has exactly one
+// direct store, so a later assignment, aliased write, or aggregate update
+// remains explicitly unknown rather than being mistaken for its parameter.
+const ::llvm::Value* RecoverSingleStoreSlotValue(const ::llvm::Value* value) {
+  const auto* load = ::llvm::dyn_cast<::llvm::LoadInst>(value);
+  if (!load) {
+    return value;
+  }
+  const auto* slot = ::llvm::dyn_cast<::llvm::AllocaInst>(
+      load->getPointerOperand()->stripPointerCasts());
+  if (!slot) {
+    return value;
+  }
+
+  const ::llvm::Value* stored = nullptr;
+  for (const ::llvm::User* user : slot->users()) {
+    if (const auto* slot_load = ::llvm::dyn_cast<::llvm::LoadInst>(user)) {
+      if (slot_load->getPointerOperand()->stripPointerCasts() != slot) {
+        return value;
+      }
+      continue;
+    }
+    const auto* store = ::llvm::dyn_cast<::llvm::StoreInst>(user);
+    if (!store ||
+        store->getPointerOperand()->stripPointerCasts() != slot) {
+      return value;
+    }
+    if (stored != nullptr) {
+      return value;
+    }
+    stored = store->getValueOperand();
+  }
+  return stored != nullptr ? stored : value;
+}
+
 std::string SemanticAnchorFor(semantic::AbstractObjectKind kind) {
   switch (kind) {
     case semantic::AbstractObjectKind::kGlobal:
@@ -243,6 +279,7 @@ StatusOr<semantic::MemoryLocation> AbstractMemoryBuilder::LocationFor(
       break;
     }
   }
+  base = RecoverSingleStoreSlotValue(base);
 
   // 2. Determine the abstract object kind and base value fingerprint.
   const semantic::AbstractObjectKind kind = KindForBase(*base);

@@ -57,7 +57,7 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 - **LLVM/Clang libraries:** 22+ (23.x and 24.x supported; 24.x recommended)
 - **Pointer Analysis:** SVF (pinned at `third_party/SVF@18fb5650…`, required, in-process)
 - **Constraint Solver:** Z3
-- **WPA Engine:** Soufflé Datalog
+- **WPA Engine:** Soufflé Datalog (production recursive WPA; C++ is a conformance oracle and an explicit `cpp-emergency` engine, never an automatic fallback)
 - **Storage:** RocksDB (CAS), SQLite (metadata/facts)
 - **Serialization:** Protobuf
 - **Testing:** GoogleTest

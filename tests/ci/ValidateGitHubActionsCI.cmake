@@ -72,7 +72,7 @@ veritas_require_ci_literal(
 )
 veritas_require_ci_literal(
   "LLVM cache key"
-  "veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r4"
+  "veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r5"
 )
 veritas_require_ci_literal(
   "Z3 cache gate"
@@ -93,13 +93,15 @@ veritas_require_ci_literal(
 veritas_require_ci_literal("RocksDB RTTI" "-DUSE_RTTI=ON")
 veritas_require_ci_literal("LLVM RTTI" "-DLLVM_ENABLE_RTTI=ON")
 veritas_require_ci_literal("LLVM exceptions" "-DLLVM_ENABLE_EH=ON")
-# LLVM must be shared component libraries so its cl::opt options register once
-# per process. The monolithic DYLIB mixes with clang's static components, and
-# static .a components get baked into multiple VERITAS/SVF shared objects;
-# both re-register cl::opt options and crash the SVF/LLVM integration tests.
-veritas_require_ci_literal("LLVM shared libraries" "-DBUILD_SHARED_LIBS=ON")
-veritas_forbid_ci_literal("LLVM monolithic DYLIB" "-DLLVM_BUILD_LLVM_DYLIB=ON")
-veritas_forbid_ci_literal("LLVM DYLIB linking" "-DLLVM_LINK_LLVM_DYLIB=ON")
+# VERITAS and SVF link the monolithic libLLVM and libclang-cpp dynamic
+# libraries, which load LLVM/clang globals (cl::opt options, SVF's analysis
+# registry) exactly once. Separated component .so (BUILD_SHARED_LIBS=ON) or
+# static .a components baked into multiple shared objects re-register those
+# globals and crash the SVF/LLVM integration tests.
+veritas_forbid_ci_literal("LLVM separated components" "-DBUILD_SHARED_LIBS=ON")
+veritas_require_ci_literal("LLVM monolithic DYLIB" "-DLLVM_BUILD_LLVM_DYLIB=ON")
+veritas_require_ci_literal("LLVM DYLIB linking" "-DLLVM_LINK_LLVM_DYLIB=ON")
+veritas_require_ci_literal("Clang DYLIB" "-DCLANG_LINK_CLANG_DYLIB=ON")
 veritas_require_ci_literal(
   "VERITAS LLVM configuration"
   "-DLLVM_PROJECT_BUILD_DIR=\"$RUNNER_TEMP/llvm-install\""

@@ -38,3 +38,4 @@ target_link_libraries(SummaryV2BuilderTest PRIVATE
 )
 
 gtest_discover_tests(SummaryV2BuilderTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(SummaryV2BuilderTest summary-v2)

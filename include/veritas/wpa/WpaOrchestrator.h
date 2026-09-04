@@ -53,6 +53,11 @@ struct WpaRunResult {
   std::vector<WpaComponentCompletion> completed_components;
   std::vector<core::StableId> rooted_input_fact_ids;
   std::vector<runtime::WorkItem> scheduled_predecessors;
+  // The flattened, canonical handoff across every completed component: the
+  // exact facts, witnesses, and diagnostics the AnalysisFactBus consumes.
+  std::vector<facts::AnalysisFact> facts;
+  std::vector<facts::WitnessEdge> witnesses;
+  std::vector<std::string> diagnostics;
 };
 
 class SccStateRepository;

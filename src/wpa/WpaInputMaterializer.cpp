@@ -419,14 +419,14 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
           memory_ids.push_back(*id);
       }
     }
-    // The root is the support relation, not the derived one: the witness cites
-    // SupportReachableCall/SupportMayWrite, and the canonicalizer matches roots
-    // by semantic row.
+    // A witness cites the support relation, not the predecessor's derived
+    // relation. Root the projected row so every cross-SCC witness terminates
+    // at the exact semantic key it names.
     auto support_fact = facts::MakeFact(row);
     if (!support_fact.ok())
       return support_fact.status();
     semantic_edb.push_back(std::move(row));
-    fact_ids.push_back(support_fact->fact_id);
+    fact_ids.push_back(fact.fact_id);
     successor_roots.push_back(RootedInputFact{
         .fact = std::move(*support_fact), .provenance_ref = "wpa:successor"});
   }

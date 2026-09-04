@@ -26,15 +26,19 @@
 #include <unistd.h>
 
 #include "veritas/core/Ids.h"
+#include "veritas/facts/AnalysisFactBus.h"
 #include "veritas/facts/FactSchema.h"
 #include "veritas/runtime/WorklistScheduler.h"
 #include "veritas/summary/v1/summary.pb.h"
 #include "veritas/summarydb/SummaryRepository.h"
 #include "veritas/wpa/CallGraph.h"
+#include "veritas/wpa/CppConformanceExecutor.h"
 #include "veritas/wpa/FixpointEngine.h"
 #include "veritas/wpa/SccGraph.h"
 #include "veritas/wpa/SccStateRepository.h"
 #include "veritas/wpa/WpaCoordinator.h"
+#include "veritas/wpa/WpaOrchestrator.h"
+#include "veritas/wpa/WpaRunRepository.h"
 
 namespace veritas::wpa {
 namespace {
@@ -235,6 +239,97 @@ TEST_F(WpaEndToEndTest, PersistsFixpointAndSchedulesExternalChanges) {
                   context_, {delta_id}, *scc_graph, &scheduler)
                   .ok());
   EXPECT_TRUE(scheduler.Empty());
+}
+
+namespace v2 = summary::v2;
+
+v2::FunctionSummary V2Summary(std::string_view name) {
+  v2::FunctionSummary summary;
+  summary.mutable_header()->set_schema_version("summary.v2");
+  summary.mutable_identity()->set_function_variant_id(
+      core::ToString(Id(core::IdKind::kFunctionVariant, name)));
+  return summary;
+}
+
+void AddV2Call(v2::FunctionSummary* summary, std::string_view from,
+               std::string_view to) {
+  auto* call = summary->add_calls();
+  call->set_call_site_id(core::ToString(
+      Id(core::IdKind::kCallSite, std::string(from) + "->" + std::string(to))));
+  call->set_callee_symbol(std::string(to));
+  call->set_resolved_callee_function_variant_id(
+      core::ToString(Id(core::IdKind::kFunctionVariant, to)));
+  call->set_dispatch(v2::DISPATCH_KIND_DIRECT);
+  call->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  call->set_provenance_ref("test:call");
+}
+
+facts::AnalysisRunManifest MakeRunManifest(facts::EngineIdentity engine) {
+  facts::AnalysisRunDescriptor descriptor;
+  descriptor.revision_id = Id(core::IdKind::kRevision, "rev");
+  descriptor.build_variant_id = Id(core::IdKind::kBuildVariant, "bv");
+  descriptor.summary_schema_version = "summary.v2";
+  descriptor.relation_schema_version = "relations.v2";
+  descriptor.rule_bundle_version = "rules.v2";
+  descriptor.model_bundle_version = "models.v1";
+  descriptor.svf_configuration_hash = std::string(64, 'a');
+  descriptor.wpa_configuration_hash = std::string(64, 'b');
+  descriptor.engine = engine;
+  descriptor.engine_toolchain_identity = "test-toolchain";
+  return std::move(facts::MakeAnalysisRun(descriptor)).value();
+}
+
+// The M9 seam: a successful orchestration reduces to one valid, content-addressed
+// batch that the fact bus validates and delivers. This pins the handoff the
+// durable M9 store and explainFact will build on.
+TEST(WpaFactBusHandoffTest, OrchestrationProducesValidFactBusBatch) {
+  auto a = V2Summary("A");
+  AddV2Call(&a, "A", "B");
+  auto b = V2Summary("B");
+  AddV2Call(&b, "B", "C");
+  const std::vector<summary::SummaryArtifact> summaries = {a, b, V2Summary("C")};
+
+  const auto db = std::filesystem::temp_directory_path() /
+                  ("veritas_wpa_bus_" + std::to_string(getpid()) + "_" +
+                   std::to_string(reinterpret_cast<std::uintptr_t>(this)));
+  auto repo = WpaRunRepository::Open(db);
+  ASSERT_TRUE(repo.ok()) << repo.status().message();
+
+  auto cpp = CppConformanceExecutor::Create(
+      facts::EngineIdentity::kCppConformance, "test-toolchain");
+  ASSERT_TRUE(cpp.ok());
+
+  WpaOrchestrator orchestrator(*cpp, *repo);
+  const std::array<WpaComponentKind, 1> components = {
+      WpaComponentKind::kReachability};
+  WpaRunRequest request;
+  request.run = MakeRunManifest(facts::EngineIdentity::kCppConformance);
+  request.summaries = summaries;
+  request.components = components;
+  auto result = orchestrator.Run(request);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+  ASSERT_FALSE(result->facts.empty());
+  ASSERT_FALSE(result->witnesses.empty());
+
+  facts::AnalysisFactBatch batch = facts::MakeAnalysisFactBatch(*result);
+  EXPECT_FALSE(batch.facts.empty());
+  EXPECT_FALSE(batch.witnesses.empty());
+  EXPECT_EQ(batch.expected_components.size(), batch.completed_components.size());
+
+  struct RecordingSink : facts::AnalysisFactSink {
+    Status Publish(const facts::AnalysisFactBatch&) override {
+      ++count;
+      return Status::Ok();
+    }
+    int count = 0;
+  } sink;
+
+  facts::AnalysisFactBus bus(*repo);
+  bus.AddSink("recording", sink);
+  ASSERT_TRUE(bus.Publish(std::move(batch)).ok());
+  EXPECT_EQ(sink.count, 1);
+
+  std::filesystem::remove_all(db);
 }
 
 } // namespace

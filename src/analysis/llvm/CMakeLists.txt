@@ -35,5 +35,6 @@ target_link_libraries(veritas_analysis_llvm
   PUBLIC
     LLVM
     clang-cpp
+    veritas_build
     veritas_summary
 )

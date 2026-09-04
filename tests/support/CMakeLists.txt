@@ -34,3 +34,28 @@ target_compile_features(veritas_test_support PUBLIC cxx_std_20)
 veritas_add_warnings(veritas_test_support)
 
 add_library(veritas::test_support ALIAS veritas_test_support)
+
+add_library(veritas_wpa_fixture_support STATIC
+  WpaFixtureHarness.cpp
+)
+
+target_include_directories(veritas_wpa_fixture_support
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+
+target_link_libraries(veritas_wpa_fixture_support
+  PUBLIC
+    veritas_analysis
+    veritas_svf_analysis
+    veritas_analysis_pipeline
+    veritas_build
+    veritas_summarydb
+    veritas_test_support
+)
+
+target_compile_features(veritas_wpa_fixture_support PUBLIC cxx_std_20)
+
+veritas_add_warnings(veritas_wpa_fixture_support)

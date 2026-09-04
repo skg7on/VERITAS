@@ -55,7 +55,7 @@ target_include_directories(svf_fact_mapper_integration_test
 add_test(NAME SvfFactMapperTest COMMAND svf_fact_mapper_integration_test)
 set_tests_properties(SvfFactMapperTest PROPERTIES
   TIMEOUT 30
-  LABELS "integration;svf"
+  LABELS "integration;svf;m9-entry;indirect-calls"
 )
 
 add_executable(svf_indirect_call_integration_test

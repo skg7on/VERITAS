@@ -58,6 +58,50 @@ std::string HashOf(const std::string& bytes) {
 
 }  // namespace
 
+CanonicalResultHashes ComputeCanonicalResultHashes(
+    std::span<const AnalysisFact> input_facts,
+    std::span<const WitnessEdge> input_witnesses) {
+  std::vector<AnalysisFact> facts(input_facts.begin(), input_facts.end());
+  std::ranges::sort(facts, [](const AnalysisFact& left,
+                              const AnalysisFact& right) {
+    return EncodeSemanticKey(left.row) < EncodeSemanticKey(right.row);
+  });
+  std::vector<WitnessEdge> witnesses(input_witnesses.begin(),
+                                     input_witnesses.end());
+  std::ranges::sort(witnesses, [](const WitnessEdge& left,
+                                  const WitnessEdge& right) {
+    const auto left_result = EncodeSemanticKey(left.result.row);
+    const auto right_result = EncodeSemanticKey(right.result.row);
+    if (left_result != right_result)
+      return left_result < right_result;
+    if (left.rule_id != right.rule_id)
+      return left.rule_id < right.rule_id;
+    if (left.input_ordinal != right.input_ordinal)
+      return left.input_ordinal < right.input_ordinal;
+    return EncodeSemanticKey(left.input.row) <
+           EncodeSemanticKey(right.input.row);
+  });
+
+  std::string external_bytes;
+  AppendField(&external_bytes, "veritas.wpa.external.v1");
+  for (const auto& fact : facts)
+    AppendField(&external_bytes, EncodeSemanticKey(fact.row));
+  CanonicalResultHashes hashes;
+  hashes.external_hash = HashOf(external_bytes);
+
+  std::string fixpoint_bytes;
+  AppendField(&fixpoint_bytes, "veritas.wpa.fixpoint.v1");
+  AppendField(&fixpoint_bytes, hashes.external_hash);
+  for (const auto& edge : witnesses) {
+    AppendField(&fixpoint_bytes, EncodeSemanticKey(edge.result.row));
+    AppendField(&fixpoint_bytes, edge.rule_id);
+    AppendField(&fixpoint_bytes, EncodeSemanticKey(edge.input.row));
+    AppendField(&fixpoint_bytes, std::to_string(edge.input_ordinal));
+  }
+  hashes.fixpoint_hash = HashOf(fixpoint_bytes);
+  return hashes;
+}
+
 StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
     const CanonicalizationRequest& request) {
   if (request.evaluation == nullptr) {
@@ -245,23 +289,10 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
   // ExternalHash covers only what a predecessor can see: the published
   // semantics. Witness edges are deliberately excluded so re-proving a fact
   // does not schedule predecessors that cannot observe the difference.
-  std::string external_bytes;
-  AppendField(&external_bytes, "veritas.wpa.external.v1");
-  for (const auto& fact : canonical.facts) {
-    AppendField(&external_bytes, EncodeSemanticKey(fact.row));
-  }
-  canonical.external_hash = HashOf(external_bytes);
-
-  std::string fixpoint_bytes;
-  AppendField(&fixpoint_bytes, "veritas.wpa.fixpoint.v1");
-  AppendField(&fixpoint_bytes, canonical.external_hash);
-  for (const auto& edge : canonical.witnesses) {
-    AppendField(&fixpoint_bytes, EncodeSemanticKey(edge.result.row));
-    AppendField(&fixpoint_bytes, edge.rule_id);
-    AppendField(&fixpoint_bytes, EncodeSemanticKey(edge.input.row));
-    AppendField(&fixpoint_bytes, std::to_string(edge.input_ordinal));
-  }
-  canonical.fixpoint_hash = HashOf(fixpoint_bytes);
+  const auto hashes = ComputeCanonicalResultHashes(canonical.facts,
+                                                   canonical.witnesses);
+  canonical.fixpoint_hash = hashes.fixpoint_hash;
+  canonical.external_hash = hashes.external_hash;
   return canonical;
 }
 
