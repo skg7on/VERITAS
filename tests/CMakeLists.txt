@@ -35,6 +35,7 @@ set_tests_properties(WpaFixtureHarnessTest PROPERTIES
 
 add_subdirectory(unit)
 add_subdirectory(integration)
+add_subdirectory(qualification)
 add_subdirectory(ci)
 
 find_program(VERITAS_BASH_EXECUTABLE bash REQUIRED)

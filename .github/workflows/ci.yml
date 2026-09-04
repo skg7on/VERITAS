@@ -293,3 +293,10 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
         run: ctest --test-dir build --output-on-failure
+
+      - name: Enforce wpa-qualification membership
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
+        run: |
+          ctest --test-dir build -L wpa-qualification --output-junit qualification.xml
+          python3 tests/qualification/check_no_skips.py --junit qualification.xml
