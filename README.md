@@ -54,7 +54,7 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 - **Languages:** C++20
 - **Build System:** CMake 3.23+
 - **Host compiler:** CMake auto-detected (current dev machine: llvm@17 17.0.6)
-- **LLVM/Clang libraries:** 22+ (24.x recommended)
+- **LLVM/Clang libraries:** 22+ (23.x and 24.x supported; 24.x recommended)
 - **Pointer Analysis:** SVF (pinned at `third_party/SVF@18fb5650…`, required, in-process)
 - **Constraint Solver:** Z3
 - **WPA Engine:** Soufflé Datalog
@@ -75,7 +75,7 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 
 - CMake 3.23+
 - Ninja (`brew install ninja` on macOS; `apt install ninja-build` on Debian/Ubuntu)
-- LLVM/Clang 22+ libraries (24.x recommended; build with `LLVM_ENABLE_RTTI=OFF` and `LLVM_ENABLE_EH=OFF`). The host C/C++ compiler is auto-detected separately and need not match the LLVM library version.
+- LLVM/Clang 22+ libraries (23.x and 24.x supported; 24.x recommended). Build with `LLVM_ENABLE_RTTI=OFF`, `LLVM_ENABLE_EH=OFF`, `LLVM_BUILD_LLVM_DYLIB=ON`, and `CLANG_LINK_CLANG_DYLIB=ON` — VERITAS and the vendored SVF link the monolithic `libLLVM` and `libclang-cpp` shared libraries. The host C/C++ compiler is auto-detected separately and need not match the LLVM library version.
 - Z3 (`brew install z3` on macOS)
 
 **Canonical local configure and build** (uses `CMakePresets.json` — Ninja generator, `build/` under the repo root, Debug):
