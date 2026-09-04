@@ -222,6 +222,18 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
       }
       result.completed_components.push_back(std::move(*completion));
 
+      // Flatten the component's canonical facts/witnesses/diagnostics into the
+      // run-level handoff the AnalysisFactBus consumes. component_result is
+      // copied (not moved) here so the successor support below still owns it.
+      result.facts.insert(result.facts.end(), component_result.facts.begin(),
+                          component_result.facts.end());
+      result.witnesses.insert(result.witnesses.end(),
+                              component_result.witnesses.begin(),
+                              component_result.witnesses.end());
+      result.diagnostics.insert(result.diagnostics.end(),
+                                component_result.diagnostics.begin(),
+                                component_result.diagnostics.end());
+
       // Incremental propagation: a changed externally visible hash schedules
       // the component's predecessors through the M7 scheduler.
       if (scc_state_ != nullptr) {

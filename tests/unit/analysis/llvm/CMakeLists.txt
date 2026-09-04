@@ -24,6 +24,7 @@ target_link_libraries(StableValueMapperTest PRIVATE
 
 veritas_add_warnings(StableValueMapperTest)
 gtest_discover_tests(StableValueMapperTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(StableValueMapperTest stable-identity)
 
 add_executable(AbstractMemoryBuilderTest
   AbstractMemoryBuilderTest.cpp
@@ -37,3 +38,4 @@ target_link_libraries(AbstractMemoryBuilderTest PRIVATE
 
 veritas_add_warnings(AbstractMemoryBuilderTest)
 gtest_discover_tests(AbstractMemoryBuilderTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(AbstractMemoryBuilderTest stable-identity)

@@ -25,6 +25,7 @@ add_library(veritas_facts
   SouffleExporter.cpp
   Witness.cpp
   SouffleRunner.cpp
+  AnalysisFactBus.cpp
 )
 
 target_include_directories(veritas_facts PUBLIC
@@ -42,6 +43,7 @@ target_link_libraries(veritas_facts PUBLIC
 )
 target_link_libraries(veritas_facts PRIVATE
   LLVMSupport
+  veritas::summarydb
 )
 
 target_compile_features(veritas_facts PUBLIC cxx_std_20)

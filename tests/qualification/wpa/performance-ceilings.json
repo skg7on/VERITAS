@@ -1,0 +1,7 @@
+{
+  "schema_version": "wpa-performance.v1",
+  "fixture": "recursive_calls",
+  "maximum_wall_time_ms": 30000,
+  "maximum_peak_rss_mb": 2048,
+  "maximum_output_facts": 1000000
+}
