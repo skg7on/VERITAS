@@ -14,7 +14,6 @@
 
 #include <string>
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "ProjectFixture.h"
@@ -40,7 +39,7 @@ TEST(WpaEmergencyModeTest, ExplicitCppModeIsDistinctAndDegraded) {
   EXPECT_EQ(result->wpa_engine, WpaEngineMode::kCppEmergency);
   EXPECT_FALSE(result->wpa_run_id.empty());
   EXPECT_NE(result->wpa_run_id, production->wpa_run_id);
-  EXPECT_THAT(result->wpa_diagnostics, ::testing::HasSubstr("degraded"));
+  EXPECT_NE(result->wpa_diagnostics.find("degraded"), std::string::npos);
 }
 
 } // namespace
