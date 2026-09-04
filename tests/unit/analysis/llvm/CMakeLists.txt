@@ -18,7 +18,7 @@ add_executable(StableValueMapperTest
 
 target_link_libraries(StableValueMapperTest PRIVATE
   veritas_analysis_llvm
-  LLVMAsmParser
+  LLVM
   GTest::gtest_main
 )
 
@@ -31,7 +31,7 @@ add_executable(AbstractMemoryBuilderTest
 
 target_link_libraries(AbstractMemoryBuilderTest PRIVATE
   veritas_analysis_llvm
-  LLVMAsmParser
+  LLVM
   GTest::gtest_main
 )
 

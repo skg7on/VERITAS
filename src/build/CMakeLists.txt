@@ -41,7 +41,7 @@ target_include_directories(veritas_build SYSTEM PRIVATE
 
 target_link_libraries(veritas_build
   PUBLIC veritas_core
-  PRIVATE clangTooling LLVMSupport
+  PRIVATE clang-cpp LLVM
 )
 
 target_compile_features(veritas_build PUBLIC cxx_std_20)

@@ -28,13 +28,9 @@ target_link_libraries(veritas_frontend_clang
   PUBLIC
     veritas_core
     veritas_build
-    clangTooling
-    clangFrontend
-    clangSerialization
-    clangAST
-    clangBasic
+    clang-cpp
   PRIVATE
-    LLVMSupport
+    LLVM
 )
 
 set_target_properties(veritas_frontend_clang PROPERTIES

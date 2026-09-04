@@ -41,7 +41,7 @@ target_link_libraries(veritas_facts PUBLIC
   veritas_analysis_semantic
 )
 target_link_libraries(veritas_facts PRIVATE
-  LLVMSupport
+  LLVM
 )
 
 target_compile_features(veritas_facts PUBLIC cxx_std_20)

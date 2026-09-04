@@ -26,6 +26,5 @@ target_include_directories(veritas_analysis_pipeline
 target_link_libraries(veritas_analysis_pipeline
   PUBLIC
     veritas_analysis_llvm
-    LLVMCore
-    LLVMSupport
+    LLVM
 )

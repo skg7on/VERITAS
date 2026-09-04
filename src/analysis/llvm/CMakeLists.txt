@@ -33,14 +33,7 @@ target_include_directories(veritas_analysis_llvm
 
 target_link_libraries(veritas_analysis_llvm
   PUBLIC
-    LLVMCore
-    LLVMSupport
-    LLVMLinker
-    LLVMBitWriter
-    clangCodeGen
-    clangFrontend
-    clangTooling
-    clangSerialization
-    clangBasic
+    LLVM
+    clang-cpp
     veritas_summary
 )
