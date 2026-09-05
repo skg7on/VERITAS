@@ -33,6 +33,7 @@
 
 #include "SourceAnchorBuilder.h"
 #include "veritas/build/CompileFlags.h"
+#include "veritas/build/Toolchain.h"
 #include "veritas/core/Hash.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
@@ -292,6 +293,7 @@ StatusOr<ProjectAstIndex> ProjectAstExtractor::ExtractProject(
     ::clang::tooling::FixedCompilationDatabase database(
         invocation->working_directory, invocation->arguments);
     ::clang::tooling::ClangTool tool(database, {invocation->source_path});
+    tool.appendArgumentsAdjuster(build::MakeSystemIncludeAdjuster());
 
     auto tu_id = core::ParseStableId(command.translation_unit_id);
     if (!tu_id.ok()) {

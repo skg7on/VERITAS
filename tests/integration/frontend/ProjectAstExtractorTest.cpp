@@ -57,5 +57,25 @@ TEST(ProjectAstExtractorTest, ExtractsFunctionsFromEveryTranslationUnit) {
   EXPECT_TRUE(has_b);
 }
 
+TEST(ProjectAstExtractorTest, ResolvesSystemHeadersWithoutExplicitSysroot) {
+  auto manifest = LoadFixtureManifest("system_headers");
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+
+  ProjectAstExtractor extractor;
+  auto index = extractor.ExtractProject(*manifest);
+  ASSERT_TRUE(index.ok()) << index.status().message();
+
+  EXPECT_EQ(index->processed_translation_units, 1u);
+  // The system headers contribute a handful of inline functions, so don't pin
+  // an exact count — assert the fixture's own function was actually extracted.
+  bool has_system_header_function = false;
+  for (const auto& declaration : index->declarations) {
+    has_system_header_function |=
+        (declaration.qualified_name.find("system_header_function") !=
+         std::string::npos);
+  }
+  EXPECT_TRUE(has_system_header_function);
+}
+
 }  // namespace
 }  // namespace veritas::frontend::clang

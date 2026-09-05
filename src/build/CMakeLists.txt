@@ -23,6 +23,7 @@ add_library(veritas_build
   CompileFlags.cpp
   ProjectInput.cpp
   ProjectManifestLoader.cpp
+  Toolchain.cpp
 )
 
 target_include_directories(veritas_build PUBLIC
@@ -43,6 +44,13 @@ target_include_directories(veritas_build SYSTEM PRIVATE
 target_link_libraries(veritas_build
   PUBLIC veritas_core
   PRIVATE clang-cpp LLVM
+)
+
+# The system-include adjuster injects an explicit -resource-dir pointing at the
+# clang builtin headers of the LLVM VERITAS links against. ClangTool infers
+# this from the running executable's path, which is wrong for a prebuilt LLVM.
+target_compile_definitions(veritas_build PRIVATE
+  VERITAS_CLANG_RESOURCE_DIR="${VERITAS_CLANG_RESOURCE_DIR}"
 )
 
 target_compile_features(veritas_build PUBLIC cxx_std_20)
