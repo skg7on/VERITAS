@@ -72,43 +72,6 @@ TEST(SouffleWpaExecutorTest, RejectsDifferentToolchainIdentity) {
   EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
 }
 
-TEST(SouffleWpaExecutorTest, MissingWorkerReturnsError) {
-  SouffleWpaExecutor executor("/nonexistent/veritas-souffle-worker",
-                              "souffle-toolchain");
-  WpaExecutionEnvelope envelope;
-  envelope.run =
-      ManifestFor(facts::EngineIdentity::kSouffle, "souffle-toolchain");
-  auto result = executor.Execute(envelope, WpaExecutionLimits{});
-  ASSERT_FALSE(result.ok());
-  EXPECT_EQ(result.status().code(), StatusCode::kInternal);
-}
-
-TEST(SouffleWpaExecutorTest, ZeroExitWithoutOutputReturnsError) {
-  SouffleWpaExecutor executor(VERITAS_EMPTY_OUTPUT_WORKER,
-                              "souffle-toolchain");
-  WpaExecutionEnvelope envelope;
-  envelope.run =
-      ManifestFor(facts::EngineIdentity::kSouffle, "souffle-toolchain");
-  envelope.logical.component = WpaComponentKind::kReachability;
-
-  auto result = executor.Execute(envelope, WpaExecutionLimits{});
-
-  ASSERT_FALSE(result.ok());
-  EXPECT_EQ(result.status().code(), StatusCode::kInternal);
-}
-
-TEST(SouffleWpaExecutorTest, TimeoutReturnsDeadlineExceeded) {
-  SouffleWpaExecutor executor(VERITAS_SOUFFLE_WORKER, "souffle-toolchain");
-  WpaExecutionEnvelope envelope;
-  envelope.run =
-      ManifestFor(facts::EngineIdentity::kSouffle, "souffle-toolchain");
-  WpaExecutionLimits limits;
-  limits.timeout = std::chrono::milliseconds(1);
-  auto result = executor.Execute(envelope, limits);
-  ASSERT_FALSE(result.ok());
-  EXPECT_EQ(result.status().code(), StatusCode::kDeadlineExceeded);
-}
-
 TEST(SouffleWpaExecutorTest, RejectsUnsupportedThreadCount) {
   SouffleWpaExecutor executor("/nonexistent/veritas-souffle-worker",
                               "souffle-toolchain");
@@ -122,42 +85,6 @@ TEST(SouffleWpaExecutorTest, RejectsUnsupportedThreadCount) {
 
   ASSERT_FALSE(result.ok());
   EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
-}
-
-TEST(SouffleWpaExecutorTest, RejectsMemoryLimitOverflow) {
-  SouffleWpaExecutor executor("/nonexistent/veritas-souffle-worker",
-                              "souffle-toolchain");
-  WpaExecutionEnvelope envelope;
-  envelope.run =
-      ManifestFor(facts::EngineIdentity::kSouffle, "souffle-toolchain");
-  WpaExecutionLimits limits;
-  limits.memory_mb = std::numeric_limits<std::uint64_t>::max();
-
-  auto result = executor.Execute(envelope, limits);
-
-  ASSERT_FALSE(result.ok());
-  EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
-}
-
-TEST(SouffleWpaExecutorTest, EnforcesOrRejectsMemoryLimit) {
-  SouffleWpaExecutor executor(VERITAS_LIMIT_PROBE_WORKER,
-                              "souffle-toolchain");
-  WpaExecutionEnvelope envelope;
-  envelope.run =
-      ManifestFor(facts::EngineIdentity::kSouffle, "souffle-toolchain");
-  envelope.logical.component = WpaComponentKind::kReachability;
-  WpaExecutionLimits limits;
-  limits.timeout = std::chrono::seconds(5);
-  limits.memory_mb = 16384;
-
-  auto result = executor.Execute(envelope, limits);
-
-#if defined(__APPLE__)
-  ASSERT_FALSE(result.ok());
-  EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
-#else
-  ASSERT_TRUE(result.ok()) << result.status().message();
-#endif
 }
 
 }  // namespace

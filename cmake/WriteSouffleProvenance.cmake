@@ -20,7 +20,7 @@
 
 foreach(_required IN ITEMS
     VERITAS_SOUFFLE_EXECUTABLE
-    VERITAS_SOUFFLE_WORKER
+    VERITAS_SOUFFLE_RUNNER
     VERITAS_SOUFFLE_FUNCTOR_LIBRARY
     VERITAS_REACHABILITY_BUNDLE
     VERITAS_MAY_WRITE_BUNDLE
@@ -51,7 +51,7 @@ function(veritas_json_escape INPUT OUTPUT)
 endfunction()
 
 file(SHA256 "${VERITAS_SOUFFLE_EXECUTABLE}" _souffle_digest)
-file(SHA256 "${VERITAS_SOUFFLE_WORKER}" _worker_digest)
+file(SHA256 "${VERITAS_SOUFFLE_RUNNER}" _runner_digest)
 file(SHA256 "${VERITAS_SOUFFLE_FUNCTOR_LIBRARY}" _functor_digest)
 file(SHA256 "${VERITAS_REACHABILITY_BUNDLE}" _reach_digest)
 file(SHA256 "${VERITAS_MAY_WRITE_BUNDLE}" _maywrite_digest)
@@ -59,7 +59,7 @@ file(SHA256 "${VERITAS_MAY_WRITE_BUNDLE}" _maywrite_digest)
 string(CONCAT _canonical
   "source_revision=${VERITAS_SOUFFLE_REVISION}\n"
   "souffle_executable_sha256=${_souffle_digest}\n"
-  "worker_executable_sha256=${_worker_digest}\n"
+  "runner_library_sha256=${_runner_digest}\n"
   "functor_library_sha256=${_functor_digest}\n"
   "reachability_bundle_sha256=${_reach_digest}\n"
   "may_write_bundle_sha256=${_maywrite_digest}\n"
@@ -88,7 +88,7 @@ file(WRITE "${VERITAS_SOUFFLE_PROVENANCE_OUTPUT}"
   "  \"source_revision\": \"${_source_revision}\",\n"
   "  \"executable_sha256\": \"${_souffle_digest}\",\n"
   "  \"souffle_executable_sha256\": \"${_souffle_digest}\",\n"
-  "  \"worker_executable_sha256\": \"${_worker_digest}\",\n"
+  "  \"runner_library_sha256\": \"${_runner_digest}\",\n"
   "  \"functor_library_sha256\": \"${_functor_digest}\",\n"
   "  \"reachability_bundle_sha256\": \"${_reach_digest}\",\n"
   "  \"may_write_bundle_sha256\": \"${_maywrite_digest}\",\n"

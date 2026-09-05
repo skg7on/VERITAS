@@ -208,6 +208,27 @@ veritas_generate_souffle_program(ReachabilityV2 veritas_reachability v2_reach
 veritas_generate_souffle_program(MayWriteV2 veritas_maywrite v2_maywrite
   ${CMAKE_SOURCE_DIR}/logic/memory_effects/may_write.v2.dl)
 
+# The in-process runner links the generated bundles + libsouffle and exposes a C
+# ABI (SouffleRunner.h). It is compiled with RTTI and exceptions (Souffle needs
+# both); the C ABI is the boundary to the -fno-rtti -fno-exceptions VERITAS code.
+add_library(veritas_souffle_runner SHARED
+  ${CMAKE_SOURCE_DIR}/src/wpa/SouffleRunner.cpp
+)
+target_include_directories(veritas_souffle_runner PRIVATE
+  ${VERITAS_SOUFFLE_SOURCE_DIR}/src/include
+  ${CMAKE_SOURCE_DIR}/include
+)
+set_target_properties(veritas_souffle_runner PROPERTIES
+  CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+target_compile_options(veritas_souffle_runner PRIVATE -frtti -fexceptions)
+target_link_libraries(veritas_souffle_runner PRIVATE
+  ReachabilityV2
+  MayWriteV2
+  libsouffle
+  veritas_souffle_functors
+)
+
+# The worker executable is a thin CLI shim over the runner.
 add_executable(veritas_souffle_worker
   ${CMAKE_SOURCE_DIR}/src/wpa/SouffleWorkerMain.cpp
 )
@@ -215,17 +236,12 @@ set_target_properties(veritas_souffle_worker PROPERTIES
   OUTPUT_NAME "veritas-souffle-worker"
 )
 target_include_directories(veritas_souffle_worker PRIVATE
-  ${VERITAS_SOUFFLE_SOURCE_DIR}/src/include
+  ${CMAKE_SOURCE_DIR}/include
 )
-# Stays at C++20 (SouffleWorkerMain.cpp uses std::string_view::starts_with); it
-# links the C++17-generated bundles and libsouffle, whose ABI is identical on the
-# same toolchain, and it does not itself instantiate the C++17-only templates.
+# Stays at C++20 (SouffleWorkerMain.cpp uses std::string_view::starts_with).
 target_compile_options(veritas_souffle_worker PRIVATE -frtti -fexceptions)
 target_link_libraries(veritas_souffle_worker PRIVATE
-  ReachabilityV2
-  MayWriteV2
-  libsouffle
-  veritas_souffle_functors
+  veritas_souffle_runner
 )
 
 # Derive production provenance only after every runtime artifact exists. The
@@ -235,7 +251,7 @@ add_custom_command(
   OUTPUT "${CMAKE_BINARY_DIR}/souffle-provenance.json"
   COMMAND ${CMAKE_COMMAND}
           "-DVERITAS_SOUFFLE_EXECUTABLE=$<TARGET_FILE:souffle>"
-          "-DVERITAS_SOUFFLE_WORKER=$<TARGET_FILE:veritas_souffle_worker>"
+          "-DVERITAS_SOUFFLE_RUNNER=$<TARGET_FILE:veritas_souffle_runner>"
           "-DVERITAS_SOUFFLE_FUNCTOR_LIBRARY=$<TARGET_FILE:veritas_souffle_functors>"
           "-DVERITAS_REACHABILITY_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_reach.cpp"
           "-DVERITAS_MAY_WRITE_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_maywrite.cpp"
@@ -254,7 +270,7 @@ add_custom_command(
           -P "${CMAKE_SOURCE_DIR}/cmake/WriteSouffleProvenance.cmake"
   DEPENDS
     souffle
-    veritas_souffle_worker
+    veritas_souffle_runner
     veritas_souffle_functors
     "${VERITAS_SOUFFLE_GEN_DIR}/v2_reach.cpp"
     "${VERITAS_SOUFFLE_GEN_DIR}/v2_maywrite.cpp"
