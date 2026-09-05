@@ -82,6 +82,19 @@ find_package(Clang REQUIRED CONFIG)
 
 message(STATUS "VERITAS: Found Clang ${CLANG_VERSION}")
 
+# Clang's builtin headers (stddef.h, stdarg.h, ...) live in the clang resource
+# directory, <LLVM_LIBRARY_DIR>/clang/<major>. ClangTool's injectResourceDir()
+# infers that path from the running executable's location, which is wrong for
+# VERITAS because VERITAS links a prebuilt LLVM whose builtin headers live
+# under the LLVM library directory. Expose the real path so the system-include
+# adjuster can inject an explicit -resource-dir.
+set(VERITAS_CLANG_RESOURCE_DIR "${LLVM_LIBRARY_DIR}/clang/${LLVM_VERSION_MAJOR}")
+if(NOT EXISTS "${VERITAS_CLANG_RESOURCE_DIR}/include/stddef.h")
+  message(WARNING
+    "VERITAS: clang builtin headers not found at ${VERITAS_CLANG_RESOURCE_DIR}; "
+    "system-header analysis may fail. Set VERITAS_CLANG_RESOURCE_DIR to override.")
+endif()
+
 # Report LLVM RTTI and exception handling settings.
 # LLVM_ENABLE_RTTI and LLVM_ENABLE_EH are set by LLVMConfig.cmake.
 # VERITAS and SVF will match whatever LLVM was built with.

@@ -12,6 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# veritas-explain: publishes a fact/provenance database in-process, then runs
+# the CLI binary and asserts the bounded explanation sections.
+add_executable(VeritasExplainTest VeritasExplainTest.cpp)
+target_link_libraries(VeritasExplainTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+target_compile_definitions(VeritasExplainTest PRIVATE
+  VERITAS_EXPLAIN_BINARY="$<TARGET_FILE:veritas-explain>"
+)
+add_dependencies(VeritasExplainTest veritas-explain)
+veritas_add_warnings(VeritasExplainTest)
+gtest_discover_tests(VeritasExplainTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(VeritasExplainTest explain-cli)
+
 # Proves the six semantic-key functors produce byte-identical keys to
 # SemanticKeyCodec. Links veritas-souffle-functors and libsouffle, so it is
 # built with RTTI/exceptions and only under the production Souffle engine.

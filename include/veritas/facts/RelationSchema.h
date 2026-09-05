@@ -24,7 +24,9 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "veritas/analysis/semantic/SemanticTypes.h"
@@ -124,6 +126,11 @@ struct RelationSchema {
 class RelationRegistry {
  public:
   const RelationSchema& Get(RelationId id) const;
+
+  // Returns the relation id carrying `name`, or std::nullopt when unknown.
+  // Relation names are the durable identity (fact IDs hash the name), so this
+  // reverse lookup is the load-time complement of Get.
+  std::optional<RelationId> FindByName(std::string_view name) const;
 };
 
 // Returns the immutable relations.v2 registry.

@@ -34,3 +34,13 @@ target_link_libraries(veritas-query PRIVATE veritas_cpg veritas_summarydb)
 # veritas-diff diffs two summaries and reports the impacted consumers through
 # the reverse dependency index.
 target_link_libraries(veritas-diff PRIVATE veritas_summarydb)
+
+# veritas-explain explains a fact's provenance from the M9 fact store.
+target_link_libraries(veritas-explain PRIVATE veritas_facts)
+
+# Its --json path uses protobuf's json_util, which returns absl::Status under
+# protobuf 22+ (where Abseil is present) but protobuf's own Status under 3.x.
+# Link the Abseil status library only when it exists (see cmake/Dependencies.cmake).
+if(TARGET absl::status)
+  target_link_libraries(veritas-explain PRIVATE absl::status)
+endif()

@@ -194,6 +194,16 @@ const RelationSchema& RelationRegistry::Get(RelationId id) const {
   return Table()[static_cast<std::size_t>(id)];
 }
 
+std::optional<RelationId> RelationRegistry::FindByName(
+    std::string_view name) const {
+  for (std::size_t i = 0; i < Table().size(); ++i) {
+    if (Table()[i].name == name) {
+      return static_cast<RelationId>(i);
+    }
+  }
+  return std::nullopt;
+}
+
 const RelationRegistry& RelationsV2() {
   static const RelationRegistry registry;
   return registry;

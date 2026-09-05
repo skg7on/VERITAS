@@ -34,6 +34,7 @@
 
 #include "analysis/llvm/OriginMap.h"
 #include "veritas/build/CompileFlags.h"
+#include "veritas/build/Toolchain.h"
 #include "veritas/core/Ids.h"
 
 namespace veritas::analysis::llvm {
@@ -154,6 +155,7 @@ BuildTranslationUnitModule(const build::TranslationUnitCommand &command,
 
   ::clang::tooling::FixedCompilationDatabase database(working_dir, arguments);
   ::clang::tooling::ClangTool tool(database, {source});
+  tool.appendArgumentsAdjuster(build::MakeSystemIncludeAdjuster());
 
   std::unique_ptr<::llvm::Module> module;
   EmitModuleActionFactory factory(context, &module);
