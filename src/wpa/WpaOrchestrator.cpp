@@ -155,6 +155,9 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
       materialization.scc_id = scc_id;
       materialization.component = component;
       materialization.summaries = request.summaries;
+      // Reuse the whole-program SCC decomposition built once above, rather
+      // than rebuilding the call graph and SCC graph for every component.
+      materialization.scc_graph = &*scc_graph;
       // Keep the successor support alive for the duration of Build: the span
       // stored in the request points into this vector.
       std::vector<facts::AnalysisFact> successor_support =
