@@ -1,0 +1,7 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "command": "clang -std=c11 -O0 -g -fno-inline -c @PROJECT_ROOT@/modeled_external_call.c -o modeled_external_call.o",
+    "file": "modeled_external_call.c"
+  }
+]

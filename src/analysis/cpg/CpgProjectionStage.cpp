@@ -131,8 +131,11 @@ StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
       continue;
     auto origin_id = origin_map.GetSymbolId(&function);
     if (!origin_id.has_value()) {
-      return Status::FailedPrecondition(
-          "CPG function is missing its OriginMap identity");
+      // SVF's extapi modeling clones external library functions (e.g. strchr,
+      // strstr) into the module as definitions to model their behavior. Those
+      // synthetic definitions carry no function-variant identity and are not
+      // part of the analyzed program, so they are not CPG function nodes.
+      continue;
     }
     auto node_id = core::ParseStableId(*origin_id);
     if (!node_id.ok()) {
