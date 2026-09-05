@@ -167,6 +167,7 @@ TEST_F(RelationIoTest, RoundTripsResultsAndWitnesses) {
     for (const auto& edge : raw->witnesses) {
       witnesses << facts::EncodeSemanticKey(edge.result.row) << '\t'
                 << edge.rule_id << '\t'
+                << edge.derivation_key << '\t'
                 << facts::EncodeSemanticKey(edge.input.row) << '\t'
                 << edge.input_ordinal << '\n';
     }
@@ -219,7 +220,8 @@ TEST_F(RelationIoTest, RejectsWitnessKeyForUnknownRelation) {
                             facts::EncodeIdField("func:sha256:aa");
   {
     std::ofstream witnesses(directory_ / "Witness.csv");
-    witnesses << bogus << "\twpa.reachability.direct.v2\t" << bogus << "\t0\n";
+    witnesses << bogus << "\twpa.reachability.direct.v2\t" << bogus << '\t'
+              << bogus << "\t0\n";
   }
   EXPECT_FALSE(RelationIo::ReadOutput(directory_, *input).ok());
 }
@@ -235,7 +237,8 @@ TEST_F(RelationIoTest, RejectsWitnessKeyWithWrongColumnDomain) {
                             facts::EncodeEnumField(0);
   {
     std::ofstream witnesses(directory_ / "Witness.csv");
-    witnesses << wrong << "\twpa.reachability.direct.v2\t" << wrong << "\t0\n";
+    witnesses << wrong << "\twpa.reachability.direct.v2\t" << wrong << '\t'
+              << wrong << "\t0\n";
   }
   EXPECT_FALSE(RelationIo::ReadOutput(directory_, *input).ok());
 }

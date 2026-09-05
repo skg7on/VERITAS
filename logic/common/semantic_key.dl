@@ -53,6 +53,11 @@
 // Every bundle emits the same witness relation. It is relation-independent by
 // construction: the canonicalizer validates and selects proofs without knowing
 // what any particular result means.
-.decl Witness(result_key:symbol, rule_id:symbol, input_key:symbol,
-              input_ordinal:unsigned)
+//
+// `derivation_key` names one Datalog firing (one proof step), so alternative
+// derivations -- different intermediates, or different call sites for one
+// intermediate -- remain distinguishable. It is the concatenation, in ordinal
+// order, of the firing's input keys.
+.decl Witness(result_key:symbol, rule_id:symbol, derivation_key:symbol,
+              input_key:symbol, input_ordinal:unsigned)
 .output Witness(IO=file, filename="Witness.csv")

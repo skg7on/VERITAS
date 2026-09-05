@@ -131,7 +131,11 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
   }
 
   // 3. Fold witness edges into derivations, rejecting anything unverifiable.
-  std::map<std::string, std::map<std::string, Derivation>> derivations;
+  // A derivation is keyed by (result, rule, derivation key): the derivation key
+  // distinguishes alternative proof steps that share a result and rule.
+  std::map<std::string,
+           std::map<std::string, std::map<std::string, Derivation>>>
+      derivations;
   for (const auto& edge : raw.witnesses) {
     const std::string result_key = EncodeSemanticKey(edge.result.row);
     if (!results.contains(result_key)) {
@@ -156,7 +160,8 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
           "witness cites an input that is neither a root nor a result");
     }
 
-    Derivation& derivation = derivations[result_key][edge.rule_id];
+    Derivation& derivation =
+        derivations[result_key][edge.rule_id][edge.derivation_key];
     derivation.rule_id = edge.rule_id;
     derivation.priority = rule->priority;
     const auto [it, inserted] =
@@ -165,8 +170,9 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
       return Status::InvalidArgument(
           "witness binds one input at two ordinals");
     }
-    // Two different inputs at the same ordinal is an ambiguous proof, not two
-    // alternative proofs: the rule has one argument in that position.
+    // With the derivation key, alternative proof steps land in separate groups;
+    // a second input at the same ordinal now indicates an engine defect, not a
+    // legal alternative proof.
     for (const auto& [existing_key, existing_ordinal] : derivation.inputs) {
       if (existing_ordinal == edge.input_ordinal && existing_key != input_key) {
         return Status::InvalidArgument(
@@ -186,30 +192,32 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
   for (std::size_t round = 0; round <= results.size(); ++round) {
     bool changed = false;
     for (auto& [result_key, by_rule] : derivations) {
-      for (auto& [rule_id, derivation] : by_rule) {
-        std::uint64_t total = 0;
-        bool provable = true;
-        for (const auto& [input_key, ordinal] : derivation.inputs) {
-          total += 1;
-          if (roots.contains(input_key))
-            continue;
-          const auto input_cost = cost.find(input_key);
-          if (input_cost == cost.end() || input_cost->second == kUnproven) {
-            provable = false;
-            break;
+      for (auto& [rule_id, by_derivation] : by_rule) {
+        for (auto& [derivation_key, derivation] : by_derivation) {
+          std::uint64_t total = 0;
+          bool provable = true;
+          for (const auto& [input_key, ordinal] : derivation.inputs) {
+            total += 1;
+            if (roots.contains(input_key))
+              continue;
+            const auto input_cost = cost.find(input_key);
+            if (input_cost == cost.end() || input_cost->second == kUnproven) {
+              provable = false;
+              break;
+            }
+            total += input_cost->second;
           }
-          total += input_cost->second;
-        }
-        if (!provable)
-          continue;
-        if (total < derivation.cost) {
-          derivation.cost = total;
-          changed = true;
-        }
-        auto& best = cost[result_key];
-        if (total < best) {
-          best = total;
-          changed = true;
+          if (!provable)
+            continue;
+          if (total < derivation.cost) {
+            derivation.cost = total;
+            changed = true;
+          }
+          auto& best = cost[result_key];
+          if (total < best) {
+            best = total;
+            changed = true;
+          }
         }
       }
     }
@@ -231,16 +239,19 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
           "published result has no finite proof rooted in declared inputs");
     }
     const Derivation* selected = nullptr;
-    for (const auto& [rule_id, derivation] : by_rule->second) {
-      if (derivation.cost == kUnproven)
-        continue;
-      if (selected == nullptr || derivation.cost < selected->cost ||
-          (derivation.cost == selected->cost &&
-           derivation.priority < selected->priority)) {
-        selected = &derivation;
+    for (const auto& [rule_id, by_derivation] : by_rule->second) {
+      for (const auto& [derivation_key, derivation] : by_derivation) {
+        if (derivation.cost == kUnproven)
+          continue;
+        if (selected == nullptr || derivation.cost < selected->cost ||
+            (derivation.cost == selected->cost &&
+             derivation.priority < selected->priority)) {
+          selected = &derivation;
+        }
+        // Equal cost and equal priority fall back to the ordered (rule id,
+        // derivation key), which the map iteration already supplies
+        // deterministically.
       }
-      // Equal cost and equal priority fall back to the ordered rule id, which
-      // the map iteration already supplies deterministically.
     }
     if (selected == nullptr) {
       return Status::FailedPrecondition(
