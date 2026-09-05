@@ -93,11 +93,18 @@ struct WpaComponentResult {
   std::vector<std::string> diagnostics;
 };
 
+class SccGraph;
+
 // Inputs to materialization. `summaries` supplies the whole analysed set; the
 // materializer derives SCC membership from it and emits local facts only for
 // members of `scc_id`. `models` may be null when no model bundle is
 // configured; the bundle's content hash, when present, participates in the
 // logical input hash so a model change misses the component cache.
+//
+// `scc_graph`, when non-null, is the pre-built whole-program SCC decomposition.
+// The orchestrator supplies it so the per-component loop does not rebuild the
+// call graph and SCC decomposition for every SCC; when null the materializer
+// derives them from `summaries`.
 struct WpaMaterializationRequest {
   facts::AnalysisRunSemanticDescriptor semantics;
   core::StableId scc_id;
@@ -105,6 +112,7 @@ struct WpaMaterializationRequest {
   std::span<const summary::SummaryArtifact> summaries;
   std::span<const facts::AnalysisFact> successor_support;
   const analysis::semantic::ModelBundle* models = nullptr;
+  const SccGraph* scc_graph = nullptr;
 };
 
 }  // namespace veritas::wpa

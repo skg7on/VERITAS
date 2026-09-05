@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <set>
 #include <span>
 #include <string>
@@ -283,15 +284,21 @@ std::string_view ComponentKindName(WpaComponentKind component) {
 
 StatusOr<WpaLogicalComponentInput>
 WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
-  // 1. Recover SCC membership. VERITAS owns call-graph construction and SCC
-  // scheduling, so membership is derived here rather than trusted from a
-  // caller-supplied list.
-  auto call_graph = CallGraph::FromSummaries(request.summaries);
-  if (!call_graph.ok())
-    return call_graph.status();
-  auto scc_graph = SccGraph::Build(*call_graph);
-  if (!scc_graph.ok())
-    return scc_graph.status();
+  // 1. Recover SCC membership. The orchestrator supplies the pre-built SCC
+  // decomposition so it is not rebuilt for every component; standalone callers
+  // fall back to deriving it from the summaries.
+  const SccGraph* scc_graph = request.scc_graph;
+  std::optional<SccGraph> owned_scc_graph;
+  if (scc_graph == nullptr) {
+    auto call_graph = CallGraph::FromSummaries(request.summaries);
+    if (!call_graph.ok())
+      return call_graph.status();
+    auto built = SccGraph::Build(*call_graph);
+    if (!built.ok())
+      return built.status();
+    owned_scc_graph = std::move(*built);
+    scc_graph = &*owned_scc_graph;
+  }
   auto members = scc_graph->Members(request.scc_id);
   if (!members.ok())
     return members.status();
