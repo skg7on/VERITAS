@@ -44,6 +44,19 @@ TEST(CpgEndToEndTest, StandardAnalysisPublishesSummariesAndCpg) {
   EXPECT_GT(result->cpg_edge_count, 0u);
 }
 
+TEST(CpgEndToEndTest, ModeledExternalFunctionsDoNotBlockCpgProjection) {
+  // SVF clones modeled external functions (e.g. malloc) into the module as
+  // synthetic definitions that carry no function-variant identity. The CPG
+  // projection must skip them rather than fail, so a program that calls the
+  // modeled allocator still publishes a CPG.
+  ProjectAnalyzer analyzer;
+  auto result = analyzer.AnalyzeProject(FixtureRequest("modeled_external_call"),
+                                        AnalysisConfig::Default());
+  ASSERT_TRUE(result.ok()) << result.status().message();
+  EXPECT_FALSE(result->projection_id.empty());
+  EXPECT_GT(result->cpg_node_count, 0u);
+}
+
 TEST(CpgEndToEndTest, IdenticalInputsProduceCanonicalEquality) {
   ProjectAnalyzer analyzer;
   auto first = analyzer.AnalyzeProject(FixtureRequest("store_load"),
