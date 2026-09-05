@@ -80,36 +80,49 @@ SupportReachableKey(g, h, e,
   SupportReachableCall(g, h, e), FunctionMap(g, gs), FunctionMap(h, hs).
 
 // -- Witnesses -------------------------------------------------------------
+//
+// `derivation_key` is the concatenation of the firing's input keys in ordinal
+// order, so two ordinals of the same proof step share one key and alternative
+// proofs stay distinct. The ordinal-0 and ordinal-1 rules bind the same body
+// variables (including call site and dispatch) so they agree on the key.
 
-Witness(rk, "wpa.reachability.direct.v2", ik, 0) :-
+Witness(rk, "wpa.reachability.direct.v2", ik, ik, 0) :-
   DirectCall(cs, f, g, d, e),
   ReachableKey(f, g, e, rk),
   DirectCallKey(cs, f, g, d, e, ik).
 
-Witness(rk, "wpa.reachability.transitive.v2", ik, 0) :-
+Witness(rk, "wpa.reachability.transitive.v2", dk, dc_key, 0) :-
   DirectCall(cs, f, g, d, e1),
   ReachableCall(g, h, e2),
   WeakenEpistemic(e1, e2, e),
   ReachableKey(f, h, e, rk),
-  DirectCallKey(cs, f, g, d, e1, ik).
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  ReachableKey(g, h, e2, rc_key),
+  dk = cat(dc_key, rc_key).
 
-Witness(rk, "wpa.reachability.transitive.v2", ik, 1) :-
-  DirectCall(_, f, g, _, e1),
+Witness(rk, "wpa.reachability.transitive.v2", dk, rc_key, 1) :-
+  DirectCall(cs, f, g, d, e1),
   ReachableCall(g, h, e2),
   WeakenEpistemic(e1, e2, e),
   ReachableKey(f, h, e, rk),
-  ReachableKey(g, h, e2, ik).
+  ReachableKey(g, h, e2, rc_key),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  dk = cat(dc_key, rc_key).
 
-Witness(rk, "wpa.reachability.support.v2", ik, 0) :-
+Witness(rk, "wpa.reachability.support.v2", dk, dc_key, 0) :-
   DirectCall(cs, f, g, d, e1),
   SupportReachableCall(g, h, e2),
   WeakenEpistemic(e1, e2, e),
   ReachableKey(f, h, e, rk),
-  DirectCallKey(cs, f, g, d, e1, ik).
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  SupportReachableKey(g, h, e2, rc_key),
+  dk = cat(dc_key, rc_key).
 
-Witness(rk, "wpa.reachability.support.v2", ik, 1) :-
-  DirectCall(_, f, g, _, e1),
+Witness(rk, "wpa.reachability.support.v2", dk, rc_key, 1) :-
+  DirectCall(cs, f, g, d, e1),
   SupportReachableCall(g, h, e2),
   WeakenEpistemic(e1, e2, e),
   ReachableKey(f, h, e, rk),
-  SupportReachableKey(g, h, e2, ik).
+  SupportReachableKey(g, h, e2, rc_key),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  dk = cat(dc_key, rc_key).

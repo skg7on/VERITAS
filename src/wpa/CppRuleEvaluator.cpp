@@ -215,6 +215,7 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
       witnesses.push_back(
           facts::WitnessEdge{.result = facts::SemanticKey{ResultRow(tuple)},
                              .rule_id = rule_prefix + "direct.v2",
+                             .derivation_key = facts::EncodeSemanticKey(row),
                              .input = facts::SemanticKey{row},
                              .input_ordinal = 0});
     }
@@ -239,14 +240,19 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
         if (!derived.insert(next).second)
           continue;
         changed = true;
+        const std::string derivation_key =
+            facts::EncodeSemanticKey(call.row) +
+            facts::EncodeSemanticKey(ResultRow(tuple));
         witnesses.push_back(facts::WitnessEdge{
             .result = facts::SemanticKey{ResultRow(next)},
             .rule_id = rule_prefix + "transitive.v2",
+            .derivation_key = derivation_key,
             .input = facts::SemanticKey{call.row},
             .input_ordinal = 0});
         witnesses.push_back(facts::WitnessEdge{
             .result = facts::SemanticKey{ResultRow(next)},
             .rule_id = rule_prefix + "transitive.v2",
+            .derivation_key = derivation_key,
             .input = facts::SemanticKey{ResultRow(tuple)},
             .input_ordinal = 1});
       }
@@ -264,14 +270,18 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
         if (!derived.insert(next).second)
           continue;
         changed = true;
+        const std::string derivation_key =
+            facts::EncodeSemanticKey(call.row) + facts::EncodeSemanticKey(row);
         witnesses.push_back(facts::WitnessEdge{
             .result = facts::SemanticKey{ResultRow(next)},
             .rule_id = rule_prefix + "support.v2",
+            .derivation_key = derivation_key,
             .input = facts::SemanticKey{call.row},
             .input_ordinal = 0});
         witnesses.push_back(facts::WitnessEdge{
             .result = facts::SemanticKey{ResultRow(next)},
             .rule_id = rule_prefix + "support.v2",
+            .derivation_key = derivation_key,
             .input = facts::SemanticKey{row},
             .input_ordinal = 1});
       }
