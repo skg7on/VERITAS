@@ -22,7 +22,12 @@ SvfConfig SvfConfig::Default() {
       .soft_analysis_budget = std::chrono::seconds(300),
       .max_graph_nodes = 2'000'000,
       .max_emitted_facts = 5'000'000,
-      .max_alias_pairs = 5'000'000,
+      // The alias cross-product is dominated by NoAlias facts (noise), and the
+      // alias facts share the global max_emitted_facts budget with value flows,
+      // memory effects, and calls. Capping the pair count below the fact budget
+      // leaves headroom for the more useful fact kinds instead of letting
+      // millions of NoAlias pairs starve them.
+      .max_alias_pairs = 1'000'000,
       .field_sensitive = true,
   };
 }
