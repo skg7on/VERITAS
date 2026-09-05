@@ -11,6 +11,7 @@ Milestone-specific specifications live in the parallel `milestones/` subtree.
 - [Evidence IR formal specification](veritas-evidence-ir-formal-specification.md)
 - [Evidence IR Agent security use cases](veritas-evidence-ir-agent-security-use-cases-design-spec.md)
 - [Claude Code Evidence IR review plugin](veritas-claude-code-evidence-review-plugin-design-spec.md)
+- [Link-unit / program boundary](link-unit-program-boundary-design-spec.md)
 - [WPA and SummaryDB end-to-end qualification corpus](wpa-summarydb-qualification-corpus-design-spec.md)
 
 ## Milestone Specifications

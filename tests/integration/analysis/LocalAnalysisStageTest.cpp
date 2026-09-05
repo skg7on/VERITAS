@@ -61,6 +61,16 @@ TEST(LocalAnalysisStageTest, BuildsLinkedProgramIrAndSummaryDrafts) {
   }
 }
 
+TEST(LocalAnalysisStageTest, RejectsMultipleEntryPointsWithClearError) {
+  auto manifest = LoadFixtureManifest("multiple_mains");
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+
+  auto result = RunLocalAnalysis(*manifest);
+  ASSERT_FALSE(result.ok());
+  EXPECT_NE(result.status().message().find("spans multiple programs"),
+            std::string::npos);
+}
+
 TEST(LocalAnalysisStageTest, ResolvesSystemHeadersWithoutExplicitSysroot) {
   auto manifest = LoadFixtureManifest("system_headers");
   ASSERT_TRUE(manifest.ok()) << manifest.status().message();
