@@ -232,7 +232,7 @@ int main(int argc, char* argv[]) {
   if (json) {
     std::string json_text;
     auto status = google::protobuf::util::MessageToJsonString(*graph, &json_text);
-    if (!status.ok()) return ReportError(status.message());
+    if (!status.ok()) return ReportError(status.ToString());
     std::cout << json_text << '\n';
     return 0;
   }
