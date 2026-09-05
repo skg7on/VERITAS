@@ -53,6 +53,13 @@ configure_file(
   @ONLY
 )
 
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/schema/v3.sql" VERITAS_SCHEMA_V3_SQL)
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/schema/schema_v3.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/schema_v3.h"
+  @ONLY
+)
+
 target_include_directories(veritas_summarydb PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>

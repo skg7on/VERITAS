@@ -1,0 +1,29 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Generated from schema/v3.sql by CMake (configure_file). Do not edit by hand;
+// edit schema/v3.sql instead. This is the single source of truth for the V3
+// fact/provenance SQLite schema, embedded so ApplySchema has no runtime
+// file-path dependency.
+
+#ifndef VERITAS_SUMMARYDB_SCHEMA_V3_H_
+#define VERITAS_SUMMARYDB_SCHEMA_V3_H_
+
+namespace veritas::summarydb {
+
+inline const char* kV3SchemaSql = R"VERITAS_SQL(@VERITAS_SCHEMA_V3_SQL@)VERITAS_SQL";
+
+}  // namespace veritas::summarydb
+
+#endif  // VERITAS_SUMMARYDB_SCHEMA_V3_H_

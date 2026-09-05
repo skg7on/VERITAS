@@ -41,6 +41,41 @@ target_link_libraries(AnalysisFactTest PRIVATE
 veritas_add_warnings(AnalysisFactTest)
 gtest_discover_tests(AnalysisFactTest DISCOVERY_TIMEOUT 60)
 
+add_executable(EpistemicTest EpistemicTest.cpp)
+target_link_libraries(EpistemicTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(EpistemicTest)
+gtest_discover_tests(EpistemicTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(EpistemicTest epistemic-propagation)
+
+add_executable(FactProtoTest FactProtoTest.cpp)
+target_link_libraries(FactProtoTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(FactProtoTest)
+gtest_discover_tests(FactProtoTest DISCOVERY_TIMEOUT 60)
+
+add_executable(FactStoreTest FactStoreTest.cpp)
+target_link_libraries(FactStoreTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(FactStoreTest)
+gtest_discover_tests(FactStoreTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(FactStoreTest fact-persistence)
+
+add_executable(ProvenanceStoreTest ProvenanceStoreTest.cpp)
+target_link_libraries(ProvenanceStoreTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(ProvenanceStoreTest)
+gtest_discover_tests(ProvenanceStoreTest DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(ProvenanceStoreTest budgeted-explanation)
+
 add_executable(DenseIdMapTest DenseIdMapTest.cpp)
 target_link_libraries(DenseIdMapTest PRIVATE
   veritas::facts
