@@ -42,7 +42,7 @@ target_link_libraries(veritas_facts PUBLIC
   veritas_analysis_semantic
 )
 target_link_libraries(veritas_facts PRIVATE
-  LLVMSupport
+  LLVM
   veritas::summarydb
 )
 

@@ -19,6 +19,16 @@
 find_package(SQLite3 REQUIRED)
 find_package(RocksDB REQUIRED CONFIG)
 
+# Prefer the shared RocksDB import when building VERITAS as shared libraries.
+# The static RocksDB::rocksdb on this system is compiled without -fPIC and
+# cannot be linked into a shared object (R_X86_64_TPOFF32 relocation error).
+if(BUILD_SHARED_LIBS AND TARGET RocksDB::rocksdb-shared)
+  set(VERITAS_ROCKSDB_TARGET RocksDB::rocksdb-shared)
+else()
+  set(VERITAS_ROCKSDB_TARGET RocksDB::rocksdb)
+endif()
+
+
 add_library(veritas_summarydb
   MetadataStore.cpp
   ObjectStoreRocksDb.cpp
@@ -55,7 +65,7 @@ target_link_libraries(veritas_summarydb PUBLIC
   veritas::build
   veritas::summary
   SQLite::SQLite3
-  RocksDB::rocksdb
+  ${VERITAS_ROCKSDB_TARGET}
 )
 
 target_compile_features(veritas_summarydb PUBLIC cxx_std_20)

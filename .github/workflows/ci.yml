@@ -199,7 +199,7 @@ jobs:
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r4
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r5
 
       - name: Checkout LLVM source
         if: steps.llvm-cache.outputs.cache-hit != 'true'
@@ -211,21 +211,22 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      # LLVM must be built as SHARED component libraries (BUILD_SHARED_LIBS=ON).
-      # Both alternatives break: the monolithic libLLVM.so DYLIB mixes with
-      # clang's still-static components, and static .a components get baked into
-      # multiple VERITAS/SVF shared objects. Either way LLVM/SVF cl::opt options
-      # ("Option registered more than once") and SVF's analysis registry
-      # ("support is already registered") re-register per process and crash every
-      # SVF/LLVM integration test. Shared components load once, matching the
-      # local dev LLVM build.
+      # Build LLVM and clang as monolithic dynamic libraries (libLLVM.so and
+      # libclang-cpp.so) so VERITAS and the vendored SVF link one LLVM and one
+      # clang. The monolithic dylib loads LLVM/clang globals (cl::opt options,
+      # SVF's analysis registry) exactly once; the alternatives — static .a
+      # components baked into multiple shared objects, or separated shared
+      # component .so — re-register those globals per object and crash every
+      # SVF/LLVM integration test. Matches the local dev LLVM build.
       - name: Configure LLVM
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         run: |
           cmake -S llvm-project/llvm -B "$RUNNER_TEMP/llvm-build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/llvm-install" \
-            -DBUILD_SHARED_LIBS=ON \
+            -DLLVM_BUILD_LLVM_DYLIB=ON \
+            -DLLVM_LINK_LLVM_DYLIB=ON \
+            -DCLANG_LINK_CLANG_DYLIB=ON \
             -DLLVM_ENABLE_PROJECTS=clang \
             -DLLVM_TARGETS_TO_BUILD=X86 \
             -DLLVM_ENABLE_RTTI=ON \
@@ -254,6 +255,8 @@ jobs:
           test -x "$RUNNER_TEMP/llvm-install/bin/clang"
           test -f "$RUNNER_TEMP/llvm-install/lib/cmake/llvm/LLVMConfig.cmake"
           test -f "$RUNNER_TEMP/llvm-install/lib/cmake/clang/ClangConfig.cmake"
+          grep -rq 'add_library(LLVM SHARED IMPORTED)' "$RUNNER_TEMP/llvm-install/lib/cmake/llvm/"
+          grep -rq 'add_library(clang-cpp SHARED IMPORTED)' "$RUNNER_TEMP/llvm-install/lib/cmake/clang/"
           test "$("$RUNNER_TEMP/llvm-install/bin/llvm-config" --version)" = "24.0.0git"
           "$RUNNER_TEMP/llvm-install/bin/clang" --version
 
@@ -264,7 +267,7 @@ jobs:
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ runner.temp }}/llvm-install
-          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r4
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r5
 
       - name: Configure VERITAS
         env:

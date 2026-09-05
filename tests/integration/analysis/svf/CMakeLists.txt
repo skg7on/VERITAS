@@ -21,8 +21,7 @@ target_link_libraries(svf_session_integration_test
     veritas_svf_analysis
     veritas_analysis_pipeline
     veritas_unit_test_support
-    LLVMCore
-    LLVMSupport
+    LLVM
 )
 
 target_include_directories(svf_session_integration_test
@@ -46,8 +45,7 @@ target_link_libraries(svf_fact_mapper_integration_test
     veritas_build
     veritas_test_support
     veritas_unit_test_support
-    LLVMCore
-    LLVMSupport
+    LLVM
 )
 
 target_include_directories(svf_fact_mapper_integration_test
@@ -69,8 +67,7 @@ target_link_libraries(svf_indirect_call_integration_test
     veritas_svf_analysis
     veritas_analysis_pipeline
     veritas_unit_test_support
-    LLVMCore
-    LLVMSupport
+    LLVM
 )
 
 target_include_directories(svf_indirect_call_integration_test
@@ -92,8 +89,7 @@ target_link_libraries(svf_alias_kinds_integration_test
     veritas_svf_analysis
     veritas_analysis_pipeline
     veritas_unit_test_support
-    LLVMCore
-    LLVMSupport
+    LLVM
 )
 
 target_include_directories(svf_alias_kinds_integration_test
@@ -115,8 +111,7 @@ target_link_libraries(svf_truncation_integration_test
     veritas_svf_analysis
     veritas_analysis_pipeline
     veritas_unit_test_support
-    LLVMCore
-    LLVMSupport
+    LLVM
 )
 
 target_include_directories(svf_truncation_integration_test
@@ -138,8 +133,7 @@ target_link_libraries(repeated_project_analysis_test
     veritas_svf_analysis
     veritas_analysis_pipeline
     veritas_unit_test_support
-    LLVMCore
-    LLVMSupport
+    LLVM
 )
 
 target_include_directories(repeated_project_analysis_test
