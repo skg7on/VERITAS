@@ -27,6 +27,8 @@ TEST(ProjectAnalyzerTest, DefaultConfigMatchesSvfDefaults) {
   EXPECT_GT(config.svf_soft_analysis_budget.count(), 0);
   EXPECT_GT(config.svf_max_graph_nodes, 0u);
   EXPECT_GT(config.svf_max_emitted_facts, 0u);
+  EXPECT_GT(config.svf_max_alias_pairs, 0u);
+  EXPECT_TRUE(config.svf_field_sensitive);
 }
 
 TEST(ProjectAnalyzerTest, ConstructsAndDestructs) {

@@ -56,6 +56,8 @@ AnalysisConfig AnalysisConfig::Default() {
       .svf_soft_analysis_budget = svf_config.soft_analysis_budget,
       .svf_max_graph_nodes = svf_config.max_graph_nodes,
       .svf_max_emitted_facts = svf_config.max_emitted_facts,
+      .svf_max_alias_pairs = svf_config.max_alias_pairs,
+      .svf_field_sensitive = svf_config.field_sensitive,
       .wpa_engine = WpaEngineMode::kSouffle,
       .wpa_component_timeout = std::chrono::seconds(30),
       .wpa_component_memory_mb = 0,
@@ -74,7 +76,8 @@ svf::SvfConfig ToSvfConfig(const AnalysisConfig &config) {
       .soft_analysis_budget = config.svf_soft_analysis_budget,
       .max_graph_nodes = config.svf_max_graph_nodes,
       .max_emitted_facts = config.svf_max_emitted_facts,
-      .field_sensitive = true,
+      .max_alias_pairs = config.svf_max_alias_pairs,
+      .field_sensitive = config.svf_field_sensitive,
   };
 }
 

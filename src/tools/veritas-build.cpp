@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -37,6 +38,8 @@ constexpr std::string_view kUsage =
     "usage:\n"
     "  veritas-build --version\n"
     "  veritas-build analyze --project <directory> [--output <directory>]\n"
+    "      [--wpa-engine souffle|cpp-emergency]\n"
+    "      [--field-sensitive true|false] [--max-alias-pairs <n>]\n"
     "\n"
     "`analyze` is the only source-input command. No `--compile-db`,\n"
     "`--manifest`, `--bitcode`, `--llvm-module`, or `--svf-input` alternative\n"
@@ -46,7 +49,27 @@ struct AnalyzeArguments {
   fs::path project;
   fs::path output;
   std::string wpa_engine = "souffle";
+  bool field_sensitive = true;
+  std::size_t max_alias_pairs = 0;  // 0 = keep the AnalysisConfig default
 };
+
+// Parse a positive decimal integer without exceptions (the project builds with
+// -fno-exceptions). Returns false on empty, non-digit, zero, or overflow input.
+bool ParsePositiveSize(std::string_view value, std::size_t* out) {
+  if (value.empty() || out == nullptr) return false;
+  std::size_t result = 0;
+  for (char c : value) {
+    if (c < '0' || c > '9') return false;
+    const std::size_t digit = static_cast<std::size_t>(c - '0');
+    if (result > (std::numeric_limits<std::size_t>::max() - digit) / 10) {
+      return false;
+    }
+    result = result * 10 + digit;
+  }
+  if (result == 0) return false;
+  *out = result;
+  return true;
+}
 
 veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
     const std::vector<std::string>& args) {
@@ -123,6 +146,24 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
             "--wpa-engine must be souffle or cpp-emergency");
       }
       parsed.wpa_engine = *value;
+    } else if (arg == "--field-sensitive") {
+      auto value = take_value(i, "--field-sensitive");
+      if (!value.ok()) return value.status();
+      if (*value == "true") {
+        parsed.field_sensitive = true;
+      } else if (*value == "false") {
+        parsed.field_sensitive = false;
+      } else {
+        return veritas::Status::InvalidArgument(
+            "--field-sensitive must be true or false");
+      }
+    } else if (arg == "--max-alias-pairs") {
+      auto value = take_value(i, "--max-alias-pairs");
+      if (!value.ok()) return value.status();
+      if (!ParsePositiveSize(*value, &parsed.max_alias_pairs)) {
+        return veritas::Status::InvalidArgument(
+            "--max-alias-pairs requires a positive integer, got: " + *value);
+      }
     } else {
       return veritas::Status::InvalidArgument("unknown argument: " + arg);
     }
@@ -192,6 +233,10 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
   config.wpa_engine = parsed->wpa_engine == "cpp-emergency"
                           ? veritas::analysis::WpaEngineMode::kCppEmergency
                           : veritas::analysis::WpaEngineMode::kSouffle;
+  config.svf_field_sensitive = parsed->field_sensitive;
+  if (parsed->max_alias_pairs != 0) {
+    config.svf_max_alias_pairs = parsed->max_alias_pairs;
+  }
   veritas::analysis::ProjectAnalyzer analyzer;
   auto result = analyzer.AnalyzeProject(request, config);
   if (!result.ok()) return result.status();

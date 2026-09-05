@@ -165,28 +165,13 @@ bool IsFormalFunctionPointerCall(const ::llvm::CallBase& call) {
          IsFunctionPointerFormal(*argument);
 }
 
-// Map an SVF alias result to a semantic AliasKind and independent epistemic
-// state. MustAlias/NoAlias are definite (kMust); MayAlias/PartialAlias are
-// may-results (kMay); anything unexpected degrades to kUnknownAlias/kUnknown.
+// An alias observation couples a semantic AliasKind with an independent
+// epistemic state. MustAlias/NoAlias are definite (kMust); MayAlias is a
+// may-result (kMay).
 struct AliasObservation {
   semantic::AliasKind kind;
   semantic::EpistemicState epistemic;
 };
-
-AliasObservation MapAliasResult(SVF::AliasResult result) {
-  switch (result) {
-    case SVF::MustAlias:
-      return {semantic::AliasKind::kMustAlias, semantic::EpistemicState::kMust};
-    case SVF::NoAlias:
-      return {semantic::AliasKind::kNoAlias, semantic::EpistemicState::kMust};
-    case SVF::MayAlias:
-      return {semantic::AliasKind::kMayAlias, semantic::EpistemicState::kMay};
-    case SVF::PartialAlias:
-      return {semantic::AliasKind::kMayAlias, semantic::EpistemicState::kMay};
-  }
-  return {semantic::AliasKind::kUnknownAlias,
-          semantic::EpistemicState::kUnknown};
-}
 
 std::string MakeProvenance(const AnalyzerRunContext& run_context,
                            const SvfConfig& config) {
@@ -234,6 +219,25 @@ std::optional<AliasPointer> ResolveAliasPointer(
   auto location = memory.LocationFor(*llvm_value, std::nullopt);
   if (!location.ok()) return std::nullopt;
   return AliasPointer{var, *id, std::move(*location)};
+}
+
+// Two ascending-sorted NodeID sequences intersect iff they share an element.
+// A two-pointer scan is O(|a| + |b|) and cache-friendly, replacing SVF's
+// linked-list SparseBitVector intersection in the alias hot loop.
+bool IntersectsSorted(const std::vector<SVF::NodeID>& a,
+                      const std::vector<SVF::NodeID>& b) {
+  std::size_t i = 0;
+  std::size_t j = 0;
+  while (i < a.size() && j < b.size()) {
+    if (a[i] < b[j]) {
+      ++i;
+    } else if (b[j] < a[i]) {
+      ++j;
+    } else {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Sort + unique a vector of fully-orderable facts (operator<=>/==).
@@ -403,12 +407,60 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
     for (const auto& entry : alias_pointers) ordered.push_back(&entry.second);
     // std::map iteration is already key-ordered (by value id), so `ordered`
     // is sorted and the cross-product below is deterministic.
+
+    // SVF's BVDataPTAImpl::alias re-expands both points-to sets on every call,
+    // so the O(N^2) cross-product below paid that cost once per pair. Hoist
+    // the field-insensitive expansion out of the loop: compute, once per
+    // pointer, the expanded points-to set as an ascending vector (with the
+    // black-hole object tracked separately) and answer MayAlias/NoAlias with a
+    // cheap two-pointer intersection. This preserves alias()'s exact result --
+    // MayAlias iff either side reaches the black hole or the expanded sets
+    // intersect -- while removing the dominant per-pair cost.
+    struct ExpandedPointsTo {
+      std::vector<SVF::NodeID> objects;  // ascending, black-hole node excluded
+      bool has_black_hole = false;
+    };
+    std::vector<ExpandedPointsTo> expanded(ordered.size());
+    const SVF::NodeID black_hole = view.svf_ir->getBlackHoleNode();
     for (std::size_t i = 0; i < ordered.size(); ++i) {
+      SVF::PointsTo pts;
+      view.andersen->expandFIObjs(
+          view.andersen->getPts(ordered[i]->var->getId()), pts);
+      ExpandedPointsTo& info = expanded[i];
+      info.objects.reserve(pts.count());
+      for (SVF::NodeID obj : pts) {
+        if (obj == black_hole) {
+          info.has_black_hole = true;
+        } else {
+          info.objects.push_back(obj);
+        }
+      }
+      // SparseBitVector iterates in ascending order, but sort defensively so
+      // the two-pointer scan below never depends on that internal ordering.
+      std::sort(info.objects.begin(), info.objects.end());
+    }
+
+    bool alias_truncated = false;
+    for (std::size_t i = 0; i < ordered.size() && !alias_truncated; ++i) {
       for (std::size_t j = i + 1; j < ordered.size(); ++j) {
+        // Bound the cross-product by the alias-pair budget (and soft time
+        // budget) before doing any per-pair work.
+        if (!budget.TryAliasQuery()) {
+          alias_truncated = true;
+          break;
+        }
         const AliasPointer& left = *ordered[i];
         const AliasPointer& right = *ordered[j];
+        const ExpandedPointsTo& lhs = expanded[i];
+        const ExpandedPointsTo& rhs = expanded[j];
+        const bool may_alias = lhs.has_black_hole || rhs.has_black_hole ||
+                               IntersectsSorted(lhs.objects, rhs.objects);
         AliasObservation observation =
-            MapAliasResult(view.andersen->alias(left.var, right.var));
+            may_alias
+                ? AliasObservation{semantic::AliasKind::kMayAlias,
+                                   semantic::EpistemicState::kMay}
+                : AliasObservation{semantic::AliasKind::kNoAlias,
+                                   semantic::EpistemicState::kMust};
         if (observation.kind == semantic::AliasKind::kMayAlias &&
             ResolvesToOneProvenObject(left, right, view)) {
           observation = {semantic::AliasKind::kMustAlias,
@@ -424,8 +476,12 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
           });
         } else {
           truncated = true;
+          break;
         }
       }
+    }
+    if (alias_truncated) {
+      truncated = true;
     }
   }
 

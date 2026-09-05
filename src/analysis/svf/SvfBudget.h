@@ -29,6 +29,7 @@ enum class BudgetReason {
   kTimeLimit,
   kGraphNodeLimit,
   kFactLimit,
+  kAliasPairLimit,
 };
 
 // BudgetReasonName converts BudgetReason to a string for provenance
@@ -39,6 +40,7 @@ struct SvfBudgetState {
   BudgetReason reason = BudgetReason::kNone;
   std::size_t observed_graph_nodes = 0;
   std::size_t emitted_facts = 0;
+  std::size_t alias_pairs_examined = 0;
   std::chrono::steady_clock::duration elapsed{};
 };
 
@@ -66,6 +68,12 @@ class SvfBudget {
   // TryEmit checks if another fact can be emitted within the fact limit.
   // Returns true and increments the counter if within budget, false otherwise.
   bool TryEmit();
+
+  // TryAliasQuery checks whether another alias pair may be examined. It
+  // enforces both the soft time budget and the alias-pair cap so the O(N^2)
+  // alias cross-product cannot outrun either limit. Returns true and
+  // increments the pair counter if within budget, false otherwise.
+  bool TryAliasQuery();
 
   // state returns the current budget state (reason, counts, elapsed)
   const SvfBudgetState& state() const { return state_; }

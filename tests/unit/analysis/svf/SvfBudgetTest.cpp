@@ -39,6 +39,7 @@ TEST(SvfBudgetTest, DefaultConstructionStartsWithNoBudgetViolation) {
   EXPECT_EQ(budget.state().reason, BudgetReason::kNone);
   EXPECT_EQ(budget.state().observed_graph_nodes, 0u);
   EXPECT_EQ(budget.state().emitted_facts, 0u);
+  EXPECT_EQ(budget.state().alias_pairs_examined, 0u);
 }
 
 TEST(SvfBudgetTest, CheckpointDetectsGraphNodeLimit) {
@@ -88,6 +89,38 @@ TEST(SvfBudgetTest, TryEmitDetectsFactLimit) {
   EXPECT_EQ(budget.state().emitted_facts, 2u);
 }
 
+TEST(SvfBudgetTest, TryAliasQueryDetectsAliasPairLimit) {
+  FakeClock clock;
+  auto config = SvfConfig::Default();
+  config.max_alias_pairs = 2;
+  SvfBudget budget(config, [&]() { return clock.Now(); });
+
+  EXPECT_TRUE(budget.TryAliasQuery());
+  EXPECT_EQ(budget.state().alias_pairs_examined, 1u);
+
+  EXPECT_TRUE(budget.TryAliasQuery());
+  EXPECT_EQ(budget.state().alias_pairs_examined, 2u);
+
+  EXPECT_FALSE(budget.TryAliasQuery());
+  EXPECT_EQ(budget.state().reason, BudgetReason::kAliasPairLimit);
+  EXPECT_EQ(budget.state().alias_pairs_examined, 2u);
+}
+
+TEST(SvfBudgetTest, TryAliasQueryDetectsTimeLimit) {
+  FakeClock clock;
+  auto config = SvfConfig::Default();
+  config.soft_analysis_budget = std::chrono::seconds(10);
+  SvfBudget budget(config, [&]() { return clock.Now(); });
+
+  clock.Advance(std::chrono::seconds(5));
+  EXPECT_TRUE(budget.TryAliasQuery());
+  EXPECT_EQ(budget.state().reason, BudgetReason::kNone);
+
+  clock.Advance(std::chrono::seconds(10));
+  EXPECT_FALSE(budget.TryAliasQuery());
+  EXPECT_EQ(budget.state().reason, BudgetReason::kTimeLimit);
+}
+
 TEST(SvfBudgetTest, OnceOverBudgetAllOperationsFail) {
   FakeClock clock;
   auto config = SvfConfig::Default();
@@ -110,6 +143,8 @@ TEST(SvfBudgetTest, BudgetReasonNameReturnsValidStrings) {
   EXPECT_STREQ(BudgetReasonName(BudgetReason::kGraphNodeLimit),
                "graph_node_limit");
   EXPECT_STREQ(BudgetReasonName(BudgetReason::kFactLimit), "fact_limit");
+  EXPECT_STREQ(BudgetReasonName(BudgetReason::kAliasPairLimit),
+               "alias_pair_limit");
 }
 
 }  // namespace
