@@ -25,6 +25,7 @@ TEST(SvfConfigTest, DefaultIsRequiredBoundedAndersenWaveDiff) {
   EXPECT_GT(config.soft_analysis_budget.count(), 0);
   EXPECT_GT(config.max_graph_nodes, 0u);
   EXPECT_GT(config.max_emitted_facts, 0u);
+  EXPECT_GT(config.max_alias_pairs, 0u);
   EXPECT_TRUE(config.field_sensitive);
 }
 
@@ -44,6 +45,7 @@ TEST(SvfConfigTest, CanonicalConfigContainsAllFields) {
   EXPECT_NE(canonical.find("soft_analysis_budget_seconds="), std::string::npos);
   EXPECT_NE(canonical.find("max_graph_nodes="), std::string::npos);
   EXPECT_NE(canonical.find("max_emitted_facts="), std::string::npos);
+  EXPECT_NE(canonical.find("max_alias_pairs="), std::string::npos);
   EXPECT_NE(canonical.find("field_sensitive="), std::string::npos);
 }
 

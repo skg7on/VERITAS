@@ -23,6 +23,7 @@
 #include <Graphs/SVFG.h>
 #include <MSSA/SVFGBuilder.h>
 #include <Util/NodeIDAllocator.h>
+#include <Util/Options.h>
 
 #include "analysis/pipeline/ProgramIr.h"
 
@@ -40,6 +41,9 @@ struct SvfCleanup final {
   bool module_set_built = false;
   bool svf_ir_built = false;
   bool andersen_built = false;
+  // SVF's process-global field limit, captured before this session may lower
+  // it, so it can be restored on exit. See RunWithSvfSession.
+  unsigned saved_field_limit = 0;
 
   ~SvfCleanup() {
     if (andersen_built) {
@@ -51,6 +55,10 @@ struct SvfCleanup final {
     if (module_set_built) {
       SVF::LLVMModuleSet::releaseLLVMModuleSet();
     }
+    // Restore the global field limit so a field-insensitive session cannot
+    // leak into a subsequent session that expects the field-sensitive default.
+    const_cast<::Option<unsigned>&>(SVF::Options::MaxFieldLimit)
+        .setValue(saved_field_limit);
     // NodeIDAllocator is a process-wide singleton whose counters accumulate
     // across sessions. Without resetting it, the next session's symbol count
     // (totalSymNum) inflates past the fresh PAG's node count and SVFIRBuilder
@@ -73,6 +81,18 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
   ++g_svf_session_count;
 
   SvfCleanup cleanup;
+
+  // SVF controls field sensitivity through the process-global
+  // Options::MaxFieldLimit (0 collapses field derivations into a
+  // field-insensitive analysis). Lower it before SVFIR construction when the
+  // config requests a field-insensitive run; SvfCleanup restores the captured
+  // value on exit. The option is a const singleton normally set only from the
+  // command line, so the const_cast is the sole programmatic path, and it is
+  // serialized by the session mutex above.
+  cleanup.saved_field_limit = SVF::Options::MaxFieldLimit();
+  if (!config.field_sensitive) {
+    const_cast<::Option<unsigned>&>(SVF::Options::MaxFieldLimit).setValue(0u);
+  }
 
   // Step 1: Build SVF module from live LLVM module
   auto* llvm_module = program_ir.GetModule();

@@ -26,6 +26,8 @@ const char* BudgetReasonName(BudgetReason reason) {
       return "graph_node_limit";
     case BudgetReason::kFactLimit:
       return "fact_limit";
+    case BudgetReason::kAliasPairLimit:
+      return "alias_pair_limit";
   }
   return "unknown";
 }
@@ -72,6 +74,30 @@ bool SvfBudget::TryEmit() {
   }
 
   ++state_.emitted_facts;
+  return true;
+}
+
+bool SvfBudget::TryAliasQuery() {
+  // Already over budget
+  if (state_.reason != BudgetReason::kNone) {
+    return false;
+  }
+
+  // Enforce the soft time budget so a large alias cross-product cannot run
+  // past the configured wall-clock bound even when the pair cap is generous.
+  state_.elapsed = now_() - started_;
+  if (state_.elapsed > config_.soft_analysis_budget) {
+    state_.reason = BudgetReason::kTimeLimit;
+    return false;
+  }
+
+  // Enforce the alias-pair cap before incrementing.
+  if (state_.alias_pairs_examined >= config_.max_alias_pairs) {
+    state_.reason = BudgetReason::kAliasPairLimit;
+    return false;
+  }
+
+  ++state_.alias_pairs_examined;
   return true;
 }
 

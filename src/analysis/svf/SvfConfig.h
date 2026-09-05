@@ -30,6 +30,11 @@ struct SvfConfig {
   std::chrono::seconds soft_analysis_budget;
   std::size_t max_graph_nodes;
   std::size_t max_emitted_facts;
+  // Upper bound on the number of pointer pairs the alias cross-product will
+  // examine. The cross-product is O(N^2) in the number of admitted alias
+  // pointers; this cap bounds that computation independently of the fact
+  // emission budget so a large program cannot stall the mapping pass.
+  std::size_t max_alias_pairs;
   bool field_sensitive;
 
   static SvfConfig Default();

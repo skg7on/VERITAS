@@ -49,6 +49,8 @@ struct AnalysisConfig {
   std::chrono::seconds svf_soft_analysis_budget;
   std::size_t svf_max_graph_nodes;
   std::size_t svf_max_emitted_facts;
+  std::size_t svf_max_alias_pairs;
+  bool svf_field_sensitive;
 
   WpaEngineMode wpa_engine;
   std::chrono::milliseconds wpa_component_timeout;
