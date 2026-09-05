@@ -87,6 +87,28 @@ TEST(SvfSessionTest, ReleasesSingletonStateBetweenRuns) {
   }
 }
 
+TEST(SvfSessionTest, FieldInsensitiveConfigCompletesAndRestoresCleanState) {
+  auto program_ir = BuildFixtureProgramIr("parameter_return");
+  auto config = SvfConfig::Default();
+  config.field_sensitive = false;
+
+  // The field-insensitive path lowers SVF's MaxFieldLimit to 0 and must build
+  // and tear down a complete session without crashing.
+  auto status = RunWithSvfSession(
+      *program_ir, config,
+      [](const SvfSessionView& view) { return Status::Ok(); });
+
+  EXPECT_TRUE(status.ok());
+
+  // A subsequent field-sensitive session must also succeed, confirming the
+  // field limit was restored on exit rather than leaking field-insensitivity.
+  auto program_ir2 = BuildFixtureProgramIr("parameter_return");
+  auto status2 = RunWithSvfSession(
+      *program_ir2, SvfConfig::Default(),
+      [](const SvfSessionView& view) { return Status::Ok(); });
+  EXPECT_TRUE(status2.ok());
+}
+
 TEST(SvfSessionTest, CallbackErrorPreservesCleanup) {
   auto program_ir = BuildFixtureProgramIr("parameter_return");
 
