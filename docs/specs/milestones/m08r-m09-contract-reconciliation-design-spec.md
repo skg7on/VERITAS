@@ -1,8 +1,12 @@
-# M8R–M9 Contract Reconciliation Design
+# M8R–M9 Contract Reconciliation Design Spec
 
-**Status:** Approved in architecture review on 2026-09-05
+**Status:** Approved in architecture review on 2026-09-05. Relocated from the
+forbidden `docs/superpowers/` path to this canonical milestone-spec location
+(`docs/specs/milestones/`) and tightened against `main` (post PR #105, #106) on
+2026-09-05.
 **Scope:** Post-merge reconciliation for PRs #87, #89, #91, #94, and #97
 **Affected milestones:** M8R.4, M8R.5, and M9
+**Authoritative WPA design:** [`m08r-souffle-wpa-architecture-refinement-design-spec.md`](m08r-souffle-wpa-architecture-refinement-design-spec.md)
 
 ## 1. Purpose
 
@@ -58,6 +62,12 @@ The repair covers every confirmed finding from the post-merge review:
 PR #94's legacy `FixpointEngine`/`FactTuple` retirement is consistent with the
 current production graph and needs no compatibility restoration.
 
+PR #105 and #106 landed after this audit: #105 ships the derivation-identity half
+of finding 10 (`derivation_key` grouping; see §7), and #106 reuses the
+whole-program SCC graph across components. The remaining findings, and the
+persisted-`witness_id`/structured-root-evidence halves of findings 8–9, are
+still open.
+
 ## 3. Architectural Outcome
 
 One analysis output root owns one SummaryDB metadata database. A successful
@@ -97,6 +107,14 @@ not primary-run semantics, and does not change the production RunId. The
 conformance execution receives its own engine identity, toolchain identity,
 and RunId.
 
+Current code: `ProjectAnalyzer::RunWpa` (`src/analysis/ProjectAnalyzer.cpp:86`)
+sets `descriptor.svf_configuration_hash`/`wpa_configuration_hash` to placeholder
+`'a'`/`'b'` strings and `engine_toolchain_identity` to the label
+`souffle-2.5-pinned` (lines 104–112). `AnalysisRunDescriptor` and
+`MakeAnalysisRun` (`include/veritas/facts/AnalysisRun.h`) already carry these
+fields and validate the 64-hex format; only the production values are
+placeholders.
+
 ### 4.2 Verified Soufflé identity
 
 The build supplies the analyzer with paths to `souffle-provenance.json`, the
@@ -114,6 +132,11 @@ Any missing, malformed, or mismatched artifact fails before a WPA run begins.
 The analyzer target depends on the provenance target so the runtime cannot be
 built without the identity material it requires.
 
+Current code: the generated manifest is parsed only by tests
+(`SouffleProvenanceTest`); `SouffleWpaExecutor::toolchain_identity`
+(`src/wpa/SouffleWpaExecutor.cpp:123`) returns the label string, not a
+digest-derived identity.
+
 ### 4.3 C++ identities and conformance
 
 C++ conformance and emergency identities are derived from a generated,
@@ -128,6 +151,11 @@ two runs have distinct RunIds. Their per-component canonical facts,
 incomplete, records a diagnostic, prevents M9 publication, and returns a
 failure. There is still no automatic production fallback.
 
+Current code: `run_cpp_conformance_oracle` is defaulted false
+(`src/analysis/ProjectAnalyzer.cpp:67`) but never read; `RunWpa` runs a single
+engine (`src/analysis/ProjectAnalyzer.cpp:144–161`) and discards the
+`WpaRunResult` without comparison or publication.
+
 ## 5. Orchestration and Incremental State
 
 Completed facts are keyed by the full `WpaComponentKey` `(SccId,
@@ -139,6 +167,17 @@ The production analyzer constructs `SccStateRepository` from the same metadata
 store used by `WpaRunRepository` and passes it to every orchestrator. A changed
 external hash schedules predecessors through M7; an internal-only witness
 change does not.
+
+Current code: `WpaOrchestrator::Run` (`src/wpa/WpaOrchestrator.cpp:108`) keys
+`completed_facts` by SCC only — `std::map<core::StableId,
+std::vector<facts::AnalysisFact>>` (line 146) assigned at
+`completed_facts[key.scc_id] = std::move(component_result.facts)` (line 261) —
+so `SuccessorSupport` (line 37) loses a successor's Reachability facts once
+MemoryEffects completes. The production analyzer constructs the orchestrator
+without an `SccStateRepository` (`src/analysis/ProjectAnalyzer.cpp:148,159`).
+PR #106 already reuses the whole-program SCC graph across components
+(`materialization.scc_graph = &*scc_graph`, `src/wpa/WpaOrchestrator.cpp:158`);
+that change does not affect the SCC-only fact keying.
 
 ## 6. Cache Identity and Validation
 
@@ -162,31 +201,48 @@ logical-input hash, canonical fact identities, rooted witness closure, and
 recomputed fixpoint/external hashes. Any mismatch is a hard cache-integrity
 error; it is never treated as a hit.
 
+Current code: `DeriveResultCacheKey` (`src/wpa/WpaRunRepository.cpp:395`) is a
+raw `'|'`-delimited concatenation with no version or explicit engine field;
+`LoadReusableComponent` (`src/wpa/WpaRunRepository.cpp:471`) deserializes a
+cached object without revalidating the requested component/run contract.
+
 ## 7. Versioned Witness and Root-Evidence Contract
 
-The raw witness protocol becomes `witness.v2`. Each edge carries a canonical
-`derivation_id` shared by every input edge in one proof. The ID covers the
-result semantic key, rule ID, and ordered input semantic keys. `RuleSpec` also
-declares its arity so the canonicalizer can reject missing, duplicate, or
-out-of-range ordinals.
+The raw witness protocol becomes `witness.v2`. PR #105 shipped the derivation
+grouping half: each immediate edge now carries a `derivation_key` shared by the
+ordinal-0 and ordinal-1 edges of one firing, and the canonicalizer groups by
+`(result, rule, derivation_key)` instead of `(result, rule)` — see the
+[witness derivation identity spec](../wpa-witness-derivation-identity-design-spec.md),
+`WitnessEdge` (`include/veritas/facts/Witness.h:51`), and
+`ResultCanonicalizer::Canonicalize` (`src/facts/ResultCanonicalizer.cpp:105`).
+The shipped key is a grouping handle only: it is not persisted or hashed and is
+dropped from the canonical witness.
 
-The canonicalizer groups candidates by `(result, rule, derivation_id)`, proves
-each candidate finite and rooted, and selects by:
+The remaining work completes the contract. The canonical proof keeps a persisted,
+witness-dependent `derivation_id` covering the result semantic key, rule ID, and
+ordered input semantic keys; `RuleSpec` declares its arity so the canonicalizer
+can reject missing, duplicate, or out-of-range ordinals.
+
+The canonicalizer selects one proof per result by:
 
 1. fewest derived edges;
 2. rule priority; and
 3. lexicographic ordered input FactIDs.
 
-The selected persisted `witness_id` is witness-dependent and is not the
-semantic `FactID`. Re-deriving one fact with a different proof retains both
-witness records while the current run binding selects exactly one.
+The selected persisted `witness_id` is witness-dependent and is not the semantic
+`FactID`. Re-deriving one fact with a different proof retains both witness
+records while the current run binding selects exactly one. Current code sets
+`selected_witness_id = FactID` in `FactStore::Publish`
+(`src/facts/FactStore.cpp:182`), collapsing distinct derivations onto one row.
 
 `RootedInputFact` is extended with structured evidence: producer/analyzer
 identity, provenance reference, source anchor, summary ID, and description.
-`WpaRunResult` and `AnalysisFactBatch` carry this root evidence alongside the
-canonical rooted-input ID set. The Fact Store persists it and the explanation
-graph exposes it, allowing text and JSON explanations to report assumptions,
-unknowns, source anchors, and summary references without recomputation.
+Current code carries only a `provenance_ref` string
+(`include/veritas/facts/Witness.h:65`). `WpaRunResult` and `AnalysisFactBatch`
+carry this root evidence alongside the canonical rooted-input ID set. The Fact
+Store persists it and the explanation graph exposes it, allowing text and JSON
+explanations to report assumptions, unknowns, source anchors, and summary
+references without recomputation.
 
 Changing the witness protocol updates the rule-bundle version while preserving
 `relations.v2` semantic rows and existing `FactID` values.
@@ -220,6 +276,16 @@ occurrence and preserve the prior binding as history.
 `selected_witness_id`, and orders any retained alternatives deterministically.
 Existing v3 data remains readable; new writes use v4 receipts and
 witness-dependent IDs. No existing FactID is rewritten.
+
+Current code: `AnalysisFactBus::DeriveBatchId`
+(`src/facts/AnalysisFactBus.cpp:37`) is a `v1` encoding that omits
+completed-component object keys/hashes and diagnostics; `Validate`
+(`src/facts/AnalysisFactBus.cpp:144`) does not recheck the supplied `batch_id`,
+completion payloads, acyclicity, or root reachability. `FactStore::Publish`
+(`src/facts/FactStore.cpp:137`) has no `(run_id, batch_id)` receipt, and
+`ProvenanceStore::Explain` (`src/facts/ProvenanceStore.cpp:78`) queries
+`run_fact_bindings` without `is_current = 1` and reads the first row
+arbitrarily.
 
 ## 9. Error Handling
 
