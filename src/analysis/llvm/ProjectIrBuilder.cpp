@@ -14,6 +14,7 @@
 
 #include "analysis/llvm/ProjectIrBuilder.h"
 
+#include <algorithm>
 #include <memory>
 #include <span>
 #include <string>
@@ -207,6 +208,7 @@ ProjectIrBuilder::BuildProjectIr(const build::AnalysisManifest &manifest) {
   std::vector<std::unique_ptr<::llvm::Module>> modules;
   modules.reserve(manifest.translation_units.size());
 
+  std::vector<std::string> entry_point_sources;
   for (const auto &command : manifest.translation_units) {
     auto module = BuildTranslationUnitModule(
         command, manifest.context.project_root, context);
@@ -217,7 +219,37 @@ ProjectIrBuilder::BuildProjectIr(const build::AnalysisManifest &manifest) {
         AnnotateFunctionIdentities(module->get(), command, manifest.context);
     if (!identity_status.ok())
       return identity_status;
+    const ::llvm::Function *entry = module->get()->getFunction("main");
+    if (entry != nullptr && !entry->isDeclaration()) {
+      entry_point_sources.push_back(
+          (manifest.context.project_root /
+           command.source_path.relative_path)
+              .string());
+    }
     modules.push_back(std::move(*module));
+  }
+
+  // A compile_commands.json for a multi-target build spans several programs
+  // (library + executables + tests), each with its own `main`. Linking them
+  // into one whole-program module would collide on the duplicate entry point.
+  // Fail here with an actionable message instead of the raw LLVM linker error.
+  if (entry_point_sources.size() > 1) {
+    std::string message =
+        "compile_commands.json spans multiple programs: " +
+        std::to_string(entry_point_sources.size()) +
+        " translation units define `main`. VERITAS analyzes one program per "
+        "invocation; restrict --project to a single target (or the library's "
+        "translation units). Entry points:";
+    const std::size_t shown =
+        std::min<std::size_t>(entry_point_sources.size(), 5);
+    for (std::size_t i = 0; i < shown; ++i) {
+      message += "\n  " + entry_point_sources[i];
+    }
+    if (entry_point_sources.size() > shown) {
+      message += "\n  ... and " +
+                 std::to_string(entry_point_sources.size() - shown) + " more";
+    }
+    return Status::FailedPrecondition(message);
   }
 
   // Clang's driver emits `-discard-value-names` when the LLVM it was built
