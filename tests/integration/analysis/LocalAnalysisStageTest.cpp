@@ -61,6 +61,16 @@ TEST(LocalAnalysisStageTest, BuildsLinkedProgramIrAndSummaryDrafts) {
   }
 }
 
+TEST(LocalAnalysisStageTest, ResolvesSystemHeadersWithoutExplicitSysroot) {
+  auto manifest = LoadFixtureManifest("system_headers");
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+
+  auto result = RunLocalAnalysis(*manifest);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+
+  ASSERT_EQ(result->summary_drafts.size(), 1u);
+}
+
 TEST(LocalAnalysisStageTest, ContextRetainsValueNames) {
   auto manifest = LoadFixtureManifest("store_load");
   ASSERT_TRUE(manifest.ok()) << manifest.status().message();

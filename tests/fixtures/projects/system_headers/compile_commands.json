@@ -1,0 +1,7 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": ["clang++", "-std=c++17", "-c", "system_headers.cpp"],
+    "file": "system_headers.cpp"
+  }
+]
