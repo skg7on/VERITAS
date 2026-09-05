@@ -344,32 +344,74 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
         owner);
   }
 
+  // Pre-index the whole-program facts by their owning function so the per-draft
+  // loop below does not rescan every fact for every function. The previous
+  // shape was O(drafts x facts) with a core::ToString per fact per draft; the
+  // indices compute each owner string exactly once (O(facts)) and each draft
+  // then retrieves only the facts it owns.
+  //
+  // The owner key is the canonical function-variant string. It must equal the
+  // draft's function_variant_id() exactly -- the same comparison the previous
+  // scan performed via core::ToString(...) != owner.
+  std::map<StableId, std::vector<const semantic::NormalizedCallTarget*>>
+      calls_by_caller;
+  for (const auto& call : facts.calls) {
+    calls_by_caller[call.caller].push_back(&call);
+  }
+
+  std::map<std::string, std::vector<const semantic::NormalizedMemoryEffect*>>
+      effects_by_owner;
+  for (const auto& effect : facts.memory_effects) {
+    const auto& owner_fn = effect.location.object.owner_function;
+    if (!owner_fn.has_value()) {
+      continue;
+    }
+    effects_by_owner[core::ToString(*owner_fn)].push_back(&effect);
+  }
+
+  std::map<std::string, std::vector<const semantic::NormalizedAlias*>>
+      aliases_by_owner;
+  for (const auto& alias : facts.aliases) {
+    const auto& left_owner = alias.left.object.owner_function;
+    const auto& right_owner = alias.right.object.owner_function;
+    if (!left_owner.has_value() || !right_owner.has_value()) {
+      continue;
+    }
+    std::string left = core::ToString(*left_owner);
+    if (left != core::ToString(*right_owner)) {
+      // Cross-function alias: a whole-program fact, never attributed to a
+      // single function's summary.
+      continue;
+    }
+    aliases_by_owner[std::move(left)].push_back(&alias);
+  }
+
   for (auto& draft : drafts) {
     const std::string& owner = draft.identity().function_variant_id();
     const StableId owner_ref =
         ::veritas::analysis::llvm::StableValueMapper::FunctionValueRef(owner);
 
     // Calls: attribute via the caller's function value ref.
-    for (const auto& call : facts.calls) {
-      if (call.caller != owner_ref) {
-        continue;
-      }
-      auto* out = draft.add_calls();
-      out->set_call_site_id(core::ToString(call.call_site));
-      if (call.callee.has_value()) {
-        const auto it = ref_to_variant.find(*call.callee);
-        if (it != ref_to_variant.end()) {
-          out->set_resolved_callee_function_variant_id(it->second);
-          out->set_callee_symbol(it->second);
-        } else {
-          // Callee is outside this module (e.g. an external target); keep the
-          // stable value-ref string as a deterministic diagnostic symbol.
-          out->set_callee_symbol(core::ToString(*call.callee));
+    auto calls_it = calls_by_caller.find(owner_ref);
+    if (calls_it != calls_by_caller.end()) {
+      for (const auto* call : calls_it->second) {
+        auto* out = draft.add_calls();
+        out->set_call_site_id(core::ToString(call->call_site));
+        if (call->callee.has_value()) {
+          const auto it = ref_to_variant.find(*call->callee);
+          if (it != ref_to_variant.end()) {
+            out->set_resolved_callee_function_variant_id(it->second);
+            out->set_callee_symbol(it->second);
+          } else {
+            // Callee is outside this module (e.g. an external target); keep the
+            // stable value-ref string as a deterministic diagnostic symbol.
+            out->set_callee_symbol(core::ToString(*call->callee));
+          }
         }
+        out->set_dispatch(ToV2Dispatch(call->dispatch));
+        out->set_epistemic(ToV1Epistemic(call->epistemic));
+        out->set_provenance_ref(call->provenance_ref);
       }
-      out->set_dispatch(ToV2Dispatch(call.dispatch));
-      out->set_epistemic(ToV1Epistemic(call.epistemic));
-      out->set_provenance_ref(call.provenance_ref);
     }
 
     // Memory effects: attribute via location.object.owner_function.
@@ -394,54 +436,51 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
       }
     }
 
-    for (const auto& effect : facts.memory_effects) {
-      const auto& owner_fn = effect.location.object.owner_function;
-      if (!owner_fn.has_value() || core::ToString(*owner_fn) != owner) {
-        continue;
+    auto effects_it = effects_by_owner.find(owner);
+    if (effects_it != effects_by_owner.end()) {
+      for (const auto* effect : effects_it->second) {
+        auto location = ToProtoLocation(effect->location);
+        if (!location.ok()) {
+          return location.status();
+        }
+        const auto kind = ToV1EffectKind(effect->kind);
+        const auto epistemic = ToV1Epistemic(effect->epistemic);
+        const auto stated = local_effects.find(
+            std::make_pair(kind, location->memory_location_id()));
+        if (stated != local_effects.end() &&
+            StrengthRank(stated->second) <= StrengthRank(epistemic)) {
+          continue;
+        }
+        auto* out = draft.add_memory_effects();
+        out->set_kind(ToV1EffectKind(effect->kind));
+        *out->mutable_location() = std::move(*location);
+        out->set_epistemic(ToV1Epistemic(effect->epistemic));
+        out->set_provenance_ref(effect->provenance_ref);
       }
-      auto location = ToProtoLocation(effect.location);
-      if (!location.ok()) {
-        return location.status();
-      }
-      const auto kind = ToV1EffectKind(effect.kind);
-      const auto epistemic = ToV1Epistemic(effect.epistemic);
-      const auto stated = local_effects.find(
-          std::make_pair(kind, location->memory_location_id()));
-      if (stated != local_effects.end() &&
-          StrengthRank(stated->second) <= StrengthRank(epistemic)) {
-        continue;
-      }
-      auto* out = draft.add_memory_effects();
-      out->set_kind(ToV1EffectKind(effect.kind));
-      *out->mutable_location() = std::move(*location);
-      out->set_epistemic(ToV1Epistemic(effect.epistemic));
-      out->set_provenance_ref(effect.provenance_ref);
     }
 
     // Aliases: attribute only when BOTH endpoints are owned by this function;
-    // a cross-function alias is a whole-program fact and stays gated out.
-    for (const auto& alias : facts.aliases) {
-      const auto& left_owner = alias.left.object.owner_function;
-      const auto& right_owner = alias.right.object.owner_function;
-      if (!left_owner.has_value() || !right_owner.has_value() ||
-          core::ToString(*left_owner) != owner ||
-          core::ToString(*right_owner) != owner) {
-        continue;
+    // a cross-function alias is a whole-program fact and stays gated out. The
+    // index is keyed by the common owner string (both endpoints must agree),
+    // so each draft retrieves exactly its own aliases.
+    auto aliases_it = aliases_by_owner.find(owner);
+    if (aliases_it != aliases_by_owner.end()) {
+      for (const auto* alias : aliases_it->second) {
+        auto left = ToProtoLocation(alias->left);
+        auto right = ToProtoLocation(alias->right);
+        if (!left.ok()) {
+          return left.status();
+        }
+        if (!right.ok()) {
+          return right.status();
+        }
+        auto* out = draft.add_alias_facts();
+        *out->mutable_left() = std::move(*left);
+        *out->mutable_right() = std::move(*right);
+        out->set_kind(ToV2AliasKind(alias->kind));
+        out->set_epistemic(ToV1Epistemic(alias->epistemic));
+        out->set_provenance_ref(alias->provenance_ref);
       }
-      auto left = ToProtoLocation(alias.left);
-      auto right = ToProtoLocation(alias.right);
-      if (!left.ok()) {
-        return left.status();
-      }
-      if (!right.ok()) {
-        return right.status();
-      }
-      auto* out = draft.add_alias_facts();
-      *out->mutable_left() = std::move(*left);
-      *out->mutable_right() = std::move(*right);
-      out->set_kind(ToV2AliasKind(alias.kind));
-      out->set_epistemic(ToV1Epistemic(alias.epistemic));
-      out->set_provenance_ref(alias.provenance_ref);
     }
 
     // Run-level unknowns attach to every draft, matching the V1 merge.
