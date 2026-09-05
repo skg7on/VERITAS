@@ -13,6 +13,7 @@ Milestone-specific specifications live in the parallel `milestones/` subtree.
 - [Claude Code Evidence IR review plugin](veritas-claude-code-evidence-review-plugin-design-spec.md)
 - [Link-unit / program boundary](link-unit-program-boundary-design-spec.md)
 - [WPA and SummaryDB end-to-end qualification corpus](wpa-summarydb-qualification-corpus-design-spec.md)
+- [WPA in-process Soufflé execution](wpa-in-process-souffle-execution-design-spec.md)
 - [WPA witness derivation identity](wpa-witness-derivation-identity-design-spec.md)
 
 ## Milestone Specifications

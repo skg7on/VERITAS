@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-foreach(_required IN ITEMS MANIFEST SOUFFLE WORKER FUNCTOR REACH_BUNDLE
+foreach(_required IN ITEMS MANIFEST SOUFFLE RUNNER FUNCTOR REACH_BUNDLE
                            MAYWRITE_BUNDLE EXPECTED_REVISION)
   if(NOT DEFINED ${_required})
     message(FATAL_ERROR "VerifySouffleProvenance: missing -D${_required}")
@@ -43,7 +43,7 @@ if(NOT _source_revision STREQUAL EXPECTED_REVISION)
 endif()
 
 assert_digest("souffle_executable_sha256" "${SOUFFLE}" _souffle_digest)
-assert_digest("worker_executable_sha256" "${WORKER}" _worker_digest)
+assert_digest("runner_library_sha256" "${RUNNER}" _runner_digest)
 assert_digest("functor_library_sha256" "${FUNCTOR}" _functor_digest)
 assert_digest("reachability_bundle_sha256" "${REACH_BUNDLE}" _reach_digest)
 assert_digest("may_write_bundle_sha256" "${MAYWRITE_BUNDLE}" _maywrite_digest)
@@ -75,7 +75,7 @@ read_field("executable_linker_flags" _linker_flags)
 string(CONCAT _canonical
   "source_revision=${_source_revision}\n"
   "souffle_executable_sha256=${_souffle_digest}\n"
-  "worker_executable_sha256=${_worker_digest}\n"
+  "runner_library_sha256=${_runner_digest}\n"
   "functor_library_sha256=${_functor_digest}\n"
   "reachability_bundle_sha256=${_reach_digest}\n"
   "may_write_bundle_sha256=${_maywrite_digest}\n"

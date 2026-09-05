@@ -71,7 +71,7 @@ veritas_m9_entry_test(SouffleWpaExecutorTest souffle-production)
     COMMAND ${CMAKE_COMMAND}
       "-DMANIFEST=${CMAKE_BINARY_DIR}/souffle-provenance.json"
       "-DSOUFFLE=$<TARGET_FILE:souffle>"
-      "-DWORKER=$<TARGET_FILE:veritas_souffle_worker>"
+      "-DRUNNER=$<TARGET_FILE:veritas_souffle_runner>"
       "-DFUNCTOR=$<TARGET_FILE:veritas_souffle_functors>"
       "-DREACH_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_reach.cpp"
       "-DMAYWRITE_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_maywrite.cpp"

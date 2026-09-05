@@ -15,10 +15,10 @@
 // SouffleWpaExecutor.h — the compiled-Souffle production engine adapter.
 //
 // Writes the engine-neutral logical input with RelationIo, runs the compiled
-// veritas-souffle-worker as a subprocess under the requested limits, and reads
+// Souffle program in-process through the C ABI in SouffleRunner.h, and reads
 // the derived relations and witness relation back into a raw evaluation. A
-// timeout, signal, non-zero exit, missing output, schema mismatch, or witness
-// parse failure returns a non-OK Status with no evaluation.
+// non-zero run status, missing output, schema mismatch, or witness parse
+// failure returns a non-OK Status with no evaluation.
 
 #ifndef VERITAS_WPA_SOUFFLE_WPA_EXECUTOR_H_
 #define VERITAS_WPA_SOUFFLE_WPA_EXECUTOR_H_
@@ -33,6 +33,8 @@ namespace veritas::wpa {
 
 class SouffleWpaExecutor final : public WpaExecutor {
  public:
+  // The `worker` path is accepted for API compatibility but unused: the engine
+  // is linked in-process, not spawned as a subprocess.
   SouffleWpaExecutor(std::filesystem::path worker,
                      std::string toolchain_identity);
 
@@ -43,7 +45,6 @@ class SouffleWpaExecutor final : public WpaExecutor {
       const WpaExecutionLimits& limits) const override;
 
  private:
-  std::filesystem::path worker_;
   std::string toolchain_identity_;
 };
 
