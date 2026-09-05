@@ -39,6 +39,13 @@ target_link_libraries(veritas_wpa PUBLIC
   veritas::summarydb
 )
 
+# The production Souffle engine is linked in-process through the runner's C ABI
+# (SouffleRunner.h); the runner target is defined by VeritasSouffle.cmake under
+# the souffle engine and resolves at generate time.
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  target_link_libraries(veritas_wpa PRIVATE veritas_souffle_runner)
+endif()
+
 target_compile_features(veritas_wpa PUBLIC cxx_std_20)
 veritas_add_warnings(veritas_wpa)
 
