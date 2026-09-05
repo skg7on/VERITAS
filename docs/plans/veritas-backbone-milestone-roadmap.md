@@ -1084,6 +1084,14 @@ Consumer scheduling is narrower than all-callers invalidation.
 
 # 12. M8: SCC-Aware WPA and Souffle Fact Engine
 
+> **Historical note (September 2026):** This section preserves the original M8
+> implementation plan. [PR #94](https://github.com/skg7on/VERITAS/pull/94)
+> later retired the legacy `FixpointEngine`, `FactSchema`/`FactTuple`,
+> `SouffleExporter`, and related rule/test files after WPA converged on the V2
+> `AnalysisFact`/`MakeFact` model. The sketches and checklists below are
+> implemented history, not the current source layout; see the
+> [M8R.3 tracking issue](https://github.com/skg7on/VERITAS/issues/77).
+
 ## Design Spec
 
 M8 computes whole-program facts over current summaries. It starts with a C++ SCC/fixpoint engine for transitive calls and may-read/may-write, then exports base relations to Souffle for recursive fact derivation once the schemas are stable.

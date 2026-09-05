@@ -1510,6 +1510,15 @@ git commit -m "feat: canonicalize generic WPA witnesses"
 
 ### Task 12: Implement V2 rule bundles and the matched C++ logical evaluator
 
+> **Historical note (September 2026):** This task and its compatibility
+> references in Tasks 4 and 11 preserve the M8R transition plan as written.
+> [PR #94](https://github.com/skg7on/VERITAS/pull/94) later retired
+> `FixpointEngine`, `SouffleExporter` (including
+> `ReconstructCanonicalProofs`), `FactTuple`, `LegacyFactAdapter`, and their
+> legacy tests in favor of the V2 `AnalysisFact`/`MakeFact` executor path. The
+> text below is historical, not current implementation guidance; see the
+> [M8R.3 tracking issue](https://github.com/skg7on/VERITAS/issues/77).
+
 **Files:**
 
 - Create: `logic/schema/relations.v2.dl`
