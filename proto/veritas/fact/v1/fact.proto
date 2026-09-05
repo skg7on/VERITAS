@@ -1,0 +1,151 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package veritas.fact.v1;
+
+// The M9 fact and provenance wire contract. Facts are canonical semantic rows
+// keyed by their witness-independent FactID; provenance is a rooted witness
+// DAG keyed to the same FactID. Explanation is a bounded projection of both.
+
+enum EpistemicState {
+  EPISTEMIC_UNSPECIFIED = 0;
+  EPISTEMIC_MUST = 1;
+  EPISTEMIC_MAY = 2;
+  EPISTEMIC_MUST_NOT = 3;
+  EPISTEMIC_INFERRED = 4;
+  EPISTEMIC_ASSUMED = 5;
+  EPISTEMIC_UNKNOWN = 6;
+}
+
+enum DispatchKind {
+  DISPATCH_UNSPECIFIED = 0;
+  DISPATCH_DIRECT = 1;
+  DISPATCH_INDIRECT = 2;
+  DISPATCH_VIRTUAL = 3;
+  DISPATCH_CALLBACK = 4;
+  DISPATCH_EXTERNAL = 5;
+  DISPATCH_UNKNOWN = 6;
+}
+
+enum AliasKind {
+  ALIAS_UNSPECIFIED = 0;
+  ALIAS_MUST = 1;
+  ALIAS_MAY = 2;
+  ALIAS_NO = 3;
+  ALIAS_UNKNOWN = 4;
+}
+
+enum ByteRangeKind {
+  BYTE_RANGE_UNSPECIFIED = 0;
+  BYTE_RANGE_KNOWN = 1;
+  BYTE_RANGE_UNKNOWN = 2;
+}
+
+enum ProducerKind {
+  PRODUCER_UNSPECIFIED = 0;
+  PRODUCER_WPA_SOUFFLE = 1;
+  PRODUCER_WPA_CPP_CONFORMANCE = 2;
+  PRODUCER_WPA_CPP_EMERGENCY = 3;
+  PRODUCER_EXTERNAL = 4;
+}
+
+// One typed semantic cell of a fact row.
+message Cell {
+  oneof value {
+    string stable_id = 1;  // "<kind>:sha256:<digest>" serialized StableId
+    int64 int64_value = 2;
+    uint64 uint64_value = 3;
+    string string_value = 4;
+    DispatchKind dispatch_kind = 5;
+    AliasKind alias_kind = 6;
+    ByteRangeKind byte_range_kind = 7;
+    EpistemicState epistemic = 8;
+  }
+}
+
+// A canonical semantic fact. fact_id is witness-independent and content-
+// addressed over relation_name + cells, so equivalent semantic rows share a
+// FactID across revisions and executions.
+message Fact {
+  string fact_id = 1;
+  string relation_name = 2;
+  string relation_schema_version = 3;  // "relations.v2"
+  repeated Cell cells = 4;
+}
+
+// The occurrence binding of a fact within one analysis run. Carries the
+// run-local and provenance context that the canonical fact itself excludes.
+message RunFactBinding {
+  string analysis_run_id = 1;
+  string fact_id = 2;
+  optional double confidence = 3;  // [0, 1], stored separately from epistemic state
+  ProducerKind producer_kind = 4;
+  string analyzer_run_id = 5;
+  string scope_kind = 6;
+  string scope_id = 7;
+  string selected_witness_id = 8;
+  bool is_current = 9;
+}
+
+// One provenance node: the witness selected (or an alternative) for a fact's
+// derivation within a run.
+message FactWitness {
+  string analysis_run_id = 1;
+  string output_fact_id = 2;
+  string witness_id = 3;
+  bool selected = 4;
+  ProducerKind producer_kind = 5;
+  string producer_id = 6;
+  string rule_id = 7;
+  string rule_version = 8;
+  string analyzer_run_id = 9;
+  string source_anchor_id = 10;
+  string summary_id = 11;
+  string description = 12;
+}
+
+// One derivation edge: this input, at this argument position, fed the rule
+// that produced the witness.
+message FactWitnessEdge {
+  string analysis_run_id = 1;
+  string output_fact_id = 2;
+  string witness_id = 3;
+  string input_kind = 4;
+  string input_id = 5;
+  uint32 input_ordinal = 6;
+}
+
+// The budget bounding an explanation traversal.
+message ExplainBudget {
+  uint32 max_depth = 1;
+  uint32 max_nodes = 2;
+  bool include_source_anchors = 3;
+  bool include_summary_ids = 4;
+  bool include_datalog_derivation = 5;
+}
+
+// A bounded explanation: the fact, its run binding, and the rooted witness
+// DAG, with an explicit truncation marker when a budget was exceeded.
+message ProvenanceGraph {
+  string run_id = 1;
+  string fact_id = 2;
+  Fact fact = 3;
+  RunFactBinding binding = 4;
+  repeated FactWitness nodes = 5;
+  repeated FactWitnessEdge edges = 6;
+  bool truncated = 7;
+  string truncation_reason = 8;
+}

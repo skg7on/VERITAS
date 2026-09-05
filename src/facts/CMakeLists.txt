@@ -12,6 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+find_package(Protobuf REQUIRED)
+
+# Generated protobuf code for the M9 fact/provenance wire contract. Mirrors
+# src/summary: IMPORT_DIRS points at proto/ so the generated header path keeps
+# the veritas/fact/v1/ prefix, matching #include "veritas/fact/v1/fact.pb.h".
+add_library(veritas_fact_proto OBJECT
+  "${CMAKE_SOURCE_DIR}/proto/veritas/fact/v1/fact.proto"
+)
+
+target_include_directories(veritas_fact_proto PUBLIC
+  "${CMAKE_CURRENT_BINARY_DIR}"
+  ${Protobuf_INCLUDE_DIRS}
+)
+
+target_link_libraries(veritas_fact_proto PUBLIC
+  protobuf::libprotobuf
+)
+
+# Protobuf 22.0+ generated code references Abseil logging/checking symbols
+# directly; link them when present (see cmake/Dependencies.cmake).
+if(TARGET absl::absl_log)
+  target_link_libraries(veritas_fact_proto PUBLIC
+    absl::absl_log
+    absl::absl_check
+  )
+endif()
+
+protobuf_generate(
+  TARGET veritas_fact_proto
+  IMPORT_DIRS "${CMAKE_SOURCE_DIR}/proto"
+  PROTOC_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}"
+)
+
 add_library(veritas_facts
   AnalysisRun.cpp
   AnalysisFact.cpp
@@ -21,6 +54,10 @@ add_library(veritas_facts
   SemanticKeyCodec.cpp
   Witness.cpp
   AnalysisFactBus.cpp
+  Epistemic.cpp
+  FactProto.cpp
+  FactStore.cpp
+  ProvenanceStore.cpp
 )
 
 target_include_directories(veritas_facts PUBLIC
@@ -35,9 +72,10 @@ target_link_libraries(veritas_facts PUBLIC
   veritas::core
   veritas::summary
   veritas_analysis_semantic
+  veritas_fact_proto
 )
 target_link_libraries(veritas_facts PRIVATE
-  LLVM
+  LLVMSupport
   veritas::summarydb
 )
 
