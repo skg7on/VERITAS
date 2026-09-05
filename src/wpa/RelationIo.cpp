@@ -329,22 +329,23 @@ StatusOr<facts::RawWpaEvaluation> RelationIo::ReadOutput(
     if (line.empty())
       continue;
     const auto cells = SplitRow(line);
-    if (cells.size() != 4) {
-      return Status::InvalidArgument("witness row must have four columns");
+    if (cells.size() != 5) {
+      return Status::InvalidArgument("witness row must have five columns");
     }
     auto result_row = RowFromKey(cells[0]);
     if (!result_row.ok())
       return result_row.status();
-    auto input_row = RowFromKey(cells[2]);
+    auto input_row = RowFromKey(cells[3]);
     if (!input_row.ok())
       return input_row.status();
-    auto ordinal = ParseUnsigned(cells[3]);
+    auto ordinal = ParseUnsigned(cells[4]);
     if (!ordinal.ok())
       return ordinal.status();
 
     raw.witnesses.push_back(facts::WitnessEdge{
         .result = facts::SemanticKey{std::move(*result_row)},
         .rule_id = cells[1],
+        .derivation_key = cells[2],
         .input = facts::SemanticKey{std::move(*input_row)},
         .input_ordinal = static_cast<std::uint32_t>(*ordinal)});
   }

@@ -43,9 +43,15 @@ struct SemanticKey {
 // One immediate derivation step. `input_ordinal` is the rule's argument
 // position, so a rule that joins two inputs emits two edges that cannot be
 // confused with two alternative single-input proofs.
+//
+// `derivation_key` names the single Datalog firing that produced this edge; the
+// ordinal-0 and ordinal-1 edges of one firing share a key, while alternative
+// firings (different intermediates or call sites) carry distinct keys. It is
+// only a grouping handle for the canonicalizer and is not persisted or hashed.
 struct WitnessEdge {
   SemanticKey result;
   std::string rule_id;
+  std::string derivation_key;
   SemanticKey input;
   std::uint32_t input_ordinal = 0;
 

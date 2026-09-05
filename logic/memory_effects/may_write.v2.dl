@@ -89,36 +89,49 @@ SupportMayWriteKey(g, x, e,
   SupportMayWrite(g, x, e), FunctionMap(g, gs), MemoryMap(x, xs).
 
 // -- Witnesses -------------------------------------------------------------
+//
+// `derivation_key` is the concatenation of the firing's input keys in ordinal
+// order, so two ordinals of the same proof step share one key and alternative
+// proofs stay distinct. The ordinal-0 and ordinal-1 rules bind the same body
+// variables (including call site and dispatch) so they agree on the key.
 
-Witness(rk, "wpa.memory.may_write.direct.v2", ik, 0) :-
+Witness(rk, "wpa.memory.may_write.direct.v2", ik, ik, 0) :-
   DirectWrite(f, x, rkind, off, sz, e),
   MayWriteKey(f, x, e, rk),
   DirectWriteKey(f, x, rkind, off, sz, e, ik).
 
-Witness(rk, "wpa.memory.may_write.transitive.v2", ik, 0) :-
+Witness(rk, "wpa.memory.may_write.transitive.v2", dk, dc_key, 0) :-
   DirectCall(cs, f, g, d, e1),
   MayWrite(g, x, e2),
   WeakenEpistemic(e1, e2, e),
   MayWriteKey(f, x, e, rk),
-  DirectCallKey(cs, f, g, d, e1, ik).
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  MayWriteKey(g, x, e2, rc_key),
+  dk = cat(dc_key, rc_key).
 
-Witness(rk, "wpa.memory.may_write.transitive.v2", ik, 1) :-
-  DirectCall(_, f, g, _, e1),
+Witness(rk, "wpa.memory.may_write.transitive.v2", dk, rc_key, 1) :-
+  DirectCall(cs, f, g, d, e1),
   MayWrite(g, x, e2),
   WeakenEpistemic(e1, e2, e),
   MayWriteKey(f, x, e, rk),
-  MayWriteKey(g, x, e2, ik).
+  MayWriteKey(g, x, e2, rc_key),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  dk = cat(dc_key, rc_key).
 
-Witness(rk, "wpa.memory.may_write.support.v2", ik, 0) :-
+Witness(rk, "wpa.memory.may_write.support.v2", dk, dc_key, 0) :-
   DirectCall(cs, f, g, d, e1),
   SupportMayWrite(g, x, e2),
   WeakenEpistemic(e1, e2, e),
   MayWriteKey(f, x, e, rk),
-  DirectCallKey(cs, f, g, d, e1, ik).
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  SupportMayWriteKey(g, x, e2, rc_key),
+  dk = cat(dc_key, rc_key).
 
-Witness(rk, "wpa.memory.may_write.support.v2", ik, 1) :-
-  DirectCall(_, f, g, _, e1),
+Witness(rk, "wpa.memory.may_write.support.v2", dk, rc_key, 1) :-
+  DirectCall(cs, f, g, d, e1),
   SupportMayWrite(g, x, e2),
   WeakenEpistemic(e1, e2, e),
   MayWriteKey(f, x, e, rk),
-  SupportMayWriteKey(g, x, e2, ik).
+  SupportMayWriteKey(g, x, e2, rc_key),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  dk = cat(dc_key, rc_key).
