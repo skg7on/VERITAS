@@ -131,6 +131,37 @@ inline void AddIndirectCall(v2::FunctionSummary* summary, std::string_view from,
   call->set_provenance_ref("test:indirect");
 }
 
+// A virtual-dispatch call: one virtual call site resolves to one or several
+// overrides, each a distinct direct-call row with dispatch=virtual and
+// epistemic=may, matching how SVF normalization emits resolved MAY targets for
+// a virtual method (single or multiple inheritance).
+inline void AddVirtualCall(v2::FunctionSummary* summary, std::string_view from,
+                           std::string_view to) {
+  auto* call = summary->add_calls();
+  call->set_call_site_id(
+      core::ToString(CallSiteId(std::string(from) + "->vcall")));
+  call->set_callee_symbol(std::string(to));
+  call->set_resolved_callee_function_variant_id(core::ToString(FunctionId(to)));
+  call->set_dispatch(v2::DISPATCH_KIND_VIRTUAL);
+  call->set_epistemic(v1::EPISTEMIC_STATE_MAY);
+  call->set_provenance_ref("test:virtual");
+}
+
+// A callback-dispatch call: a function-pointer formal parameter, a global
+// function pointer, or a table selection invokes a target at one call site.
+// Resolved MAY targets share the call site and carry dispatch=callback.
+inline void AddCallbackCall(v2::FunctionSummary* summary, std::string_view from,
+                            std::string_view to) {
+  auto* call = summary->add_calls();
+  call->set_call_site_id(
+      core::ToString(CallSiteId(std::string(from) + "->cb")));
+  call->set_callee_symbol(std::string(to));
+  call->set_resolved_callee_function_variant_id(core::ToString(FunctionId(to)));
+  call->set_dispatch(v2::DISPATCH_KIND_CALLBACK);
+  call->set_epistemic(v1::EPISTEMIC_STATE_MAY);
+  call->set_provenance_ref("test:callback");
+}
+
 inline void AddMemoryWrite(v2::FunctionSummary* summary,
                            std::string_view memory, bool known_range) {
   auto* effect = summary->add_memory_effects();
