@@ -265,66 +265,82 @@ Status RelationIo::WriteInput(const std::filesystem::path& directory,
 StatusOr<facts::RawWpaEvaluation> RelationIo::ReadOutput(
     const std::filesystem::path& directory,
     const WpaLogicalComponentInput& input) {
-  const bool memory = input.component == WpaComponentKind::kMemoryEffects;
-  const facts::RelationId derived =
-      memory ? facts::RelationId::kMayWrite : facts::RelationId::kReachableCall;
-  const auto& derived_schema = facts::RelationsV2().Get(derived);
-
   facts::RawWpaEvaluation raw;
 
-  // Results arrive dense. Map every id back before it can become a fact.
-  std::ifstream results(directory / (derived_schema.name + ".csv"));
-  if (!results.is_open()) {
-    return Status::Internal("Souffle worker did not produce the result file");
-  }
-  std::string line;
-  while (std::getline(results, line)) {
-    if (line.empty())
-      continue;
-    const auto cells = SplitRow(line);
-    if (cells.size() != derived_schema.columns.size()) {
-      return Status::InvalidArgument("result row does not match its schema");
+  // Results arrive dense. Map every id back before it can become a fact. Each
+  // derived relation this component evaluates has its own result file.
+  for (const auto& domain : ComponentDomains(input.component)) {
+    const auto& derived_schema = facts::RelationsV2().Get(domain.derived);
+    std::ifstream results(directory / (derived_schema.name + ".csv"));
+    if (!results.is_open()) {
+      return Status::Internal("Souffle worker did not produce the result file");
     }
-    facts::SemanticRow row;
-    row.relation = derived;
-    for (std::size_t i = 0; i < cells.size(); ++i) {
-      auto ordinal = ParseUnsigned(cells[i]);
-      if (!ordinal.ok())
-        return ordinal.status();
-      switch (derived_schema.columns[i].domain) {
-      case facts::ColumnDomain::kFunctionId: {
-        auto stable = input.mappings.functions.ToStable(
-            facts::FunctionId{static_cast<std::uint32_t>(*ordinal)});
-        if (!stable.ok())
-          return stable.status();
-        row.cells.push_back(*stable);
-        break;
+    std::string line;
+    while (std::getline(results, line)) {
+      if (line.empty())
+        continue;
+      const auto cells = SplitRow(line);
+      if (cells.size() != derived_schema.columns.size()) {
+        return Status::InvalidArgument("result row does not match its schema");
       }
-      case facts::ColumnDomain::kMemoryId: {
-        auto stable = input.mappings.memories.ToStable(
-            facts::MemoryId{static_cast<std::uint32_t>(*ordinal)});
-        if (!stable.ok())
-          return stable.status();
-        row.cells.push_back(*stable);
-        break;
+      facts::SemanticRow row;
+      row.relation = domain.derived;
+      for (std::size_t i = 0; i < cells.size(); ++i) {
+        const auto domain = derived_schema.columns[i].domain;
+        if (domain == facts::ColumnDomain::kString) {
+          row.cells.push_back(cells[i]);
+          continue;
+        }
+        auto ordinal = ParseUnsigned(cells[i]);
+        if (!ordinal.ok())
+          return ordinal.status();
+        switch (domain) {
+        case facts::ColumnDomain::kFunctionId: {
+          auto stable = input.mappings.functions.ToStable(
+              facts::FunctionId{static_cast<std::uint32_t>(*ordinal)});
+          if (!stable.ok())
+            return stable.status();
+          row.cells.push_back(*stable);
+          break;
+        }
+        case facts::ColumnDomain::kMemoryId: {
+          auto stable = input.mappings.memories.ToStable(
+              facts::MemoryId{static_cast<std::uint32_t>(*ordinal)});
+          if (!stable.ok())
+            return stable.status();
+          row.cells.push_back(*stable);
+          break;
+        }
+        case facts::ColumnDomain::kValueId: {
+          auto stable = input.mappings.values.ToStable(
+              facts::ValueId{static_cast<std::uint32_t>(*ordinal)});
+          if (!stable.ok())
+            return stable.status();
+          row.cells.push_back(*stable);
+          break;
+        }
+        case facts::ColumnDomain::kUint64:
+          row.cells.push_back(*ordinal);
+          break;
+        default:
+          row.cells.push_back(static_cast<sem::EpistemicState>(*ordinal));
+          break;
+        }
       }
-      default:
-        row.cells.push_back(static_cast<sem::EpistemicState>(*ordinal));
-        break;
-      }
+      auto valid = facts::ValidateSemanticRow(row);
+      if (!valid.ok())
+        return valid;
+      raw.results.push_back(std::move(row));
     }
-    auto valid = facts::ValidateSemanticRow(row);
-    if (!valid.ok())
-      return valid;
-    raw.results.push_back(std::move(row));
+    if (results.bad())
+      return Status::Internal("failed reading the Souffle result file");
   }
-  if (results.bad())
-    return Status::Internal("failed reading the Souffle result file");
 
   std::ifstream witnesses(directory / "Witness.csv");
   if (!witnesses.is_open()) {
     return Status::Internal("Souffle worker did not produce Witness.csv");
   }
+  std::string line;
   while (std::getline(witnesses, line)) {
     if (line.empty())
       continue;

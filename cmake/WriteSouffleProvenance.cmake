@@ -23,7 +23,9 @@ foreach(_required IN ITEMS
     VERITAS_SOUFFLE_RUNNER
     VERITAS_SOUFFLE_FUNCTOR_LIBRARY
     VERITAS_REACHABILITY_BUNDLE
-    VERITAS_MAY_WRITE_BUNDLE
+    VERITAS_MEMORY_EFFECTS_BUNDLE
+    VERITAS_FLOW_BUNDLE
+    VERITAS_EFFECTS_BUNDLE
     VERITAS_SOUFFLE_REVISION
     VERITAS_COMPILER_ID
     VERITAS_COMPILER_VERSION
@@ -54,7 +56,9 @@ file(SHA256 "${VERITAS_SOUFFLE_EXECUTABLE}" _souffle_digest)
 file(SHA256 "${VERITAS_SOUFFLE_RUNNER}" _runner_digest)
 file(SHA256 "${VERITAS_SOUFFLE_FUNCTOR_LIBRARY}" _functor_digest)
 file(SHA256 "${VERITAS_REACHABILITY_BUNDLE}" _reach_digest)
-file(SHA256 "${VERITAS_MAY_WRITE_BUNDLE}" _maywrite_digest)
+file(SHA256 "${VERITAS_MEMORY_EFFECTS_BUNDLE}" _memory_effects_digest)
+file(SHA256 "${VERITAS_FLOW_BUNDLE}" _flow_digest)
+file(SHA256 "${VERITAS_EFFECTS_BUNDLE}" _effects_digest)
 
 string(CONCAT _canonical
   "source_revision=${VERITAS_SOUFFLE_REVISION}\n"
@@ -62,7 +66,9 @@ string(CONCAT _canonical
   "runner_library_sha256=${_runner_digest}\n"
   "functor_library_sha256=${_functor_digest}\n"
   "reachability_bundle_sha256=${_reach_digest}\n"
-  "may_write_bundle_sha256=${_maywrite_digest}\n"
+  "memory_effects_bundle_sha256=${_memory_effects_digest}\n"
+  "flow_bundle_sha256=${_flow_digest}\n"
+  "effects_bundle_sha256=${_effects_digest}\n"
   "compiler_id=${VERITAS_COMPILER_ID}\n"
   "compiler_version=${VERITAS_COMPILER_VERSION}\n"
   "compiler_path=${VERITAS_COMPILER_PATH}\n"
@@ -91,7 +97,9 @@ file(WRITE "${VERITAS_SOUFFLE_PROVENANCE_OUTPUT}"
   "  \"runner_library_sha256\": \"${_runner_digest}\",\n"
   "  \"functor_library_sha256\": \"${_functor_digest}\",\n"
   "  \"reachability_bundle_sha256\": \"${_reach_digest}\",\n"
-  "  \"may_write_bundle_sha256\": \"${_maywrite_digest}\",\n"
+  "  \"memory_effects_bundle_sha256\": \"${_memory_effects_digest}\",\n"
+  "  \"flow_bundle_sha256\": \"${_flow_digest}\",\n"
+  "  \"effects_bundle_sha256\": \"${_effects_digest}\",\n"
   "  \"compiler_id\": \"${_COMPILER_ID}\",\n"
   "  \"compiler_version\": \"${_COMPILER_VERSION}\",\n"
   "  \"compiler_path\": \"${_COMPILER_PATH}\",\n"

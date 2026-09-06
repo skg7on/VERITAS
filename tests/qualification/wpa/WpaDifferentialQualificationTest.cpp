@@ -71,6 +71,33 @@ Program ProgramFor(const QualificationCase& c) {
     AddMemoryWrite(&writer, "mem:buffer", /*known_range=*/true);
     return {{writer}, "writer"};
   }
+  // A read closure: a direct read and a read reached through a call, so the
+  // transitive MayRead rule is exercised alongside the direct one.
+  if (c.name == "memory_read") {
+    auto reader = V2Summary("reader");
+    AddMemoryRead(&reader, "mem:buffer", /*known_range=*/true);
+    AddDirectCall(&reader, "reader", "callee");
+    auto callee = V2Summary("callee");
+    AddMemoryRead(&callee, "mem:shared", /*known_range=*/true);
+    return {{reader, callee}, "reader"};
+  }
+  // A value-flow closure: two local flows compose transitively, and a
+  // parameter flow seeds a third base edge, so the transitive and parameter
+  // GlobalFlow rules are exercised alongside the local base rule.
+  if (c.name == "flow") {
+    auto f = V2Summary("f");
+    AddLocalFlow(&f, "v:0", "v:1");
+    AddLocalFlow(&f, "v:1", "v:2");
+    AddParameterFlow(&f, "cs:1", "v:2", "v:3");
+    return {{f}, "f"};
+  }
+  // An unresolved call yields an unknown effect, and the coverage certificate
+  // marks the function incomplete.
+  if (c.name == "effects") {
+    auto f = V2Summary("f");
+    AddUnknownCall(&f, "f", "unresolved");
+    return {{f}, "f"};
+  }
   // The mixed C/C++ semantic_zoo corpus's recursion shapes: a self-recursive
   // function and a mutually recursive pair, sharing a leaf. The entry point
   // lives in the mutual/self-recursive SCC, so the derived reachability facts
@@ -182,6 +209,10 @@ INSTANTIATE_TEST_SUITE_P(
                           "dispatch"},
         QualificationCase{"memory", WpaComponentKind::kMemoryEffects,
                           "writer"},
+        QualificationCase{"memory_read", WpaComponentKind::kMemoryEffects,
+                          "reader"},
+        QualificationCase{"flow", WpaComponentKind::kFlow, "f"},
+        QualificationCase{"effects", WpaComponentKind::kEffects, "f"},
         QualificationCase{"semantic_zoo_recursive",
                           WpaComponentKind::kReachability,
                           "zoo_recursive_entry"},

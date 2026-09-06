@@ -276,6 +276,74 @@ void ExtractUnknownsV2(const ::llvm::Function &function,
   }
 }
 
+Status ExtractParameterFlowsV2(const ::llvm::Function &function,
+                               const StableValueMapper &values,
+                               summary::FunctionLocalFactsV2 *facts) {
+  for (const auto &block : function) {
+    for (const auto &inst : block) {
+      const auto *call = ::llvm::dyn_cast<::llvm::CallBase>(&inst);
+      if (!call)
+        continue;
+      const auto *callee = call->getCalledFunction();
+      if (!callee)
+        continue;  // indirect target; no single formal to bind
+      auto call_site = values.CallSiteIdFor(*call);
+      if (!call_site.ok())
+        return call_site.status();
+      const auto num_params = callee->getFunctionType()->getNumParams();
+      for (unsigned i = 0; i < call->arg_size() && i < num_params; ++i) {
+        const auto *actual = call->getArgOperand(i);
+        if (!::llvm::isa<::llvm::Instruction>(actual) &&
+            !::llvm::isa<::llvm::Argument>(actual)) {
+          continue;  // constants and special values carry no intra-arg flow
+        }
+        auto actual_id = values.IdFor(*actual);
+        if (!actual_id.ok())
+          return actual_id.status();
+        summary::ParameterFlowFactV2 fact;
+        fact.call_site_id = *call_site;
+        fact.actual_id = *actual_id;
+        fact.formal_id = values.FormalParamId(*callee, i);
+        fact.epistemic = semantic::EpistemicState::kMust;
+        fact.provenance_ref = "local:parameter_flow";
+        facts->parameter_flows.push_back(std::move(fact));
+      }
+    }
+  }
+  return Status::Ok();
+}
+
+Status ExtractReturnFlowsV2(const ::llvm::Function &function,
+                            const StableValueMapper &values,
+                            summary::FunctionLocalFactsV2 *facts) {
+  for (const auto &block : function) {
+    for (const auto &inst : block) {
+      const auto *call = ::llvm::dyn_cast<::llvm::CallBase>(&inst);
+      if (!call)
+        continue;
+      if (call->getType()->isVoidTy())
+        continue;
+      const auto *callee = call->getCalledFunction();
+      if (!callee || callee->getReturnType()->isVoidTy())
+        continue;
+      auto call_site = values.CallSiteIdFor(*call);
+      if (!call_site.ok())
+        return call_site.status();
+      auto result_id = values.IdFor(*call);
+      if (!result_id.ok())
+        return result_id.status();
+      summary::ReturnFlowFactV2 fact;
+      fact.call_site_id = *call_site;
+      fact.return_id = values.ReturnValueId(*callee);
+      fact.result_id = *result_id;
+      fact.epistemic = semantic::EpistemicState::kMust;
+      fact.provenance_ref = "local:return_flow";
+      facts->return_flows.push_back(std::move(fact));
+    }
+  }
+  return Status::Ok();
+}
+
 } // namespace
 
 veritas::StatusOr<std::vector<summary::FunctionLocalFacts>>
@@ -345,6 +413,12 @@ LocalFactExtractor::ExtractV2(pipeline::ProgramIr &program_ir) const {
     if (!status.ok())
       return status;
     status = ExtractValueFlowsV2(function, values, &facts);
+    if (!status.ok())
+      return status;
+    status = ExtractParameterFlowsV2(function, values, &facts);
+    if (!status.ok())
+      return status;
+    status = ExtractReturnFlowsV2(function, values, &facts);
     if (!status.ok())
       return status;
     ExtractUnknownsV2(function, &facts);

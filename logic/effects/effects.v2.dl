@@ -1,0 +1,160 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// effects.v2.dl -- the UnknownEffect and SoundnessCoverage domains.
+//
+// UnknownEffect is the typed surface for an effect the analysis cannot model:
+// an unresolved call, propagated up the call graph. SoundnessCoverage is the
+// function-scoped completeness certificate: a function with an unknown effect
+// is not soundly covered, and one without is.
+
+.include "../schema/relations.v2.dl"
+.include "../common/epistemic.dl"
+.include "../common/semantic_key.dl"
+
+// -- UnknownEffect ---------------------------------------------------------
+
+.decl UnknownEffect(function_id:FunctionId, subject:symbol, reason:symbol,
+                    epistemic:Epistemic)
+.output UnknownEffect(IO=file, filename="UnknownEffect.csv")
+
+// An unresolved call is an unknown effect scoped to its call site.
+UnknownEffect(f, cs_str, reason, e) :-
+  UnknownCall(cs, f, reason, e),
+  CallSiteMap(cs, cs_str).
+
+// A callee's unknown effect propagates to its caller, weakening the warrant.
+UnknownEffect(f, subj, r, e) :-
+  DirectCall(_, f, g, _, e1),
+  UnknownEffect(g, subj, r, e2),
+  WeakenEpistemic(e1, e2, e).
+
+UnknownEffect(f, subj, r, e) :-
+  DirectCall(_, f, g, _, e1),
+  SupportUnknownEffect(g, subj, r, e2),
+  WeakenEpistemic(e1, e2, e).
+
+// -- SoundnessCoverage -----------------------------------------------------
+
+.decl SoundnessCoverage(scope_id:symbol, coverage_kind:symbol,
+                        complete:unsigned, epistemic:Epistemic)
+.output SoundnessCoverage(IO=file, filename="SoundnessCoverage.csv")
+
+// A function with an unknown effect is not soundly covered. Epistemic MUST is
+// ordinal 0. A function with no gap is implied complete (closed-world) by the
+// absence of this fact at the query layer; the WPA emits only the positive gap.
+SoundnessCoverage(fs, "dominating_check_absence", 0, 0) :-
+  UnknownEffect(f, _, _, _),
+  FunctionMap(f, fs).
+
+// -- Semantic keys ---------------------------------------------------------
+
+.decl UnknownEffectKey(function_id:FunctionId, subject:symbol, reason:symbol,
+                       epistemic:Epistemic, key:symbol)
+UnknownEffectKey(f, subj, r, e,
+  cat(@veritas_key_header_v1("UnknownEffect", 4),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_field_symbol_v1(subj),
+  cat(@veritas_key_field_symbol_v1(r), @veritas_key_field_enum_v1(e)))))) :-
+  UnknownEffect(f, subj, r, e), FunctionMap(f, fs).
+
+.decl UnknownCallKey(call_site_id:CallSiteId, caller_id:FunctionId,
+                     reason:symbol, epistemic:Epistemic, key:symbol)
+UnknownCallKey(cs, f, reason, e,
+  cat(@veritas_key_header_v1("UnknownCall", 4),
+  cat(@veritas_key_id_v1(css),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_field_symbol_v1(reason),
+      @veritas_key_field_enum_v1(e)))))) :-
+  UnknownCall(cs, f, reason, e), CallSiteMap(cs, css), FunctionMap(f, fs).
+
+.decl DirectCallKey(call_site_id:CallSiteId, caller_id:FunctionId,
+                    callee_id:FunctionId, dispatch:Dispatch,
+                    epistemic:Epistemic, key:symbol)
+DirectCallKey(cs, f, g, d, e,
+  cat(@veritas_key_header_v1("DirectCall", 5),
+  cat(@veritas_key_id_v1(css),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(gs),
+  cat(@veritas_key_field_enum_v1(d), @veritas_key_field_enum_v1(e))))))) :-
+  DirectCall(cs, f, g, d, e), CallSiteMap(cs, css),
+  FunctionMap(f, fs), FunctionMap(g, gs).
+
+.decl SupportUnknownEffectKey(function_id:FunctionId, subject:symbol,
+                              reason:symbol, epistemic:Epistemic, key:symbol)
+SupportUnknownEffectKey(g, subj, r, e,
+  cat(@veritas_key_header_v1("SupportUnknownEffect", 4),
+  cat(@veritas_key_id_v1(gs),
+  cat(@veritas_key_field_symbol_v1(subj),
+  cat(@veritas_key_field_symbol_v1(r), @veritas_key_field_enum_v1(e)))))) :-
+  SupportUnknownEffect(g, subj, r, e), FunctionMap(g, gs).
+
+.decl SoundnessCoverageKey(scope_id:symbol, coverage_kind:symbol,
+                           complete:unsigned, epistemic:Epistemic, key:symbol)
+SoundnessCoverageKey(fs, kind, c, e,
+  cat(@veritas_key_header_v1("SoundnessCoverage", 4),
+  cat(@veritas_key_field_symbol_v1(fs),
+  cat(@veritas_key_field_symbol_v1(kind),
+  cat(@veritas_key_field_unsigned_v1(c), @veritas_key_field_enum_v1(e)))))) :-
+  SoundnessCoverage(fs, kind, c, e).
+
+// -- Witnesses -------------------------------------------------------------
+
+Witness(rk, "wpa.effect.unknown.call.v2", ik, ik, 0) :-
+  UnknownCall(cs, f, reason, e),
+  UnknownEffectKey(f, css, reason, e, rk),
+  UnknownCallKey(cs, f, reason, e, ik),
+  CallSiteMap(cs, css).
+
+Witness(rk, "wpa.effect.unknown.transitive.v2", dk, dc_key, 0) :-
+  DirectCall(cs, f, g, d, e1),
+  UnknownEffect(g, subj, r, e2),
+  WeakenEpistemic(e1, e2, e),
+  UnknownEffectKey(f, subj, r, e, rk),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  UnknownEffectKey(g, subj, r, e2, uc_key),
+  dk = cat(dc_key, uc_key).
+
+Witness(rk, "wpa.effect.unknown.transitive.v2", dk, uc_key, 1) :-
+  DirectCall(cs, f, g, d, e1),
+  UnknownEffect(g, subj, r, e2),
+  WeakenEpistemic(e1, e2, e),
+  UnknownEffectKey(f, subj, r, e, rk),
+  UnknownEffectKey(g, subj, r, e2, uc_key),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  dk = cat(dc_key, uc_key).
+
+Witness(rk, "wpa.effect.unknown.support.v2", dk, dc_key, 0) :-
+  DirectCall(cs, f, g, d, e1),
+  SupportUnknownEffect(g, subj, r, e2),
+  WeakenEpistemic(e1, e2, e),
+  UnknownEffectKey(f, subj, r, e, rk),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  SupportUnknownEffectKey(g, subj, r, e2, sc_key),
+  dk = cat(dc_key, sc_key).
+
+Witness(rk, "wpa.effect.unknown.support.v2", dk, sc_key, 1) :-
+  DirectCall(cs, f, g, d, e1),
+  SupportUnknownEffect(g, subj, r, e2),
+  WeakenEpistemic(e1, e2, e),
+  UnknownEffectKey(f, subj, r, e, rk),
+  SupportUnknownEffectKey(g, subj, r, e2, sc_key),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  dk = cat(dc_key, sc_key).
+
+Witness(sk, "wpa.coverage.incomplete.v2", uk, uk, 0) :-
+  UnknownEffect(f, subj, r, e),
+  SoundnessCoverageKey(fs, "dominating_check_absence", 0, 0, sk),
+  UnknownEffectKey(f, subj, r, e, uk),
+  FunctionMap(f, fs).

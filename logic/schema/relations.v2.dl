@@ -84,6 +84,33 @@
                            epistemic:Epistemic)
 .decl SupportMayWrite(function_id:FunctionId, memory_id:MemoryId,
                       epistemic:Epistemic)
+.decl SupportMayRead(function_id:FunctionId, memory_id:MemoryId,
+                     epistemic:Epistemic)
 
 .input SupportReachableCall(IO=file, filename="SupportReachableCall.facts")
 .input SupportMayWrite(IO=file, filename="SupportMayWrite.facts")
+.input SupportMayRead(IO=file, filename="SupportMayRead.facts")
+
+// Flow. LocalFlow/ParameterFlow/ReturnFlow are the base edges the GlobalFlow
+// closure composes; SupportGlobalFlow carries a successor SCC's flow summary.
+.decl LocalFlow(function_id:FunctionId, source_id:ValueId,
+                destination_id:ValueId, flow_kind:symbol, epistemic:Epistemic)
+.decl ParameterFlow(call_site_id:CallSiteId, actual_id:ValueId,
+                    formal_id:ValueId, epistemic:Epistemic)
+.decl ReturnFlow(call_site_id:CallSiteId, return_id:ValueId,
+                 result_id:ValueId, epistemic:Epistemic)
+.decl SupportGlobalFlow(source_id:ValueId, sink_id:ValueId,
+                        epistemic:Epistemic)
+
+.input LocalFlow(IO=file, filename="LocalFlow.facts")
+.input ParameterFlow(IO=file, filename="ParameterFlow.facts")
+.input ReturnFlow(IO=file, filename="ReturnFlow.facts")
+.input SupportGlobalFlow(IO=file, filename="SupportGlobalFlow.facts")
+
+// Unknown effect and its successor support. UnknownEffect is keyed on the
+// function that carries the unknown plus a subject/reason pair; its epistemic
+// state is MAY or UNKNOWN only.
+.decl SupportUnknownEffect(function_id:FunctionId, subject:symbol,
+                           reason:symbol, epistemic:Epistemic)
+
+.input SupportUnknownEffect(IO=file, filename="SupportUnknownEffect.facts")

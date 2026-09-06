@@ -1,0 +1,28 @@
+# Effects rule bundle.
+#
+# Identifies the compiled program that evaluates the UnknownEffect and
+# SoundnessCoverage domains together. The bundle identity participates in run
+# identity and in the component cache key, so a rule change must not reuse a
+# prior compiled result.
+
+bundle_name=effects
+bundle_version=rules.v2
+component=effects
+entry=effects.v2.dl
+
+# UnknownCall seeds the unknown-effect closure; DirectCall propagates it up the
+# call graph. FunctionMap/CallSiteMap resolve dense ids for keys and scopes.
+input=FunctionMap
+input=CallSiteMap
+input=DirectCall
+input=UnknownCall
+input=SupportUnknownEffect
+
+output=UnknownEffect
+output=SoundnessCoverage
+output=Witness
+
+rule=wpa.effect.unknown.call.v2
+rule=wpa.effect.unknown.support.v2
+rule=wpa.effect.unknown.transitive.v2
+rule=wpa.coverage.incomplete.v2

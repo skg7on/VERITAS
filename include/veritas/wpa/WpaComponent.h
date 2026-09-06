@@ -25,6 +25,7 @@
 #define VERITAS_WPA_WPA_COMPONENT_H_
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -42,11 +43,23 @@ namespace veritas::wpa {
 enum class WpaComponentKind : std::uint8_t {
   kReachability,
   kMemoryEffects,
+  kFlow,
+  kEffects,
 };
 
 // Canonical text for a component kind. Used in the logical input hash, so the
 // tokens are part of the contract and must not be renamed casually.
 std::string_view ComponentKindName(WpaComponentKind component);
+
+// The (derived, successor-support) relation pair a component evaluates. A
+// domain with no successor support has a nullopt support relation (e.g. the
+// function-local SoundnessCoverage certificate).
+struct ComponentDomain {
+  facts::RelationId derived;
+  std::optional<facts::RelationId> support;
+};
+
+std::vector<ComponentDomain> ComponentDomains(WpaComponentKind component);
 
 // Run-local dual identity. Dense IDs are assigned in sorted stable-ID order
 // and never escape their AnalysisRun; every dense cell in the EDB is

@@ -61,6 +61,16 @@ class StableValueMapper {
   // Deterministic kCallSite identity for a call instruction.
   StatusOr<core::StableId> CallSiteIdFor(const ::llvm::CallBase& call) const;
 
+  // Deterministic kValueRef identity for a function's formal parameter,
+  // independent of whether the function has a body in the module. Mirrors the
+  // Argument encoding without needing the LLVM Argument, so an external
+  // callee's formal can be named too.
+  core::StableId FormalParamId(const ::llvm::Function& callee,
+                               std::uint32_t arg_index) const;
+
+  // Deterministic kValueRef identity for a function's return value.
+  core::StableId ReturnValueId(const ::llvm::Function& callee) const;
+
   // The canonical kValueRef identity of a function, derived solely from its
   // function-variant ID string (or diagnostic name when no origin-map entry
   // exists). This is the single source of truth for the function-value

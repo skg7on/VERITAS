@@ -257,6 +257,62 @@ StatusOr<v2::ValueFlow> ToProto(const ValueFlowFactV2& flow) {
   return out;
 }
 
+StatusOr<v2::ParameterFlow> ToProto(const ParameterFlowFactV2& flow) {
+  if (Status status = ValidateStableIdKind(flow.call_site_id,
+                                           core::IdKind::kCallSite,
+                                           "call_site_id");
+      !status.ok()) {
+    return status;
+  }
+  if (Status status = ValidateStableIdKind(flow.actual_id,
+                                           core::IdKind::kValueRef,
+                                           "actual_id");
+      !status.ok()) {
+    return status;
+  }
+  if (Status status = ValidateStableIdKind(flow.formal_id,
+                                           core::IdKind::kValueRef,
+                                           "formal_id");
+      !status.ok()) {
+    return status;
+  }
+  v2::ParameterFlow out;
+  out.set_call_site_id(core::ToString(flow.call_site_id));
+  out.set_actual_id(core::ToString(flow.actual_id));
+  out.set_formal_id(core::ToString(flow.formal_id));
+  out.set_epistemic(ToProto(flow.epistemic));
+  out.set_provenance_ref(flow.provenance_ref);
+  return out;
+}
+
+StatusOr<v2::ReturnFlow> ToProto(const ReturnFlowFactV2& flow) {
+  if (Status status = ValidateStableIdKind(flow.call_site_id,
+                                           core::IdKind::kCallSite,
+                                           "call_site_id");
+      !status.ok()) {
+    return status;
+  }
+  if (Status status = ValidateStableIdKind(flow.return_id,
+                                           core::IdKind::kValueRef,
+                                           "return_id");
+      !status.ok()) {
+    return status;
+  }
+  if (Status status = ValidateStableIdKind(flow.result_id,
+                                           core::IdKind::kValueRef,
+                                           "result_id");
+      !status.ok()) {
+    return status;
+  }
+  v2::ReturnFlow out;
+  out.set_call_site_id(core::ToString(flow.call_site_id));
+  out.set_return_id(core::ToString(flow.return_id));
+  out.set_result_id(core::ToString(flow.result_id));
+  out.set_epistemic(ToProto(flow.epistemic));
+  out.set_provenance_ref(flow.provenance_ref);
+  return out;
+}
+
 StatusOr<v2::AliasFact> ToProto(const AliasFactV2& alias) {
   auto left = ToProto(alias.left);
   if (!left.ok()) {
@@ -346,6 +402,32 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
   SortBySerialized(&value_flows);
   for (const auto& flow : value_flows) {
     *summary.add_value_flows() = flow;
+  }
+
+  std::vector<v2::ParameterFlow> parameter_flows;
+  for (const auto& flow : facts.parameter_flows) {
+    auto proto = ToProto(flow);
+    if (!proto.ok()) {
+      return proto.status();
+    }
+    parameter_flows.push_back(std::move(*proto));
+  }
+  SortBySerialized(&parameter_flows);
+  for (const auto& flow : parameter_flows) {
+    *summary.add_parameter_flows() = flow;
+  }
+
+  std::vector<v2::ReturnFlow> return_flows;
+  for (const auto& flow : facts.return_flows) {
+    auto proto = ToProto(flow);
+    if (!proto.ok()) {
+      return proto.status();
+    }
+    return_flows.push_back(std::move(*proto));
+  }
+  SortBySerialized(&return_flows);
+  for (const auto& flow : return_flows) {
+    *summary.add_return_flows() = flow;
   }
 
   std::vector<v2::AliasFact> alias_facts;

@@ -73,6 +73,14 @@ const EpistemicSet& ModelStatedStates() {
   return set;
 }
 
+// A coverage conclusion is either deterministically established (MUST) or
+// uncertain (UNKNOWN); a coverage certificate is never a MAY or a MUST_NOT.
+const EpistemicSet& CoverageStates() {
+  static const EpistemicSet set = {sem::EpistemicState::kMust,
+                                   sem::EpistemicState::kUnknown};
+  return set;
+}
+
 const RelationTable& Table() {
   static const RelationTable table = {
       RelationSchema{"FunctionMap", RelationOwnership::kEdb,
@@ -184,6 +192,44 @@ const RelationTable& Table() {
                       {"memory_id", ColumnDomain::kMemoryId},
                       {"epistemic", ColumnDomain::kEpistemic}},
                      WithoutMustNot()},
+      RelationSchema{"MayRead", RelationOwnership::kIdb,
+                     {{"function_id", ColumnDomain::kFunctionId},
+                      {"memory_id", ColumnDomain::kMemoryId},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     WithoutMustNot()},
+      RelationSchema{"SupportMayRead", RelationOwnership::kEdb,
+                     {{"function_id", ColumnDomain::kFunctionId},
+                      {"memory_id", ColumnDomain::kMemoryId},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     WithoutMustNot()},
+      RelationSchema{"GlobalFlow", RelationOwnership::kIdb,
+                     {{"source_id", ColumnDomain::kValueId},
+                      {"sink_id", ColumnDomain::kValueId},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     WithoutMustNot()},
+      RelationSchema{"SupportGlobalFlow", RelationOwnership::kEdb,
+                     {{"source_id", ColumnDomain::kValueId},
+                      {"sink_id", ColumnDomain::kValueId},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     WithoutMustNot()},
+      RelationSchema{"UnknownEffect", RelationOwnership::kIdb,
+                     {{"function_id", ColumnDomain::kFunctionId},
+                      {"subject", ColumnDomain::kString},
+                      {"reason", ColumnDomain::kString},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     UnresolvedCallStates()},
+      RelationSchema{"SupportUnknownEffect", RelationOwnership::kEdb,
+                     {{"function_id", ColumnDomain::kFunctionId},
+                      {"subject", ColumnDomain::kString},
+                      {"reason", ColumnDomain::kString},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     UnresolvedCallStates()},
+      RelationSchema{"SoundnessCoverage", RelationOwnership::kIdb,
+                     {{"scope_id", ColumnDomain::kString},
+                      {"coverage_kind", ColumnDomain::kString},
+                      {"complete", ColumnDomain::kUint64},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     CoverageStates()},
   };
   return table;
 }

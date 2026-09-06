@@ -64,6 +64,11 @@ inline core::StableId MemoryId(std::string_view name) {
                             std::as_bytes(std::span(name.data(), name.size())));
 }
 
+inline core::StableId ValueId(std::string_view name) {
+  return core::MakeStableId(core::IdKind::kValueRef,
+                            std::as_bytes(std::span(name.data(), name.size())));
+}
+
 inline facts::AnalysisRunSemanticDescriptor Semantics() {
   facts::AnalysisRunSemanticDescriptor semantics;
   semantics.build_variant_id = core::MakeStableId(
@@ -175,6 +180,54 @@ inline void AddMemoryWrite(v2::FunctionSummary* summary,
   range->set_size(known_range ? 8 : 0);
   effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   effect->set_provenance_ref("test:write");
+}
+
+inline void AddMemoryRead(v2::FunctionSummary* summary,
+                          std::string_view memory, bool known_range) {
+  auto* effect = summary->add_memory_effects();
+  effect->set_kind(v1::EFFECT_KIND_READ);
+  effect->mutable_location()->set_memory_location_id(
+      core::ToString(MemoryId(memory)));
+  auto* range = effect->mutable_location()->mutable_byte_range();
+  range->set_offset_known(known_range);
+  range->set_offset(known_range ? 0 : 0);
+  range->set_size_known(known_range);
+  range->set_size(known_range ? 8 : 0);
+  effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  effect->set_provenance_ref("test:read");
+}
+
+inline void AddLocalFlow(v2::FunctionSummary* summary, std::string_view from,
+                         std::string_view to) {
+  auto* flow = summary->add_value_flows();
+  flow->set_source_value_id(core::ToString(ValueId(from)));
+  flow->set_destination_value_id(core::ToString(ValueId(to)));
+  flow->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  flow->set_provenance_ref("test:local");
+}
+
+inline void AddParameterFlow(v2::FunctionSummary* summary,
+                             std::string_view call_site, std::string_view actual,
+                             std::string_view formal) {
+  auto* flow = summary->add_parameter_flows();
+  flow->set_call_site_id(core::ToString(CallSiteId(call_site)));
+  flow->set_actual_id(core::ToString(ValueId(actual)));
+  flow->set_formal_id(core::ToString(ValueId(formal)));
+  flow->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  flow->set_provenance_ref("test:parameter");
+}
+
+// An unresolved call: no resolved callee, so the materializer projects it as
+// an UnknownCall rather than a DirectCall.
+inline void AddUnknownCall(v2::FunctionSummary* summary, std::string_view from,
+                           std::string_view reason) {
+  auto* call = summary->add_calls();
+  call->set_call_site_id(
+      core::ToString(CallSiteId(std::string(from) + "->unknown")));
+  call->set_callee_symbol(std::string(reason));
+  call->set_dispatch(v2::DISPATCH_KIND_INDIRECT);
+  call->set_epistemic(v1::EPISTEMIC_STATE_MAY);
+  call->set_provenance_ref("test:unknown");
 }
 
 // Materializes the logical input for one component rooted at `root`.

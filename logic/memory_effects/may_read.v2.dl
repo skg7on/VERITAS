@@ -1,0 +1,120 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// may_read.v2.dl -- the MayRead domain.
+//
+// The read mirror of MayWrite: a direct read, a read reached through a call,
+// and one reached through a successor SCC's support. MayRead is keyed on the
+// memory location alone and carries no byte range, for the same reason
+// MayWrite carries none: memory identity excludes the range, so "does f read
+// object o" has a single answer.
+//
+// This file is a rule body included by memory_effects.v2.dl; the schema and
+// common functors are included there once so both bodies share one projection.
+
+.decl MayRead(function_id:FunctionId, memory_id:MemoryId,
+              epistemic:Epistemic)
+.output MayRead(IO=file, filename="MayRead.csv")
+
+// A member's own read, at its own warrant. The range columns are projected
+// away here; they remain available on DirectRead.
+MayRead(f, x, e) :- DirectRead(f, x, _, _, _, e).
+
+MayRead(f, x, e) :-
+  DirectCall(_, f, g, _, e1),
+  MayRead(g, x, e2),
+  WeakenEpistemic(e1, e2, e).
+
+MayRead(f, x, e) :-
+  DirectCall(_, f, g, _, e1),
+  SupportMayRead(g, x, e2),
+  WeakenEpistemic(e1, e2, e).
+
+// -- Semantic keys ---------------------------------------------------------
+
+.decl MayReadKey(function_id:FunctionId, memory_id:MemoryId,
+                 epistemic:Epistemic, key:symbol)
+MayReadKey(f, x, e,
+  cat(@veritas_key_header_v1("MayRead", 3),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(xs), @veritas_key_field_enum_v1(e))))) :-
+  MayRead(f, x, e), FunctionMap(f, fs), MemoryMap(x, xs).
+
+.decl DirectReadKey(function_id:FunctionId, memory_id:MemoryId,
+                    range_kind:RangeKind, offset:number, size:unsigned,
+                    epistemic:Epistemic, key:symbol)
+DirectReadKey(f, x, rk, off, sz, e,
+  cat(@veritas_key_header_v1("DirectRead", 6),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(xs),
+  cat(@veritas_key_field_enum_v1(rk),
+  cat(@veritas_key_field_number_v1(off),
+  cat(@veritas_key_field_unsigned_v1(sz),
+      @veritas_key_field_enum_v1(e)))))))) :-
+  DirectRead(f, x, rk, off, sz, e), FunctionMap(f, fs), MemoryMap(x, xs).
+
+.decl SupportMayReadKey(function_id:FunctionId, memory_id:MemoryId,
+                        epistemic:Epistemic, key:symbol)
+SupportMayReadKey(g, x, e,
+  cat(@veritas_key_header_v1("SupportMayRead", 3),
+  cat(@veritas_key_id_v1(gs),
+  cat(@veritas_key_id_v1(xs), @veritas_key_field_enum_v1(e))))) :-
+  SupportMayRead(g, x, e), FunctionMap(g, gs), MemoryMap(x, xs).
+
+// -- Witnesses -------------------------------------------------------------
+//
+// Same shape as may_write.v2.dl: each firing emits one Witness tuple per
+// input, tagged with the input's argument position, so two ordinals of one
+// proof step share a key and alternative proofs stay distinct.
+
+Witness(rk, "wpa.memory.may_read.direct.v2", ik, ik, 0) :-
+  DirectRead(f, x, rkind, off, sz, e),
+  MayReadKey(f, x, e, rk),
+  DirectReadKey(f, x, rkind, off, sz, e, ik).
+
+Witness(rk, "wpa.memory.may_read.transitive.v2", dk, dc_key, 0) :-
+  DirectCall(cs, f, g, d, e1),
+  MayRead(g, x, e2),
+  WeakenEpistemic(e1, e2, e),
+  MayReadKey(f, x, e, rk),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  MayReadKey(g, x, e2, rc_key),
+  dk = cat(dc_key, rc_key).
+
+Witness(rk, "wpa.memory.may_read.transitive.v2", dk, rc_key, 1) :-
+  DirectCall(cs, f, g, d, e1),
+  MayRead(g, x, e2),
+  WeakenEpistemic(e1, e2, e),
+  MayReadKey(f, x, e, rk),
+  MayReadKey(g, x, e2, rc_key),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  dk = cat(dc_key, rc_key).
+
+Witness(rk, "wpa.memory.may_read.support.v2", dk, dc_key, 0) :-
+  DirectCall(cs, f, g, d, e1),
+  SupportMayRead(g, x, e2),
+  WeakenEpistemic(e1, e2, e),
+  MayReadKey(f, x, e, rk),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  SupportMayReadKey(g, x, e2, rc_key),
+  dk = cat(dc_key, rc_key).
+
+Witness(rk, "wpa.memory.may_read.support.v2", dk, rc_key, 1) :-
+  DirectCall(cs, f, g, d, e1),
+  SupportMayRead(g, x, e2),
+  WeakenEpistemic(e1, e2, e),
+  MayReadKey(f, x, e, rk),
+  SupportMayReadKey(g, x, e2, rc_key),
+  DirectCallKey(cs, f, g, d, e1, dc_key),
+  dk = cat(dc_key, rc_key).

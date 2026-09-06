@@ -29,10 +29,12 @@ namespace {
 
 // Maps a component name to the registered program name. These are the output
 // filenames the build generates the bundles from (v2_reach.cpp /
-// v2_maywrite.cpp), sanitized by Souffle's synthesiser.
+// v2_memory_effects.cpp), sanitized by Souffle's synthesiser.
 const char* ProgramNameForComponent(std::string_view component) {
   if (component == "reachability") return "v2_reach";
-  if (component == "memory-effects") return "v2_maywrite";
+  if (component == "memory-effects") return "v2_memory_effects";
+  if (component == "flow") return "v2_global_flow";
+  if (component == "effects") return "v2_effects";
   return nullptr;
 }
 

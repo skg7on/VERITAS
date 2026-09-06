@@ -164,7 +164,9 @@ Status CompareCanonicalResults(const wpa::WpaRunResult &primary,
     const auto &p = primary_completion->result;
     if (p.external_hash != c.external_hash ||
         p.fixpoint_hash != c.fixpoint_hash) {
-      return Status::FailedPrecondition("conformance result hashes differ");
+      return Status::FailedPrecondition(
+          "conformance result hashes differ for component " +
+          std::to_string(static_cast<int>(key.component)));
     }
     if (p.facts != c.facts) {
       return Status::FailedPrecondition("conformance canonical facts differ");
@@ -243,9 +245,11 @@ Status RunWpa(const std::filesystem::path &output_root,
   limits.memory_mb = config.wpa_component_memory_mb;
   limits.threads = config.wpa_threads;
 
-  const std::array<wpa::WpaComponentKind, 2> components = {
+  const std::array<wpa::WpaComponentKind, 4> components = {
       wpa::WpaComponentKind::kReachability,
-      wpa::WpaComponentKind::kMemoryEffects};
+      wpa::WpaComponentKind::kMemoryEffects,
+      wpa::WpaComponentKind::kFlow,
+      wpa::WpaComponentKind::kEffects};
 
   wpa::WpaRunRequest wpa_request;
   wpa_request.run = *run;
