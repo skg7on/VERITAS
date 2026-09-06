@@ -33,6 +33,7 @@ namespace {
 const char* ProgramNameForComponent(std::string_view component) {
   if (component == "reachability") return "v2_reach";
   if (component == "memory-effects") return "v2_memory_effects";
+  if (component == "flow") return "v2_global_flow";
   return nullptr;
 }
 

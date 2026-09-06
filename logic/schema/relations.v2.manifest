@@ -43,3 +43,5 @@ SupportReachableCall	edb	source_id:function_id,target_id:function_id,epistemic:e
 SupportMayWrite	edb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
 MayRead	idb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
 SupportMayRead	edb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+GlobalFlow	idb	source_id:value_id,sink_id:value_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+SupportGlobalFlow	edb	source_id:value_id,sink_id:value_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN

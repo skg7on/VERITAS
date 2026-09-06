@@ -79,9 +79,15 @@ WpaComponentResult MakeResult(const WpaLogicalComponentInput& logical,
 
 // Maps the V2 component kind to the V1 protobuf enum the M7 scheduler uses.
 summary::v1::ComponentKind V1Component(WpaComponentKind component) {
-  return component == WpaComponentKind::kReachability
-             ? summary::v1::COMPONENT_KIND_CALLS
-             : summary::v1::COMPONENT_KIND_MEMORY_EFFECTS;
+  switch (component) {
+  case WpaComponentKind::kReachability:
+    return summary::v1::COMPONENT_KIND_CALLS;
+  case WpaComponentKind::kFlow:
+    return summary::v1::COMPONENT_KIND_VALUE_FLOW;
+  case WpaComponentKind::kMemoryEffects:
+    return summary::v1::COMPONENT_KIND_MEMORY_EFFECTS;
+  }
+  return summary::v1::COMPONENT_KIND_UNSPECIFIED;
 }
 
 // Builds the minimal V1 SccResult the incremental scheduler needs to compare

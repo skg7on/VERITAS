@@ -264,14 +264,25 @@ std::string EncodeSemanticRow(const facts::SemanticRow &row) {
 } // namespace
 
 std::string_view ComponentKindName(WpaComponentKind component) {
-  return component == WpaComponentKind::kReachability ? "reachability"
-                                                      : "memory-effects";
+  switch (component) {
+  case WpaComponentKind::kReachability:
+    return "reachability";
+  case WpaComponentKind::kMemoryEffects:
+    return "memory-effects";
+  case WpaComponentKind::kFlow:
+    return "flow";
+  }
+  return "unknown";
 }
 
 std::vector<ComponentDomain> ComponentDomains(WpaComponentKind component) {
   if (component == WpaComponentKind::kReachability) {
     return {{facts::RelationId::kReachableCall,
              facts::RelationId::kSupportReachableCall}};
+  }
+  if (component == WpaComponentKind::kFlow) {
+    return {{facts::RelationId::kGlobalFlow,
+             facts::RelationId::kSupportGlobalFlow}};
   }
   return {{facts::RelationId::kMayWrite, facts::RelationId::kSupportMayWrite},
           {facts::RelationId::kMayRead, facts::RelationId::kSupportMayRead}};
@@ -314,6 +325,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   // facts never enter here.
   const bool memory_component =
       request.component == WpaComponentKind::kMemoryEffects;
+  const bool flow_component = request.component == WpaComponentKind::kFlow;
   std::vector<facts::SemanticRow> semantic_edb;
   // Base facts owned by this SCC's members. They root every witness chain a
   // locally derived result can produce, so they are collected as they are
@@ -327,6 +339,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   std::vector<core::StableId> function_ids(members->begin(), members->end());
   std::vector<core::StableId> call_site_ids;
   std::vector<core::StableId> memory_ids;
+  std::vector<core::StableId> value_ids;
 
   for (const auto &member : *members) {
     const auto it = by_function.find(member);
@@ -386,20 +399,80 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
       }
     }
 
-    if (!memory_component)
-      continue;
-    for (const auto &effect : MemoryEffectsOf(*it->second)) {
-      auto memory = core::ParseStableId(effect.memory_location_id);
-      if (!memory.ok() || memory->kind != core::IdKind::kMemoryRef)
-        return Status::InvalidArgument("invalid memory-location identity");
-      memory_ids.push_back(*memory);
-      facts::SemanticRow row;
-      row.relation = effect.is_write ? facts::RelationId::kDirectWrite
-                                     : facts::RelationId::kDirectRead;
-      row.cells = {member,        *memory,     effect.range_kind,
-                   effect.offset, effect.size, effect.epistemic};
-      local_base_rows.push_back(LocalBaseFact{row, member});
-      semantic_edb.push_back(std::move(row));
+    if (memory_component) {
+      for (const auto &effect : MemoryEffectsOf(*it->second)) {
+        auto memory = core::ParseStableId(effect.memory_location_id);
+        if (!memory.ok() || memory->kind != core::IdKind::kMemoryRef)
+          return Status::InvalidArgument("invalid memory-location identity");
+        memory_ids.push_back(*memory);
+        facts::SemanticRow row;
+        row.relation = effect.is_write ? facts::RelationId::kDirectWrite
+                                       : facts::RelationId::kDirectRead;
+        row.cells = {member,        *memory,     effect.range_kind,
+                     effect.offset, effect.size, effect.epistemic};
+        local_base_rows.push_back(LocalBaseFact{row, member});
+        semantic_edb.push_back(std::move(row));
+      }
+    }
+
+    if (flow_component) {
+      const auto *current = std::get_if<v2::FunctionSummary>(it->second);
+      if (current == nullptr)
+        continue;  // a tagged V1 projection supplies no flow rows
+      for (const auto &flow : current->value_flows()) {
+        auto src = core::ParseStableId(flow.source_value_id());
+        if (!src.ok() || src->kind != core::IdKind::kValueRef)
+          return Status::InvalidArgument("invalid value-flow source");
+        auto dst = core::ParseStableId(flow.destination_value_id());
+        if (!dst.ok() || dst->kind != core::IdKind::kValueRef)
+          return Status::InvalidArgument("invalid value-flow destination");
+        value_ids.push_back(*src);
+        value_ids.push_back(*dst);
+        facts::SemanticRow row;
+        row.relation = facts::RelationId::kLocalFlow;
+        row.cells = {member, *src, *dst, std::string("local"),
+                     ToSemantic(flow.epistemic())};
+        local_base_rows.push_back(LocalBaseFact{row, member});
+        semantic_edb.push_back(std::move(row));
+      }
+      for (const auto &flow : current->parameter_flows()) {
+        auto site = core::ParseStableId(flow.call_site_id());
+        if (!site.ok() || site->kind != core::IdKind::kCallSite)
+          return Status::InvalidArgument("invalid parameter-flow call site");
+        call_site_ids.push_back(*site);
+        auto actual = core::ParseStableId(flow.actual_id());
+        if (!actual.ok() || actual->kind != core::IdKind::kValueRef)
+          return Status::InvalidArgument("invalid parameter-flow actual");
+        auto formal = core::ParseStableId(flow.formal_id());
+        if (!formal.ok() || formal->kind != core::IdKind::kValueRef)
+          return Status::InvalidArgument("invalid parameter-flow formal");
+        value_ids.push_back(*actual);
+        value_ids.push_back(*formal);
+        facts::SemanticRow row;
+        row.relation = facts::RelationId::kParameterFlow;
+        row.cells = {*site, *actual, *formal, ToSemantic(flow.epistemic())};
+        local_base_rows.push_back(LocalBaseFact{row, member});
+        semantic_edb.push_back(std::move(row));
+      }
+      for (const auto &flow : current->return_flows()) {
+        auto site = core::ParseStableId(flow.call_site_id());
+        if (!site.ok() || site->kind != core::IdKind::kCallSite)
+          return Status::InvalidArgument("invalid return-flow call site");
+        call_site_ids.push_back(*site);
+        auto ret = core::ParseStableId(flow.return_id());
+        if (!ret.ok() || ret->kind != core::IdKind::kValueRef)
+          return Status::InvalidArgument("invalid return-flow return");
+        auto result = core::ParseStableId(flow.result_id());
+        if (!result.ok() || result->kind != core::IdKind::kValueRef)
+          return Status::InvalidArgument("invalid return-flow result");
+        value_ids.push_back(*ret);
+        value_ids.push_back(*result);
+        facts::SemanticRow row;
+        row.relation = facts::RelationId::kReturnFlow;
+        row.cells = {*site, *ret, *result, ToSemantic(flow.epistemic())};
+        local_base_rows.push_back(LocalBaseFact{row, member});
+        semantic_edb.push_back(std::move(row));
+      }
     }
   }
 
@@ -426,6 +499,8 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
           function_ids.push_back(*id);
         else if (id->kind == core::IdKind::kMemoryRef)
           memory_ids.push_back(*id);
+        else if (id->kind == core::IdKind::kValueRef)
+          value_ids.push_back(*id);
       }
     }
     // A witness cites the support relation, not the predecessor's derived
@@ -451,7 +526,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   auto call_sites = facts::CallSiteDenseMap::Build(std::move(call_site_ids));
   if (!call_sites.ok())
     return call_sites.status();
-  auto values = facts::ValueDenseMap::Build({});
+  auto values = facts::ValueDenseMap::Build(std::move(value_ids));
   if (!values.ok())
     return values.status();
   auto fact_map =
@@ -469,6 +544,10 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   for (const auto &stable : memories->StableIds()) {
     semantic_edb.push_back(facts::SemanticRow{
         facts::RelationId::kMemoryMap, {stable, core::ToString(stable)}});
+  }
+  for (const auto &stable : values->StableIds()) {
+    semantic_edb.push_back(facts::SemanticRow{
+        facts::RelationId::kValueMap, {stable, core::ToString(stable)}});
   }
   for (const auto &stable : call_sites->StableIds()) {
     semantic_edb.push_back(facts::SemanticRow{
@@ -511,6 +590,13 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
         }
         case facts::ColumnDomain::kMemoryId: {
           auto dense = memories->ToDense(*id);
+          if (!dense.ok())
+            return dense.status();
+          execution.cells.push_back(*dense);
+          break;
+        }
+        case facts::ColumnDomain::kValueId: {
+          auto dense = values->ToDense(*id);
           if (!dense.ok())
             return dense.status();
           execution.cells.push_back(*dense);

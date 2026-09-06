@@ -26,3 +26,8 @@ wpa.memory.may_write.transitive.v2	30	MayWrite
 wpa.memory.may_read.direct.v2	10	MayRead
 wpa.memory.may_read.support.v2	20	MayRead
 wpa.memory.may_read.transitive.v2	30	MayRead
+wpa.flow.global.local.v2	10	GlobalFlow
+wpa.flow.global.parameter.v2	10	GlobalFlow
+wpa.flow.global.return.v2	10	GlobalFlow
+wpa.flow.global.support.v2	20	GlobalFlow
+wpa.flow.global.transitive.v2	30	GlobalFlow

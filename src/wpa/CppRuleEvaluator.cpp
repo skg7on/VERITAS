@@ -117,11 +117,13 @@ std::vector<Domain> DomainsFor(WpaComponentKind component) {
 }
 
 // The cells of an execution row resolved back to semantic form. `endpoint_ids`
-// collects FunctionId/MemoryId cells in column order; `epistemics` collects
-// epistemic cells. Both are what the closure rules join on.
+// collects FunctionId/MemoryId cells in column order; `value_ids` collects
+// ValueId cells (the flow closure's endpoints); `epistemics` collects
+// epistemic cells.
 struct ResolvedRow {
   facts::SemanticRow semantic;
   std::vector<core::StableId> endpoint_ids;
+  std::vector<core::StableId> value_ids;
   std::vector<sem::EpistemicState> epistemics;
 };
 
@@ -155,6 +157,12 @@ StatusOr<ResolvedRow> ResolveRow(const facts::ExecutionRow& row,
       if (!stable.ok())
         return stable.status();
       resolved.semantic.cells.push_back(*stable);
+    } else if (const auto* value_id = std::get_if<facts::ValueId>(&cell)) {
+      auto stable = mappings.values.ToStable(*value_id);
+      if (!stable.ok())
+        return stable.status();
+      resolved.value_ids.push_back(*stable);
+      resolved.semantic.cells.push_back(*stable);
     } else if (const auto* state = std::get_if<sem::EpistemicState>(&cell)) {
       resolved.epistemics.push_back(*state);
       resolved.semantic.cells.push_back(*state);
@@ -182,10 +190,144 @@ StatusOr<ResolvedRow> ResolveRow(const facts::ExecutionRow& row,
   return resolved;
 }
 
+// Evaluates the GlobalFlow closure: the transitive closure over value
+// identity, seeded by LocalFlow/ParameterFlow/ReturnFlow and closed over the
+// transitive and successor-support steps. Unlike the call-mediated closures,
+// the transitive step joins two derived flows directly on a shared boundary
+// value.
+StatusOr<facts::RawWpaEvaluation> EvaluateFlow(
+    const WpaLogicalComponentInput& input) {
+  std::vector<std::pair<DerivedTuple, facts::SemanticRow>> base_rows;
+  std::vector<std::pair<DerivedTuple, facts::SemanticRow>> support_rows;
+  std::map<DerivedTuple, std::string> base_rule;
+
+  for (const auto& row : input.edb) {
+    const bool base = row.relation == facts::RelationId::kLocalFlow ||
+                      row.relation == facts::RelationId::kParameterFlow ||
+                      row.relation == facts::RelationId::kReturnFlow;
+    if (!base && row.relation != facts::RelationId::kSupportGlobalFlow)
+      continue;
+    auto resolved = ResolveRow(row, input.mappings);
+    if (!resolved.ok())
+      return resolved.status();
+    if (resolved->value_ids.size() < 2) {
+      return Status::InvalidArgument("flow row is missing value endpoints");
+    }
+    const DerivedTuple tuple{resolved->value_ids[0], resolved->value_ids[1],
+                             resolved->epistemics.front()};
+    if (row.relation == facts::RelationId::kSupportGlobalFlow) {
+      support_rows.emplace_back(tuple, resolved->semantic);
+      continue;
+    }
+    base_rows.emplace_back(tuple, resolved->semantic);
+    const char* rule = row.relation == facts::RelationId::kLocalFlow
+                           ? "wpa.flow.global.local.v2"
+                       : row.relation == facts::RelationId::kParameterFlow
+                           ? "wpa.flow.global.parameter.v2"
+                           : "wpa.flow.global.return.v2";
+    base_rule.emplace(tuple, rule);
+  }
+
+  facts::RawWpaEvaluation raw;
+  std::set<DerivedTuple> derived;
+  auto ResultRow = [&](const DerivedTuple& tuple) {
+    return facts::SemanticRow{facts::RelationId::kGlobalFlow,
+                              {tuple.subject, tuple.object, tuple.epistemic}};
+  };
+
+  for (const auto& [tuple, row] : base_rows) {
+    if (!WeaknessRank(tuple.epistemic).has_value())
+      continue;
+    if (derived.insert(tuple).second) {
+      raw.witnesses.push_back(facts::WitnessEdge{
+          .result = facts::SemanticKey{ResultRow(tuple)},
+          .rule_id = base_rule.at(tuple),
+          .derivation_key = facts::EncodeSemanticKey(row),
+          .input = facts::SemanticKey{row},
+          .input_ordinal = 0});
+    }
+  }
+
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    const std::vector<DerivedTuple> snapshot(derived.begin(), derived.end());
+
+    // Transitive: compose two derived flows sharing a boundary value.
+    for (const auto& a : snapshot) {
+      for (const auto& b : snapshot) {
+        if (a.object != b.subject)
+          continue;
+        const auto combined = Weaken(a.epistemic, b.epistemic);
+        if (!combined.has_value())
+          continue;
+        const DerivedTuple next{a.subject, b.object, *combined};
+        if (derived.insert(next).second)
+          changed = true;
+        const std::string derivation_key =
+            facts::EncodeSemanticKey(ResultRow(a)) +
+            facts::EncodeSemanticKey(ResultRow(b));
+        raw.witnesses.push_back(facts::WitnessEdge{
+            .result = facts::SemanticKey{ResultRow(next)},
+            .rule_id = "wpa.flow.global.transitive.v2",
+            .derivation_key = derivation_key,
+            .input = facts::SemanticKey{ResultRow(a)},
+            .input_ordinal = 0});
+        raw.witnesses.push_back(facts::WitnessEdge{
+            .result = facts::SemanticKey{ResultRow(next)},
+            .rule_id = "wpa.flow.global.transitive.v2",
+            .derivation_key = derivation_key,
+            .input = facts::SemanticKey{ResultRow(b)},
+            .input_ordinal = 1});
+      }
+    }
+
+    // Support: a derived flow composed with a successor SCC's flow summary.
+    for (const auto& a : snapshot) {
+      for (const auto& [tuple, row] : support_rows) {
+        if (a.object != tuple.subject)
+          continue;
+        const auto combined = Weaken(a.epistemic, tuple.epistemic);
+        if (!combined.has_value())
+          continue;
+        const DerivedTuple next{a.subject, tuple.object, *combined};
+        if (derived.insert(next).second)
+          changed = true;
+        const std::string derivation_key =
+            facts::EncodeSemanticKey(ResultRow(a)) +
+            facts::EncodeSemanticKey(row);
+        raw.witnesses.push_back(facts::WitnessEdge{
+            .result = facts::SemanticKey{ResultRow(next)},
+            .rule_id = "wpa.flow.global.support.v2",
+            .derivation_key = derivation_key,
+            .input = facts::SemanticKey{ResultRow(a)},
+            .input_ordinal = 0});
+        raw.witnesses.push_back(facts::WitnessEdge{
+            .result = facts::SemanticKey{ResultRow(next)},
+            .rule_id = "wpa.flow.global.support.v2",
+            .derivation_key = derivation_key,
+            .input = facts::SemanticKey{row},
+            .input_ordinal = 1});
+      }
+    }
+  }
+
+  for (const auto& tuple : derived) {
+    raw.results.push_back(ResultRow(tuple));
+  }
+  std::ranges::sort(raw.witnesses);
+  raw.witnesses.erase(std::unique(raw.witnesses.begin(), raw.witnesses.end()),
+                      raw.witnesses.end());
+  return raw;
+}
+
 }  // namespace
 
 StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
     const WpaLogicalComponentInput& input) const {
+  if (input.component == WpaComponentKind::kFlow) {
+    return EvaluateFlow(input);
+  }
   const auto domains = DomainsFor(input.component);
 
   // 1. Parse the DirectCall edges once; they seed the transitive closure for

@@ -194,6 +194,16 @@ const RelationTable& Table() {
                       {"memory_id", ColumnDomain::kMemoryId},
                       {"epistemic", ColumnDomain::kEpistemic}},
                      WithoutMustNot()},
+      RelationSchema{"GlobalFlow", RelationOwnership::kIdb,
+                     {{"source_id", ColumnDomain::kValueId},
+                      {"sink_id", ColumnDomain::kValueId},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     WithoutMustNot()},
+      RelationSchema{"SupportGlobalFlow", RelationOwnership::kEdb,
+                     {{"source_id", ColumnDomain::kValueId},
+                      {"sink_id", ColumnDomain::kValueId},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     WithoutMustNot()},
   };
   return table;
 }

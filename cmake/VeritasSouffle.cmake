@@ -208,6 +208,8 @@ veritas_generate_souffle_program(ReachabilityV2 veritas_reachability v2_reach
 veritas_generate_souffle_program(MemoryEffectsV2 veritas_memory_effects
   v2_memory_effects
   ${CMAKE_SOURCE_DIR}/logic/memory_effects/memory_effects.v2.dl)
+veritas_generate_souffle_program(GlobalFlowV2 veritas_global_flow v2_global_flow
+  ${CMAKE_SOURCE_DIR}/logic/flow/global_flow.v2.dl)
 
 # The in-process runner links the generated bundles + libsouffle and exposes a C
 # ABI (SouffleRunner.h). It is compiled with RTTI and exceptions (Souffle needs
@@ -225,6 +227,7 @@ target_compile_options(veritas_souffle_runner PRIVATE -frtti -fexceptions)
 target_link_libraries(veritas_souffle_runner PRIVATE
   ReachabilityV2
   MemoryEffectsV2
+  GlobalFlowV2
   libsouffle
   veritas_souffle_functors
 )
@@ -256,6 +259,7 @@ add_custom_command(
           "-DVERITAS_SOUFFLE_FUNCTOR_LIBRARY=$<TARGET_FILE:veritas_souffle_functors>"
           "-DVERITAS_REACHABILITY_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_reach.cpp"
           "-DVERITAS_MEMORY_EFFECTS_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_memory_effects.cpp"
+          "-DVERITAS_FLOW_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_global_flow.cpp"
           "-DVERITAS_SOUFFLE_REVISION=${VERITAS_SOUFFLE_PINNED_REVISION}"
           "-DVERITAS_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}"
           "-DVERITAS_COMPILER_VERSION=${CMAKE_CXX_COMPILER_VERSION}"
@@ -275,6 +279,7 @@ add_custom_command(
     veritas_souffle_functors
     "${VERITAS_SOUFFLE_GEN_DIR}/v2_reach.cpp"
     "${VERITAS_SOUFFLE_GEN_DIR}/v2_memory_effects.cpp"
+    "${VERITAS_SOUFFLE_GEN_DIR}/v2_global_flow.cpp"
     "${CMAKE_SOURCE_DIR}/cmake/WriteSouffleProvenance.cmake"
   COMMENT "Deriving canonical Souffle provenance"
   VERBATIM

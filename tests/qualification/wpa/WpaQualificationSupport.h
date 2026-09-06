@@ -64,6 +64,11 @@ inline core::StableId MemoryId(std::string_view name) {
                             std::as_bytes(std::span(name.data(), name.size())));
 }
 
+inline core::StableId ValueId(std::string_view name) {
+  return core::MakeStableId(core::IdKind::kValueRef,
+                            std::as_bytes(std::span(name.data(), name.size())));
+}
+
 inline facts::AnalysisRunSemanticDescriptor Semantics() {
   facts::AnalysisRunSemanticDescriptor semantics;
   semantics.build_variant_id = core::MakeStableId(
@@ -190,6 +195,26 @@ inline void AddMemoryRead(v2::FunctionSummary* summary,
   range->set_size(known_range ? 8 : 0);
   effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   effect->set_provenance_ref("test:read");
+}
+
+inline void AddLocalFlow(v2::FunctionSummary* summary, std::string_view from,
+                         std::string_view to) {
+  auto* flow = summary->add_value_flows();
+  flow->set_source_value_id(core::ToString(ValueId(from)));
+  flow->set_destination_value_id(core::ToString(ValueId(to)));
+  flow->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  flow->set_provenance_ref("test:local");
+}
+
+inline void AddParameterFlow(v2::FunctionSummary* summary,
+                             std::string_view call_site, std::string_view actual,
+                             std::string_view formal) {
+  auto* flow = summary->add_parameter_flows();
+  flow->set_call_site_id(core::ToString(CallSiteId(call_site)));
+  flow->set_actual_id(core::ToString(ValueId(actual)));
+  flow->set_formal_id(core::ToString(ValueId(formal)));
+  flow->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  flow->set_provenance_ref("test:parameter");
 }
 
 // Materializes the logical input for one component rooted at `root`.

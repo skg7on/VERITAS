@@ -1,0 +1,30 @@
+# GlobalFlow rule bundle.
+#
+# Identifies the compiled program that evaluates the GlobalFlow component. The
+# bundle identity participates in run identity and in the component cache key,
+# so a rule change must not reuse a prior compiled result.
+
+bundle_name=flow
+bundle_version=rules.v2
+component=flow
+entry=global_flow.v2.dl
+
+# LocalFlow/ParameterFlow/ReturnFlow are the three base edge kinds; the
+# transitive and support rules compose them. SupportGlobalFlow carries a
+# successor SCC's flow summary.
+input=FunctionMap
+input=ValueMap
+input=CallSiteMap
+input=LocalFlow
+input=ParameterFlow
+input=ReturnFlow
+input=SupportGlobalFlow
+
+output=GlobalFlow
+output=Witness
+
+rule=wpa.flow.global.local.v2
+rule=wpa.flow.global.parameter.v2
+rule=wpa.flow.global.return.v2
+rule=wpa.flow.global.support.v2
+rule=wpa.flow.global.transitive.v2

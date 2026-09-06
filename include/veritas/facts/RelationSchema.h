@@ -75,11 +75,14 @@ enum class RelationId : std::uint16_t {
   // M10A: the read mirror of MayWrite, and its successor-SCC support relation.
   kMayRead,
   kSupportMayRead,
+  // M10A: the interprocedural value-flow closure and its successor support.
+  kGlobalFlow,
+  kSupportGlobalFlow,
 };
 
 // Number of relations in the relations.v2 registry. Single authority for both
 // the registry table and relation-id range validation.
-inline constexpr std::size_t kRelationCountV2 = 21;
+inline constexpr std::size_t kRelationCountV2 = 23;
 
 // Semantic domain of a relation column. ID domains are carried as a stable ID
 // in a semantic row and as a typed dense ID in an execution row (model IDs are

@@ -1,0 +1,156 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// global_flow.v2.dl -- the GlobalFlow domain.
+//
+// The interprocedural may-flow closure over value identity. Three base edge
+// kinds seed it — an intra-procedural LocalFlow, an actual-to-formal
+// ParameterFlow, and a return-to-result ReturnFlow — and two recursive steps
+// close it: a transitive join of two derived flows on a shared boundary value,
+// and a join with a successor SCC's flow summary.
+//
+// This file is a self-contained bundle (like reachability.v2.dl): it includes
+// the schema and common functors itself.
+
+.include "../schema/relations.v2.dl"
+.include "../common/epistemic.dl"
+.include "../common/semantic_key.dl"
+
+.decl GlobalFlow(source_id:ValueId, sink_id:ValueId, epistemic:Epistemic)
+.output GlobalFlow(IO=file, filename="GlobalFlow.csv")
+
+// A local flow is a global flow at its own warrant. LocalFlow's function_id
+// and flow_kind are projected away; value identity is stable across functions.
+GlobalFlow(s, d, e) :- LocalFlow(_, s, d, _, e).
+
+// An actual argument flows to the callee's formal parameter.
+GlobalFlow(a, f, e) :- ParameterFlow(_, a, f, e).
+
+// A callee's return value flows to the caller's result.
+GlobalFlow(r, c, e) :- ReturnFlow(_, r, c, e).
+
+// Two derived flows sharing a boundary value compose, weakening the warrant.
+GlobalFlow(s, d, e) :-
+  GlobalFlow(s, m, e1),
+  GlobalFlow(m, d, e2),
+  WeakenEpistemic(e1, e2, e).
+
+// A derived flow composed with a successor SCC's flow summary.
+GlobalFlow(s, d, e) :-
+  GlobalFlow(s, m, e1),
+  SupportGlobalFlow(m, d, e2),
+  WeakenEpistemic(e1, e2, e).
+
+// -- Semantic keys ---------------------------------------------------------
+
+.decl GlobalFlowKey(source_id:ValueId, sink_id:ValueId,
+                    epistemic:Epistemic, key:symbol)
+GlobalFlowKey(s, d, e,
+  cat(@veritas_key_header_v1("GlobalFlow", 3),
+  cat(@veritas_key_id_v1(ss),
+  cat(@veritas_key_id_v1(ds), @veritas_key_field_enum_v1(e))))) :-
+  GlobalFlow(s, d, e), ValueMap(s, ss), ValueMap(d, ds).
+
+.decl LocalFlowKey(function_id:FunctionId, source_id:ValueId,
+                   destination_id:ValueId, flow_kind:symbol,
+                   epistemic:Epistemic, key:symbol)
+LocalFlowKey(f, s, d, fk, e,
+  cat(@veritas_key_header_v1("LocalFlow", 5),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(ss),
+  cat(@veritas_key_id_v1(ds),
+  cat(@veritas_key_field_symbol_v1(fk), @veritas_key_field_enum_v1(e))))))) :-
+  LocalFlow(f, s, d, fk, e), FunctionMap(f, fs),
+  ValueMap(s, ss), ValueMap(d, ds).
+
+.decl ParameterFlowKey(call_site_id:CallSiteId, actual_id:ValueId,
+                       formal_id:ValueId, epistemic:Epistemic, key:symbol)
+ParameterFlowKey(cs, a, f, e,
+  cat(@veritas_key_header_v1("ParameterFlow", 4),
+  cat(@veritas_key_id_v1(css),
+  cat(@veritas_key_id_v1(act_sym),
+  cat(@veritas_key_id_v1(frm_sym), @veritas_key_field_enum_v1(e)))))) :-
+  ParameterFlow(cs, a, f, e), CallSiteMap(cs, css),
+  ValueMap(a, act_sym), ValueMap(f, frm_sym).
+
+.decl ReturnFlowKey(call_site_id:CallSiteId, return_id:ValueId,
+                    result_id:ValueId, epistemic:Epistemic, key:symbol)
+ReturnFlowKey(cs, r, res, e,
+  cat(@veritas_key_header_v1("ReturnFlow", 4),
+  cat(@veritas_key_id_v1(css),
+  cat(@veritas_key_id_v1(rs),
+  cat(@veritas_key_id_v1(ress), @veritas_key_field_enum_v1(e)))))) :-
+  ReturnFlow(cs, r, res, e), CallSiteMap(cs, css),
+  ValueMap(r, rs), ValueMap(res, ress).
+
+.decl SupportGlobalFlowKey(source_id:ValueId, sink_id:ValueId,
+                           epistemic:Epistemic, key:symbol)
+SupportGlobalFlowKey(s, d, e,
+  cat(@veritas_key_header_v1("SupportGlobalFlow", 3),
+  cat(@veritas_key_id_v1(ss),
+  cat(@veritas_key_id_v1(ds), @veritas_key_field_enum_v1(e))))) :-
+  SupportGlobalFlow(s, d, e), ValueMap(s, ss), ValueMap(d, ds).
+
+// -- Witnesses -------------------------------------------------------------
+
+Witness(rk, "wpa.flow.global.local.v2", ik, ik, 0) :-
+  LocalFlow(f, s, d, fk, e),
+  GlobalFlowKey(s, d, e, rk),
+  LocalFlowKey(f, s, d, fk, e, ik).
+
+Witness(rk, "wpa.flow.global.parameter.v2", ik, ik, 0) :-
+  ParameterFlow(cs, a, f, e),
+  GlobalFlowKey(a, f, e, rk),
+  ParameterFlowKey(cs, a, f, e, ik).
+
+Witness(rk, "wpa.flow.global.return.v2", ik, ik, 0) :-
+  ReturnFlow(cs, r, res, e),
+  GlobalFlowKey(r, res, e, rk),
+  ReturnFlowKey(cs, r, res, e, ik).
+
+Witness(rk, "wpa.flow.global.transitive.v2", dk, a_key, 0) :-
+  GlobalFlow(s, m, e1),
+  GlobalFlow(m, d, e2),
+  WeakenEpistemic(e1, e2, e),
+  GlobalFlowKey(s, d, e, rk),
+  GlobalFlowKey(s, m, e1, a_key),
+  GlobalFlowKey(m, d, e2, b_key),
+  dk = cat(a_key, b_key).
+
+Witness(rk, "wpa.flow.global.transitive.v2", dk, b_key, 1) :-
+  GlobalFlow(s, m, e1),
+  GlobalFlow(m, d, e2),
+  WeakenEpistemic(e1, e2, e),
+  GlobalFlowKey(s, d, e, rk),
+  GlobalFlowKey(s, m, e1, a_key),
+  GlobalFlowKey(m, d, e2, b_key),
+  dk = cat(a_key, b_key).
+
+Witness(rk, "wpa.flow.global.support.v2", dk, a_key, 0) :-
+  GlobalFlow(s, m, e1),
+  SupportGlobalFlow(m, d, e2),
+  WeakenEpistemic(e1, e2, e),
+  GlobalFlowKey(s, d, e, rk),
+  GlobalFlowKey(s, m, e1, a_key),
+  SupportGlobalFlowKey(m, d, e2, b_key),
+  dk = cat(a_key, b_key).
+
+Witness(rk, "wpa.flow.global.support.v2", dk, b_key, 1) :-
+  GlobalFlow(s, m, e1),
+  SupportGlobalFlow(m, d, e2),
+  WeakenEpistemic(e1, e2, e),
+  GlobalFlowKey(s, d, e, rk),
+  GlobalFlowKey(s, m, e1, a_key),
+  SupportGlobalFlowKey(m, d, e2, b_key),
+  dk = cat(a_key, b_key).

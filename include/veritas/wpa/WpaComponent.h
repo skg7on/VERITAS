@@ -42,6 +42,7 @@ namespace veritas::wpa {
 enum class WpaComponentKind : std::uint8_t {
   kReachability,
   kMemoryEffects,
+  kFlow,
 };
 
 // Canonical text for a component kind. Used in the logical input hash, so the

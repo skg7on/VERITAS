@@ -29,7 +29,7 @@ namespace {
 // Priorities are grouped per derived relation: a rule that reaches a result
 // directly outranks one that reaches it through a successor's support, which
 // outranks a locally transitive derivation. Only the ordering matters.
-constexpr std::size_t kRuleCount = 9;
+constexpr std::size_t kRuleCount = 14;
 
 using RuleTable = std::array<RuleSpec, kRuleCount>;
 
@@ -49,6 +49,11 @@ const RuleTable& Table() {
       RuleSpec{"wpa.memory.may_read.support.v2", 20, RelationId::kMayRead, 2},
       RuleSpec{"wpa.memory.may_read.transitive.v2", 30, RelationId::kMayRead,
                2},
+      RuleSpec{"wpa.flow.global.local.v2", 10, RelationId::kGlobalFlow, 1},
+      RuleSpec{"wpa.flow.global.parameter.v2", 10, RelationId::kGlobalFlow, 1},
+      RuleSpec{"wpa.flow.global.return.v2", 10, RelationId::kGlobalFlow, 1},
+      RuleSpec{"wpa.flow.global.support.v2", 20, RelationId::kGlobalFlow, 2},
+      RuleSpec{"wpa.flow.global.transitive.v2", 30, RelationId::kGlobalFlow, 2},
   };
   return table;
 }

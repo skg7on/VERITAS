@@ -306,6 +306,14 @@ StatusOr<facts::RawWpaEvaluation> RelationIo::ReadOutput(
           row.cells.push_back(*stable);
           break;
         }
+        case facts::ColumnDomain::kValueId: {
+          auto stable = input.mappings.values.ToStable(
+              facts::ValueId{static_cast<std::uint32_t>(*ordinal)});
+          if (!stable.ok())
+            return stable.status();
+          row.cells.push_back(*stable);
+          break;
+        }
         default:
           row.cells.push_back(static_cast<sem::EpistemicState>(*ordinal));
           break;
