@@ -68,6 +68,20 @@ set_tests_properties(SummaryV2PipelineTest PROPERTIES
   LABELS "integration;analysis"
 )
 
+add_executable(souffle_provenance_test
+  SouffleProvenanceTest.cpp
+)
+target_include_directories(souffle_provenance_test PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+target_link_libraries(souffle_provenance_test
+  PRIVATE
+    veritas_analysis
+    GTest::gtest_main
+)
+veritas_add_warnings(souffle_provenance_test)
+gtest_discover_tests(souffle_provenance_test DISCOVERY_TIMEOUT 60)
+
 add_subdirectory(svf)
 add_subdirectory(cpg)
 

@@ -14,6 +14,7 @@
 
 #include "veritas/facts/AnalysisFactBus.h"
 
+#include <map>
 #include <set>
 #include <span>
 #include <string>
@@ -32,30 +33,6 @@ void AppendField(std::string* out, std::string_view value) {
   out->append(std::to_string(value.size()));
   out->push_back(':');
   out->append(value);
-}
-
-core::StableId DeriveBatchId(const AnalysisFactBatch& batch) {
-  std::string canonical = "veritas.analysis-fact-batch.v1";
-  AppendField(&canonical, core::ToString(batch.run.run_id));
-  for (const auto& component : batch.expected_components) {
-    AppendField(&canonical, core::ToString(component.scc_id));
-    AppendField(&canonical, std::to_string(static_cast<int>(component.component)));
-  }
-  for (const auto& fact : batch.facts) {
-    AppendField(&canonical, EncodeSemanticKey(fact.row));
-  }
-  for (const auto& edge : batch.witnesses) {
-    AppendField(&canonical, EncodeSemanticKey(edge.result.row));
-    AppendField(&canonical, edge.rule_id);
-    AppendField(&canonical, EncodeSemanticKey(edge.input.row));
-    AppendField(&canonical, std::to_string(edge.input_ordinal));
-  }
-  for (const auto& id : batch.rooted_input_fact_ids) {
-    AppendField(&canonical, core::ToString(id));
-  }
-  return core::MakeStableId(
-      core::IdKind::kFact,
-      std::as_bytes(std::span(canonical.data(), canonical.size())));
 }
 
 constexpr std::string_view kDeliveryTableSql =
@@ -92,12 +69,49 @@ StatusOr<bool> IsDelivered(summarydb::MetadataStore& store,
 
 }  // namespace
 
+core::StableId DeriveBatchId(const AnalysisFactBatch& batch) {
+  std::string canonical = "veritas.analysis-fact-batch.v2";
+  AppendField(&canonical, core::ToString(batch.run.run_id));
+  for (const auto& component : batch.expected_components) {
+    AppendField(&canonical, core::ToString(component.scc_id));
+    AppendField(&canonical, std::to_string(static_cast<int>(component.component)));
+  }
+  for (const auto& completion : batch.completed_components) {
+    AppendField(&canonical, core::ToString(completion.key.scc_id));
+    AppendField(&canonical,
+                std::to_string(static_cast<int>(completion.key.component)));
+    AppendField(&canonical, completion.result_object_key);
+    AppendField(&canonical, completion.result.logical_input_hash);
+    AppendField(&canonical, completion.result.fixpoint_hash);
+    AppendField(&canonical, completion.result.external_hash);
+  }
+  for (const auto& id : batch.rooted_input_fact_ids) {
+    AppendField(&canonical, core::ToString(id));
+  }
+  for (const auto& fact : batch.facts) {
+    AppendField(&canonical, EncodeSemanticKey(fact.row));
+  }
+  for (const auto& edge : batch.witnesses) {
+    AppendField(&canonical, EncodeSemanticKey(edge.result.row));
+    AppendField(&canonical, edge.rule_id);
+    AppendField(&canonical, EncodeSemanticKey(edge.input.row));
+    AppendField(&canonical, std::to_string(edge.input_ordinal));
+  }
+  for (const auto& diagnostic : batch.diagnostics) {
+    AppendField(&canonical, diagnostic);
+  }
+  return core::MakeStableId(
+      core::IdKind::kFact,
+      std::as_bytes(std::span(canonical.data(), canonical.size())));
+}
+
 AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
   AnalysisFactBatch batch;
   batch.run = result.run;
   batch.expected_components = result.expected_components;
   batch.completed_components = result.completed_components;
   batch.rooted_input_fact_ids = result.rooted_input_fact_ids;
+  batch.rooted_input_facts = result.rooted_input_facts;
   batch.facts = result.facts;
   batch.witnesses = result.witnesses;
   batch.diagnostics = result.diagnostics;
@@ -129,6 +143,7 @@ AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
     }
     return left.input_ordinal < right.input_ordinal;
   });
+  std::ranges::sort(batch.diagnostics);
 
   batch.batch_id = DeriveBatchId(batch);
   return batch;
@@ -142,12 +157,24 @@ void AnalysisFactBus::AddSink(std::string sink_id, AnalysisFactSink& sink) {
 }
 
 Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
-  // Exact expected/completed component equality.
+  // The supplied batch id must equal the recomputed canonical id, so a tampered
+  // or mis-assembled batch is rejected before it reaches any sink.
+  if (batch.batch_id != DeriveBatchId(batch)) {
+    return Status::FailedPrecondition(
+        "supplied batch_id does not match the canonical id");
+  }
+
+  // Exact expected/completed component equality, with no duplicates.
   std::set<wpa::WpaComponentKey> expected(batch.expected_components.begin(),
                                           batch.expected_components.end());
+  if (expected.size() != batch.expected_components.size()) {
+    return Status::FailedPrecondition("duplicate expected component");
+  }
   std::set<wpa::WpaComponentKey> completed;
   for (const auto& completion : batch.completed_components) {
-    completed.insert(completion.key);
+    if (!completed.insert(completion.key).second) {
+      return Status::FailedPrecondition("duplicate completed component");
+    }
   }
   if (expected != completed) {
     return Status::FailedPrecondition(
@@ -198,6 +225,48 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
     if (!roots.contains(derived->fact_id)) {
       return Status::FailedPrecondition("witness leaf outside the root set");
     }
+  }
+
+  // Every witness result must be a published fact.
+  for (const auto& edge : batch.witnesses) {
+    if (!published_keys.contains(EncodeSemanticKey(edge.result.row))) {
+      return Status::FailedPrecondition(
+          "witness result is not a published fact");
+    }
+  }
+
+  // The witness DAG must be acyclic: every published fact's proof is a finite
+  // tree rooted in declared inputs. A cycle would let a fact justify itself.
+  std::map<std::string, std::vector<std::string>> dependencies;
+  std::map<std::string, int> input_count;
+  for (const auto& fact : batch.facts) {
+    input_count[EncodeSemanticKey(fact.row)] = 0;
+  }
+  for (const auto& edge : batch.witnesses) {
+    const std::string result_key = EncodeSemanticKey(edge.result.row);
+    const std::string input_key = EncodeSemanticKey(edge.input.row);
+    if (input_count.contains(input_key)) {
+      dependencies[input_key].push_back(result_key);
+      input_count[result_key] += 1;
+    }
+  }
+  std::vector<std::string> ready;
+  for (const auto& [key, count] : input_count) {
+    if (count == 0) {
+      ready.push_back(key);
+    }
+  }
+  std::size_t processed = 0;
+  for (std::size_t i = 0; i < ready.size(); ++i) {
+    ++processed;
+    for (const auto& dependent : dependencies[ready[i]]) {
+      if (--input_count[dependent] == 0) {
+        ready.push_back(dependent);
+      }
+    }
+  }
+  if (processed != input_count.size()) {
+    return Status::FailedPrecondition("witness DAG contains a cycle");
   }
 
   return Status::Ok();

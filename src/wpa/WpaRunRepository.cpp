@@ -17,11 +17,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
 
+#include "veritas/core/Hash.h"
+#include "veritas/facts/ResultCanonicalizer.h"
 #include "veritas/facts/Witness.h"
 
 namespace veritas::wpa {
@@ -392,26 +395,49 @@ std::vector<std::byte> ToBytes(std::string_view text) {
 
 }  // namespace
 
-std::string DeriveResultCacheKey(const facts::AnalysisRunManifest& run,
-                                 const WpaComponentKey& key,
-                                 std::string_view logical_input_hash) {
-  // Everything that identifies the exact result independent of revision and
-  // run identity. The component key is covered by scc_id + component kind.
-  std::string out;
-  out += logical_input_hash;
-  out += '|';
-  out += core::ToString(key.scc_id);
-  out += '|';
-  out += std::to_string(static_cast<int>(key.component));
-  out += '|';
-  out += run.engine_toolchain_identity;
-  out += '|';
-  out += run.relation_schema_version;
-  out += '|';
-  out += run.rule_bundle_version;
-  out += '|';
-  out += run.model_bundle_version;
+std::string ResultCacheDescriptor::Encode() const {
+  auto append_field = [](std::string* out, std::string_view value) {
+    out->append(std::to_string(value.size()));
+    out->push_back(':');
+    out->append(value);
+  };
+  std::string out = "veritas.wpa-result-cache.v2";
+  append_field(&out, std::to_string(static_cast<int>(engine)));
+  append_field(&out, engine_toolchain_identity);
+  append_field(&out, logical_input_hash);
+  append_field(&out, core::ToString(scc_id));
+  append_field(&out, std::to_string(static_cast<int>(component)));
+  append_field(&out, summary_schema_version);
+  append_field(&out, relation_schema_version);
+  append_field(&out, rule_bundle_version);
+  append_field(&out, model_bundle_version);
+  append_field(&out, svf_configuration_hash);
+  append_field(&out, wpa_configuration_hash);
   return out;
+}
+
+std::string ResultCacheDescriptor::Key() const {
+  const std::string encoded = Encode();
+  return core::DigestToHex(core::ComputeSHA256(
+      std::as_bytes(std::span(encoded.data(), encoded.size()))));
+}
+
+ResultCacheDescriptor MakeResultCacheDescriptor(
+    const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
+    std::string_view logical_input_hash) {
+  ResultCacheDescriptor descriptor;
+  descriptor.engine = run.engine;
+  descriptor.engine_toolchain_identity = run.engine_toolchain_identity;
+  descriptor.logical_input_hash = std::string(logical_input_hash);
+  descriptor.scc_id = key.scc_id;
+  descriptor.component = key.component;
+  descriptor.summary_schema_version = run.summary_schema_version;
+  descriptor.relation_schema_version = run.relation_schema_version;
+  descriptor.rule_bundle_version = run.rule_bundle_version;
+  descriptor.model_bundle_version = run.model_bundle_version;
+  descriptor.svf_configuration_hash = run.svf_configuration_hash;
+  descriptor.wpa_configuration_hash = run.wpa_configuration_hash;
+  return descriptor;
 }
 
 WpaRunRepository::WpaRunRepository(
@@ -469,13 +495,14 @@ Status WpaRunRepository::BeginRun(const facts::AnalysisRunManifest& run) {
 }
 
 StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableComponent(
-    const std::string& result_cache_key) {
+    const ResultCacheDescriptor& descriptor) {
+  const std::string cache_key = descriptor.Key();
   auto rows = metadata_store_.Query(
       "SELECT result_object_key, logical_input_hash, engine_toolchain_identity, "
       "relation_schema_version, rule_bundle_version, model_bundle_version, "
       "fixpoint_hash, external_hash "
       "FROM wpa_component_result_cache_v2 WHERE result_cache_key = ?",
-      {result_cache_key});
+      {cache_key});
   if (!rows.ok()) {
     return rows.status();
   }
@@ -486,6 +513,18 @@ StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableCompon
   if (row.size() != 8) {
     return Status::Internal("result cache row has an unexpected shape");
   }
+
+  // Revalidate the metadata row against the requested descriptor before
+  // trusting the cached object.
+  if (row[1] != descriptor.logical_input_hash ||
+      row[2] != descriptor.engine_toolchain_identity ||
+      row[3] != descriptor.relation_schema_version ||
+      row[4] != descriptor.rule_bundle_version ||
+      row[5] != descriptor.model_bundle_version) {
+    return Status::FailedPrecondition(
+        "result cache metadata does not match the requested component");
+  }
+
   const std::string& object_key = row[0];
   auto bytes = component_results_->Get(object_key);
   if (!bytes.ok()) {
@@ -497,6 +536,29 @@ StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableCompon
   if (!result.ok()) {
     return result.status();
   }
+
+  // Revalidate the deserialized content: identity, every fact identity, and
+  // the recomputed canonical hashes. Any mismatch is a hard integrity error.
+  if (result->scc_id != descriptor.scc_id ||
+      result->component != descriptor.component ||
+      result->logical_input_hash != descriptor.logical_input_hash) {
+    return Status::FailedPrecondition(
+        "cached result does not match the requested component");
+  }
+  for (const auto& fact : result->facts) {
+    auto derived = facts::MakeFact(fact.row);
+    if (!derived.ok() || derived->fact_id != fact.fact_id) {
+      return Status::FailedPrecondition(
+          "cached fact identity does not match its row");
+    }
+  }
+  const auto hashes = facts::ComputeCanonicalResultHashes(result->facts,
+                                                          result->witnesses);
+  if (hashes.fixpoint_hash != result->fixpoint_hash ||
+      hashes.external_hash != result->external_hash) {
+    return Status::FailedPrecondition(
+        "cached result hashes do not match its content");
+  }
   return std::optional<WpaComponentResult>(std::move(*result));
 }
 
@@ -504,7 +566,7 @@ StatusOr<WpaComponentCompletion> WpaRunRepository::StoreSuccessfulComponent(
     const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
     const WpaComponentResult& result) {
   const std::string cache_key =
-      DeriveResultCacheKey(run, key, result.logical_input_hash);
+      MakeResultCacheDescriptor(run, key, result.logical_input_hash).Key();
   const std::string serialized = SerializeResult(result);
   const auto bytes = ToBytes(serialized);
 

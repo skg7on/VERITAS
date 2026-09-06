@@ -52,6 +52,9 @@ struct WpaRunResult {
   std::vector<WpaComponentKey> expected_components;
   std::vector<WpaComponentCompletion> completed_components;
   std::vector<core::StableId> rooted_input_fact_ids;
+  // The full rooted-input evidence (design §7), carried alongside the canonical
+  // ID set so the explanation graph can report source anchors and summaries.
+  std::vector<facts::RootedInputFact> rooted_input_facts;
   std::vector<runtime::WorkItem> scheduled_predecessors;
   // The flattened, canonical handoff across every completed component: the
   // exact facts, witnesses, and diagnostics the AnalysisFactBus consumes.

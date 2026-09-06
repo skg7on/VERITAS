@@ -46,11 +46,6 @@ core::StableId CallSiteId(std::string_view name) {
                             std::as_bytes(std::span(name.data(), name.size())));
 }
 
-core::StableId BatchId(std::string_view text) {
-  return core::MakeStableId(core::IdKind::kFact,
-                            std::as_bytes(std::span(text.data(), text.size())));
-}
-
 SemanticRow Reachable(std::string_view from, std::string_view to) {
   return SemanticRow{RelationId::kReachableCall,
                      {FunctionId(from), FunctionId(to), sem::EpistemicState::kMay}};
@@ -100,7 +95,6 @@ std::filesystem::path TempDbPath() {
 AnalysisFactBatch SuccessfulBatch() {
   AnalysisFactBatch batch;
   batch.run = TestRun();
-  batch.batch_id = BatchId("test-batch");
 
   wpa::WpaComponentKey key{FunctionId("scc"),
                            wpa::WpaComponentKind::kReachability};
@@ -121,6 +115,7 @@ AnalysisFactBatch SuccessfulBatch() {
   batch.rooted_input_fact_ids = {root.fact_id};
   batch.facts = {derived};
   batch.witnesses = {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)};
+  batch.batch_id = DeriveBatchId(batch);
   return batch;
 }
 

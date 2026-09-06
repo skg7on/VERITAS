@@ -36,7 +36,7 @@ namespace {
 // materializer turns into support relations.
 std::vector<facts::AnalysisFact> SuccessorSupport(
     const SccGraph& scc_graph, core::StableId scc_id, WpaComponentKind component,
-    const std::map<core::StableId, std::vector<facts::AnalysisFact>>&
+    const std::map<WpaComponentKey, std::vector<facts::AnalysisFact>>&
         completed_facts) {
   const facts::RelationId expected =
       component == WpaComponentKind::kReachability
@@ -48,7 +48,7 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
     return support;
   }
   for (const auto& successor : *successors) {
-    auto it = completed_facts.find(successor);
+    auto it = completed_facts.find(WpaComponentKey{successor, component});
     if (it == completed_facts.end()) {
       continue;
     }
@@ -143,7 +143,7 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
     }
   }
 
-  std::map<core::StableId, std::vector<facts::AnalysisFact>> completed_facts;
+  std::map<WpaComponentKey, std::vector<facts::AnalysisFact>> completed_facts;
 
   for (const auto& scc_id : scc_order) {
     for (const auto component : request.components) {
@@ -173,17 +173,19 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
         return logical.status();
       }
 
-      // Collect the rooted input fact IDs for the batch.
+      // Collect the rooted input fact IDs and their full evidence for the batch.
       for (const auto& root : logical->local_roots) {
         result.rooted_input_fact_ids.push_back(root.fact.fact_id);
+        result.rooted_input_facts.push_back(root);
       }
       for (const auto& root : logical->successor_roots) {
         result.rooted_input_fact_ids.push_back(root.fact.fact_id);
+        result.rooted_input_facts.push_back(root);
       }
 
-      const std::string cache_key = DeriveResultCacheKey(
+      const ResultCacheDescriptor cache_descriptor = MakeResultCacheDescriptor(
           request.run, key, logical->logical_input_hash);
-      auto reusable = repository_.LoadReusableComponent(cache_key);
+      auto reusable = repository_.LoadReusableComponent(cache_descriptor);
       if (!reusable.ok()) {
         repository_.RecordComponentFailure(request.run, key,
                                            std::string(reusable.status().message()));
@@ -261,7 +263,7 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
         }
       }
 
-      completed_facts[key.scc_id] = std::move(component_result.facts);
+      completed_facts[key] = std::move(component_result.facts);
     }
   }
 

@@ -152,12 +152,12 @@ the working tree, so partially staged changes remain intact.
 
 ## Current State
 
-M0–M8 are implemented and tested. Within the M8R remediation bridge, M8R.1 and
-M8R.2 are delivered; M8R.3–M8R.5 remain outstanding, and M9–M12 sit behind the
-M8R.5 entry gate. The current project pipeline and CLI are available now, with
-the remaining milestones extending provenance, recursive analysis, Evidence
-Builder inputs, Evidence IR semantic modeling and serialization, and external
-inputs.
+M0–M8 are implemented and tested. The M8R remediation bridge (M8R.1–M8R.5) is
+delivered, and M9 (durable provenance and explain APIs) is delivered via the
+M8R–M9 contract reconciliation. M10–M12 (recursive analysis, Evidence Builder
+inputs, Evidence IR semantic modeling and serialization, and external inputs)
+remain planned. The current project pipeline, CLI, and `veritas-explain` tooling
+are available now.
 
 **Documentation:** Start at the [documentation index](docs/README.md).
 
@@ -172,7 +172,7 @@ inputs.
 
 ---
 
-## CLI Overview (Planned)
+## CLI Overview
 
 ```bash
 # Tier 1: Direct project analysis

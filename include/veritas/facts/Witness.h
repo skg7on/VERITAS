@@ -62,9 +62,18 @@ struct WitnessEdge {
 // An input fact together with where it came from. Roots terminate every
 // witness chain, so a published result is always traceable to a declared
 // input rather than to the evaluator's assertion.
+//
+// The structured evidence fields carry the root's producer/analyzer identity,
+// source anchor, summary reference, and description through the run-to-batch
+// boundary so the explanation graph can report assumptions, unknowns, source
+// anchors, and summary references without recomputation (design §7).
 struct RootedInputFact {
   AnalysisFact fact;
   std::string provenance_ref;
+  std::string producer_id;
+  std::string source_anchor_id;
+  std::string summary_id;
+  std::string description;
 };
 
 // What an engine returns before validation: asserted results, the witness

@@ -181,6 +181,35 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
     }
   }
 
+  // 3a. Validate derivation arity: every derivation's input ordinals must be
+  // exactly {0, ..., rule.arity - 1}. The per-edge checks above already reject
+  // duplicate ordinals, so a derivation of the declared arity with an ordinal
+  // present in range is exactly correct.
+  for (const auto& [result_key, by_rule] : derivations) {
+    for (const auto& [rule_id, by_derivation] : by_rule) {
+      const RuleSpec* rule = RulesV2().Find(rule_id);
+      for (const auto& [derivation_key, derivation] : by_derivation) {
+        if (derivation.inputs.size() != rule->arity) {
+          return Status::InvalidArgument(
+              "witness derivation has the wrong number of inputs");
+        }
+        for (std::uint32_t ordinal = 0; ordinal < rule->arity; ++ordinal) {
+          bool found = false;
+          for (const auto& [input_key, input_ordinal] : derivation.inputs) {
+            if (input_ordinal == ordinal) {
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            return Status::InvalidArgument(
+                "witness derivation is missing an input ordinal");
+          }
+        }
+      }
+    }
+  }
+
   // 4. Relax derivation costs to a fixpoint. A root costs nothing; a
   // derivation costs one edge per input plus the cost of proving each derived
   // input. A result reachable only through a cycle never leaves kUnproven,

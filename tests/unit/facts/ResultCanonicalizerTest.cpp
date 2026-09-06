@@ -91,15 +91,50 @@ TEST(ResultCanonicalizerTest, RejectsOrphanedDerivedResult) {
   EXPECT_EQ(result.status().code(), StatusCode::kFailedPrecondition);
 }
 
-// Two results that cite only each other are a closed loop with no root. Such a
-// cycle can justify anything, so neither result may be published.
-TEST(ResultCanonicalizerTest, RejectsCyclicUnrootedWitnesses) {
-  const std::vector<RootedInputFact> roots = {};
+// A rule's arity declares how many inputs it joins. A derivation that supplies
+// too few inputs (here a transitive derivation with a single input) is rejected
+// before any proof can be selected.
+TEST(ResultCanonicalizerTest, RejectsDerivationWithMissingOrdinal) {
+  const std::vector<RootedInputFact> roots = {Root(DirectCall("f", "g"))};
   RawWpaEvaluation raw;
-  raw.results = {Reachable("f", "g"), Reachable("g", "h")};
+  raw.results = {Reachable("f", "g")};
   raw.witnesses = {
-      Edge(Reachable("f", "g"), kTransitive, Reachable("g", "h"), 0),
-      Edge(Reachable("g", "h"), kTransitive, Reachable("f", "g"), 0)};
+      Edge(Reachable("f", "g"), kTransitive, Reachable("f", "g"), 0)};
+
+  auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
+  ASSERT_FALSE(result.ok());
+  EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
+}
+
+// An input ordinal outside the rule's declared arity is rejected even when the
+// derivation otherwise has the right number of inputs.
+TEST(ResultCanonicalizerTest, RejectsOutOfRangeOrdinal) {
+  const std::vector<RootedInputFact> roots = {Root(DirectCall("f", "g"))};
+  RawWpaEvaluation raw;
+  raw.results = {Reachable("f", "g")};
+  raw.witnesses = {
+      Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 1)};
+
+  auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
+  ASSERT_FALSE(result.ok());
+  EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
+}
+
+// Two results that cite only each other are a closed loop with no root. Such a
+// cycle can justify anything, so neither result may be published. Each
+// transitive derivation has its full arity (a direct-call root plus a
+// reachable-call input) but the reachable inputs mutually depend, leaving the
+// cycle unrooted.
+TEST(ResultCanonicalizerTest, RejectsCyclicUnrootedWitnesses) {
+  const std::vector<RootedInputFact> roots = {Root(DirectCall("f", "g")),
+                                              Root(DirectCall("g", "f"))};
+  RawWpaEvaluation raw;
+  raw.results = {Reachable("f", "h"), Reachable("g", "h")};
+  raw.witnesses = {
+      Edge(Reachable("f", "h"), kTransitive, DirectCall("f", "g"), 0),
+      Edge(Reachable("f", "h"), kTransitive, Reachable("g", "h"), 1),
+      Edge(Reachable("g", "h"), kTransitive, DirectCall("g", "f"), 0),
+      Edge(Reachable("g", "h"), kTransitive, Reachable("f", "h"), 1)};
 
   auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
   ASSERT_FALSE(result.ok());

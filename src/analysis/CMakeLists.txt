@@ -15,6 +15,7 @@
 add_library(veritas_analysis
   ProjectAnalyzer.cpp
   ProjectPublicationCoordinator.cpp
+  SouffleProvenance.cpp
 )
 
 target_include_directories(veritas_analysis
@@ -43,16 +44,21 @@ target_link_libraries(veritas_analysis
 # built against (mirrors VERITAS_TESTS_SOURCE_DIR for test fixtures).
 target_compile_definitions(veritas_analysis PRIVATE
   VERITAS_LOGIC_MODELS_DIR="${CMAKE_SOURCE_DIR}/logic/models"
+  VERITAS_CPP_BUILD_FINGERPRINT="compiler_id=${CMAKE_CXX_COMPILER_ID}|compiler_version=${CMAKE_CXX_COMPILER_VERSION}|system_name=${CMAKE_SYSTEM_NAME}|system_processor=${CMAKE_SYSTEM_PROCESSOR}|build_type=${CMAKE_BUILD_TYPE}"
 )
 
 # The compiled Souffle worker is the production executor; bake its path in so
-# the analyzer can construct the SouffleWpaExecutor. Only defined under the
-# souffle engine.
+# the analyzer can construct the SouffleWpaExecutor. The generated provenance
+# manifest and built executable are baked too, so the runtime loader verifies
+# identity before any WPA run. Only defined under the souffle engine.
 if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   target_compile_definitions(veritas_analysis PRIVATE
     VERITAS_SOUFFLE_WORKER="$<TARGET_FILE:veritas_souffle_worker>"
+    VERITAS_SOUFFLE_PROVENANCE_PATH="${CMAKE_BINARY_DIR}/souffle-provenance.json"
+    VERITAS_SOUFFLE_EXECUTABLE_PATH="$<TARGET_FILE:souffle>"
   )
-  add_dependencies(veritas_analysis veritas_souffle_worker)
+  add_dependencies(veritas_analysis veritas_souffle_worker
+                   veritas_souffle_provenance)
 endif()
 
 add_subdirectory(semantic)

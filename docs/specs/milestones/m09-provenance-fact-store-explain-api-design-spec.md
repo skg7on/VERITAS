@@ -1,6 +1,6 @@
 # M9 Provenance-Aware Fact Store and Explain API Design Spec
 
-**Status:** Draft target; blocked until every M8R entry criterion passes
+**Status:** Delivered (M8R–M9 contract reconciliation, issue #109)
 **Milestone:** M9
 **Depends on:** All M8R.1-M8R.5 gates and all ten executable M9 entry criteria
 **Feeds:** M10A recursive domain expansion, M10B Evidence APIs, and future Evidence IR

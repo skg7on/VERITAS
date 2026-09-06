@@ -35,14 +35,16 @@ using RuleTable = std::array<RuleSpec, kRuleCount>;
 
 const RuleTable& Table() {
   static const RuleTable table = {
-      RuleSpec{"wpa.reachability.direct.v2", 10, RelationId::kReachableCall},
-      RuleSpec{"wpa.reachability.support.v2", 20, RelationId::kReachableCall},
+      RuleSpec{"wpa.reachability.direct.v2", 10, RelationId::kReachableCall,
+               1},
+      RuleSpec{"wpa.reachability.support.v2", 20, RelationId::kReachableCall,
+               2},
       RuleSpec{"wpa.reachability.transitive.v2", 30,
-               RelationId::kReachableCall},
-      RuleSpec{"wpa.memory.may_write.direct.v2", 10, RelationId::kMayWrite},
-      RuleSpec{"wpa.memory.may_write.support.v2", 20, RelationId::kMayWrite},
-      RuleSpec{"wpa.memory.may_write.transitive.v2", 30,
-               RelationId::kMayWrite},
+               RelationId::kReachableCall, 2},
+      RuleSpec{"wpa.memory.may_write.direct.v2", 10, RelationId::kMayWrite, 1},
+      RuleSpec{"wpa.memory.may_write.support.v2", 20, RelationId::kMayWrite, 2},
+      RuleSpec{"wpa.memory.may_write.transitive.v2", 30, RelationId::kMayWrite,
+               2},
   };
   return table;
 }

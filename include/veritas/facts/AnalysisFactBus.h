@@ -50,6 +50,8 @@ struct AnalysisFactBatch {
   std::vector<wpa::WpaComponentKey> expected_components;
   std::vector<wpa::WpaComponentCompletion> completed_components;
   std::vector<core::StableId> rooted_input_fact_ids;
+  // Full rooted-input evidence carried alongside the canonical ID set.
+  std::vector<RootedInputFact> rooted_input_facts;
   std::vector<AnalysisFact> facts;
   std::vector<WitnessEdge> witnesses;
   std::vector<std::string> diagnostics;
@@ -60,6 +62,10 @@ struct AnalysisFactBatch {
 // input, fact, and witness ordering, and derives the content-addressed
 // batch_id. Mechanical; the bus re-validates on Publish.
 AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result);
+
+// Recomputes the canonical content-addressed batch id over every immutable
+// field. Exposed so the bus and its callers share one derivation.
+core::StableId DeriveBatchId(const AnalysisFactBatch& batch);
 
 // A named consumer of analysis fact batches. Repeated publication of the same
 // (run_id, batch_id) must be a successful no-op.
