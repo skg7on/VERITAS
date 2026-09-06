@@ -14,8 +14,10 @@
 
 #include "veritas/analysis/ProjectAnalyzer.h"
 
+#include <span>
 #include <string>
 
+#include "analysis/SouffleProvenance.h"
 #include "analysis/cpg/CpgProjectionStage.h"
 #include "analysis/pipeline/LocalAnalysisStage.h"
 #include "analysis/svf/SvfAnalysisStage.h"
@@ -25,7 +27,9 @@
 #include "veritas/analysis/semantic/ModelBundle.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
+#include "veritas/core/Hash.h"
 #include "veritas/core/Ids.h"
+#include "veritas/core/Version.h"
 #include "veritas/facts/AnalysisRun.h"
 #include "veritas/summary/SummaryArtifact.h"
 #include "veritas/wpa/CppConformanceExecutor.h"
@@ -82,6 +86,37 @@ svf::SvfConfig ToSvfConfig(const AnalysisConfig &config) {
   };
 }
 
+std::string HashString(std::string_view bytes) {
+  return core::DigestToHex(core::ComputeSHA256(
+      std::as_bytes(std::span(bytes.data(), bytes.size()))));
+}
+
+// The SVF configuration hash is the canonical analyzer-config string hashed.
+std::string SvfConfigurationHash(const AnalysisConfig &config) {
+  return HashString(ToSvfConfig(config).CanonicalAnalyzerConfig());
+}
+
+// The WPA configuration hash covers the component set, execution limits, and
+// relation/rule/model bundle settings (design §4.1), length-prefixed so no
+// choice of field contents can forge a boundary.
+std::string WpaConfigurationHash(const AnalysisConfig &config) {
+  auto append_field = [](std::string *out, std::string_view value) {
+    out->append(std::to_string(value.size()));
+    out->push_back(':');
+    out->append(value);
+  };
+  std::string canonical = "veritas.wpa.config.v1";
+  append_field(&canonical, "reachability");
+  append_field(&canonical, "memory_effects");
+  append_field(&canonical, std::to_string(config.wpa_component_timeout.count()));
+  append_field(&canonical, std::to_string(config.wpa_component_memory_mb));
+  append_field(&canonical, std::to_string(config.wpa_threads));
+  append_field(&canonical, "relations.v2");
+  append_field(&canonical, config.rule_bundle_version);
+  append_field(&canonical, config.model_bundle_version);
+  return HashString(canonical);
+}
+
 // Runs the WPA orchestrator over the just-published summaries and records the
 // run identity, engine, and any degraded-mode or failure diagnostic.
 Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &config,
@@ -102,14 +137,29 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
   descriptor.relation_schema_version = "relations.v2";
   descriptor.rule_bundle_version = config.rule_bundle_version;
   descriptor.model_bundle_version = config.model_bundle_version;
-  descriptor.svf_configuration_hash = std::string(64, 'a');
-  descriptor.wpa_configuration_hash = std::string(64, 'b');
+  descriptor.svf_configuration_hash = SvfConfigurationHash(config);
+  descriptor.wpa_configuration_hash = WpaConfigurationHash(config);
   descriptor.engine = config.wpa_engine == WpaEngineMode::kSouffle
                           ? facts::EngineIdentity::kSouffle
                           : facts::EngineIdentity::kCppEmergency;
-  const std::string toolchain_identity =
-      config.wpa_engine == WpaEngineMode::kSouffle ? "souffle-2.5-pinned"
-                                                    : "veritas-cpp-emergency";
+  std::string toolchain_identity;
+  if (config.wpa_engine == WpaEngineMode::kSouffle) {
+#ifdef VERITAS_SOUFFLE_PROVENANCE_PATH
+    auto provenance = SouffleProvenance::Load(
+        VERITAS_SOUFFLE_PROVENANCE_PATH, VERITAS_SOUFFLE_EXECUTABLE_PATH);
+    if (!provenance.ok()) {
+      return provenance.status();
+    }
+    toolchain_identity = provenance->toolchain_identity();
+#else
+    return Status::FailedPrecondition(
+        "souffle WPA was requested but provenance is not built");
+#endif
+  } else {
+    // The C++ fallback identity is derived from the baked VERITAS version and
+    // Git revision; it is distinct from the digest-derived Souffle identity.
+    toolchain_identity = "veritas-cpp-" + veritas::GetVersion().git_revision;
+  }
   descriptor.engine_toolchain_identity = toolchain_identity;
   auto run = facts::MakeAnalysisRun(descriptor);
   if (!run.ok())

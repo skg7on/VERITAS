@@ -69,13 +69,35 @@ struct WpaComponentCompletion {
   WpaComponentResult result;
 };
 
-// Derives the content-addressed cache key for a component: everything that
-// identifies the exact result independent of revision and run identity. The
-// logical input hash is known before execution, so the key can be looked up
-// ahead of a run.
-std::string DeriveResultCacheKey(const facts::AnalysisRunManifest& run,
-                                 const WpaComponentKey& key,
-                                 std::string_view logical_input_hash);
+// Versioned, engine-scoped identity for one cacheable component result (design
+// §6). The descriptor is length-prefix encoded and hashed; the resulting digest
+// is the cache and object key. This intentionally invalidates the former
+// delimiter-concatenated key format without rewriting historical run records.
+struct ResultCacheDescriptor {
+  facts::EngineIdentity engine;
+  std::string engine_toolchain_identity;
+  std::string logical_input_hash;
+  core::StableId scc_id;
+  WpaComponentKind component;
+  std::string summary_schema_version;
+  std::string relation_schema_version;
+  std::string rule_bundle_version;
+  std::string model_bundle_version;
+  std::string svf_configuration_hash;
+  std::string wpa_configuration_hash;
+
+  // Canonical length-prefixed encoding; injective across field contents.
+  std::string Encode() const;
+  // The content-addressed cache key: SHA-256 of Encode(), lowercase hex.
+  std::string Key() const;
+};
+
+// Builds the descriptor for a component from its run manifest and key. The
+// logical input hash is known before execution, so the descriptor (and its key)
+// can be formed ahead of a run.
+ResultCacheDescriptor MakeResultCacheDescriptor(
+    const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
+    std::string_view logical_input_hash);
 
 class WpaRunRepository {
  public:
@@ -88,10 +110,13 @@ class WpaRunRepository {
   // Records a run as in progress. Idempotent for the same run_id.
   Status BeginRun(const facts::AnalysisRunManifest& run);
 
-  // Loads a reusable result from the cache, validating every identity field and
-  // the stored object. Returns nullopt when nothing matches.
+  // Loads a reusable result from the cache, revalidating the metadata row, the
+  // stored object, the deserialized SCC/component/logical-input identity, every
+  // fact identity, and the recomputed fixpoint/external hashes against the
+  // expected descriptor. Any mismatch is a hard cache-integrity error. Returns
+  // nullopt when no entry matches.
   StatusOr<std::optional<WpaComponentResult>> LoadReusableComponent(
-      const std::string& result_cache_key);
+      const ResultCacheDescriptor& descriptor);
 
   // Stores a successful component result: the immutable object, the cache row,
   // and the run's component state, in one transaction.

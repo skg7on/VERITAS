@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 #include "veritas/facts/AnalysisRun.h"
+#include "veritas/facts/ResultCanonicalizer.h"
 #include "veritas/facts/Witness.h"
 
 namespace veritas::wpa {
@@ -66,9 +67,11 @@ WpaComponentResult ResultFor(std::string_view scc_name) {
   result.scc_id = FunctionId(scc_name);
   result.component = WpaComponentKind::kReachability;
   result.logical_input_hash = "logical";
-  result.fixpoint_hash = "fixpoint";
-  result.external_hash = "external";
   result.facts = {ReachableFact("f", "g")};
+  const auto hashes =
+      facts::ComputeCanonicalResultHashes(result.facts, result.witnesses);
+  result.fixpoint_hash = hashes.fixpoint_hash;
+  result.external_hash = hashes.external_hash;
   return result;
 }
 
@@ -93,12 +96,12 @@ TEST(WpaRunRepositoryTest, StoresAndLoadsAComponentResult) {
   ASSERT_TRUE(stored.ok());
   EXPECT_EQ(stored->key, key);
 
-  auto loaded =
-      repo->LoadReusableComponent(DeriveResultCacheKey(run, key, "logical"));
+  auto loaded = repo->LoadReusableComponent(
+      MakeResultCacheDescriptor(run, key, "logical"));
   ASSERT_TRUE(loaded.ok());
   ASSERT_TRUE(loaded->has_value());
   EXPECT_EQ(loaded->value().facts, result.facts);
-  EXPECT_EQ(loaded->value().external_hash, "external");
+  EXPECT_EQ(loaded->value().external_hash, result.external_hash);
   EXPECT_EQ(loaded->value().scc_id, key.scc_id);
 
   std::filesystem::remove_all(db);

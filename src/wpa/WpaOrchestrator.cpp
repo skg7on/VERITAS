@@ -181,9 +181,9 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
         result.rooted_input_fact_ids.push_back(root.fact.fact_id);
       }
 
-      const std::string cache_key = DeriveResultCacheKey(
+      const ResultCacheDescriptor cache_descriptor = MakeResultCacheDescriptor(
           request.run, key, logical->logical_input_hash);
-      auto reusable = repository_.LoadReusableComponent(cache_key);
+      auto reusable = repository_.LoadReusableComponent(cache_descriptor);
       if (!reusable.ok()) {
         repository_.RecordComponentFailure(request.run, key,
                                            std::string(reusable.status().message()));
