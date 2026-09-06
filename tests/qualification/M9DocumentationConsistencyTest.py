@@ -45,6 +45,21 @@ class M9DocumentationConsistencyTest(unittest.TestCase):
             for phrase in phrases:
                 self.assertIn(phrase, text, f"{rel} missing ownership statement {phrase!r}")
 
+    def test_milestone_status_is_delivered(self):
+        spec = SOURCE_ROOT / (
+            "docs/specs/milestones/"
+            "m09-provenance-fact-store-explain-api-design-spec.md"
+        )
+        self.assertIn("Delivered", spec.read_text())
+        index = SOURCE_ROOT / "docs/specs/milestones/README.md"
+        self.assertIn("| M9 | Delivered |", index.read_text())
+
+    def test_no_stale_delivery_markers(self):
+        remediation = SOURCE_ROOT / (
+            "docs/specs/milestones/m08r-souffle-wpa-remediation-design-spec.md"
+        )
+        self.assertNotIn("this PR", remediation.read_text())
+
     def test_provenance_records_pinned_revision(self):
         manifest = build_dir() / "souffle-provenance.json"
         self.assertTrue(manifest.exists(), "souffle provenance manifest missing")

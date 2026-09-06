@@ -243,7 +243,7 @@ label name must not appear here as evidence before the label exists.
 | M8R.2 | Delivered | `4b81cb8` (PR #76) | Full suite 255/255 passed, 0 failures, at merge. No M9 gate labels yet; Task 16 defines them. |
 | M8R.3 | Delivered | `638eb1e` (PR #78) | `RelationSchemaTest`, `WpaInputMaterializerTest`, `WpaExecutorConformanceTest` at merge |
 | M8R.4 | Delivered | `8faf463` (PR #83), `654f08b` (PR #87) | `SouffleWpaExecutorTest`, `WpaExecutorConformanceTest`, `ProjectAnalyzerWpaTest`, `SouffleProvenanceTest` at merge |
-| M8R.5 | Delivered | this PR | `wpa-qualification` (five aggregates) plus the ten `m9-entry` criterion labels; `python3 tools/check_m9_entry.py --build-dir build` passes all ten |
+| M8R.5 | Delivered | `fe9face` (PR #89) | `wpa-qualification` (five aggregates) plus the ten `m9-entry` criterion labels; `python3 tools/check_m9_entry.py --build-dir build` passes all ten |
 
 M8R.2 recorded three deferrals. Their disposition, so a later reader does not
 have to reconstruct it from pull-request discussion:
