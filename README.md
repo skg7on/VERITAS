@@ -30,7 +30,12 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 
 3. **Evidence IR (EIR)** — claim-oriented, provenance-preserving typed graph IR the Agent consumes. Enforces MUST / MAY / MUST_NOT / INFERRED / ASSUMED / UNKNOWN as distinct epistemic states.
 
-**Pipeline:** Ingest (compile_commands.json, bitcode, or external analysis) → module acquisition → local static analysis → Function Summary IR → SummaryDB → Incremental WPA (SCC + fixpoint + Datalog) → global derived facts → Evidence Builder → Evidence IR → Agent + Proof Engines → Review Result.
+**Target pipeline:** Ingest (`compile_commands.json`, LLVM IR, or governed external analysis) → module acquisition → local static analysis → Function Summary IR → SummaryDB → incremental WPA (SCC + fixpoint + Datalog) → global derived facts → Evidence Builder → Evidence IR → Agent + Proof Engines → Review Result.
+
+The shipped input path currently starts from a project-level
+`compile_commands.json`. M11's approved design adds LLVM bitcode/textual IR at
+the module-acquisition boundary, and M12 adds external-analysis providers at a
+separate validated fact-ingestion boundary.
 
 ---
 
@@ -38,9 +43,11 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 
 - **Immutable summaries** — every function summary is content-addressed; changes create new versions
 - **Semantic incrementality** — invalidation based on component deltas (not file timestamps)
-- **Full provenance** — every derived fact traces back to source anchors and analysis rules
+- **Durable provenance** — immutable fact batches, rooted witnesses, idempotent publication, and bounded explanations connect derived facts to source evidence and rules
 - **Explicit uncertainty** — MUST / MAY / INFERRED / ASSUMED / UNKNOWN states preserved throughout
-- **Whole-program analysis** — SCC-aware fixpoint computation over call graphs and value flows
+- **Production whole-program analysis** — compiled Soufflé runs in-process over SCC-aware incremental state, with deterministic C++ conformance checking
+- **M10A domain expansion** — local ParameterFlow and ReturnFlow facts feed four recursive WPA relations: MayRead, GlobalFlow, UnknownEffect, and SoundnessCoverage
+- **Qualified determinism** — differential, migration, failure, performance, and mixed C/C++ `semantic_zoo` gates exercise the production pipeline
 - **Pluggable backends** — storage adapters for RocksDB, SQLite, in-memory, and custom backends
 - **Evidence-first design** — CPG is a query projection; Summary IR is the source of truth
 
@@ -53,7 +60,7 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 **Analysis Stack (V1):**
 - **Languages:** C++20
 - **Build System:** CMake 3.23+
-- **Host compiler:** CMake auto-detected (current dev machine: llvm@17 17.0.6)
+- **Host compiler:** CMake auto-detected independently from the selected LLVM/Clang libraries
 - **LLVM/Clang libraries:** 22+ (23.x and 24.x supported; 24.x recommended)
 - **Pointer Analysis:** SVF (pinned at `third_party/SVF@18fb5650…`, required, in-process)
 - **Constraint Solver:** Z3
@@ -63,9 +70,10 @@ VERITAS is an evidence-centric whole-program analysis platform that combines det
 - **Testing:** GoogleTest
 
 **Ingest Tiers:**
-1. **Tier 1 (T0 canonical)** — `compile_commands.json` project directory → `CodeGenIrSource`
-2. **Tier 2 (T0/T1 fidelity)** — bitcode/textual IR → `BitcodeIrSource`
-3. **Tier 3 (epistemic floor)** — external analysis (Joern, PhASAR) → `ExternalFactsImporter`
+
+1. **Tier 1 — available:** `compile_commands.json` project directory → Clang CodeGen → canonical `ProgramIr`; M11 refines this path with persisted, bounded parallel `CodeGenIrSource` acquisition
+2. **Tier 2 — M11 approved, pending implementation:** separated or linked `.bc`/`.ll` → persisted canonical IR acquisition with T0/T1 fidelity
+3. **Tier 3 — M12 approved, pending implementation:** external analysis providers such as Joern → validated provider projection and external fact ingestion with an epistemic floor
 
 ---
 
@@ -152,12 +160,40 @@ the working tree, so partially staged changes remain intact.
 
 ## Current State
 
-M0–M8 are implemented and tested. The M8R remediation bridge (M8R.1–M8R.5) is
-delivered, and M9 (durable provenance and explain APIs) is delivered via the
-M8R–M9 contract reconciliation. M10–M12 (recursive analysis, Evidence Builder
-inputs, Evidence IR semantic modeling and serialization, and external inputs)
-remain planned. The current project pipeline, CLI, and `veritas-explain` tooling
-are available now.
+M0–M9 and M10A are implemented and tested. The current project-input pipeline runs
+required in-process SVF, publishes Function Summary IR and thin CPG state,
+executes production recursive WPA through compiled Soufflé, persists
+explainable facts and provenance, and exposes bounded explanations through
+`veritas-explain`.
+
+Recent backbone work delivered:
+
+- **M8R–M9 reconciliation:** exact engine identities, strict cache validation,
+  self-identifying witness derivations, rooted provenance, atomic idempotent
+  fact publication, FactStore persistence, and production-pipeline
+  qualification ([#110](https://github.com/skg7on/VERITAS/pull/110),
+  [#113](https://github.com/skg7on/VERITAS/pull/113)).
+- **Analysis and WPA refinement:** bounded SVF alias expansion, owner-indexed
+  whole-program fact merging, reused SCC topology, and in-process compiled
+  Soufflé execution ([#100](https://github.com/skg7on/VERITAS/pull/100),
+  [#101](https://github.com/skg7on/VERITAS/pull/101),
+  [#106](https://github.com/skg7on/VERITAS/pull/106),
+  [#107](https://github.com/skg7on/VERITAS/pull/107)).
+- **M10A domain expansion:** local ParameterFlow and ReturnFlow facts now feed
+  the recursive MayRead, GlobalFlow, UnknownEffect, and SoundnessCoverage
+  relations in the executable analysis stack
+  ([#117](https://github.com/skg7on/VERITAS/pull/117),
+  [#120](https://github.com/skg7on/VERITAS/pull/120)).
+- **M11 design refinement:** unified project and external LLVM IR acquisition,
+  persisted per-TU and linked bitcode, bounded parallel CodeGen, detailed run
+  reporting, and large-project performance qualification are approved and
+  pending implementation ([#114](https://github.com/skg7on/VERITAS/pull/114),
+  [issue #20](https://github.com/skg7on/VERITAS/issues/20)).
+
+M10B and M10C remain planned. M11 is approved and pending implementation;
+M12A–M12C are approved and pending implementation, while M12D still requires
+detailed design. The milestone specification matrix below is the canonical
+status record.
 
 **Documentation:** Start at the [documentation index](docs/README.md).
 
@@ -174,27 +210,43 @@ are available now.
 
 ## CLI Overview
 
+Available now:
+
 ```bash
-# Tier 1: Direct project analysis
-veritas-build analyze --project <directory>
+# Analyze a project and optionally select the SummaryDB output and WPA settings
+veritas-build analyze --project <directory> [--output <directory>] \
+  [--wpa-engine souffle|cpp-emergency] \
+  [--field-sensitive true|false] [--max-alias-pairs <n>]
 
-# Tier 2: Bitcode input
-veritas-build analyze --bitcode <module>
+# Query current callees or bounded value-flow paths
+veritas-query callees <function-id> --revision <id> --build <id> --db <directory>
+veritas-query flow <src-id> <dst-id> --projection <id> --db <directory> \
+  [--max-depth <n> --max-nodes <n> --max-paths <n>]
 
-# Tier 3: External-facts import
-veritas-build import --joern <export.json>
-veritas-build import --phasar <results.json>
+# Compare two summary artifacts and compute bounded downstream impact
+veritas-diff --db <directory> --old <summary-id> --new <summary-id> \
+  [--max-consumers <n> --max-depth <n>]
 
-# Query operations
-veritas-query summary <function-id>
-veritas-query callers <function-id>
-veritas-query writes <memory-ref>
-veritas-query evidence <claim-id>
-
-# Incremental operations
-veritas-diff <revision-a> <revision-b>
-veritas-explain fact <fact-id>
+# Explain one persisted fact
+veritas-explain fact <fact-id> --run <run-id> --db <directory> \
+  [--max-depth <n> --max-nodes <n>] [--json]
 ```
+
+Approved M11 interface, not yet implemented:
+
+```bash
+# Analyze separated TU bitcode/textual IR or one linked module
+veritas-build analyze --bitcode <file.bc|file.ll|directory> \
+  --output <absolute-directory> [--jobs auto|N]
+
+# Parallel project CodeGen with persisted LLVM artifacts and run reports
+veritas-build analyze --project <directory> \
+  --output <absolute-directory> [--jobs auto|N]
+```
+
+See the [M11 design specification](docs/specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md)
+and [implementation plan](docs/plans/milestones/m11-external-ir-adapter-implementation-plan.md)
+for the artifact, fidelity, reporting, and performance contracts.
 
 ---
 
@@ -205,7 +257,7 @@ veritas-explain fact <fact-id>
 3. **Every derived fact has provenance** — tuples trace back to rules, inputs, and source anchors
 4. **Explicit uncertainty** — MUST / MAY / INFERRED / ASSUMED / UNKNOWN preserved; no silent promotion
 5. **Incrementality on semantic deltas** — invalidation based on component hashes, not file timestamps
-6. **WPA consumes summaries by default** — external artifacts enter via Tier 3 only
+6. **All external inputs use governed adapters** — LLVM IR enters only at Tier 2 module acquisition; external analysis enters only at Tier 3 fact ingestion, and neither bypasses VERITAS validation, identity, or provenance
 7. **CPG is a query projection** — Summary IR is the source of truth; CPG indexes it
 8. **LLM output is a hypothesis** — requires deterministic verification before becoming a fact
 
