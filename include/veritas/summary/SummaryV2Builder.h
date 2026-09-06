@@ -58,6 +58,22 @@ struct ValueFlowFactV2 {
   std::string provenance_ref;
 };
 
+struct ParameterFlowFactV2 {
+  core::StableId call_site_id;  // must be kCallSite
+  core::StableId actual_id;     // must be kValueRef (caller)
+  core::StableId formal_id;     // must be kValueRef (callee formal)
+  semantic::EpistemicState epistemic;
+  std::string provenance_ref;
+};
+
+struct ReturnFlowFactV2 {
+  core::StableId call_site_id;  // must be kCallSite
+  core::StableId return_id;     // must be kValueRef (callee return)
+  core::StableId result_id;     // must be kValueRef (caller result)
+  semantic::EpistemicState epistemic;
+  std::string provenance_ref;
+};
+
 struct AliasFactV2 {
   semantic::MemoryLocation left;
   semantic::MemoryLocation right;
@@ -78,6 +94,8 @@ struct FunctionLocalFactsV2 {
   std::vector<MemoryEffectFactV2> memory_effects;
   std::vector<ValueFlowFactV2> value_flows;
   std::vector<AliasFactV2> aliases;
+  std::vector<ParameterFlowFactV2> parameter_flows;
+  std::vector<ReturnFlowFactV2> return_flows;
 
   // Components V2 does not refine (immutable v1:: proto messages).
   std::vector<v1::BasicBlockSummaryRef> basic_block_summaries;

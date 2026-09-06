@@ -190,6 +190,32 @@ StatusOr<core::StableId> StableValueMapper::CallSiteIdFor(
                             std::as_bytes(std::span(bytes.data(), bytes.size())));
 }
 
+core::StableId StableValueMapper::FormalParamId(
+    const ::llvm::Function& callee, std::uint32_t arg_index) const {
+  std::string bytes;
+  AppendTag(&bytes, 'V');
+  AppendTag(&bytes, 'A');
+  AppendOwnerVariant(&bytes, &callee);
+  AppendUInt(&bytes, arg_index);
+  AppendTypeFingerprint(&bytes,
+                        callee.getFunctionType()->getParamType(arg_index));
+  return core::MakeStableId(
+      core::IdKind::kValueRef,
+      std::as_bytes(std::span(bytes.data(), bytes.size())));
+}
+
+core::StableId StableValueMapper::ReturnValueId(
+    const ::llvm::Function& callee) const {
+  std::string bytes;
+  AppendTag(&bytes, 'V');
+  AppendTag(&bytes, 'R');
+  AppendOwnerVariant(&bytes, &callee);
+  AppendTypeFingerprint(&bytes, callee.getReturnType());
+  return core::MakeStableId(
+      core::IdKind::kValueRef,
+      std::as_bytes(std::span(bytes.data(), bytes.size())));
+}
+
 void StableValueMapper::AppendValue(std::string* out,
                                     const ::llvm::Value& value) const {
   if (const auto* arg = ::llvm::dyn_cast<::llvm::Argument>(&value)) {

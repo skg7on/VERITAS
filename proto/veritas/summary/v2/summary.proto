@@ -35,6 +35,8 @@ message FunctionSummary {
   repeated veritas.summary.v1.Unknown unknowns = 20;
   repeated veritas.summary.v1.Assumption assumptions = 21;
   repeated veritas.summary.v1.Dependency dependencies = 22;
+  repeated ParameterFlow parameter_flows = 23;
+  repeated ReturnFlow return_flows = 24;
   repeated veritas.summary.v1.ProvenanceRef provenance_refs = 30;
 }
 
@@ -125,6 +127,28 @@ message AliasFact {
   MemoryLocation left = 1;
   MemoryLocation right = 2;
   AliasKind kind = 3;
+  veritas.summary.v1.EpistemicState epistemic = 4;
+  string provenance_ref = 5;
+}
+
+// ParameterFlow — an actual argument flows to a callee's formal parameter at a
+// call site. `actual_id` is the caller's value ref; `formal_id` is the callee's
+// formal value ref.
+message ParameterFlow {
+  string call_site_id = 1;
+  string actual_id = 2;
+  string formal_id = 3;
+  veritas.summary.v1.EpistemicState epistemic = 4;
+  string provenance_ref = 5;
+}
+
+// ReturnFlow — a callee's return value flows to the caller's result value at a
+// call site. `return_id` is the callee's return value ref; `result_id` is the
+// call result value ref in the caller.
+message ReturnFlow {
+  string call_site_id = 1;
+  string return_id = 2;
+  string result_id = 3;
   veritas.summary.v1.EpistemicState epistemic = 4;
   string provenance_ref = 5;
 }

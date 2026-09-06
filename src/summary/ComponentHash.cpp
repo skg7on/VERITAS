@@ -504,6 +504,26 @@ std::string SerializeComponentSemanticV2(v1::ComponentKind kind,
       canonical += std::to_string(static_cast<int>(flow.epistemic()));
       canonical += '\0';
     }
+    for (const auto &flow : summary.parameter_flows()) {
+      canonical += flow.call_site_id();
+      canonical += '\0';
+      canonical += flow.actual_id();
+      canonical += '\0';
+      canonical += flow.formal_id();
+      canonical += '\0';
+      canonical += std::to_string(static_cast<int>(flow.epistemic()));
+      canonical += '\0';
+    }
+    for (const auto &flow : summary.return_flows()) {
+      canonical += flow.call_site_id();
+      canonical += '\0';
+      canonical += flow.return_id();
+      canonical += '\0';
+      canonical += flow.result_id();
+      canonical += '\0';
+      canonical += std::to_string(static_cast<int>(flow.epistemic()));
+      canonical += '\0';
+    }
     break;
   }
   case v1::COMPONENT_KIND_ALIAS_FACTS: {
@@ -584,6 +604,12 @@ std::string SerializeComponentEvidenceV2(v1::ComponentKind kind,
     for (const auto &flow : summary.value_flows()) {
       canonical += flow.provenance_ref();
     }
+    for (const auto &flow : summary.parameter_flows()) {
+      canonical += flow.provenance_ref();
+    }
+    for (const auto &flow : summary.return_flows()) {
+      canonical += flow.provenance_ref();
+    }
     break;
   }
   case v1::COMPONENT_KIND_ALIAS_FACTS: {
@@ -647,7 +673,8 @@ int32_t GetItemCountV2(v1::ComponentKind kind,
   case v1::COMPONENT_KIND_MEMORY_EFFECTS:
     return summary.memory_effects_size();
   case v1::COMPONENT_KIND_VALUE_FLOW:
-    return summary.value_flows_size();
+    return summary.value_flows_size() + summary.parameter_flows_size() +
+           summary.return_flows_size();
   case v1::COMPONENT_KIND_CONTROL_FLOW:
     return summary.control_flow_size();
   case v1::COMPONENT_KIND_RANGE_FACTS:
