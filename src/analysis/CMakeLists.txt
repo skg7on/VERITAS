@@ -44,6 +44,7 @@ target_link_libraries(veritas_analysis
 # built against (mirrors VERITAS_TESTS_SOURCE_DIR for test fixtures).
 target_compile_definitions(veritas_analysis PRIVATE
   VERITAS_LOGIC_MODELS_DIR="${CMAKE_SOURCE_DIR}/logic/models"
+  VERITAS_CPP_BUILD_FINGERPRINT="compiler_id=${CMAKE_CXX_COMPILER_ID}|compiler_version=${CMAKE_CXX_COMPILER_VERSION}|system_name=${CMAKE_SYSTEM_NAME}|system_processor=${CMAKE_SYSTEM_PROCESSOR}|build_type=${CMAKE_BUILD_TYPE}"
 )
 
 # The compiled Souffle worker is the production executor; bake its path in so

@@ -1,6 +1,6 @@
 # WPA and SummaryDB End-to-End Qualification Corpus Design Specification
 
-**Status:** Approved design; implementation pending
+**Status:** Implemented — the `semantic_zoo` corpus fixture and the `wpa-qualification` aggregates run through the production Soufflé WPA path; the corpus also runs end-to-end (differential + publication) in `ProjectAnalyzerWpaTest`
 
 **Scope:** M8R.4 orchestration completion and M8R.5 qualification
 

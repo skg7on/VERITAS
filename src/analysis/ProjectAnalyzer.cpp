@@ -121,6 +121,23 @@ std::string WpaConfigurationHash(const AnalysisConfig &config) {
   return HashString(canonical);
 }
 
+// The C++ conformance/emergency identity is derived from a canonical build
+// fingerprint (design §4.3): the baked compiler/platform/build-type/flags, the
+// VERITAS version and Git revision, and the rule-bundle version. It is distinct
+// from the digest-derived Souffle identity and cannot reuse it.
+std::string CppToolchainIdentity(const AnalysisConfig &config) {
+  const auto version = veritas::GetVersion();
+  std::string fingerprint = "veritas-cpp-build.v1;";
+  fingerprint += VERITAS_CPP_BUILD_FINGERPRINT;
+  fingerprint += ";version=";
+  fingerprint += std::to_string(version.major) + "." +
+                 std::to_string(version.minor) + "." +
+                 std::to_string(version.patch);
+  fingerprint += ";git_revision=" + version.git_revision;
+  fingerprint += ";rule_bundle=" + config.rule_bundle_version;
+  return "veritas-cpp-" + HashString(fingerprint);
+}
+
 // Compares two runs' completed components: every component key, canonical
 // facts, ExternalHash, and FixpointHash must agree (design §4.3).
 Status CompareCanonicalResults(const wpa::WpaRunResult &primary,
@@ -196,9 +213,7 @@ Status RunWpa(const std::filesystem::path &output_root,
         "souffle WPA was requested but provenance is not built");
 #endif
   } else {
-    // The C++ fallback identity is derived from the baked VERITAS version and
-    // Git revision; it is distinct from the digest-derived Souffle identity.
-    toolchain_identity = "veritas-cpp-" + veritas::GetVersion().git_revision;
+    toolchain_identity = CppToolchainIdentity(config);
   }
   descriptor.engine_toolchain_identity = toolchain_identity;
   auto run = facts::MakeAnalysisRun(descriptor);
@@ -272,7 +287,7 @@ Status RunWpa(const std::filesystem::path &output_root,
     facts::AnalysisRunDescriptor conformance_descriptor = descriptor;
     conformance_descriptor.engine = facts::EngineIdentity::kCppConformance;
     conformance_descriptor.engine_toolchain_identity =
-        "veritas-cpp-" + veritas::GetVersion().git_revision;
+        CppToolchainIdentity(config);
     auto conformance_run = facts::MakeAnalysisRun(conformance_descriptor);
     if (!conformance_run.ok()) {
       return conformance_run.status();

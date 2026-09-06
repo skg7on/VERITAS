@@ -157,7 +157,8 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
         "SELECT witness_id, selected, producer_kind, producer_id, rule_id,"
         " rule_version, analyzer_run_id, source_anchor_id, summary_id,"
         " description FROM provenance_nodes"
-        " WHERE run_id = ? AND output_fact_id = ? AND selected = 1",
+        " WHERE run_id = ? AND output_fact_id = ?"
+        " ORDER BY selected DESC, witness_id ASC",
         {run, task.fact_id});
     if (!node_rows.ok()) {
       return node_rows.status();
@@ -166,45 +167,50 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
       continue;  // rooted input: a leaf, no witness to expand
     }
 
-    if (node_count >= budget.max_nodes) {
-      truncated = true;
-      truncation_reason = "max_nodes";
-      break;
-    }
-    const auto& nr = (*node_rows)[0];
-    auto* node = graph.add_nodes();
-    node->set_analysis_run_id(run);
-    node->set_output_fact_id(task.fact_id);
-    node->set_witness_id(nr[0]);
-    node->set_selected(nr[1] == "1");
-    node->set_producer_kind(ToProtoProducer(
-        static_cast<ProducerKind>(std::strtol(nr[2].c_str(), nullptr, 10))));
-    node->set_producer_id(nr[3]);
-    node->set_rule_id(nr[4]);
-    node->set_rule_version(nr[5]);
-    node->set_analyzer_run_id(nr[6]);
-    node->set_source_anchor_id(nr[7]);
-    node->set_summary_id(nr[8]);
-    node->set_description(nr[9]);
-    ++node_count;
+    // Emit the selected witness first, then any retained alternatives, in
+    // deterministic witness-id order.
+    for (const auto& nr : *node_rows) {
+      if (node_count >= budget.max_nodes) {
+        truncated = true;
+        truncation_reason = "max_nodes";
+        break;
+      }
+      auto* node = graph.add_nodes();
+      node->set_analysis_run_id(run);
+      node->set_output_fact_id(task.fact_id);
+      node->set_witness_id(nr[0]);
+      node->set_selected(nr[1] == "1");
+      node->set_producer_kind(ToProtoProducer(
+          static_cast<ProducerKind>(std::strtol(nr[2].c_str(), nullptr, 10))));
+      node->set_producer_id(nr[3]);
+      node->set_rule_id(nr[4]);
+      node->set_rule_version(nr[5]);
+      node->set_analyzer_run_id(nr[6]);
+      node->set_source_anchor_id(nr[7]);
+      node->set_summary_id(nr[8]);
+      node->set_description(nr[9]);
+      ++node_count;
 
-    // Apply the budget's inclusion flags to the node we just emitted.
-    if (!budget.include_source_anchors) {
-      node->clear_source_anchor_id();
-    }
-    if (!budget.include_summary_ids) {
-      node->clear_summary_id();
-    }
-    if (!budget.include_datalog_derivation) {
-      node->clear_rule_id();
-      node->clear_rule_version();
+      // Apply the budget's inclusion flags to the node we just emitted.
+      if (!budget.include_source_anchors) {
+        node->clear_source_anchor_id();
+      }
+      if (!budget.include_summary_ids) {
+        node->clear_summary_id();
+      }
+      if (!budget.include_datalog_derivation) {
+        node->clear_rule_id();
+        node->clear_rule_version();
+      }
     }
 
+    // The breadth-first walk expands only the selected proof's edges.
+    const std::string selected_witness_id = (*node_rows)[0][0];
     auto edge_rows = store_.Query(
         "SELECT witness_id, input_kind, input_id, input_ordinal"
         " FROM provenance_edges WHERE run_id = ? AND output_fact_id = ?"
-        " ORDER BY input_ordinal",
-        {run, task.fact_id});
+        " AND witness_id = ? ORDER BY input_ordinal",
+        {run, task.fact_id, selected_witness_id});
     if (!edge_rows.ok()) {
       return edge_rows.status();
     }

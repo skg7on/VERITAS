@@ -324,7 +324,11 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   // locally derived result can produce, so they are collected as they are
   // emitted. Identity map relations are plumbing, not facts, and never appear
   // here.
-  std::vector<facts::SemanticRow> local_base_rows;
+  struct LocalBaseFact {
+    facts::SemanticRow row;
+    core::StableId owner;
+  };
+  std::vector<LocalBaseFact> local_base_rows;
   std::vector<core::StableId> function_ids(members->begin(), members->end());
   std::vector<core::StableId> call_site_ids;
   std::vector<core::StableId> memory_ids;
@@ -365,7 +369,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
                                                 : call.callee_symbol,
                      call.epistemic};
       }
-      local_base_rows.push_back(row);
+      local_base_rows.push_back(LocalBaseFact{row, member});
       semantic_edb.push_back(std::move(row));
 
       // Applicable models. A model describes an external function, which has
@@ -399,7 +403,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
                                      : facts::RelationId::kDirectRead;
       row.cells = {member,        *memory,     effect.range_kind,
                    effect.offset, effect.size, effect.epistemic};
-      local_base_rows.push_back(row);
+      local_base_rows.push_back(LocalBaseFact{row, member});
       semantic_edb.push_back(std::move(row));
     }
   }
@@ -558,12 +562,17 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   // the component was executed.
   std::vector<RootedInputFact> local_roots;
   local_roots.reserve(local_base_rows.size());
-  for (const auto &row : local_base_rows) {
-    auto fact = facts::MakeFact(row);
+  for (const auto &base : local_base_rows) {
+    auto fact = facts::MakeFact(base.row);
     if (!fact.ok())
       return fact.status();
-    local_roots.push_back(
-        RootedInputFact{.fact = std::move(*fact), .provenance_ref = "wpa:local"});
+    local_roots.push_back(RootedInputFact{
+        .fact = std::move(*fact),
+        .provenance_ref = "wpa:local",
+        .producer_id = "veritas",
+        .source_anchor_id = "",
+        .summary_id = core::ToString(base.owner),
+        .description = ""});
   }
 
   // 9. Derive the logical input hash. It covers the semantic configuration,

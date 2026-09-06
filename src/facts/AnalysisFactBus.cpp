@@ -14,6 +14,7 @@
 
 #include "veritas/facts/AnalysisFactBus.h"
 
+#include <map>
 #include <set>
 #include <span>
 #include <string>
@@ -224,6 +225,48 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
     if (!roots.contains(derived->fact_id)) {
       return Status::FailedPrecondition("witness leaf outside the root set");
     }
+  }
+
+  // Every witness result must be a published fact.
+  for (const auto& edge : batch.witnesses) {
+    if (!published_keys.contains(EncodeSemanticKey(edge.result.row))) {
+      return Status::FailedPrecondition(
+          "witness result is not a published fact");
+    }
+  }
+
+  // The witness DAG must be acyclic: every published fact's proof is a finite
+  // tree rooted in declared inputs. A cycle would let a fact justify itself.
+  std::map<std::string, std::vector<std::string>> dependencies;
+  std::map<std::string, int> input_count;
+  for (const auto& fact : batch.facts) {
+    input_count[EncodeSemanticKey(fact.row)] = 0;
+  }
+  for (const auto& edge : batch.witnesses) {
+    const std::string result_key = EncodeSemanticKey(edge.result.row);
+    const std::string input_key = EncodeSemanticKey(edge.input.row);
+    if (input_count.contains(input_key)) {
+      dependencies[input_key].push_back(result_key);
+      input_count[result_key] += 1;
+    }
+  }
+  std::vector<std::string> ready;
+  for (const auto& [key, count] : input_count) {
+    if (count == 0) {
+      ready.push_back(key);
+    }
+  }
+  std::size_t processed = 0;
+  for (std::size_t i = 0; i < ready.size(); ++i) {
+    ++processed;
+    for (const auto& dependent : dependencies[ready[i]]) {
+      if (--input_count[dependent] == 0) {
+        ready.push_back(dependent);
+      }
+    }
+  }
+  if (processed != input_count.size()) {
+    return Status::FailedPrecondition("witness DAG contains a cycle");
   }
 
   return Status::Ok();

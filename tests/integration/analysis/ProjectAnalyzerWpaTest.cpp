@@ -88,6 +88,12 @@ TEST(ProjectAnalyzerWpaTest, SemanticZooCorpusDifferentialAndPublication) {
   EXPECT_EQ(result->wpa_engine, WpaEngineMode::kSouffle);
   EXPECT_FALSE(result->wpa_run_id.empty());
   EXPECT_TRUE(result->wpa_diagnostics.empty());
+
+  // Determinism: a second identical run yields the same content-addressed run
+  // identity (and therefore the same engine-neutral descriptor).
+  auto again = analyzer.AnalyzeProject(request, config);
+  ASSERT_TRUE(again.ok()) << again.status().message();
+  EXPECT_EQ(again->wpa_run_id, result->wpa_run_id);
 }
 
 }  // namespace
