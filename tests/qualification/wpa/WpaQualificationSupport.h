@@ -177,6 +177,21 @@ inline void AddMemoryWrite(v2::FunctionSummary* summary,
   effect->set_provenance_ref("test:write");
 }
 
+inline void AddMemoryRead(v2::FunctionSummary* summary,
+                          std::string_view memory, bool known_range) {
+  auto* effect = summary->add_memory_effects();
+  effect->set_kind(v1::EFFECT_KIND_READ);
+  effect->mutable_location()->set_memory_location_id(
+      core::ToString(MemoryId(memory)));
+  auto* range = effect->mutable_location()->mutable_byte_range();
+  range->set_offset_known(known_range);
+  range->set_offset(known_range ? 0 : 0);
+  range->set_size_known(known_range);
+  range->set_size(known_range ? 8 : 0);
+  effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  effect->set_provenance_ref("test:read");
+}
+
 // Materializes the logical input for one component rooted at `root`.
 inline StatusOr<WpaLogicalComponentInput> InputFor(
     const std::vector<summary::SummaryArtifact>& artifacts,

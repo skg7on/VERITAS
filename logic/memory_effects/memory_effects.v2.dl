@@ -1,0 +1,42 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// memory_effects.v2.dl -- the combined memory-effects rule bundle.
+//
+// One component evaluates the read and the write closure together over the
+// same DirectCall/DirectRead/DirectWrite EDB, so the schema, the epistemic
+// functor, the semantic-key functors, and the shared DirectCallKey helper are
+// included exactly once here and the two domain bodies share them.
+
+.include "../schema/relations.v2.dl"
+.include "../common/epistemic.dl"
+.include "../common/semantic_key.dl"
+
+// Shared semantic-key helper. Both the MayWrite and MayRead witness rules cite
+// DirectCall inputs, so the helper is declared once rather than re-declared in
+// each body (Souffle rejects a duplicate relation declaration).
+.decl DirectCallKey(call_site_id:CallSiteId, caller_id:FunctionId,
+                    callee_id:FunctionId, dispatch:Dispatch,
+                    epistemic:Epistemic, key:symbol)
+DirectCallKey(cs, f, g, d, e,
+  cat(@veritas_key_header_v1("DirectCall", 5),
+  cat(@veritas_key_id_v1(css),
+  cat(@veritas_key_id_v1(fs),
+  cat(@veritas_key_id_v1(gs),
+  cat(@veritas_key_field_enum_v1(d), @veritas_key_field_enum_v1(e))))))) :-
+  DirectCall(cs, f, g, d, e), CallSiteMap(cs, css),
+  FunctionMap(f, fs), FunctionMap(g, gs).
+
+.include "may_write.v2.dl"
+.include "may_read.v2.dl"

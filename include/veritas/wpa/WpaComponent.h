@@ -48,6 +48,16 @@ enum class WpaComponentKind : std::uint8_t {
 // tokens are part of the contract and must not be renamed casually.
 std::string_view ComponentKindName(WpaComponentKind component);
 
+// The (derived, successor-support) relation pair a component evaluates. The
+// reachability component has one pair; the memory-effects component evaluates
+// the write and read closures together and therefore has two.
+struct ComponentDomain {
+  facts::RelationId derived;
+  facts::RelationId support;
+};
+
+std::vector<ComponentDomain> ComponentDomains(WpaComponentKind component);
+
 // Run-local dual identity. Dense IDs are assigned in sorted stable-ID order
 // and never escape their AnalysisRun; every dense cell in the EDB is
 // reconstructible through these maps.

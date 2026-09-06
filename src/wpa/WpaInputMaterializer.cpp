@@ -229,20 +229,6 @@ std::span<const sem::FunctionModel> ModelsForCallee(
   return base.empty() ? direct : models.Lookup(base);
 }
 
-// The support relation that carries a successor result for this component.
-facts::RelationId SupportRelationFor(WpaComponentKind component) {
-  return component == WpaComponentKind::kReachability
-             ? facts::RelationId::kSupportReachableCall
-             : facts::RelationId::kSupportMayWrite;
-}
-
-// The derived relation whose successor results this component may cite.
-facts::RelationId DerivedRelationFor(WpaComponentKind component) {
-  return component == WpaComponentKind::kReachability
-             ? facts::RelationId::kReachableCall
-             : facts::RelationId::kMayWrite;
-}
-
 // Canonical encoding of a semantic row. Used both to order the EDB and to hash
 // it, so ordering and hashing can never disagree.
 std::string EncodeSemanticRow(const facts::SemanticRow &row) {
@@ -280,6 +266,15 @@ std::string EncodeSemanticRow(const facts::SemanticRow &row) {
 std::string_view ComponentKindName(WpaComponentKind component) {
   return component == WpaComponentKind::kReachability ? "reachability"
                                                       : "memory-effects";
+}
+
+std::vector<ComponentDomain> ComponentDomains(WpaComponentKind component) {
+  if (component == WpaComponentKind::kReachability) {
+    return {{facts::RelationId::kReachableCall,
+             facts::RelationId::kSupportReachableCall}};
+  }
+  return {{facts::RelationId::kMayWrite, facts::RelationId::kSupportMayWrite},
+          {facts::RelationId::kMayRead, facts::RelationId::kSupportMayRead}};
 }
 
 StatusOr<WpaLogicalComponentInput>
@@ -410,17 +405,20 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
 
   // 4. Successor results enter as explicit support rows carrying stable
   // support-fact identities. They are inputs, never results of this component.
-  const facts::RelationId derived = DerivedRelationFor(request.component);
-  const facts::RelationId support = SupportRelationFor(request.component);
+  std::map<facts::RelationId, facts::RelationId> support_for_derived;
+  for (const auto &domain : ComponentDomains(request.component)) {
+    support_for_derived[domain.derived] = domain.support;
+  }
   std::vector<RootedInputFact> successor_roots;
   std::vector<core::StableId> fact_ids;
   for (const auto &fact : request.successor_support) {
-    if (fact.row.relation != derived) {
+    const auto support_it = support_for_derived.find(fact.row.relation);
+    if (support_it == support_for_derived.end()) {
       return Status::FailedPrecondition(
           "successor support fact does not belong to this component");
     }
     facts::SemanticRow row;
-    row.relation = support;
+    row.relation = support_it->second;
     row.cells = fact.row.cells;
     for (const auto &cell : row.cells) {
       if (const auto *id = std::get_if<core::StableId>(&cell)) {

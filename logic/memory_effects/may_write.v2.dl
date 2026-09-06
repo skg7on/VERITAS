@@ -22,10 +22,10 @@
 // the id, two writes at different offsets in one object would derive two
 // distinct MayWrite facts and "does f write object o" would have no single
 // answer. DirectWrite keeps range_kind, offset, and size as its own columns.
-
-.include "../schema/relations.v2.dl"
-.include "../common/epistemic.dl"
-.include "../common/semantic_key.dl"
+//
+// This file is a rule body included by memory_effects.v2.dl; the schema and
+// common functors are included there once so the MayWrite and MayRead bodies
+// share one projection, and the shared DirectCallKey helper lives there too.
 
 .decl MayWrite(function_id:FunctionId, memory_id:MemoryId,
                epistemic:Epistemic)
@@ -67,18 +67,6 @@ DirectWriteKey(f, x, rk, off, sz, e,
   cat(@veritas_key_field_unsigned_v1(sz),
       @veritas_key_field_enum_v1(e)))))))) :-
   DirectWrite(f, x, rk, off, sz, e), FunctionMap(f, fs), MemoryMap(x, xs).
-
-.decl DirectCallKey(call_site_id:CallSiteId, caller_id:FunctionId,
-                    callee_id:FunctionId, dispatch:Dispatch,
-                    epistemic:Epistemic, key:symbol)
-DirectCallKey(cs, f, g, d, e,
-  cat(@veritas_key_header_v1("DirectCall", 5),
-  cat(@veritas_key_id_v1(css),
-  cat(@veritas_key_id_v1(fs),
-  cat(@veritas_key_id_v1(gs),
-  cat(@veritas_key_field_enum_v1(d), @veritas_key_field_enum_v1(e))))))) :-
-  DirectCall(cs, f, g, d, e), CallSiteMap(cs, css),
-  FunctionMap(f, fs), FunctionMap(g, gs).
 
 .decl SupportMayWriteKey(function_id:FunctionId, memory_id:MemoryId,
                          epistemic:Epistemic, key:symbol)

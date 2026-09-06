@@ -108,7 +108,7 @@ StatusOr<SouffleProvenance> SouffleProvenance::Load(
       "runner_library_sha256",
       "functor_library_sha256",
       "reachability_bundle_sha256",
-      "may_write_bundle_sha256",
+      "memory_effects_bundle_sha256",
       "compiler_id",
       "compiler_version",
       "compiler_path",

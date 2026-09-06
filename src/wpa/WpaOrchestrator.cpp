@@ -15,6 +15,7 @@
 #include "veritas/wpa/WpaOrchestrator.h"
 
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,10 +39,10 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
     const SccGraph& scc_graph, core::StableId scc_id, WpaComponentKind component,
     const std::map<WpaComponentKey, std::vector<facts::AnalysisFact>>&
         completed_facts) {
-  const facts::RelationId expected =
-      component == WpaComponentKind::kReachability
-          ? facts::RelationId::kReachableCall
-          : facts::RelationId::kMayWrite;
+  std::set<facts::RelationId> expected;
+  for (const auto& domain : ComponentDomains(component)) {
+    expected.insert(domain.derived);
+  }
   std::vector<facts::AnalysisFact> support;
   auto successors = scc_graph.Successors(scc_id);
   if (!successors.ok()) {
@@ -53,7 +54,7 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
       continue;
     }
     for (const auto& fact : it->second) {
-      if (fact.row.relation == expected) {
+      if (expected.contains(fact.row.relation)) {
         support.push_back(fact);
       }
     }

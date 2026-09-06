@@ -74,7 +74,7 @@ veritas_m9_entry_test(SouffleWpaExecutorTest souffle-production)
       "-DRUNNER=$<TARGET_FILE:veritas_souffle_runner>"
       "-DFUNCTOR=$<TARGET_FILE:veritas_souffle_functors>"
       "-DREACH_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_reach.cpp"
-      "-DMAYWRITE_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_maywrite.cpp"
+      "-DMEMORY_EFFECTS_BUNDLE=${VERITAS_SOUFFLE_GEN_DIR}/v2_memory_effects.cpp"
       "-DEXPECTED_REVISION=${VERITAS_SOUFFLE_PINNED_REVISION}"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/VerifySouffleProvenance.cmake"
   )
