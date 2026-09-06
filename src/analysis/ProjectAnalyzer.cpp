@@ -14,6 +14,7 @@
 
 #include "veritas/analysis/ProjectAnalyzer.h"
 
+#include <map>
 #include <span>
 #include <string>
 
@@ -30,7 +31,9 @@
 #include "veritas/core/Hash.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Version.h"
+#include "veritas/facts/AnalysisFactBus.h"
 #include "veritas/facts/AnalysisRun.h"
+#include "veritas/facts/FactStore.h"
 #include "veritas/summary/SummaryArtifact.h"
 #include "veritas/wpa/CppConformanceExecutor.h"
 #include "veritas/wpa/SccStateRepository.h"
@@ -115,6 +118,41 @@ std::string WpaConfigurationHash(const AnalysisConfig &config) {
   append_field(&canonical, config.rule_bundle_version);
   append_field(&canonical, config.model_bundle_version);
   return HashString(canonical);
+}
+
+// Compares two runs' completed components: every component key, canonical
+// facts, ExternalHash, and FixpointHash must agree (design §4.3).
+Status CompareCanonicalResults(const wpa::WpaRunResult &primary,
+                               const wpa::WpaRunResult &conformance) {
+  std::map<wpa::WpaComponentKey, const wpa::WpaComponentCompletion *>
+      primary_map;
+  for (const auto &completion : primary.completed_components) {
+    primary_map[completion.key] = &completion;
+  }
+  std::map<wpa::WpaComponentKey, const wpa::WpaComponentCompletion *>
+      conformance_map;
+  for (const auto &completion : conformance.completed_components) {
+    conformance_map[completion.key] = &completion;
+  }
+  if (primary_map.size() != conformance_map.size()) {
+    return Status::FailedPrecondition("conformance component count differs");
+  }
+  for (const auto &[key, primary_completion] : primary_map) {
+    const auto it = conformance_map.find(key);
+    if (it == conformance_map.end()) {
+      return Status::FailedPrecondition("conformance is missing a component");
+    }
+    const auto &c = it->second->result;
+    const auto &p = primary_completion->result;
+    if (p.external_hash != c.external_hash ||
+        p.fixpoint_hash != c.fixpoint_hash) {
+      return Status::FailedPrecondition("conformance result hashes differ");
+    }
+    if (p.facts != c.facts) {
+      return Status::FailedPrecondition("conformance canonical facts differ");
+    }
+  }
+  return Status::Ok();
 }
 
 // Runs the WPA orchestrator over the just-published summaries and records the
@@ -223,6 +261,65 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
     return wpa_result.status();
   }
   result->wpa_run_id = core::ToString(wpa_result->run.run_id);
+
+  // Optional C++ conformance oracle: run a second, separately identified
+  // kCppConformance execution over the same logical inputs and require the
+  // canonical results to agree before any publication (design §4.3).
+  if (config.run_cpp_conformance_oracle &&
+      config.wpa_engine == WpaEngineMode::kSouffle) {
+    facts::AnalysisRunDescriptor conformance_descriptor = descriptor;
+    conformance_descriptor.engine = facts::EngineIdentity::kCppConformance;
+    conformance_descriptor.engine_toolchain_identity =
+        "veritas-cpp-" + veritas::GetVersion().git_revision;
+    auto conformance_run = facts::MakeAnalysisRun(conformance_descriptor);
+    if (!conformance_run.ok()) {
+      return conformance_run.status();
+    }
+
+    auto conformance_executor = wpa::CppConformanceExecutor::Create(
+        facts::EngineIdentity::kCppConformance,
+        conformance_descriptor.engine_toolchain_identity);
+    if (!conformance_executor.ok()) {
+      return conformance_executor.status();
+    }
+
+    wpa::WpaRunRequest conformance_request = wpa_request;
+    conformance_request.run = *conformance_run;
+    wpa::WpaOrchestrator conformance_orchestrator(*conformance_executor, *repo,
+                                                  &scc_state);
+    auto conformance_result =
+        conformance_orchestrator.Run(conformance_request);
+    if (!conformance_result.ok()) {
+      repo->MarkIncomplete(wpa_result->run);
+      result->wpa_diagnostics =
+          std::string(conformance_result.status().message());
+      return conformance_result.status();
+    }
+    if (Status mismatch =
+            CompareCanonicalResults(*wpa_result, *conformance_result);
+        !mismatch.ok()) {
+      repo->MarkIncomplete(wpa_result->run);
+      repo->MarkIncomplete(conformance_result->run);
+      result->wpa_diagnostics = std::string(mismatch.message());
+      return mismatch;
+    }
+  }
+
+  // Build the canonical batch and publish it through the fact bus to a fact
+  // store sink on the shared metadata database, so the run's facts become
+  // explainable (design §3).
+  auto batch = facts::MakeAnalysisFactBatch(*wpa_result);
+  auto fact_store = facts::FactStore::Open(request.output_root);
+  if (!fact_store.ok()) {
+    return fact_store.status();
+  }
+  facts::AnalysisFactBus bus(*repo);
+  bus.AddSink("fact-store", *fact_store);
+  if (Status published = bus.Publish(batch); !published.ok()) {
+    result->wpa_diagnostics = std::string(published.message());
+    return published;
+  }
+
   result->wpa_diagnostics =
       config.wpa_engine == WpaEngineMode::kCppEmergency
           ? "degraded: cpp-emergency WPA"

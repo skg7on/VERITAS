@@ -56,5 +56,19 @@ TEST(ProjectAnalyzerWpaTest, ExplicitEmergencyUsesDistinctRunIdentity) {
   EXPECT_FALSE(emergency->wpa_diagnostics.empty());
 }
 
+// The conformance oracle runs a second, separately identified C++ execution
+// and requires its canonical results to agree with Souffle before publication.
+TEST(ProjectAnalyzerWpaTest, ConformanceOracleRunsWhenConfigured) {
+  ProjectAnalyzer analyzer;
+  auto config = AnalysisConfig::Default();
+  config.run_cpp_conformance_oracle = true;
+
+  auto result = analyzer.AnalyzeProject(FixtureRequest(), config);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+  EXPECT_EQ(result->wpa_engine, WpaEngineMode::kSouffle);
+  EXPECT_FALSE(result->wpa_run_id.empty());
+  EXPECT_TRUE(result->wpa_diagnostics.empty());
+}
+
 }  // namespace
 }  // namespace veritas::analysis
