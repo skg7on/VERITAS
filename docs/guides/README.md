@@ -18,8 +18,9 @@ the complete target platform.
 | RocksDB summary CAS and SQLite metadata/CPG/dependency schema | **Available now** | `<output>/objects` and `<output>/metadata.db` |
 | Native CPG `callees` and budgeted `flow` queries | **Available now** | `veritas-query` |
 | Summary component diff and dependency impact for v1 artifacts | **Available now** | `veritas-diff` and C++ APIs; add a version-neutral overload for v2 |
-| SCC graph, C++ fixed point, Souffle export/runner, and persisted M8 state | **Available as library/tested M8 components** | `veritas::wpa` and `veritas::facts`; not invoked by `veritas-build analyze` |
-| Durable Fact/Provenance Store and explain API | **Approved target (M9)** | Design and plan only |
+| SCC WPA with compiled in-process Soufflé, exact run/cache identities, and persisted incremental state | **Available now** | `veritas-build analyze` uses Soufflé by default; `--wpa-engine cpp-emergency` is an explicit degraded mode |
+| Durable Fact/Provenance Store and bounded explain API | **Available now** | `AnalysisFactBus`, `FactStore`, `ProvenanceStore`, and `veritas-explain` |
+| M8R/M9 qualification and entry gate | **Available now** | `python3 tools/check_m9_entry.py --build-dir build` |
 | Evidence Builder semantic queries and typed handoff | **Approved target (M10B)** | Design and plan only |
 | Validated Evidence IR model and serialization | **Approved target (M10C)** | Design and plan only |
 | LLVM `.bc` / `.ll` ingestion | **Approved target (M11)** | `--bitcode` is currently rejected |
@@ -57,6 +58,8 @@ Guides summarize but do not replace the project contracts:
 - [Whole-program analysis architecture](../architecture/02-whole-program-analysis-architecture.md)
 - [SummaryDB storage architecture](../architecture/03-summarydb-storage-architecture.md)
 - [Evidence IR architecture](../architecture/04-evidence-ir-architecture.md)
+- [M8R–M9 contract reconciliation](../specs/milestones/m08r-m09-contract-reconciliation-design-spec.md)
+- [M9 Fact/Provenance Store and explain API](../specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md)
 - [M10B Evidence Builder design](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md)
 - [M10C Evidence IR design](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md)
 - [M11/M12 adapter boundary](../specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md)

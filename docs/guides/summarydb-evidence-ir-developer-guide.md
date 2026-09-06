@@ -54,7 +54,7 @@ lives in one database engine:
 | --- | --- | --- |
 | Object Store | Content-addressed immutable summaries and, in the target, provider artifacts and Evidence slices | RocksDB summary CAS is implemented |
 | Metadata Store | Repositories, revisions, builds, identities, configurations, bindings, and publication state | SQLite implementation is present |
-| Fact Store | Normalized current and historical native/provider relations plus run bindings | Run-local fact types exist; durable M9 publication is a target |
+| Fact Store | Normalized current and historical native/provider relations plus run bindings | Native WPA facts, current/history bindings, witness DAGs, and atomic batch receipts are implemented; provider publication is an M12 target |
 | Graph Index | Native CPG and provider-projection adjacency/query indexes | Native thin CPG is implemented; provider projections are M12 targets |
 | Dependency Index | Reverse component dependencies and bounded impact traversal | Native summary dependencies are implemented |
 | Evidence Cache | Materialized, snapshot-pinned claim slices | M10B/M10C target |
@@ -62,8 +62,9 @@ lives in one database engine:
 
 WPA executors sit beside these layers: they consume immutable summaries and
 run-local projections, then publish validated results through the storage
-boundary. Souffle or an engine-native graph is therefore never itself the
-SummaryDB.
+boundary. Compiled Soufflé is the production recursive engine; C++ is an
+explicit emergency mode or a separately identified conformance oracle. Neither
+engine's private graph is itself the SummaryDB.
 
 ## 2. Current code map
 
@@ -78,9 +79,9 @@ The paths below exist now unless marked as a target.
 | Function Summary IR | `proto/veritas/summary/`, `src/summary/`, `include/veritas/summary/` | v1/v2 schema, builders, canonicalization, component hashes, version-neutral artifacts |
 | Summary persistence | `src/summarydb/`, `include/veritas/summarydb/` | RocksDB CAS, SQLite metadata/schema, current bindings, deltas, reverse dependencies |
 | Native CPG | `src/cpg/`, `src/analysis/cpg/`, `include/veritas/cpg/` | Thin projection, canonical identity, persistence, bounded queries |
-| Run-local facts | `src/facts/`, `include/veritas/facts/` | `relations.v2`, base facts, dense IDs, Souffle export/runner, rooted proof reconstruction |
-| Whole-program analysis | `src/wpa/`, `include/veritas/wpa/` | Call/SCC graphs, C++ fixpoint, state persistence, propagation |
-| CLI tools | `src/tools/` | Analyze and query, v1 diff/impact, and a version-only explanation skeleton |
+| Durable facts and provenance | `src/facts/`, `include/veritas/facts/`, `proto/veritas/fact/` | `relations.v2`, canonical facts, witness v2, Fact Bus validation, schema-v4 publication, and bounded explanation |
+| Whole-program analysis | `src/wpa/`, `include/veritas/wpa/` | Call/SCC graphs, compiled in-process Soufflé execution, C++ conformance/emergency execution, exact result caching, state persistence, and propagation |
+| CLI tools | `src/tools/` | Analyze with WPA, native CPG queries, v1 diff/impact, and bounded fact explanation |
 | Evidence Builder | `include/veritas/evidence/`, `src/evidence/` | **M10B target; not present** |
 | Evidence IR implementation | `proto/veritas/evidence/`, `include/veritas/evidence/`, `src/evidence/` | **M10C target; not present** |
 | Provider substrate/importers | planned `include/veritas/provider/`, `src/provider/` families | **M12 target; not present** |
@@ -88,7 +89,10 @@ The paths below exist now unless marked as a target.
 The current source analysis entry point is
 `ProjectAnalyzer::AnalyzeProject`. It resolves the project, builds the private
 module, extracts and merges summary.v2 facts, projects the native CPG, and
-publishes both through `ProjectPublicationCoordinator`.
+publishes both through `ProjectPublicationCoordinator`. It then runs
+component-scoped WPA, persists run/cache/SCC state, validates an
+`AnalysisFactBatch`, and publishes canonical facts and provenance to the same
+SummaryDB.
 
 ## 3. Work with version-neutral summaries
 
@@ -151,8 +155,16 @@ extractor must:
   exceptions or RTTI.
 
 If an SVF fact refines an LLVM-local draft, merge by the stable owning
-`FunctionVariantID`. Never correlate stages through `llvm::Value*` addresses
-after the stage boundary.
+`FunctionVariantID`. Index whole-program calls, memory effects, and aliases by
+their owner once, then merge only the facts for that draft; rescanning every
+fact for every function recreates quadratic behavior. Never correlate stages
+through `llvm::Value*` addresses after the stage boundary.
+
+SVF may clone plain external-library models into the private LLVM module.
+Those synthetic definitions have no program `OriginMap` identity and are
+intentionally omitted from the native CPG. A real program function missing its
+identity remains an error; do not synthesize an ID merely to admit a modeled
+external.
 
 ### 4.3 Extend the summary schema and builder
 
@@ -228,41 +240,55 @@ At minimum, test:
 
 ## 5. Add a whole-program relation or domain
 
-Whole-program execution consumes summaries, not raw source or an engine-native
-graph. The implemented fact builder and fixpoint path is currently v1-only:
+Whole-program execution consumes version-neutral summaries, not raw source or
+an engine-native graph. The production path is:
 
 ```text
-summary::v1::FunctionSummary set
-  -> SummaryFactBuilder
+summary::SummaryArtifact set (the native pipeline currently wraps summary.v2)
+  -> WpaInputMaterializer
   -> typed relations.v2 facts
   -> stable-to-dense ID maps for one AnalysisRun
-  -> C++ fixpoint and/or Souffle executor
-  -> canonical facts plus immediate proof inputs
-  -> convergence/component state
+  -> one deterministic call graph and SCC graph
+  -> WpaOrchestrator over full (SccId, WpaComponentKind) keys
+  -> compiled in-process Soufflé executor by default
+  -> canonical facts, rooted inputs, and immediate proof edges
+  -> exact result cache plus convergence/component state
+  -> AnalysisFactBatch validation
+  -> atomic FactStore publication and current provenance binding
 ```
 
-The native analyzer currently publishes v2 summaries, so no released
-orchestration connects its output to this v1-only WPA path. Before extending
-WPA for current analyzer output, add a version-neutral `SummaryArtifact`
-boundary to fact construction and domain execution; do not down-cast v2 or
-reinterpret its bytes as v1.
+Do not reintroduce the retired `FixpointEngine`, `FactTuple`, `FactSchema`,
+`SummaryFactBuilder`, `SouffleExporter`, or the former
+`veritas::facts::SouffleRunner` subprocess wrapper. New domains extend the V2
+`AnalysisFact`/`MakeFact` pipeline and compiled Soufflé rule bundles. The C++
+executor must remain separately identified and is used only for conformance or
+an explicit emergency run.
 
 ### 5.1 Relation requirements
 
 A new relation needs:
 
 - a stable registered name and fixed typed column schema;
-- an arity and cell-domain validator;
+- a relation arity and cell-domain validator;
+- a `RuleSpec` arity for every derivation rule;
 - explicit epistemic representation;
 - a canonical `FactID` independent of run, dense IDs, tuple order, engine, and
   witness;
 - conversion from summaries/base facts;
 - monotone join/weakening semantics where recursion uses it;
-- finite immediate proof inputs for every derived row; and
+- finite immediate proof inputs for every derived row;
+- a shared `derivation_key` for raw edges from one rule firing;
+- a persisted, witness-dependent derivation identity over result, rule, and
+  ordered inputs; and
 - deterministic duplicate and alternate-proof selection.
 
 Engine-native tuple IDs and dense integers are run-local conveniences. They
 must never leak into durable facts, Evidence, or provider identities.
+
+The canonicalizer rejects missing, duplicate, or out-of-range input ordinals.
+Rooted inputs carry structured producer, provenance, source-anchor, summary,
+and description fields through `WpaRunResult` and `AnalysisFactBatch`; do not
+collapse this evidence into an opaque diagnostic string.
 
 ### 5.2 Recursion and external visibility
 
@@ -275,12 +301,68 @@ Budget exhaustion, timeout, or engine failure must produce explicit incomplete
 state. Do not publish a partial replacement or silently fall back from one
 engine identity to another.
 
+The current in-process Soufflé runner no longer has the subprocess boundary
+that enforced per-component timeout and memory ceilings. Do not advertise
+those execution-limit fields as hard isolation; deployments that require hard
+limits must contain the `veritas-build` process.
+
+Key all completed facts and successor support by the full
+`WpaComponentKey`; SCC-only storage lets one domain overwrite another. Reuse a
+component only through a versioned, length-prefixed `ResultCacheDescriptor`
+covering the logical input, SCC/component, schemas, rule/model bundles,
+SVF/WPA configuration, and exact engine/toolchain identity. The current cache
+loader revalidates the metadata descriptor fields, requested SCC/component and
+logical-input identity, every semantic FactID, and recomputed
+fixpoint/external hashes. The later Fact Bus gate validates witness closure and
+acyclicity before any sink publication.
+
+Production Soufflé identity comes from the verified generated provenance
+manifest and artifact digest. A C++ conformance run uses a distinct canonical
+build fingerprint and RunId; any result mismatch fails closed before Fact
+Store publication.
+
 ### 5.3 M9 boundary
 
-The current repository has run-local fact types and proof reconstruction, but
-the durable M9 Fact/Provenance Store and `AnalysisFactBatch` publication
-boundary are not implemented. When adding durable publication, follow the M9
-specification rather than writing raw tuple rows directly into SQLite.
+M9 is implemented. A successful production WPA run is reduced to one
+`AnalysisFactBatch`. Its v2 ID covers the run, expected/completed component
+keys and result hashes, rooted-input IDs, facts, witnesses, and diagnostics.
+Structured `rooted_input_facts` evidence is transported to publication but is
+not yet included in `DeriveBatchId`; extend the encoding before treating a new
+root-evidence field as content-addressed. `AnalysisFactBus::Validate`
+recomputes the current batch identity, checks component-set completeness and
+duplicate keys, validates fact/witness membership and acyclicity, and rejects
+invalid input before any sink sees it.
+
+`FactStore::Publish` writes canonical root and derived facts, occurrence
+bindings, and witness records together with a schema-v4 receipt keyed by
+`(run_id, batch_id)`. For a derived witness, it projects `producer_id`,
+`source_anchor_id`, `summary_id`, and `description` from the first directly
+rooted input it encounters. The full per-root structure is not durable:
+`provenance_ref` is not stored and multiple root-evidence records are not
+retained independently. Re-delivery of the same receipt is a successful no-op;
+a different batch preserves the prior occurrence as history. Semantic
+`FactID` remains witness-independent, while `selected_witness_id` identifies
+the selected derivation.
+
+`ProvenanceStore::Explain(run_id, fact_id, budget)` requires the current
+binding, emits retained witness alternatives in selected-first/witness-ID
+order, and expands the first selected proof subject to depth/node budgets.
+When multiple historical batches for the same run/fact retain selected nodes,
+callers must currently verify that the expanded witness matches the binding's
+`selected_witness_id`; the traversal does not yet use that field to choose the
+node. Product code should use `FactStore` and `ProvenanceStore`, not write or
+query their SQLite tables as an application API. The equivalent supported CLI
+is `veritas-explain fact`.
+
+For a new WPA relation or rule, extend the qualification corpus with:
+
+- byte-identical Soufflé/C++ canonical facts and witnesses;
+- input-permutation determinism;
+- at least two components over multiple SCCs when successor support is used;
+- malformed-arity, cyclic, unrooted, and alternative-derivation cases;
+- cache descriptor changes and corrupt-cache rejection;
+- batch-field mutation and idempotent redelivery cases; and
+- the applicable `m9-entry` criterion registration with no skip path.
 
 ## 6. Add an external provider adapter
 

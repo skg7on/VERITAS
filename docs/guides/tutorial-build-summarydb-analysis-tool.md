@@ -3,7 +3,9 @@
 This tutorial builds a small in-tree C++ tool over APIs available today. The
 tool first lists current summaries without assuming v1 or v2, then opens the
 current native CPG and queries callees. The final section shows how the existing
-diff/dependency APIs support incremental analysis tools.
+diff/dependency APIs support incremental analysis tools. The input analysis
+also publishes WPA facts and provenance; this tutorial deliberately keeps its
+sample reader focused on the summary/CPG boundary.
 
 The tutorial is intentionally API-first. SQL examples in the generation manual
 are useful for diagnostics, but product tooling should depend on semantic APIs
@@ -20,8 +22,10 @@ build/bin/veritas-build analyze \
   --output /absolute/path/to/summarydb
 ```
 
-Record the printed revision and build-variant IDs. This tutorial refers to
-them as `<revision-id>` and `<build-variant-id>`.
+Record the printed revision, build-variant, CPG projection, and WPA run IDs.
+This tutorial refers to the first two as `<revision-id>` and
+`<build-variant-id>`. Use the run ID with `veritas-explain` when inspecting a
+fact discovered through the diagnostic workflow in the generation manual.
 
 ## 2. Write a version-neutral summary lister
 
@@ -346,6 +350,8 @@ ctest --preset default
 git diff --check
 ```
 
-For richer semantic queries and Evidence generation, continue with the
+For current durable-fact inspection, use the
+[`veritas-explain` workflow](summarydb-generation-manual.md#35-inspect-a-generated-database).
+For richer semantic queries and future Evidence generation, continue with the
 [developer guide](summarydb-evidence-ir-developer-guide.md) and the
 [Agent review tutorial](tutorial-agent-code-review.md).
