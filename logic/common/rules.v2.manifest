@@ -34,4 +34,6 @@ wpa.flow.global.transitive.v2	30	GlobalFlow
 wpa.effect.unknown.call.v2	10	UnknownEffect
 wpa.effect.unknown.support.v2	20	UnknownEffect
 wpa.effect.unknown.transitive.v2	30	UnknownEffect
+wpa.effect.unknown.external.v2	10	UnknownEffect
+wpa.effect.unknown.feature.v2	10	UnknownEffect
 wpa.coverage.incomplete.v2	10	SoundnessCoverage

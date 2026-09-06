@@ -98,6 +98,19 @@ Program ProgramFor(const QualificationCase& c) {
     AddUnknownCall(&f, "f", "unresolved");
     return {{f}, "f"};
   }
+  // A direct call to a function with no summary (external, unmodeled) yields
+  // an unmodeled_external unknown effect.
+  if (c.name == "effects_external") {
+    auto f = V2Summary("f");
+    AddDirectCall(&f, "f", "ext");
+    return {{f}, "f"};
+  }
+  // An unsupported construct yields an unsupported_feature unknown effect.
+  if (c.name == "effects_feature") {
+    auto f = V2Summary("f");
+    AddUnknown(&f, "unsupported_construct");
+    return {{f}, "f"};
+  }
   // The mixed C/C++ semantic_zoo corpus's recursion shapes: a self-recursive
   // function and a mutually recursive pair, sharing a leaf. The entry point
   // lives in the mutual/self-recursive SCC, so the derived reachability facts
@@ -213,6 +226,8 @@ INSTANTIATE_TEST_SUITE_P(
                           "reader"},
         QualificationCase{"flow", WpaComponentKind::kFlow, "f"},
         QualificationCase{"effects", WpaComponentKind::kEffects, "f"},
+        QualificationCase{"effects_external", WpaComponentKind::kEffects, "f"},
+        QualificationCase{"effects_feature", WpaComponentKind::kEffects, "f"},
         QualificationCase{"semantic_zoo_recursive",
                           WpaComponentKind::kReachability,
                           "zoo_recursive_entry"},

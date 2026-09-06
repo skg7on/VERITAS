@@ -230,6 +230,9 @@ const RelationTable& Table() {
                       {"complete", ColumnDomain::kUint64},
                       {"epistemic", ColumnDomain::kEpistemic}},
                      CoverageStates()},
+      RelationSchema{"UnmodeledExternal", RelationOwnership::kEdb,
+                     {{"function_id", ColumnDomain::kFunctionId}},
+                     NoEpistemic()},
   };
   return table;
 }

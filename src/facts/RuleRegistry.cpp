@@ -29,7 +29,7 @@ namespace {
 // Priorities are grouped per derived relation: a rule that reaches a result
 // directly outranks one that reaches it through a successor's support, which
 // outranks a locally transitive derivation. Only the ordering matters.
-constexpr std::size_t kRuleCount = 18;
+constexpr std::size_t kRuleCount = 20;
 
 using RuleTable = std::array<RuleSpec, kRuleCount>;
 
@@ -59,6 +59,10 @@ const RuleTable& Table() {
                2},
       RuleSpec{"wpa.effect.unknown.transitive.v2", 30,
                RelationId::kUnknownEffect, 2},
+      RuleSpec{"wpa.effect.unknown.external.v2", 10, RelationId::kUnknownEffect,
+               1},
+      RuleSpec{"wpa.effect.unknown.feature.v2", 10, RelationId::kUnknownEffect,
+               1},
       RuleSpec{"wpa.coverage.incomplete.v2", 10, RelationId::kSoundnessCoverage,
                1},
   };
