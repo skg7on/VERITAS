@@ -14,6 +14,7 @@
 
 #include "veritas/analysis/ProjectAnalyzer.h"
 
+#include <filesystem>
 #include <map>
 #include <span>
 #include <string>
@@ -157,7 +158,8 @@ Status CompareCanonicalResults(const wpa::WpaRunResult &primary,
 
 // Runs the WPA orchestrator over the just-published summaries and records the
 // run identity, engine, and any degraded-mode or failure diagnostic.
-Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &config,
+Status RunWpa(const std::filesystem::path &output_root,
+              const AnalysisConfig &config,
               const std::vector<summary::v2::FunctionSummary> &summaries,
               const build::AnalysisManifest &manifest,
               ProjectAnalysisResult *result) {
@@ -207,7 +209,7 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
   // and the persisted manifest context all live in <output_root>/metadata.db.
   // The SCC scheduler needs the revision/build-variant rows the publication
   // coordinator wrote there, so it must share this store, not a side database.
-  auto repo = wpa::WpaRunRepository::Open(request.output_root);
+  auto repo = wpa::WpaRunRepository::Open(output_root);
   if (!repo.ok())
     return repo.status();
 
@@ -309,7 +311,7 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
   // store sink on the shared metadata database, so the run's facts become
   // explainable (design §3).
   auto batch = facts::MakeAnalysisFactBatch(*wpa_result);
-  auto fact_store = facts::FactStore::Open(request.output_root);
+  auto fact_store = facts::FactStore::Open(output_root);
   if (!fact_store.ok()) {
     return fact_store.status();
   }
@@ -437,7 +439,8 @@ public:
     }
 
     // Run the recursive WPA over the just-published summaries.
-    auto wpa_status = RunWpa(request, config, summaries, *manifest, &result);
+    auto wpa_status =
+        RunWpa(input->output_root, config, summaries, *manifest, &result);
     if (!wpa_status.ok()) {
       result.wpa_diagnostics = std::string(wpa_status.message());
       return wpa_status;
