@@ -71,6 +71,64 @@ Program ProgramFor(const QualificationCase& c) {
     AddMemoryWrite(&writer, "mem:buffer", /*known_range=*/true);
     return {{writer}, "writer"};
   }
+  // The mixed C/C++ semantic_zoo corpus's recursion shapes: a self-recursive
+  // function and a mutually recursive pair, sharing a leaf. The entry point
+  // lives in the mutual/self-recursive SCC, so the derived reachability facts
+  // exercise both cycle shapes at once.
+  if (c.name == "semantic_zoo_recursive") {
+    auto entry = V2Summary("zoo_recursive_entry");
+    AddDirectCall(&entry, "zoo_recursive_entry", "self_recursive");
+    AddDirectCall(&entry, "zoo_recursive_entry", "mutual_even");
+
+    auto self = V2Summary("self_recursive");
+    AddDirectCall(&self, "self_recursive", "self_recursive");
+    AddDirectCall(&self, "self_recursive", "writing_leaf");
+
+    auto even = V2Summary("mutual_even");
+    AddDirectCall(&even, "mutual_even", "mutual_odd");
+    AddDirectCall(&even, "mutual_even", "writing_leaf");
+
+    auto odd = V2Summary("mutual_odd");
+    AddDirectCall(&odd, "mutual_odd", "mutual_even");
+    AddDirectCall(&odd, "mutual_odd", "writing_leaf");
+
+    return {{entry, self, even, odd, V2Summary("writing_leaf")},
+            "zoo_recursive_entry"};
+  }
+  // A function-pointer formal parameter invokes one of several admissible
+  // callback targets: callback dispatch with MAY epistemic, matching the
+  // semantic_zoo callback-parameter classification.
+  if (c.name == "semantic_zoo_callback") {
+    auto parameter = V2Summary("zoo_callback_parameter");
+    AddCallbackCall(&parameter, "zoo_callback_parameter", "zoo_callback_left");
+    AddCallbackCall(&parameter, "zoo_callback_parameter", "zoo_callback_right");
+    return {{parameter, V2Summary("zoo_callback_left"),
+             V2Summary("zoo_callback_right")},
+            "zoo_callback_parameter"};
+  }
+  // Virtual dispatch through a base pointer resolves to two admissible
+  // overrides (single and multiple inheritance): virtual dispatch with MAY
+  // epistemic, matching the semantic_zoo virtual-dispatch shapes.
+  if (c.name == "semantic_zoo_virtual") {
+    auto select = V2Summary("zoo_virtual_select");
+    AddVirtualCall(&select, "zoo_virtual_select", "zoo_single_override");
+    AddVirtualCall(&select, "zoo_virtual_select", "zoo_multiple_override");
+    return {{select, V2Summary("zoo_single_override"),
+             V2Summary("zoo_multiple_override")},
+            "zoo_virtual_select"};
+  }
+  // The semantic_zoo memory shapes: one function writes several distinct
+  // memory locations, mixing known and unknown byte ranges (globals, stack
+  // slots, and an aliased/overlapping access).
+  if (c.name == "semantic_zoo_memory") {
+    auto shapes = V2Summary("zoo_memory_shapes");
+    AddMemoryWrite(&shapes, "mem:zoo_global", /*known_range=*/true);
+    AddMemoryWrite(&shapes, "mem:zoo_static", /*known_range=*/true);
+    AddMemoryWrite(&shapes, "mem:zoo_stack", /*known_range=*/true);
+    AddMemoryWrite(&shapes, "mem:zoo_union_overlap", /*known_range=*/false);
+    AddMemoryWrite(&shapes, "mem:zoo_alias", /*known_range=*/false);
+    return {{shapes}, "zoo_memory_shapes"};
+  }
   return {};
 }
 
@@ -89,6 +147,7 @@ TEST_P(WpaDifferentialQualificationTest, SouffleEqualsCppOracle) {
   // run ID) but agree on every published fact and on the externally visible
   // hash, over byte-identical logical input.
   EXPECT_EQ(pair->souffle.facts, pair->cpp.facts);
+  EXPECT_EQ(pair->souffle.witnesses, pair->cpp.witnesses);
   EXPECT_EQ(pair->souffle.external_hash, pair->cpp.external_hash);
   EXPECT_EQ(pair->souffle.fixpoint_hash, pair->cpp.fixpoint_hash);
   // The case must actually derive something, not merely agree on an empty
@@ -122,7 +181,17 @@ INSTANTIATE_TEST_SUITE_P(
         QualificationCase{"callback", WpaComponentKind::kReachability,
                           "dispatch"},
         QualificationCase{"memory", WpaComponentKind::kMemoryEffects,
-                          "writer"}));
+                          "writer"},
+        QualificationCase{"semantic_zoo_recursive",
+                          WpaComponentKind::kReachability,
+                          "zoo_recursive_entry"},
+        QualificationCase{"semantic_zoo_callback",
+                          WpaComponentKind::kReachability,
+                          "zoo_callback_parameter"},
+        QualificationCase{"semantic_zoo_virtual", WpaComponentKind::kReachability,
+                          "zoo_virtual_select"},
+        QualificationCase{"semantic_zoo_memory", WpaComponentKind::kMemoryEffects,
+                          "zoo_memory_shapes"}));
 
 }  // namespace
 }  // namespace veritas::wpa::qualification
