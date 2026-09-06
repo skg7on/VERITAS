@@ -70,5 +70,25 @@ TEST(ProjectAnalyzerWpaTest, ConformanceOracleRunsWhenConfigured) {
   EXPECT_TRUE(result->wpa_diagnostics.empty());
 }
 
+// The mixed C/C++ semantic_zoo corpus runs end-to-end through the production
+// pipeline: local extraction, SVF, Soufflé/C++ conformance, and canonical fact
+// publication. Publication happens inside RunWpa, so a successful analysis
+// proves the batch was validated and durably published.
+TEST(ProjectAnalyzerWpaTest, SemanticZooCorpusDifferentialAndPublication) {
+  const ProjectAnalysisRequest request{
+      .project_root = testing::FixtureProject("semantic_zoo"),
+      .output_root = testing::FixtureProject("semantic_zoo") / ".veritas",
+  };
+  auto config = AnalysisConfig::Default();
+  config.run_cpp_conformance_oracle = true;
+
+  ProjectAnalyzer analyzer;
+  auto result = analyzer.AnalyzeProject(request, config);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+  EXPECT_EQ(result->wpa_engine, WpaEngineMode::kSouffle);
+  EXPECT_FALSE(result->wpa_run_id.empty());
+  EXPECT_TRUE(result->wpa_diagnostics.empty());
+}
+
 }  // namespace
 }  // namespace veritas::analysis

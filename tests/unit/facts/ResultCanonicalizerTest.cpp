@@ -32,7 +32,6 @@ namespace {
 namespace sem = analysis::semantic;
 
 constexpr std::string_view kDirect = "wpa.reachability.direct.v2";
-constexpr std::string_view kSupport = "wpa.reachability.support.v2";
 constexpr std::string_view kTransitive = "wpa.reachability.transitive.v2";
 
 core::StableId FunctionId(std::string_view name) {
@@ -122,14 +121,20 @@ TEST(ResultCanonicalizerTest, RejectsOutOfRangeOrdinal) {
 }
 
 // Two results that cite only each other are a closed loop with no root. Such a
-// cycle can justify anything, so neither result may be published.
+// cycle can justify anything, so neither result may be published. Each
+// transitive derivation has its full arity (a direct-call root plus a
+// reachable-call input) but the reachable inputs mutually depend, leaving the
+// cycle unrooted.
 TEST(ResultCanonicalizerTest, RejectsCyclicUnrootedWitnesses) {
-  const std::vector<RootedInputFact> roots = {};
+  const std::vector<RootedInputFact> roots = {Root(DirectCall("f", "g")),
+                                              Root(DirectCall("g", "f"))};
   RawWpaEvaluation raw;
-  raw.results = {Reachable("f", "g"), Reachable("g", "h")};
+  raw.results = {Reachable("f", "h"), Reachable("g", "h")};
   raw.witnesses = {
-      Edge(Reachable("f", "g"), kSupport, Reachable("g", "h"), 0),
-      Edge(Reachable("g", "h"), kSupport, Reachable("f", "g"), 0)};
+      Edge(Reachable("f", "h"), kTransitive, DirectCall("f", "g"), 0),
+      Edge(Reachable("f", "h"), kTransitive, Reachable("g", "h"), 1),
+      Edge(Reachable("g", "h"), kTransitive, DirectCall("g", "f"), 0),
+      Edge(Reachable("g", "h"), kTransitive, Reachable("f", "h"), 1)};
 
   auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
   ASSERT_FALSE(result.ok());
