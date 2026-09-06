@@ -61,6 +61,14 @@ message(STATUS "VERITAS: SVF shared libs = ${BUILD_SHARED_LIBS}")
 # SVF is a pinned third-party dependency treated as an opaque library.
 set(SVF_WARN_AS_ERROR OFF CACHE BOOL "Disable -Werror for SVF" FORCE)
 
+# Initialize SVF's ABI switches from the LLVM package before entering the
+# vendored project. Leaving SVF's defaults in place makes its configure step
+# announce incompatible settings and repair them only after target creation.
+set(SVF_ENABLE_RTTI ${LLVM_ENABLE_RTTI} CACHE BOOL
+    "Match SVF RTTI to LLVM" FORCE)
+set(SVF_ENABLE_EXCEPTIONS ${LLVM_ENABLE_EH} CACHE BOOL
+    "Match SVF exception handling to LLVM" FORCE)
+
 # EXCLUDE_FROM_ALL keeps SVF's stand-alone front-end binaries (wpa, ae, dvf,
 # saber, svf-ex, llvm2svf, ...) out of the default `all` target. SvfCore and
 # SvfLLVM will still be built on demand because veritas_third_party_svf (and

@@ -32,7 +32,6 @@ target_link_libraries(veritas_analysis
     veritas_svf_analysis
     veritas_analysis_pipeline
     veritas_analysis_cpg
-    veritas_analysis_semantic
     veritas_cpg
     veritas_build
     veritas_summarydb

@@ -9,6 +9,7 @@ records this hierarchy migration.
 
 Additional project/tooling plans:
 
+- [Build warning cleanup](build-warning-cleanup-implementation-plan.md)
 - [Claude Code Evidence IR review plugin](veritas-claude-code-evidence-review-plugin-implementation-plan.md)
 - [WPA and SummaryDB qualification corpus](wpa-summarydb-qualification-corpus-implementation-plan.md)
 
