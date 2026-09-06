@@ -215,6 +215,11 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     witness_id_by_fact[fact->fact_id] = entry.witness_id;
   }
 
+  std::map<core::StableId, RootedInputFact> root_evidence;
+  for (const auto& root : batch.rooted_input_facts) {
+    root_evidence[root.fact.fact_id] = root;
+  }
+
   Status s = metadata_store_.BeginTransaction();
   if (!s.ok()) {
     return s;
@@ -263,6 +268,22 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     node.selected = true;
     node.producer_kind = ProducerKindForEngine(batch.run.engine);
     node.rule_id = entry.ordered_edges.front().rule_id;
+    // Populate provenance metadata from a rooted input's structured evidence,
+    // so the explanation graph reports source anchors and summaries.
+    for (const WitnessEdge& edge : entry.ordered_edges) {
+      auto input = MakeFact(edge.input.row);
+      if (!input.ok()) {
+        return rollback(input.status());
+      }
+      const auto root = root_evidence.find(input->fact_id);
+      if (root != root_evidence.end()) {
+        node.producer_id = root->second.producer_id;
+        node.source_anchor_id = root->second.source_anchor_id;
+        node.summary_id = root->second.summary_id;
+        node.description = root->second.description;
+        break;
+      }
+    }
     s = provenance.PutNode(node);
     if (!s.ok()) {
       return rollback(s);

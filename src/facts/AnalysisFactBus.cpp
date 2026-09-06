@@ -98,6 +98,7 @@ AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
   batch.expected_components = result.expected_components;
   batch.completed_components = result.completed_components;
   batch.rooted_input_fact_ids = result.rooted_input_fact_ids;
+  batch.rooted_input_facts = result.rooted_input_facts;
   batch.facts = result.facts;
   batch.witnesses = result.witnesses;
   batch.diagnostics = result.diagnostics;

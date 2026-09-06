@@ -173,12 +173,14 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
         return logical.status();
       }
 
-      // Collect the rooted input fact IDs for the batch.
+      // Collect the rooted input fact IDs and their full evidence for the batch.
       for (const auto& root : logical->local_roots) {
         result.rooted_input_fact_ids.push_back(root.fact.fact_id);
+        result.rooted_input_facts.push_back(root);
       }
       for (const auto& root : logical->successor_roots) {
         result.rooted_input_fact_ids.push_back(root.fact.fact_id);
+        result.rooted_input_facts.push_back(root);
       }
 
       const ResultCacheDescriptor cache_descriptor = MakeResultCacheDescriptor(
