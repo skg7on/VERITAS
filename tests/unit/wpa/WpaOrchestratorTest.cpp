@@ -19,6 +19,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -44,6 +45,11 @@ core::StableId FunctionId(std::string_view name) {
 
 core::StableId CallSiteId(std::string_view name) {
   return core::MakeStableId(core::IdKind::kCallSite,
+                            std::as_bytes(std::span(name.data(), name.size())));
+}
+
+core::StableId MemoryId(std::string_view name) {
+  return core::MakeStableId(core::IdKind::kMemoryRef,
                             std::as_bytes(std::span(name.data(), name.size())));
 }
 
@@ -82,6 +88,15 @@ void AddCall(v2::FunctionSummary* summary, std::string_view from,
   call->set_dispatch(v2::DISPATCH_KIND_DIRECT);
   call->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   call->set_provenance_ref("test:call");
+}
+
+void AddWrite(v2::FunctionSummary* summary, std::string_view memory) {
+  auto* effect = summary->add_memory_effects();
+  effect->set_kind(v1::EFFECT_KIND_WRITE);
+  effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  effect->set_provenance_ref("test:write");
+  auto* location = effect->mutable_location();
+  location->set_memory_location_id(core::ToString(MemoryId(memory)));
 }
 
 // a -> b -> c: three SCCs in a chain, so the reverse-topological order has c
@@ -136,6 +151,76 @@ class FailingExecutor : public WpaExecutor {
       const WpaExecutionEnvelope&, const WpaExecutionLimits&) const override {
     return Status::Internal("injected failure");
   }
+};
+
+// Emits one derived fact per component, grounded in the materializer's own
+// local roots, and records the successor support it observes. Reachability
+// derives Reachable(caller, callee) from a DirectCall root; MemoryEffects
+// derives MayWrite(function, memory) from a DirectWrite root.
+class FactEmittingExecutor : public WpaExecutor {
+ public:
+  struct Observation {
+    core::StableId scc_id;
+    WpaComponentKind component;
+    std::vector<facts::AnalysisFact> successor_roots;
+  };
+
+  facts::EngineIdentity identity() const override {
+    return facts::EngineIdentity::kSouffle;
+  }
+  std::string_view toolchain_identity() const override {
+    return "test-toolchain";
+  }
+
+  StatusOr<facts::RawWpaEvaluation> Execute(
+      const WpaExecutionEnvelope& envelope, const WpaExecutionLimits&) const override {
+    const auto& logical = envelope.logical;
+    observations_.push_back(
+        Observation{logical.scc_id, logical.component, {}});
+    for (const auto& root : logical.successor_roots) {
+      observations_.back().successor_roots.push_back(root.fact);
+    }
+
+    facts::RawWpaEvaluation raw;
+    const bool reach = logical.component == WpaComponentKind::kReachability;
+    const facts::RelationId input_relation =
+        reach ? facts::RelationId::kDirectCall
+              : facts::RelationId::kDirectWrite;
+    for (const auto& root : logical.local_roots) {
+      if (root.fact.row.relation != input_relation) {
+        continue;
+      }
+      const auto& in = root.fact.row;
+      facts::SemanticRow result;
+      std::string rule;
+      if (reach) {
+        // DirectCall {site, caller, callee, dispatch, epistemic} ->
+        // ReachableCall {caller, callee, epistemic}.
+        result = facts::SemanticRow{facts::RelationId::kReachableCall,
+                                    {in.cells[1], in.cells[2], in.cells[4]}};
+        rule = "wpa.reachability.direct.v2";
+      } else {
+        // DirectWrite {fn, memory, range, offset, size, epistemic} ->
+        // MayWrite {fn, memory, epistemic}.
+        result = facts::SemanticRow{facts::RelationId::kMayWrite,
+                                    {in.cells[0], in.cells[1], in.cells[5]}};
+        rule = "wpa.memory.may_write.direct.v2";
+      }
+      raw.results.push_back(result);
+      raw.witnesses.push_back(
+          facts::WitnessEdge{.result = facts::SemanticKey{result},
+                             .rule_id = rule,
+                             .input = facts::SemanticKey{in},
+                             .input_ordinal = 0});
+      break;  // one derived fact per component
+    }
+    return raw;
+  }
+
+  const std::vector<Observation>& observations() const { return observations_; }
+
+ private:
+  mutable std::vector<Observation> observations_;
 };
 
 TEST(WpaOrchestratorTest, RunsSccsInReverseTopologicalOrder) {
@@ -247,6 +332,73 @@ TEST(WpaOrchestratorTest, RepeatedRunSchedulesNoPredecessors) {
   auto second = orchestrator.Run(request);
   ASSERT_TRUE(second.ok());
   EXPECT_TRUE(second->scheduled_predecessors.empty());
+
+  std::filesystem::remove_all(db);
+}
+
+// Reachability and MemoryEffects run together over a chain a -> b -> c; each
+// function writes a distinct memory so MemoryEffects has a local root too.
+// After both components complete for b, a's Reachability successor support must
+// still contain b's ReachableCall(b, c) rather than being overwritten by b's
+// later MemoryEffects completion.
+TEST(WpaOrchestratorTest, TwoComponentsPreserveReachabilitySupport) {
+  auto a = V2Summary("a");
+  AddCall(&a, "a", "b");
+  AddWrite(&a, "ma");
+  auto b = V2Summary("b");
+  AddCall(&b, "b", "c");
+  AddWrite(&b, "mb");
+  auto c = V2Summary("c");
+  AddWrite(&c, "mc");
+  const std::vector<summary::SummaryArtifact> program = {a, b, c};
+
+  auto graph = CallGraph::FromSummaries(program);
+  ASSERT_TRUE(graph.ok());
+  auto scc = SccGraph::Build(*graph);
+  ASSERT_TRUE(scc.ok());
+
+  const auto db = TempDbPath();
+  auto repo = WpaRunRepository::Open(db);
+  ASSERT_TRUE(repo.ok());
+
+  FactEmittingExecutor executor;
+  WpaOrchestrator orchestrator(executor, *repo);
+
+  const std::array<WpaComponentKind, 2> components = {
+      WpaComponentKind::kReachability, WpaComponentKind::kMemoryEffects};
+  WpaRunRequest request;
+  request.run = MakeManifest(facts::EngineIdentity::kSouffle);
+  request.summaries = program;
+  request.components = components;
+
+  auto result = orchestrator.Run(request);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+
+  auto scc_a = scc->SccForFunction(FunctionId("a"));
+  ASSERT_TRUE(scc_a.ok());
+
+  const FactEmittingExecutor::Observation* a_reach = nullptr;
+  for (const auto& obs : executor.observations()) {
+    if (obs.scc_id == *scc_a &&
+        obs.component == WpaComponentKind::kReachability) {
+      a_reach = &obs;
+    }
+  }
+  ASSERT_NE(a_reach, nullptr);
+
+  // Successor support is re-projected into the support relation by the
+  // materializer (kSupportReachableCall mirrors kReachableCall's columns).
+  bool saw_reachable_bc = false;
+  for (const auto& root : a_reach->successor_roots) {
+    const auto& row = root.row;
+    if (row.relation == facts::RelationId::kSupportReachableCall &&
+        std::get<core::StableId>(row.cells[0]) == FunctionId("b") &&
+        std::get<core::StableId>(row.cells[1]) == FunctionId("c")) {
+      saw_reachable_bc = true;
+    }
+  }
+  EXPECT_TRUE(saw_reachable_bc)
+      << "a's reachability successor support lost b's reachable call";
 
   std::filesystem::remove_all(db);
 }

@@ -29,6 +29,7 @@
 #include "veritas/facts/AnalysisRun.h"
 #include "veritas/summary/SummaryArtifact.h"
 #include "veritas/wpa/CppConformanceExecutor.h"
+#include "veritas/wpa/SccStateRepository.h"
 #include "veritas/wpa/SouffleWpaExecutor.h"
 #include "veritas/wpa/WpaOrchestrator.h"
 #include "veritas/wpa/WpaRunRepository.h"
@@ -114,9 +115,15 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
   if (!run.ok())
     return run.status();
 
-  auto repo = wpa::WpaRunRepository::Open(request.output_root / "wpa");
+  // One output root owns one SummaryDB: the WPA run state, SCC topology, facts,
+  // and the persisted manifest context all live in <output_root>/metadata.db.
+  // The SCC scheduler needs the revision/build-variant rows the publication
+  // coordinator wrote there, so it must share this store, not a side database.
+  auto repo = wpa::WpaRunRepository::Open(request.output_root);
   if (!repo.ok())
     return repo.status();
+
+  wpa::SccStateRepository scc_state(repo->metadata_store());
 
   // The WPA consumes summaries as the variant type; the published drafts are
   // all v2, so wrap them.
@@ -145,7 +152,7 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
     if (config.wpa_engine == WpaEngineMode::kSouffle) {
 #ifdef VERITAS_SOUFFLE_WORKER
       wpa::SouffleWpaExecutor executor(VERITAS_SOUFFLE_WORKER, toolchain_identity);
-      wpa::WpaOrchestrator orchestrator(executor, *repo);
+      wpa::WpaOrchestrator orchestrator(executor, *repo, &scc_state);
       return orchestrator.Run(wpa_request);
 #else
       return Status::FailedPrecondition(
@@ -156,7 +163,7 @@ Status RunWpa(const ProjectAnalysisRequest &request, const AnalysisConfig &confi
         facts::EngineIdentity::kCppEmergency, toolchain_identity);
     if (!executor.ok())
       return executor.status();
-    wpa::WpaOrchestrator orchestrator(*executor, *repo);
+    wpa::WpaOrchestrator orchestrator(*executor, *repo, &scc_state);
     return orchestrator.Run(wpa_request);
   }();
 
