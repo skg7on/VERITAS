@@ -41,3 +41,5 @@ ReachableCall	idb	source_id:function_id,target_id:function_id,epistemic:epistemi
 MayWrite	idb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
 SupportReachableCall	edb	source_id:function_id,target_id:function_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
 SupportMayWrite	edb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+MayRead	idb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+SupportMayRead	edb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN

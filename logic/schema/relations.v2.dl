@@ -84,6 +84,9 @@
                            epistemic:Epistemic)
 .decl SupportMayWrite(function_id:FunctionId, memory_id:MemoryId,
                       epistemic:Epistemic)
+.decl SupportMayRead(function_id:FunctionId, memory_id:MemoryId,
+                     epistemic:Epistemic)
 
 .input SupportReachableCall(IO=file, filename="SupportReachableCall.facts")
 .input SupportMayWrite(IO=file, filename="SupportMayWrite.facts")
+.input SupportMayRead(IO=file, filename="SupportMayRead.facts")

@@ -184,6 +184,16 @@ const RelationTable& Table() {
                       {"memory_id", ColumnDomain::kMemoryId},
                       {"epistemic", ColumnDomain::kEpistemic}},
                      WithoutMustNot()},
+      RelationSchema{"MayRead", RelationOwnership::kIdb,
+                     {{"function_id", ColumnDomain::kFunctionId},
+                      {"memory_id", ColumnDomain::kMemoryId},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     WithoutMustNot()},
+      RelationSchema{"SupportMayRead", RelationOwnership::kEdb,
+                     {{"function_id", ColumnDomain::kFunctionId},
+                      {"memory_id", ColumnDomain::kMemoryId},
+                      {"epistemic", ColumnDomain::kEpistemic}},
+                     WithoutMustNot()},
   };
   return table;
 }

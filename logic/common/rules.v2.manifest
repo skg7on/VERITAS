@@ -23,3 +23,6 @@ wpa.reachability.transitive.v2	30	ReachableCall
 wpa.memory.may_write.direct.v2	10	MayWrite
 wpa.memory.may_write.support.v2	20	MayWrite
 wpa.memory.may_write.transitive.v2	30	MayWrite
+wpa.memory.may_read.direct.v2	10	MayRead
+wpa.memory.may_read.support.v2	20	MayRead
+wpa.memory.may_read.transitive.v2	30	MayRead
