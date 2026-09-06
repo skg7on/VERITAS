@@ -1,7 +1,7 @@
 # VERITAS SummaryDB Ingest Adapters — Milestone Design Specification
 
-**Status:** M11 design approved; its existing implementation plan must be
-replaced before implementation. M12 details are superseded by
+**Status:** M11 design and replacement implementation plan approved; pending
+implementation. M12 details are superseded by
 `m12-joern-cpg-summarydb-importer-design-spec.md`.
 **Updated:** 2026-09-06
 **Scope:** M11 unified LLVM IR acquisition, persisted IR artifacts, analysis
@@ -202,11 +202,11 @@ The installed API remains free of LLVM and Clang native types.
 namespace veritas::analysis {
 
 struct ProjectInputSpec {
-  std::filesystem::path project_dir;
+  std::filesystem::path project_root;
 };
 
 struct BitcodeInputSpec {
-  enum class Kind { LinkedFile, ModuleDirectory };
+  enum class Kind { kLinkedFile, kModuleDirectory };
   Kind kind;
   std::filesystem::path path;
 };
@@ -214,14 +214,14 @@ struct BitcodeInputSpec {
 using AnalysisInput = std::variant<ProjectInputSpec, BitcodeInputSpec>;
 
 struct JobCount {
-  enum class Mode { Auto, Explicit };
-  Mode mode = Mode::Auto;
+  enum class Mode { kAuto, kExplicit };
+  Mode mode = Mode::kAuto;
   std::size_t value = 0;
 };
 
 struct AnalysisRequest {
   AnalysisInput input;
-  std::filesystem::path output_dir;
+  std::filesystem::path output_root;
   JobCount jobs;
   AnalysisConfig config;
 };
@@ -242,7 +242,8 @@ class ProjectAnalyzer {
 
   // Compatibility wrapper for existing callers.
   StatusOr<ProjectAnalysisResult> AnalyzeProject(
-      const ProjectAnalysisRequest& request);
+      const ProjectAnalysisRequest& request,
+      const AnalysisConfig& config);
 };
 
 }  // namespace veritas::analysis
@@ -255,10 +256,11 @@ the caller cannot lose identity, fidelity, or artifact provenance:
 namespace veritas::analysis::pipeline {
 
 struct AcquiredProgramIr {
-  ProgramContext context;
+  AnalysisManifest manifest;
   ProgramIr program_ir;
   IrSnapshotDescriptor snapshot;
   InputFidelity fidelity;
+  std::vector<InputUnitArtifact> units;
 };
 
 class ProgramIrSource {
@@ -302,7 +304,7 @@ shape.
 
 ### 7.2 Scheduling and failure
 
-`CodegenScheduler` uses a bounded pool of the resolved job count. Translation
+`InputUnitScheduler` uses a bounded pool of the resolved job count. Translation
 units are assigned a stable manifest ordinal. Completion order may vary, but
 all externally visible collections are sorted by that ordinal or a canonical
 ID before serialization.
@@ -386,6 +388,9 @@ The selected SummaryDB directory has the following additional layout:
   llvm/
     objects/
       <sha256>.bc
+    cache/
+      input-units/
+        <cache-key>.json
     snapshots/
       <acquisition-id>/
         tus/
@@ -412,6 +417,12 @@ Concurrent object insertion uses temporary files in the destination filesystem
 and atomic put-if-absent publication. A racing writer must verify that an
 existing object has the expected digest before treating the insertion as a
 cache hit.
+
+Each `llvm/cache/input-units/<cache-key>.json` record maps one dependency-
+complete project cache key to its canonical bitcode object digest and input-
+unit metadata. Cache records are atomically replaced only after their object is
+durable. A missing, malformed, schema-incompatible, or digest-mismatched record
+is a cache miss.
 
 For project input, root `manifest.json` retains the existing M1 analysis
 manifest. For anonymous external input, it is a schema-discriminated external
@@ -446,8 +457,8 @@ normalized semantic compile command
 + identity annotation and acquisition schema versions
 ```
 
-Timestamps are not semantic inputs. The current empty `preprocessor_hash`
-placeholder is insufficient; implementation must populate the include-closure
+Timestamps are not semantic inputs. The currently empty `preprocessor_hash`
+field is insufficient; implementation must populate the include-closure
 digest using Clang dependency scanning or an equivalent compiler-owned
 dependency computation. Exact cache hits skip CodeGen and reuse the immutable
 bitcode object. A missing dependency digest is a cache miss, never permission to
@@ -650,10 +661,9 @@ Implementation is divided into four reviewable stages:
    fidelity enforcement, cross-input equivalence tests, the large-project
    benchmark report, and user documentation.
 
-The replacement implementation plan must name exact files, tests, commands,
-and commits for these stages. It must supersede rather than append to
-`docs/plans/milestones/m11-external-ir-adapter-implementation-plan.md`, whose
-current scope covers only the narrower external-IR adapter.
+The approved replacement implementation plan names exact files, tests,
+commands, and commits for these stages. It supersedes the former narrow scope
+at `docs/plans/milestones/m11-external-ir-adapter-implementation-plan.md`.
 
 Documentation work in the implementation includes:
 
