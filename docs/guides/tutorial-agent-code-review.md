@@ -1,8 +1,9 @@
 # Tutorial: Build an Agent-Based Code-Review Tool
 
 This tutorial shows how a future review tool should consume VERITAS SummaryDB
-and Evidence IR. It is an integration blueprint for the approved M9, M10B,
-M10C, and M12C contracts—not a runnable tutorial in the current tree.
+and Evidence IR. It builds on delivered M9 facts/provenance and the approved
+M10B, M10C, and M12C contracts; the complete Agent workflow is not runnable in
+the current tree.
 
 The key design goal is narrow:
 
@@ -10,21 +11,23 @@ The key design goal is narrow:
 > hypotheses or proof obligations. It cannot convert its own output into an
 > authoritative program fact.
 
-## 1. Wait for the required platform gates
+## 1. Use the delivered M9 boundary and wait for the remaining gates
 
 Do not build production Agent integration directly on the current SQLite
 schema or native CPG CLI. The safe boundary depends on:
 
-| Gate | Required delivery |
-| --- | --- |
-| M9 | Durable canonical facts, run bindings, selected rooted witnesses, snapshot reads, and `Explain(run_id, fact_id)` |
-| M10A | Recursive domains needed by the first memory-safety demo |
-| M10B | Bounded semantic query APIs, query-completion facts, and immutable `EvidenceBuildInput` |
-| M10C | Validated `EvidenceCase`, canonical `EvidenceID`, EIR-T, Protobuf, and diagnostic EIR JSON |
-| M12C, optional | Pinned provider selection, fusion/conflict records, provider-aware completion and Evidence dependencies |
+| Gate | Status | Required delivery |
+| --- | --- | --- |
+| M9 | **Delivered** | Durable canonical facts, current/history run bindings, witness-dependent selected proofs, bounded `Explain(run_id, fact_id)`, and atomic batch receipts |
+| M10A | Planned | Recursive domains needed by the first memory-safety demo |
+| M10B | Approved target | Bounded semantic query APIs, query-completion facts, and immutable `EvidenceBuildInput` |
+| M10C | Approved target | Validated `EvidenceCase`, canonical `EvidenceID`, EIR-T, Protobuf, and diagnostic EIR JSON |
+| M12C, optional | Approved target | Pinned provider selection, fusion/conflict records, provider-aware completion and Evidence dependencies |
 
-The current repository has approved designs/plans for these gates, but does not
-yet expose `EvidenceQueryService` or `EvidenceCaseBuilder`.
+The current repository exposes `FactStore`, `ProvenanceStore::Explain`, and the
+bounded `veritas-explain fact` CLI. It does not yet expose
+`EvidenceQueryService` or `EvidenceCaseBuilder`, so an Agent must not replace
+those missing semantic/completeness boundaries with raw SQL or CPG access.
 
 ## 2. Choose one registered finding type
 
@@ -97,6 +100,11 @@ get_unknowns(scope_id, budget)
 explain_fact(run_id, fact_id, budget)
 expand_summary(summary_id, component, budget)
 ```
+
+The `explain_fact` implementation can delegate to the delivered
+`ProvenanceStore::Explain` boundary (or `veritas-explain` for operator use).
+The other calls remain M10B semantic-query work and must share one pinned
+snapshot before this becomes a production Agent tool surface.
 
 Each response should use the same envelope:
 
@@ -408,7 +416,8 @@ or a privileged database client.
 
 Before calling an Agent-based reviewer production-ready, confirm:
 
-- M9/M10B/M10C gates and required conformance suites pass;
+- the delivered M9 gate continues to pass, and M10B/M10C gates plus their
+  required conformance suites are delivered;
 - every Agent input has one validated `EvidenceID` and immutable snapshot;
 - every tool response exposes completeness and provenance;
 - Agent output is schema-validated and stored as non-authoritative;
@@ -421,7 +430,8 @@ Before calling an Agent-based reviewer production-ready, confirm:
 - safe, unsafe, uncertain, truncated, contradicted, and stale cases all have
   executable tests.
 
-Read the [M10B design](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md),
+Read the [M9 design](../specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md),
+[M10B design](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md),
 [M10C design](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md),
 and [Evidence IR architecture](../architecture/04-evidence-ir-architecture.md)
 before implementing this tutorial.

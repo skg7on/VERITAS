@@ -1,9 +1,10 @@
 # Generating and Inspecting a VERITAS SummaryDB
 
 This manual explains how program inputs become Function Summary IR, a native
-thin CPG, and persistent SummaryDB state. It covers the executable source-code
-workflow first, then the approved LLVM IR/bitcode and Joern workflows, the
-future PhASAR adapter, and the contract for additional providers.
+thin CPG, whole-program facts, and persistent SummaryDB state. It covers the
+executable source-code workflow first, including durable provenance and
+explanation, then the approved LLVM IR/bitcode and Joern workflows, the future
+PhASAR adapter, and the contract for additional providers.
 
 ## 1. Know which path exists
 
@@ -12,7 +13,7 @@ in the current tree.
 
 | Tier | Input | What VERITAS owns after ingestion | Current status |
 | --- | --- | --- | --- |
-| 1 | Project directory containing `compile_commands.json` | Clang CodeGen, linked `ProgramIr`, local extraction, required in-process SVF, Summary IR v2, native thin CPG, atomic publication | **Available now** |
+| 1 | Project directory containing `compile_commands.json` | Clang CodeGen, linked `ProgramIr`, local extraction, required in-process SVF, Summary IR v2, native thin CPG, SCC WPA, durable facts/provenance, atomic publication | **Available now** |
 | 2 | One `.bc`/`.ll` file or a directory of them | Module loading/linking followed by the same native analysis path as Tier 1 | **Approved M11 target** |
 | 3 | Joern GraphSON/GraphML or another provider result | Provider-neutral graph/facts, capabilities, assumptions, provenance, and an independent provider binding | **Approved M12 target**; PhASAR still needs M12D design |
 
@@ -25,8 +26,9 @@ in provider projections and enter with an epistemic floor of `INFERRED` or
 ## 2. Build VERITAS
 
 Prerequisites and exact version contracts are documented in
-[LLVM](../third_party/LLVM.md) and [SVF](../third_party/SVF.md). The canonical
-build uses Ninja and the repository presets:
+[LLVM](../third_party/LLVM.md), [SVF](../third_party/SVF.md), and
+[Soufflé](../third_party/Souffle.md). The canonical build uses Ninja and the
+repository presets:
 
 ```bash
 cmake --preset default \
@@ -35,14 +37,27 @@ cmake --build --preset default
 ctest --preset default
 ```
 
+LLVM/Clang 22 and later are supported, including the LLVM 23 debug-intrinsic
+APIs. Shared builds link the monolithic `LLVM` and `clang-cpp` libraries, so an
+LLVM/Clang source build used here must enable `LLVM_BUILD_LLVM_DYLIB` and
+`CLANG_LINK_CLANG_DYLIB`. The default production WPA build also requires Bison
+3.2 or later and Flex because the pinned vendored Soufflé is built from source.
+
 The relevant executables are produced under `build/bin/`:
 
 ```text
 veritas-build    ingest and native analysis
 veritas-query    native CPG queries available today
 veritas-diff     summary-component diff and dependency impact
-veritas-explain  version-only skeleton; the planned M9 fact API is not present
+veritas-explain  bounded fact/provenance explanation in text or JSON
 ```
+
+The production WPA runtime is compiled from the pinned vendored Soufflé and
+runs in process. Its generated provenance manifest and built artifact digest
+are verified before analysis; the C++ executor is reserved for an explicit
+emergency mode or API-configured conformance run. The former subprocess
+per-component timeout and memory isolation does not apply to the in-process
+runner; use process-level containment when an operator requires hard limits.
 
 Confirm that the executable and checkout agree before generating persistent
 state:
@@ -70,9 +85,12 @@ cp /absolute/path/to/project/build/compile_commands.json \
 ```
 
 Other build systems may use their normal compilation-database generator. The
-database must describe every translation unit intended for analysis. Missing
-files, empty databases, invalid commands, or partial ingestion are hard
-failures; VERITAS never silently analyzes a subset.
+database must describe every translation unit intended for one program.
+Whole-build databases that contain several executables are not yet split into
+link units; if multiple translation units define `main`, restrict the database
+to one target before analysis. Missing files, empty databases, invalid
+commands, multiple programs, or partial ingestion are hard failures; VERITAS
+never silently analyzes a subset.
 
 Prefer absolute `directory` values in each compilation-database entry (the
 normal CMake output). A relative `directory` is resolved by the compilation
@@ -90,6 +108,12 @@ python3 -m json.tool \
 The second command checks JSON syntax only. Clang's compilation-database
 loader and VERITAS command normalization perform the authoritative validation.
 
+VERITAS preserves explicit `-resource-dir`, `-isysroot`, and `--sysroot`
+arguments. When they are absent, it injects the configured LLVM resource
+directory and, on macOS, resolves an SDK from `SDKROOT`, `xcrun`, or known SDK
+locations. A normal driver-style compilation database therefore does not need
+to duplicate those implicit system include arguments.
+
 ### 3.2 Run the native pipeline
 
 Use an explicit output directory when the database should live outside the
@@ -100,6 +124,22 @@ build/bin/veritas-build analyze \
   --project /absolute/path/to/project \
   --output /absolute/path/to/summarydb
 ```
+
+The default is field-sensitive SVF, a 300-second soft analysis budget, a
+1,000,000-pair alias cap, and production Soufflé WPA. The supported CLI
+controls are explicit and identity-bearing:
+
+```bash
+build/bin/veritas-build analyze \
+  --project /absolute/path/to/project \
+  --output /absolute/path/to/summarydb \
+  --field-sensitive true \
+  --max-alias-pairs 1000000 \
+  --wpa-engine souffle
+```
+
+Use `--wpa-engine cpp-emergency` only as a deliberate degraded run. VERITAS
+does not automatically fall back from a failed or mismatched Soufflé run.
 
 If `--output` is omitted, VERITAS writes to
 `/absolute/path/to/project/.veritas`.
@@ -113,16 +153,30 @@ project directory
   -> Clang CodeGen for every translation unit
   -> link all modules into one private ProgramIr
   -> extract local summary.v2 drafts
-  -> run required in-process SVF
+  -> run required in-process SVF with bounded alias enumeration
   -> merge typed calls, memory effects, value flows, and aliases
   -> build the native thin CPG
   -> write immutable summary objects
   -> atomically bind summaries and CPG as current
+  -> build one deterministic call graph and SCC graph
+  -> execute Reachability and MemoryEffects with compiled in-process Soufflé
+  -> persist exact WPA run/component/cache state
+  -> validate one canonical AnalysisFactBatch
+  -> atomically publish facts, current bindings, witnesses, and batch receipt
 ```
 
-`veritas-build analyze` does **not** currently run the M8 SCC/fixpoint library,
-publish an M9 durable fact store, build M10B evidence inputs, or serialize M10C
-Evidence IR. Those stages have separate milestone gates.
+`veritas-build analyze` now completes the M8R/M9 handoff. It does **not** build
+M10B evidence inputs or serialize M10C Evidence IR; those stages retain their
+separate milestone gates.
+
+The summary/CPG coordinator and the Fact Store are separate atomic visibility
+boundaries. A WPA, conformance, batch-validation, or Fact Store failure
+publishes no new fact batch or receipt, but it does not erase immutable
+summaries or a summary/CPG binding committed earlier in the command. Check the
+WPA run status only to diagnose component execution: the orchestrator marks a
+run complete before batch construction, validation, and Fact Store
+publication. Treat the fact snapshot as advanced only after the command exits
+successfully and `fact_batch_receipts` contains a matching row.
 
 ### 3.3 Read the command result
 
@@ -141,11 +195,14 @@ Published summaries: <count>
 CPG projection: cpgproj:sha256:<digest>
 CPG nodes: <count>
 CPG edges: <count>
+WPA engine: souffle
+WPA run: run:sha256:<digest>
 Unknowns: <count>
 ```
 
-Save the revision, build-variant, projection, and relevant function/value IDs.
-The query tools operate on stable IDs, not source names or file-line identity.
+Save the revision, build-variant, projection, WPA run, and relevant
+function/value/fact IDs. The query and explanation tools operate on stable IDs,
+not source names or file-line identity.
 
 ### 3.4 Understand the output directory
 
@@ -154,8 +211,10 @@ The implemented output is:
 ```text
 <summarydb-root>/
   manifest.json    diagnostic, deterministic AnalysisManifest view
-  metadata.db      SQLite metadata, bindings, native CPG, dependencies, M8 state
+  metadata.db      SQLite metadata, CPG, WPA state/cache, facts, and provenance
   objects/         RocksDB content-addressed Function Summary objects
+  wpa-component-results/
+                   RocksDB content-addressed successful WPA component results
 ```
 
 `manifest.json` is diagnostic JSON, not a canonical persistent input. Summary
@@ -171,7 +230,12 @@ The current SQLite schema contains these main groups:
 | Summary publication | `summary_objects`, `summary_components`, `summary_bindings` |
 | Native CPG | `cpg_projections`, `cpg_nodes`, `cpg_edges`, `cpg_edge_support`, `current_cpg_projections` |
 | Incrementality | `summary_dependencies`, `reverse_dependency_index`, `summary_deltas`, `component_deltas` |
-| M8 state | `wpa_sccs`, `wpa_scc_members`, `wpa_scc_edges`, `wpa_component_states` |
+| SCC topology and incremental state | `wpa_sccs`, `wpa_scc_members`, `wpa_scc_edges`, `wpa_component_states` |
+| WPA runs and reusable components | `wpa_analysis_runs`, `wpa_component_states_v2`, `wpa_component_result_cache_v2` |
+| Durable facts and current/history bindings | `analysis_facts`, `run_fact_bindings` |
+| Selected/alternative proofs | `provenance_nodes`, `provenance_edges` |
+| Per-sink Fact Bus delivery | `wpa_fact_bus_deliveries` |
+| Idempotent Fact Store delivery | `fact_batch_receipts` |
 
 Product code must use semantic C++ APIs rather than SQL. Direct SQL is useful
 only for development diagnostics and schema troubleshooting.
@@ -194,7 +258,14 @@ sqlite3 -readonly /absolute/path/to/summarydb/metadata.db \
    UNION ALL
    SELECT 'cpg_nodes', count(*) FROM cpg_nodes
    UNION ALL
-   SELECT 'cpg_edges', count(*) FROM cpg_edges;"
+   SELECT 'cpg_edges', count(*) FROM cpg_edges
+   UNION ALL
+   SELECT 'wpa_runs', count(*) FROM wpa_analysis_runs
+   UNION ALL
+   SELECT 'facts', count(*) FROM analysis_facts
+   UNION ALL
+   SELECT 'current_fact_bindings', count(*)
+     FROM run_fact_bindings WHERE is_current = 1;"
 ```
 
 List the current context and projection:
@@ -242,11 +313,68 @@ build/bin/veritas-query flow <source-value-id> <destination-value-id> \
 `Truncated by: none` means the traversal was complete within its budget. A
 truncated empty result is not proof that no path exists.
 
+List WPA runs, including status, and a bounded sample of current facts:
+
+```bash
+sqlite3 -readonly /absolute/path/to/summarydb/metadata.db \
+  "SELECT run_id, engine_identity, status, completed_at
+     FROM wpa_analysis_runs
+    ORDER BY completed_at DESC, run_id;"
+
+sqlite3 -readonly /absolute/path/to/summarydb/metadata.db \
+  "SELECT run_id, batch_id, wpa_run_id
+     FROM fact_batch_receipts
+    ORDER BY run_id, batch_id;"
+
+sqlite3 -readonly /absolute/path/to/summarydb/metadata.db \
+  "SELECT b.run_id, b.fact_id, f.relation_name, b.selected_witness_id
+     FROM run_fact_bindings AS b
+     JOIN analysis_facts AS f ON f.fact_id = b.fact_id
+    WHERE b.is_current = 1
+    ORDER BY b.run_id, f.relation_name, b.fact_id
+    LIMIT 50;"
+```
+
+These SQL queries are diagnostic discovery aids. Once you have a current
+`run_id` and `fact_id`, use the supported bounded explanation interface:
+
+```bash
+build/bin/veritas-explain fact <fact-id> \
+  --run <run-id> \
+  --db /absolute/path/to/summarydb \
+  --max-depth 16 \
+  --max-nodes 100
+
+build/bin/veritas-explain fact <fact-id> \
+  --run <run-id> \
+  --db /absolute/path/to/summarydb \
+  --max-depth 16 \
+  --max-nodes 100 \
+  --json
+```
+
+Explanation requires the run's current binding. The C++ API and `--json`
+output list retained witness nodes in selected-first/witness-ID order and
+expand the first selected proof. If multiple batches for the same run/fact
+retain selected witness nodes, compare the expanded `witness_id` with the
+binding's `selected_witness_id`; the current traversal does not use the binding
+field to choose among them. The default text output is a summarized view: it
+does not expose witness IDs or alternatives, cannot verify that selection, and
+its displayed rule must not be used to disambiguate retained alternatives.
+Treat `Truncated: max_depth` or `Truncated: max_nodes` as an incomplete
+explanation, never as absence of additional support.
+
 ### 3.6 Rerun and compare
 
 Rerunning the same semantic input is safe. Summary objects are written with
 put-if-absent semantics, while one SQLite transaction advances current summary
-and CPG bindings. Equivalent content reuses the same IDs.
+and CPG bindings. WPA components are reused only after their versioned cache
+descriptor, engine/configuration metadata, requested component identity,
+semantic FactIDs, and result hashes are revalidated. The Fact Bus then checks
+witness closure and acyclicity before publication. Re-delivering the same
+`(run_id, batch_id)` to the Fact Store is an atomic no-op; a different batch
+preserves prior bindings as history and selects the new current occurrence.
+Equivalent content reuses the same IDs.
 
 After a source or build change, generate a new SummaryDB snapshot in the same
 output root and retain the old and new summary IDs. The current analyzer emits
@@ -279,11 +407,16 @@ that extension boundary.
 | `compile_commands.json is empty` | Regenerate the build database; a zero-byte file is rejected before parsing. |
 | `invalid compile_commands.json` | Validate JSON and ensure entries follow Clang's compilation database schema. |
 | Missing translation unit or compile failure | Fix the command/file; partial project analysis is intentionally refused. |
-| Source exists but is reported missing | Check whether the entry's `directory` is relative or stale; regenerate with absolute working directories. |
-| Module link failure | Resolve conflicting/incompatible translation-unit outputs or duplicate definitions. |
+| Source exists but is reported missing | Check whether the entry's `directory` is relative or stale; regenerate with absolute working directories. On macOS, also verify `SDKROOT` or `xcrun --show-sdk-path` if automatic sysroot discovery cannot find an SDK. |
+| `compile_commands.json spans multiple programs` | Restrict the compilation database to one library/executable target. Link-unit inference is not implemented yet. |
+| Module link failure | Resolve conflicting/incompatible translation-unit outputs or duplicate definitions within the selected program. |
 | SVF stage failure | Check the pinned SVF/LLVM build contract and preserve the exact diagnostic. |
+| Alias analysis exhausts its pair/time budget | Choose field sensitivity deliberately and, if the resource trade-off is acceptable, rerun with a larger positive `--max-alias-pairs`. The setting participates in run identity. |
+| Soufflé provenance is missing, malformed, unsupported, or mismatched | Rebuild the generated Soufflé artifacts from the pinned vendored revision. Do not edit the manifest or substitute an unrecorded executable/library. |
+| Production WPA fails | Preserve the diagnostic and fix the cause. `--wpa-engine cpp-emergency` is an explicit degraded analysis, not an automatic fallback or equivalent engine identity. |
 | Invalid or missing stable identity | Do not synthesize an ID; fix the identity-producing frontend/adapter. |
 | Query returns no rows | Confirm revision, build variant, projection, and endpoint ID all belong to the same snapshot. |
+| `veritas-explain` reports `binding not found` | Confirm the fact belongs to the supplied run and still has a current binding; historical rows are not selected implicitly. |
 | Query reports truncation | Increase the relevant budget or surface the result as incomplete; never reinterpret it as absence. |
 
 ## 4. Tier 2: LLVM IR and bitcode
