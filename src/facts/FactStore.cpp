@@ -220,6 +220,20 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     root_evidence[root.fact.fact_id] = root;
   }
 
+  // Idempotent redelivery: a batch already durably published is a successful
+  // no-op (schema v4 receipt keyed by (run_id, batch_id)).
+  const std::string run_id = core::ToString(batch.run.run_id);
+  const std::string batch_id = core::ToString(batch.batch_id);
+  auto already = metadata_store_.Query(
+      "SELECT 1 FROM fact_batch_receipts WHERE run_id = ? AND batch_id = ?",
+      {run_id, batch_id});
+  if (!already.ok()) {
+    return already.status();
+  }
+  if (!already->empty()) {
+    return Status::Ok();
+  }
+
   Status s = metadata_store_.BeginTransaction();
   if (!s.ok()) {
     return s;
@@ -307,6 +321,16 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
         return rollback(s);
       }
     }
+  }
+
+  // Commit the receipt with the facts, bindings, and witnesses in one
+  // transaction, so a crash leaves neither a receipt nor partial facts.
+  s = metadata_store_.Execute(
+      "INSERT INTO fact_batch_receipts (run_id, batch_id, wpa_run_id) "
+      "VALUES (?, ?, ?)",
+      {run_id, batch_id, run_id});
+  if (!s.ok()) {
+    return rollback(s);
   }
 
   return metadata_store_.CommitTransaction();

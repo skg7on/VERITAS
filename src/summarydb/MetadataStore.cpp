@@ -19,6 +19,7 @@
 #include "schema_v1.h"
 #include "schema_v2.h"
 #include "schema_v3.h"
+#include "schema_v4.h"
 #include "veritas/build/AnalysisManifest.h"
 
 namespace veritas::summarydb {
@@ -132,7 +133,11 @@ Status MetadataStore::ApplySchema() {
   if (!status.ok()) {
     return status;
   }
-  return ExecuteSQL(db_, kV3SchemaSql);
+  status = ExecuteSQL(db_, kV3SchemaSql);
+  if (!status.ok()) {
+    return status;
+  }
+  return ExecuteSQL(db_, kV4SchemaSql);
 }
 
 Status MetadataStore::PutRepository(const RepositoryRow &row) {

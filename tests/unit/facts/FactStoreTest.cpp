@@ -151,11 +151,23 @@ TEST(FactStoreTest, CurrentReplacementPreservesHistory) {
   ASSERT_TRUE(store.ok()) << store.status().message();
 
   const auto run = TestRun();
-  const auto batch = SuccessfulBatch(run);
   const auto fact = MakeFact(Reachable("f", "g")).value();
 
+  auto batch = SuccessfulBatch(run);
   ASSERT_TRUE(store->Publish(batch).ok());
-  ASSERT_TRUE(store->Publish(batch).ok());  // re-derivation replaces the current
+
+  // Re-delivery of the same (run_id, batch_id) is a successful no-op: it
+  // changes no fact, binding, or provenance state.
+  ASSERT_TRUE(store->Publish(batch).ok());
+  auto after_redelivery = store->GetBindings(run.run_id, fact.fact_id);
+  ASSERT_TRUE(after_redelivery.ok());
+  ASSERT_EQ(after_redelivery->size(), 1u);
+
+  // A different batch in the same run replaces the current binding and keeps
+  // the prior one as history.
+  auto batch2 = SuccessfulBatch(run);
+  batch2.batch_id = BatchId("batch2");
+  ASSERT_TRUE(store->Publish(batch2).ok());
 
   auto bindings = store->GetBindings(run.run_id, fact.fact_id);
   ASSERT_TRUE(bindings.ok());

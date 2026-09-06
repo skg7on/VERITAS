@@ -107,7 +107,7 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
   auto binding_rows = store_.Query(
       "SELECT confidence, producer_kind, analyzer_run_id, scope_kind, scope_id,"
       " selected_witness_id, is_current FROM run_fact_bindings"
-      " WHERE run_id = ? AND fact_id = ?",
+      " WHERE run_id = ? AND fact_id = ? AND is_current = 1",
       {run, target});
   if (!binding_rows.ok()) {
     return binding_rows.status();
@@ -157,7 +157,7 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
         "SELECT witness_id, selected, producer_kind, producer_id, rule_id,"
         " rule_version, analyzer_run_id, source_anchor_id, summary_id,"
         " description FROM provenance_nodes"
-        " WHERE run_id = ? AND output_fact_id = ?",
+        " WHERE run_id = ? AND output_fact_id = ? AND selected = 1",
         {run, task.fact_id});
     if (!node_rows.ok()) {
       return node_rows.status();

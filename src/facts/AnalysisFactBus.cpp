@@ -34,30 +34,6 @@ void AppendField(std::string* out, std::string_view value) {
   out->append(value);
 }
 
-core::StableId DeriveBatchId(const AnalysisFactBatch& batch) {
-  std::string canonical = "veritas.analysis-fact-batch.v1";
-  AppendField(&canonical, core::ToString(batch.run.run_id));
-  for (const auto& component : batch.expected_components) {
-    AppendField(&canonical, core::ToString(component.scc_id));
-    AppendField(&canonical, std::to_string(static_cast<int>(component.component)));
-  }
-  for (const auto& fact : batch.facts) {
-    AppendField(&canonical, EncodeSemanticKey(fact.row));
-  }
-  for (const auto& edge : batch.witnesses) {
-    AppendField(&canonical, EncodeSemanticKey(edge.result.row));
-    AppendField(&canonical, edge.rule_id);
-    AppendField(&canonical, EncodeSemanticKey(edge.input.row));
-    AppendField(&canonical, std::to_string(edge.input_ordinal));
-  }
-  for (const auto& id : batch.rooted_input_fact_ids) {
-    AppendField(&canonical, core::ToString(id));
-  }
-  return core::MakeStableId(
-      core::IdKind::kFact,
-      std::as_bytes(std::span(canonical.data(), canonical.size())));
-}
-
 constexpr std::string_view kDeliveryTableSql =
     "CREATE TABLE IF NOT EXISTS wpa_fact_bus_deliveries ("
     " run_id TEXT NOT NULL,"
@@ -91,6 +67,42 @@ StatusOr<bool> IsDelivered(summarydb::MetadataStore& store,
 }
 
 }  // namespace
+
+core::StableId DeriveBatchId(const AnalysisFactBatch& batch) {
+  std::string canonical = "veritas.analysis-fact-batch.v2";
+  AppendField(&canonical, core::ToString(batch.run.run_id));
+  for (const auto& component : batch.expected_components) {
+    AppendField(&canonical, core::ToString(component.scc_id));
+    AppendField(&canonical, std::to_string(static_cast<int>(component.component)));
+  }
+  for (const auto& completion : batch.completed_components) {
+    AppendField(&canonical, core::ToString(completion.key.scc_id));
+    AppendField(&canonical,
+                std::to_string(static_cast<int>(completion.key.component)));
+    AppendField(&canonical, completion.result_object_key);
+    AppendField(&canonical, completion.result.logical_input_hash);
+    AppendField(&canonical, completion.result.fixpoint_hash);
+    AppendField(&canonical, completion.result.external_hash);
+  }
+  for (const auto& id : batch.rooted_input_fact_ids) {
+    AppendField(&canonical, core::ToString(id));
+  }
+  for (const auto& fact : batch.facts) {
+    AppendField(&canonical, EncodeSemanticKey(fact.row));
+  }
+  for (const auto& edge : batch.witnesses) {
+    AppendField(&canonical, EncodeSemanticKey(edge.result.row));
+    AppendField(&canonical, edge.rule_id);
+    AppendField(&canonical, EncodeSemanticKey(edge.input.row));
+    AppendField(&canonical, std::to_string(edge.input_ordinal));
+  }
+  for (const auto& diagnostic : batch.diagnostics) {
+    AppendField(&canonical, diagnostic);
+  }
+  return core::MakeStableId(
+      core::IdKind::kFact,
+      std::as_bytes(std::span(canonical.data(), canonical.size())));
+}
 
 AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
   AnalysisFactBatch batch;
@@ -130,6 +142,7 @@ AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
     }
     return left.input_ordinal < right.input_ordinal;
   });
+  std::ranges::sort(batch.diagnostics);
 
   batch.batch_id = DeriveBatchId(batch);
   return batch;
@@ -143,12 +156,24 @@ void AnalysisFactBus::AddSink(std::string sink_id, AnalysisFactSink& sink) {
 }
 
 Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
-  // Exact expected/completed component equality.
+  // The supplied batch id must equal the recomputed canonical id, so a tampered
+  // or mis-assembled batch is rejected before it reaches any sink.
+  if (batch.batch_id != DeriveBatchId(batch)) {
+    return Status::FailedPrecondition(
+        "supplied batch_id does not match the canonical id");
+  }
+
+  // Exact expected/completed component equality, with no duplicates.
   std::set<wpa::WpaComponentKey> expected(batch.expected_components.begin(),
                                           batch.expected_components.end());
+  if (expected.size() != batch.expected_components.size()) {
+    return Status::FailedPrecondition("duplicate expected component");
+  }
   std::set<wpa::WpaComponentKey> completed;
   for (const auto& completion : batch.completed_components) {
-    completed.insert(completion.key);
+    if (!completed.insert(completion.key).second) {
+      return Status::FailedPrecondition("duplicate completed component");
+    }
   }
   if (expected != completed) {
     return Status::FailedPrecondition(
