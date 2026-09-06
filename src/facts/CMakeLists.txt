@@ -71,7 +71,6 @@ target_include_directories(veritas_facts SYSTEM PRIVATE
 target_link_libraries(veritas_facts PUBLIC
   veritas::core
   veritas::summary
-  veritas_analysis_semantic
   veritas_fact_proto
 )
 target_link_libraries(veritas_facts PRIVATE

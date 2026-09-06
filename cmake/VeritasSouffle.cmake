@@ -109,6 +109,15 @@ foreach(_souffle_target IN ITEMS libsouffle souffle souffleprof compiled)
   endif()
 endforeach()
 
+# Keep diagnostics from VERITAS-owned code strict while containing warnings in
+# the pinned Souffle 2.5 implementation and its generated Bison parser.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  target_compile_options(libsouffle PRIVATE
+    -Wno-pessimizing-move
+    -Wno-unused-but-set-variable
+  )
+endif()
+
 # Three upstream patches accompany the vendored tree, all clearly marked
 # "VERITAS (vendored build integration)" in place; everything else is
 # byte-identical to the pinned revision:
@@ -201,6 +210,9 @@ function(veritas_generate_souffle_program NAME NAMESPACE PROGRAM SOURCE)
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
   target_compile_definitions(${NAME} PRIVATE __EMBEDDED_SOUFFLE__)
   target_compile_options(${NAME} PRIVATE -frtti -fexceptions)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(${NAME} PRIVATE -Wno-deprecated-declarations)
+  endif()
 endfunction()
 
 veritas_generate_souffle_program(ReachabilityV2 veritas_reachability v2_reach

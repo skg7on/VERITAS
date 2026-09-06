@@ -57,7 +57,6 @@ target_link_libraries(summary_v2_pipeline_integration_test
     veritas_analysis
     veritas_summarydb
     veritas_test_support
-    GTest::gtest
     GTest::gtest_main
 )
 
