@@ -112,5 +112,10 @@
 // state is MAY or UNKNOWN only.
 .decl SupportUnknownEffect(function_id:FunctionId, subject:symbol,
                            reason:symbol, epistemic:Epistemic)
+.decl UnmodeledExternal(function_id:FunctionId)
+.decl UnsupportedFeature(node_id:symbol, feature_kind:symbol,
+                         soundness_policy:symbol)
 
 .input SupportUnknownEffect(IO=file, filename="SupportUnknownEffect.facts")
+.input UnmodeledExternal(IO=file, filename="UnmodeledExternal.facts")
+.input UnsupportedFeature(IO=file, filename="UnsupportedFeature.facts")

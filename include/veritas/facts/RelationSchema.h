@@ -83,11 +83,13 @@ enum class RelationId : std::uint16_t {
   kSupportUnknownEffect,
   // M10A: the soundness-coverage certificate.
   kSoundnessCoverage,
+  // M10A: an external callee the analysis could not model.
+  kUnmodeledExternal,
 };
 
 // Number of relations in the relations.v2 registry. Single authority for both
 // the registry table and relation-id range validation.
-inline constexpr std::size_t kRelationCountV2 = 26;
+inline constexpr std::size_t kRelationCountV2 = 27;
 
 // Semantic domain of a relation column. ID domains are carried as a stable ID
 // in a semantic row and as a typed dense ID in an execution row (model IDs are

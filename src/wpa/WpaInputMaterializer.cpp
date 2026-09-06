@@ -333,6 +333,8 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   const bool memory_component =
       request.component == WpaComponentKind::kMemoryEffects;
   const bool flow_component = request.component == WpaComponentKind::kFlow;
+  const bool effects_component =
+      request.component == WpaComponentKind::kEffects;
   std::vector<facts::SemanticRow> semantic_edb;
   // Base facts owned by this SCC's members. They root every witness chain a
   // locally derived result can produce, so they are collected as they are
@@ -386,6 +388,20 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
       }
       local_base_rows.push_back(LocalBaseFact{row, member});
       semantic_edb.push_back(std::move(row));
+
+      // An unmodeled external: a resolved callee with no summary and no model.
+      if (resolved && !by_function.contains(callee)) {
+        const bool modeled =
+            request.models != nullptr &&
+            !ModelsForCallee(*request.models, call.callee_symbol).empty();
+        if (!modeled) {
+          facts::SemanticRow external;
+          external.relation = facts::RelationId::kUnmodeledExternal;
+          external.cells = {callee};
+          local_base_rows.push_back(LocalBaseFact{external, member});
+          semantic_edb.push_back(std::move(external));
+        }
+      }
 
       // Applicable models. A model describes an external function, which has
       // no summary and therefore no dense function id, so the relation's
@@ -479,6 +495,19 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
         row.cells = {*site, *ret, *result, ToSemantic(flow.epistemic())};
         local_base_rows.push_back(LocalBaseFact{row, member});
         semantic_edb.push_back(std::move(row));
+      }
+    }
+
+    if (effects_component) {
+      const auto *current = std::get_if<v2::FunctionSummary>(it->second);
+      if (current != nullptr) {
+        for (const auto &unknown : current->unknowns()) {
+          facts::SemanticRow row;
+          row.relation = facts::RelationId::kUnsupportedFeature;
+          row.cells = {core::ToString(member), unknown.kind(), "unknown"};
+          local_base_rows.push_back(LocalBaseFact{row, member});
+          semantic_edb.push_back(std::move(row));
+        }
       }
     }
   }

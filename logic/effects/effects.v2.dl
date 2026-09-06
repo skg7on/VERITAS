@@ -45,6 +45,19 @@ UnknownEffect(f, subj, r, e) :-
   SupportUnknownEffect(g, subj, r, e2),
   WeakenEpistemic(e1, e2, e).
 
+// An unmodeled external callee is an unknown effect. Epistemic MAY is ordinal
+// 1.
+UnknownEffect(f, g_str, "unmodeled_external", 1) :-
+  DirectCall(_, f, g, _, _),
+  UnmodeledExternal(g),
+  FunctionMap(g, g_str).
+
+// An unsupported feature becomes an unknown effect in its owning function.
+// Epistemic UNKNOWN is ordinal 5.
+UnknownEffect(f, subj, "unsupported_feature", 5) :-
+  UnsupportedFeature(node, subj, _),
+  FunctionMap(f, fs), fs = node.
+
 // -- SoundnessCoverage -----------------------------------------------------
 
 .decl SoundnessCoverage(scope_id:symbol, coverage_kind:symbol,
@@ -109,6 +122,15 @@ SoundnessCoverageKey(fs, kind, c, e,
   cat(@veritas_key_field_unsigned_v1(c), @veritas_key_field_enum_v1(e)))))) :-
   SoundnessCoverage(fs, kind, c, e).
 
+.decl UnsupportedFeatureKey(node_id:symbol, feature_kind:symbol,
+                            soundness_policy:symbol, key:symbol)
+UnsupportedFeatureKey(node, fk, sp,
+  cat(@veritas_key_header_v1("UnsupportedFeature", 3),
+  cat(@veritas_key_field_symbol_v1(node),
+  cat(@veritas_key_field_symbol_v1(fk),
+      @veritas_key_field_symbol_v1(sp))))) :-
+  UnsupportedFeature(node, fk, sp).
+
 // -- Witnesses -------------------------------------------------------------
 
 Witness(rk, "wpa.effect.unknown.call.v2", ik, ik, 0) :-
@@ -158,3 +180,16 @@ Witness(sk, "wpa.coverage.incomplete.v2", uk, uk, 0) :-
   SoundnessCoverageKey(fs, "dominating_check_absence", 0, 0, sk),
   UnknownEffectKey(f, subj, r, e, uk),
   FunctionMap(f, fs).
+
+Witness(rk, "wpa.effect.unknown.external.v2", ik, ik, 0) :-
+  DirectCall(cs, f, g, d, e),
+  UnmodeledExternal(g),
+  UnknownEffectKey(f, g_str, "unmodeled_external", 1, rk),
+  DirectCallKey(cs, f, g, d, e, ik),
+  FunctionMap(g, g_str).
+
+Witness(rk, "wpa.effect.unknown.feature.v2", ik, ik, 0) :-
+  UnsupportedFeature(node, subj, _),
+  UnknownEffectKey(f, subj, "unsupported_feature", 5, rk),
+  UnsupportedFeatureKey(node, subj, _, ik),
+  FunctionMap(f, fs), fs = node.

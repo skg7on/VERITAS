@@ -17,6 +17,8 @@ input=CallSiteMap
 input=DirectCall
 input=UnknownCall
 input=SupportUnknownEffect
+input=UnmodeledExternal
+input=UnsupportedFeature
 
 output=UnknownEffect
 output=SoundnessCoverage
@@ -25,4 +27,6 @@ output=Witness
 rule=wpa.effect.unknown.call.v2
 rule=wpa.effect.unknown.support.v2
 rule=wpa.effect.unknown.transitive.v2
+rule=wpa.effect.unknown.external.v2
+rule=wpa.effect.unknown.feature.v2
 rule=wpa.coverage.incomplete.v2

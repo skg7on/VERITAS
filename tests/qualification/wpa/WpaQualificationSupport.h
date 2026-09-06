@@ -230,6 +230,14 @@ inline void AddUnknownCall(v2::FunctionSummary* summary, std::string_view from,
   call->set_provenance_ref("test:unknown");
 }
 
+// An unknown recorded on a summary (an unsupported construct).
+inline void AddUnknown(v2::FunctionSummary* summary, std::string_view kind) {
+  auto* unknown = summary->add_unknowns();
+  unknown->set_kind(std::string(kind));
+  unknown->set_reason("test");
+  unknown->set_scope("test");
+}
+
 // Materializes the logical input for one component rooted at `root`.
 inline StatusOr<WpaLogicalComponentInput> InputFor(
     const std::vector<summary::SummaryArtifact>& artifacts,

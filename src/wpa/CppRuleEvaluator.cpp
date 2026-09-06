@@ -342,6 +342,9 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
   std::vector<std::pair<UnknownTuple, facts::SemanticRow>> base_rows;
   std::vector<std::pair<UnknownTuple, facts::SemanticRow>> support_rows;
   std::map<core::StableId, std::string> function_stable;
+  std::map<std::string, core::StableId> stable_to_function;
+  std::set<core::StableId> unmodeled_externals;
+  std::vector<std::pair<std::string, facts::SemanticRow>> unsupported_features;
 
   for (const auto& row : input.edb) {
     if (row.relation == facts::RelationId::kDirectCall) {
@@ -400,6 +403,27 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
       if (!id.ok())
         return id.status();
       function_stable[*id] = *stable;
+      stable_to_function[*stable] = *id;
+    } else if (row.relation == facts::RelationId::kUnmodeledExternal) {
+      const auto* fn = std::get_if<facts::FunctionId>(&row.cells[0]);
+      if (fn == nullptr) {
+        return Status::InvalidArgument("malformed UnmodeledExternal row");
+      }
+      auto id = input.mappings.functions.ToStable(*fn);
+      if (!id.ok())
+        return id.status();
+      unmodeled_externals.insert(*id);
+    } else if (row.relation == facts::RelationId::kUnsupportedFeature) {
+      const auto* node = std::get_if<std::string>(&row.cells[0]);
+      const auto* kind = std::get_if<std::string>(&row.cells[1]);
+      const auto* policy = std::get_if<std::string>(&row.cells[2]);
+      if (node == nullptr || kind == nullptr || policy == nullptr) {
+        return Status::InvalidArgument("malformed UnsupportedFeature row");
+      }
+      facts::SemanticRow semantic;
+      semantic.relation = row.relation;
+      semantic.cells = {*node, *kind, *policy};
+      unsupported_features.emplace_back(*node, semantic);
     }
   }
 
@@ -425,6 +449,45 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
       raw.witnesses.push_back(facts::WitnessEdge{
           .result = facts::SemanticKey{UnknownResultRow(tuple)},
           .rule_id = "wpa.effect.unknown.call.v2",
+          .derivation_key = facts::EncodeSemanticKey(row),
+          .input = facts::SemanticKey{row},
+          .input_ordinal = 0});
+    }
+  }
+
+  // Unmodeled external: a DirectCall to an unmodeled external callee.
+  for (const auto& call : calls) {
+    if (!unmodeled_externals.contains(call.callee))
+      continue;
+    auto stable_it = function_stable.find(call.callee);
+    if (stable_it == function_stable.end())
+      continue;
+    const UnknownTuple tuple{call.caller, stable_it->second,
+                             "unmodeled_external", sem::EpistemicState::kMay};
+    if (derived.insert(tuple).second) {
+      raw.witnesses.push_back(facts::WitnessEdge{
+          .result = facts::SemanticKey{UnknownResultRow(tuple)},
+          .rule_id = "wpa.effect.unknown.external.v2",
+          .derivation_key = facts::EncodeSemanticKey(call.row),
+          .input = facts::SemanticKey{call.row},
+          .input_ordinal = 0});
+    }
+  }
+
+  // Unsupported feature: seed from UnsupportedFeature resolved to a function.
+  for (const auto& [node, row] : unsupported_features) {
+    auto fn_it = stable_to_function.find(node);
+    if (fn_it == stable_to_function.end())
+      continue;
+    const auto* kind = std::get_if<std::string>(&row.cells[1]);
+    if (kind == nullptr)
+      continue;
+    const UnknownTuple tuple{fn_it->second, *kind, "unsupported_feature",
+                             sem::EpistemicState::kUnknown};
+    if (derived.insert(tuple).second) {
+      raw.witnesses.push_back(facts::WitnessEdge{
+          .result = facts::SemanticKey{UnknownResultRow(tuple)},
+          .rule_id = "wpa.effect.unknown.feature.v2",
           .derivation_key = facts::EncodeSemanticKey(row),
           .input = facts::SemanticKey{row},
           .input_ordinal = 0});
