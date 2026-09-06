@@ -14,16 +14,21 @@
 
 #include "veritas/facts/FactStore.h"
 
+#include <algorithm>
 #include <cstdlib>
+#include <map>
 #include <set>
+#include <span>
 #include <string>
 #include <system_error>
 #include <utility>
 #include <vector>
 
+#include "veritas/core/Hash.h"
 #include "veritas/facts/FactProto.h"
 #include "veritas/facts/HexCodec.h"
 #include "veritas/facts/ProvenanceStore.h"
+#include "veritas/facts/Witness.h"
 
 namespace veritas::facts {
 
@@ -52,6 +57,27 @@ RunFactBinding ParseBinding(const std::vector<std::string>& row,
   binding.selected_witness_id = row[5];
   binding.is_current = row[6] == "1";
   return binding;
+}
+
+// The witness-dependent derivation identity (design §7): the semantic key of
+// the result, the rule that derived it, and its ordered input semantic keys.
+// Distinct derivations of the same fact produce distinct witness ids, while
+// the semantic FactID stays witness-independent.
+std::string DeriveWitnessId(const SemanticRow& result, std::string_view rule_id,
+                            const std::vector<SemanticRow>& ordered_inputs) {
+  auto append_field = [](std::string* out, std::string_view value) {
+    out->append(std::to_string(value.size()));
+    out->push_back(':');
+    out->append(value);
+  };
+  std::string bytes = "veritas.witness.derivation.v1";
+  append_field(&bytes, EncodeSemanticKey(result));
+  append_field(&bytes, rule_id);
+  for (const auto& input : ordered_inputs) {
+    append_field(&bytes, EncodeSemanticKey(input));
+  }
+  return core::DigestToHex(core::ComputeSHA256(
+      std::as_bytes(std::span(bytes.data(), bytes.size()))));
 }
 
 }  // namespace
@@ -156,6 +182,39 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     }
   }
 
+  // Group the canonical witnesses by result and derive each result's
+  // witness-dependent derivation identity. The selected proof's witness id is
+  // distinct from the semantic FactID, so re-deriving a fact by a different
+  // proof retains a distinct witness record.
+  struct ResultWitness {
+    std::string witness_id;
+    std::vector<WitnessEdge> ordered_edges;
+  };
+  std::map<std::string, ResultWitness> result_witnesses;
+  for (const WitnessEdge& edge : batch.witnesses) {
+    result_witnesses[EncodeSemanticKey(edge.result.row)].ordered_edges.push_back(
+        edge);
+  }
+  std::map<core::StableId, std::string> witness_id_by_fact;
+  for (auto& [result_key, entry] : result_witnesses) {
+    std::ranges::sort(entry.ordered_edges, [](const auto& a, const auto& b) {
+      return a.input_ordinal < b.input_ordinal;
+    });
+    std::vector<SemanticRow> inputs;
+    inputs.reserve(entry.ordered_edges.size());
+    for (const auto& edge : entry.ordered_edges) {
+      inputs.push_back(edge.input.row);
+    }
+    entry.witness_id = DeriveWitnessId(entry.ordered_edges.front().result.row,
+                                       entry.ordered_edges.front().rule_id,
+                                       inputs);
+    auto fact = MakeFact(entry.ordered_edges.front().result.row);
+    if (!fact.ok()) {
+      return fact.status();
+    }
+    witness_id_by_fact[fact->fact_id] = entry.witness_id;
+  }
+
   Status s = metadata_store_.BeginTransaction();
   if (!s.ok()) {
     return s;
@@ -179,52 +238,53 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     binding.fact_id = fact.fact_id;
     binding.producer_kind = ProducerKindForEngine(batch.run.engine);
     binding.is_current = true;
-    binding.selected_witness_id = core::ToString(fact.fact_id);
+    const auto witness = witness_id_by_fact.find(fact.fact_id);
+    binding.selected_witness_id =
+        witness != witness_id_by_fact.end() ? witness->second
+                                            : core::ToString(fact.fact_id);
     s = PutBinding(binding);
     if (!s.ok()) {
       return rollback(s);
     }
   }
 
-  // The witness DAG: one node per derived fact, one edge per derivation step.
+  // The witness DAG: one node per selected proof, one edge per derivation step.
   ProvenanceStore provenance(metadata_store_);
-  std::set<std::string> node_seen;
-  for (const WitnessEdge& edge : batch.witnesses) {
-    auto result_fact = MakeFact(edge.result.row);
+  for (const auto& [result_key, entry] : result_witnesses) {
+    auto result_fact = MakeFact(entry.ordered_edges.front().result.row);
     if (!result_fact.ok()) {
       return rollback(result_fact.status());
     }
-    auto input_fact = MakeFact(edge.input.row);
-    if (!input_fact.ok()) {
-      return rollback(input_fact.status());
+
+    FactWitness node;
+    node.run_id = batch.run.run_id;
+    node.output_fact_id = result_fact->fact_id;
+    node.witness_id = entry.witness_id;
+    node.selected = true;
+    node.producer_kind = ProducerKindForEngine(batch.run.engine);
+    node.rule_id = entry.ordered_edges.front().rule_id;
+    s = provenance.PutNode(node);
+    if (!s.ok()) {
+      return rollback(s);
     }
 
-    const std::string witness_id = core::ToString(result_fact->fact_id);
-    if (node_seen.insert(witness_id).second) {
-      FactWitness node;
-      node.run_id = batch.run.run_id;
-      node.output_fact_id = result_fact->fact_id;
-      node.witness_id = witness_id;
-      node.selected = true;
-      node.producer_kind = ProducerKindForEngine(batch.run.engine);
-      node.rule_id = edge.rule_id;
-      s = provenance.PutNode(node);
+    for (const WitnessEdge& edge : entry.ordered_edges) {
+      auto input_fact = MakeFact(edge.input.row);
+      if (!input_fact.ok()) {
+        return rollback(input_fact.status());
+      }
+      FactWitnessEdge witness_edge;
+      witness_edge.run_id = batch.run.run_id;
+      witness_edge.output_fact_id = result_fact->fact_id;
+      witness_edge.witness_id = entry.witness_id;
+      witness_edge.input_kind =
+          rooted_inputs.count(input_fact->fact_id) ? "rooted" : "derived";
+      witness_edge.input_id = core::ToString(input_fact->fact_id);
+      witness_edge.input_ordinal = edge.input_ordinal;
+      s = provenance.PutEdge(witness_edge);
       if (!s.ok()) {
         return rollback(s);
       }
-    }
-
-    FactWitnessEdge witness_edge;
-    witness_edge.run_id = batch.run.run_id;
-    witness_edge.output_fact_id = result_fact->fact_id;
-    witness_edge.witness_id = witness_id;
-    witness_edge.input_kind =
-        rooted_inputs.count(input_fact->fact_id) ? "rooted" : "derived";
-    witness_edge.input_id = core::ToString(input_fact->fact_id);
-    witness_edge.input_ordinal = edge.input_ordinal;
-    s = provenance.PutEdge(witness_edge);
-    if (!s.ok()) {
-      return rollback(s);
     }
   }
 

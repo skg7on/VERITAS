@@ -32,6 +32,7 @@ namespace {
 namespace sem = analysis::semantic;
 
 constexpr std::string_view kDirect = "wpa.reachability.direct.v2";
+constexpr std::string_view kSupport = "wpa.reachability.support.v2";
 constexpr std::string_view kTransitive = "wpa.reachability.transitive.v2";
 
 core::StableId FunctionId(std::string_view name) {
@@ -91,6 +92,35 @@ TEST(ResultCanonicalizerTest, RejectsOrphanedDerivedResult) {
   EXPECT_EQ(result.status().code(), StatusCode::kFailedPrecondition);
 }
 
+// A rule's arity declares how many inputs it joins. A derivation that supplies
+// too few inputs (here a transitive derivation with a single input) is rejected
+// before any proof can be selected.
+TEST(ResultCanonicalizerTest, RejectsDerivationWithMissingOrdinal) {
+  const std::vector<RootedInputFact> roots = {Root(DirectCall("f", "g"))};
+  RawWpaEvaluation raw;
+  raw.results = {Reachable("f", "g")};
+  raw.witnesses = {
+      Edge(Reachable("f", "g"), kTransitive, Reachable("f", "g"), 0)};
+
+  auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
+  ASSERT_FALSE(result.ok());
+  EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
+}
+
+// An input ordinal outside the rule's declared arity is rejected even when the
+// derivation otherwise has the right number of inputs.
+TEST(ResultCanonicalizerTest, RejectsOutOfRangeOrdinal) {
+  const std::vector<RootedInputFact> roots = {Root(DirectCall("f", "g"))};
+  RawWpaEvaluation raw;
+  raw.results = {Reachable("f", "g")};
+  raw.witnesses = {
+      Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 1)};
+
+  auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
+  ASSERT_FALSE(result.ok());
+  EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
+}
+
 // Two results that cite only each other are a closed loop with no root. Such a
 // cycle can justify anything, so neither result may be published.
 TEST(ResultCanonicalizerTest, RejectsCyclicUnrootedWitnesses) {
@@ -98,8 +128,8 @@ TEST(ResultCanonicalizerTest, RejectsCyclicUnrootedWitnesses) {
   RawWpaEvaluation raw;
   raw.results = {Reachable("f", "g"), Reachable("g", "h")};
   raw.witnesses = {
-      Edge(Reachable("f", "g"), kTransitive, Reachable("g", "h"), 0),
-      Edge(Reachable("g", "h"), kTransitive, Reachable("f", "g"), 0)};
+      Edge(Reachable("f", "g"), kSupport, Reachable("g", "h"), 0),
+      Edge(Reachable("g", "h"), kSupport, Reachable("f", "g"), 0)};
 
   auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
   ASSERT_FALSE(result.ok());

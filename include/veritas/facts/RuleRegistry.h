@@ -38,6 +38,9 @@ struct RuleSpec {
   // reaching a result by a more direct route outranks a transitive one.
   std::uint32_t priority;
   RelationId result;
+  // The number of input arguments the rule joins. The canonicalizer rejects a
+  // derivation whose input ordinals are not exactly {0, ..., arity - 1}.
+  std::uint32_t arity;
 };
 
 class RuleRegistry {
