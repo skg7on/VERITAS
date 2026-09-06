@@ -217,6 +217,19 @@ inline void AddParameterFlow(v2::FunctionSummary* summary,
   flow->set_provenance_ref("test:parameter");
 }
 
+// An unresolved call: no resolved callee, so the materializer projects it as
+// an UnknownCall rather than a DirectCall.
+inline void AddUnknownCall(v2::FunctionSummary* summary, std::string_view from,
+                           std::string_view reason) {
+  auto* call = summary->add_calls();
+  call->set_call_site_id(
+      core::ToString(CallSiteId(std::string(from) + "->unknown")));
+  call->set_callee_symbol(std::string(reason));
+  call->set_dispatch(v2::DISPATCH_KIND_INDIRECT);
+  call->set_epistemic(v1::EPISTEMIC_STATE_MAY);
+  call->set_provenance_ref("test:unknown");
+}
+
 // Materializes the logical input for one component rooted at `root`.
 inline StatusOr<WpaLogicalComponentInput> InputFor(
     const std::vector<summary::SummaryArtifact>& artifacts,

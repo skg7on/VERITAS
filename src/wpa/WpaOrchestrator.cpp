@@ -41,7 +41,9 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
         completed_facts) {
   std::set<facts::RelationId> expected;
   for (const auto& domain : ComponentDomains(component)) {
-    expected.insert(domain.derived);
+    if (domain.support.has_value()) {
+      expected.insert(domain.derived);
+    }
   }
   std::vector<facts::AnalysisFact> support;
   auto successors = scc_graph.Successors(scc_id);
@@ -86,6 +88,8 @@ summary::v1::ComponentKind V1Component(WpaComponentKind component) {
     return summary::v1::COMPONENT_KIND_VALUE_FLOW;
   case WpaComponentKind::kMemoryEffects:
     return summary::v1::COMPONENT_KIND_MEMORY_EFFECTS;
+  case WpaComponentKind::kEffects:
+    return summary::v1::COMPONENT_KIND_UNKNOWNS;
   }
   return summary::v1::COMPONENT_KIND_UNSPECIFIED;
 }

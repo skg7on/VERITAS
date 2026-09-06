@@ -271,6 +271,8 @@ std::string_view ComponentKindName(WpaComponentKind component) {
     return "memory-effects";
   case WpaComponentKind::kFlow:
     return "flow";
+  case WpaComponentKind::kEffects:
+    return "effects";
   }
   return "unknown";
 }
@@ -283,6 +285,11 @@ std::vector<ComponentDomain> ComponentDomains(WpaComponentKind component) {
   if (component == WpaComponentKind::kFlow) {
     return {{facts::RelationId::kGlobalFlow,
              facts::RelationId::kSupportGlobalFlow}};
+  }
+  if (component == WpaComponentKind::kEffects) {
+    return {{facts::RelationId::kUnknownEffect,
+             facts::RelationId::kSupportUnknownEffect},
+            {facts::RelationId::kSoundnessCoverage, std::nullopt}};
   }
   return {{facts::RelationId::kMayWrite, facts::RelationId::kSupportMayWrite},
           {facts::RelationId::kMayRead, facts::RelationId::kSupportMayRead}};
@@ -480,7 +487,9 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   // support-fact identities. They are inputs, never results of this component.
   std::map<facts::RelationId, facts::RelationId> support_for_derived;
   for (const auto &domain : ComponentDomains(request.component)) {
-    support_for_derived[domain.derived] = domain.support;
+    if (domain.support.has_value()) {
+      support_for_derived[domain.derived] = *domain.support;
+    }
   }
   std::vector<RootedInputFact> successor_roots;
   std::vector<core::StableId> fact_ids;

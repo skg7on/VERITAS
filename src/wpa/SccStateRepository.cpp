@@ -66,7 +66,8 @@ Status ValidateResult(const SccResult &result) {
   }
   if (result.component_kind != summary::v1::COMPONENT_KIND_CALLS &&
       result.component_kind != summary::v1::COMPONENT_KIND_MEMORY_EFFECTS &&
-      result.component_kind != summary::v1::COMPONENT_KIND_VALUE_FLOW) {
+      result.component_kind != summary::v1::COMPONENT_KIND_VALUE_FLOW &&
+      result.component_kind != summary::v1::COMPONENT_KIND_UNKNOWNS) {
     return Status::InvalidArgument(
         "SCC state requires a supported WPA component");
   }

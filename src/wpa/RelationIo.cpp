@@ -286,10 +286,15 @@ StatusOr<facts::RawWpaEvaluation> RelationIo::ReadOutput(
       facts::SemanticRow row;
       row.relation = domain.derived;
       for (std::size_t i = 0; i < cells.size(); ++i) {
+        const auto domain = derived_schema.columns[i].domain;
+        if (domain == facts::ColumnDomain::kString) {
+          row.cells.push_back(cells[i]);
+          continue;
+        }
         auto ordinal = ParseUnsigned(cells[i]);
         if (!ordinal.ok())
           return ordinal.status();
-        switch (derived_schema.columns[i].domain) {
+        switch (domain) {
         case facts::ColumnDomain::kFunctionId: {
           auto stable = input.mappings.functions.ToStable(
               facts::FunctionId{static_cast<std::uint32_t>(*ordinal)});
@@ -314,6 +319,9 @@ StatusOr<facts::RawWpaEvaluation> RelationIo::ReadOutput(
           row.cells.push_back(*stable);
           break;
         }
+        case facts::ColumnDomain::kUint64:
+          row.cells.push_back(*ordinal);
+          break;
         default:
           row.cells.push_back(static_cast<sem::EpistemicState>(*ordinal));
           break;

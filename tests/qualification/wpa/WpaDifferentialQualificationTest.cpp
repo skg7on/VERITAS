@@ -91,6 +91,13 @@ Program ProgramFor(const QualificationCase& c) {
     AddParameterFlow(&f, "cs:1", "v:2", "v:3");
     return {{f}, "f"};
   }
+  // An unresolved call yields an unknown effect, and the coverage certificate
+  // marks the function incomplete.
+  if (c.name == "effects") {
+    auto f = V2Summary("f");
+    AddUnknownCall(&f, "f", "unresolved");
+    return {{f}, "f"};
+  }
   // The mixed C/C++ semantic_zoo corpus's recursion shapes: a self-recursive
   // function and a mutually recursive pair, sharing a leaf. The entry point
   // lives in the mutual/self-recursive SCC, so the derived reachability facts
@@ -205,6 +212,7 @@ INSTANTIATE_TEST_SUITE_P(
         QualificationCase{"memory_read", WpaComponentKind::kMemoryEffects,
                           "reader"},
         QualificationCase{"flow", WpaComponentKind::kFlow, "f"},
+        QualificationCase{"effects", WpaComponentKind::kEffects, "f"},
         QualificationCase{"semantic_zoo_recursive",
                           WpaComponentKind::kReachability,
                           "zoo_recursive_entry"},

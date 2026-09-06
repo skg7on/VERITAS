@@ -321,12 +321,220 @@ StatusOr<facts::RawWpaEvaluation> EvaluateFlow(
   return raw;
 }
 
+// One unknown-effect tuple: the function carrying the unknown plus its
+// subject/reason pair and warrant.
+struct UnknownTuple {
+  core::StableId function;
+  std::string subject;
+  std::string reason;
+  sem::EpistemicState epistemic;
+
+  auto operator<=>(const UnknownTuple&) const = default;
+};
+
+// Evaluates the UnknownEffect and SoundnessCoverage domains together: the
+// unknown-effect closure seeds from unresolved calls and propagates up the
+// call graph, then the coverage certificate marks each function complete or
+// not based on the presence of an unknown effect.
+StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
+    const WpaLogicalComponentInput& input) {
+  std::vector<CallEdgeTuple> calls;
+  std::vector<std::pair<UnknownTuple, facts::SemanticRow>> base_rows;
+  std::vector<std::pair<UnknownTuple, facts::SemanticRow>> support_rows;
+  std::map<core::StableId, std::string> function_stable;
+
+  for (const auto& row : input.edb) {
+    if (row.relation == facts::RelationId::kDirectCall) {
+      auto resolved = ResolveRow(row, input.mappings);
+      if (!resolved.ok())
+        return resolved.status();
+      if (resolved->endpoint_ids.size() < 2) {
+        return Status::InvalidArgument("DirectCall row is missing endpoints");
+      }
+      calls.push_back(CallEdgeTuple{.caller = resolved->endpoint_ids[0],
+                                    .callee = resolved->endpoint_ids[1],
+                                    .epistemic = resolved->epistemics.front(),
+                                    .row = resolved->semantic});
+    } else if (row.relation == facts::RelationId::kUnknownCall) {
+      auto resolved = ResolveRow(row, input.mappings);
+      if (!resolved.ok())
+        return resolved.status();
+      if (resolved->endpoint_ids.empty()) {
+        return Status::InvalidArgument("UnknownCall row is missing its caller");
+      }
+      const auto* site = std::get_if<core::StableId>(&resolved->semantic.cells[0]);
+      const auto* reason = std::get_if<std::string>(&resolved->semantic.cells[2]);
+      if (site == nullptr || reason == nullptr) {
+        return Status::InvalidArgument("malformed UnknownCall row");
+      }
+      base_rows.emplace_back(
+          UnknownTuple{resolved->endpoint_ids[0], core::ToString(*site),
+                       *reason, resolved->epistemics.front()},
+          resolved->semantic);
+    } else if (row.relation == facts::RelationId::kSupportUnknownEffect) {
+      auto resolved = ResolveRow(row, input.mappings);
+      if (!resolved.ok())
+        return resolved.status();
+      if (resolved->endpoint_ids.empty()) {
+        return Status::InvalidArgument(
+            "SupportUnknownEffect row is missing its function");
+      }
+      const auto* subject = std::get_if<std::string>(&resolved->semantic.cells[1]);
+      const auto* reason = std::get_if<std::string>(&resolved->semantic.cells[2]);
+      if (subject == nullptr || reason == nullptr) {
+        return Status::InvalidArgument("malformed SupportUnknownEffect row");
+      }
+      support_rows.emplace_back(
+          UnknownTuple{resolved->endpoint_ids[0], *subject, *reason,
+                       resolved->epistemics.front()},
+          resolved->semantic);
+    } else if (row.relation == facts::RelationId::kFunctionMap) {
+      // FunctionMap carries no epistemic state, so resolve it directly rather
+      // than through ResolveRow (which requires one).
+      const auto* fn = std::get_if<facts::FunctionId>(&row.cells[0]);
+      const auto* stable = std::get_if<std::string>(&row.cells[1]);
+      if (fn == nullptr || stable == nullptr) {
+        return Status::InvalidArgument("malformed FunctionMap row");
+      }
+      auto id = input.mappings.functions.ToStable(*fn);
+      if (!id.ok())
+        return id.status();
+      function_stable[*id] = *stable;
+    }
+  }
+
+  facts::RawWpaEvaluation raw;
+  auto UnknownResultRow = [](const UnknownTuple& tuple) {
+    return facts::SemanticRow{facts::RelationId::kUnknownEffect,
+                              {tuple.function, tuple.subject, tuple.reason,
+                               tuple.epistemic}};
+  };
+  auto CoverageResultRow = [](const std::string& scope,
+                              std::uint64_t complete) {
+    return facts::SemanticRow{
+        facts::RelationId::kSoundnessCoverage,
+        {scope, std::string("dominating_check_absence"), complete,
+         sem::EpistemicState::kMust}};
+  };
+
+  std::set<UnknownTuple> derived;
+  for (const auto& [tuple, row] : base_rows) {
+    if (!WeaknessRank(tuple.epistemic).has_value())
+      continue;
+    if (derived.insert(tuple).second) {
+      raw.witnesses.push_back(facts::WitnessEdge{
+          .result = facts::SemanticKey{UnknownResultRow(tuple)},
+          .rule_id = "wpa.effect.unknown.call.v2",
+          .derivation_key = facts::EncodeSemanticKey(row),
+          .input = facts::SemanticKey{row},
+          .input_ordinal = 0});
+    }
+  }
+
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    const std::vector<UnknownTuple> snapshot(derived.begin(), derived.end());
+
+    for (const auto& call : calls) {
+      for (const auto& tuple : snapshot) {
+        if (tuple.function != call.callee)
+          continue;
+        const auto combined = Weaken(call.epistemic, tuple.epistemic);
+        if (!combined.has_value())
+          continue;
+        const UnknownTuple next{call.caller, tuple.subject, tuple.reason,
+                                *combined};
+        if (derived.insert(next).second)
+          changed = true;
+        const std::string derivation_key =
+            facts::EncodeSemanticKey(call.row) +
+            facts::EncodeSemanticKey(UnknownResultRow(tuple));
+        raw.witnesses.push_back(facts::WitnessEdge{
+            .result = facts::SemanticKey{UnknownResultRow(next)},
+            .rule_id = "wpa.effect.unknown.transitive.v2",
+            .derivation_key = derivation_key,
+            .input = facts::SemanticKey{call.row},
+            .input_ordinal = 0});
+        raw.witnesses.push_back(facts::WitnessEdge{
+            .result = facts::SemanticKey{UnknownResultRow(next)},
+            .rule_id = "wpa.effect.unknown.transitive.v2",
+            .derivation_key = derivation_key,
+            .input = facts::SemanticKey{UnknownResultRow(tuple)},
+            .input_ordinal = 1});
+      }
+    }
+
+    for (const auto& call : calls) {
+      for (const auto& [tuple, row] : support_rows) {
+        if (tuple.function != call.callee)
+          continue;
+        const auto combined = Weaken(call.epistemic, tuple.epistemic);
+        if (!combined.has_value())
+          continue;
+        const UnknownTuple next{call.caller, tuple.subject, tuple.reason,
+                                *combined};
+        if (derived.insert(next).second)
+          changed = true;
+        const std::string derivation_key =
+            facts::EncodeSemanticKey(call.row) +
+            facts::EncodeSemanticKey(row);
+        raw.witnesses.push_back(facts::WitnessEdge{
+            .result = facts::SemanticKey{UnknownResultRow(next)},
+            .rule_id = "wpa.effect.unknown.support.v2",
+            .derivation_key = derivation_key,
+            .input = facts::SemanticKey{call.row},
+            .input_ordinal = 0});
+        raw.witnesses.push_back(facts::WitnessEdge{
+            .result = facts::SemanticKey{UnknownResultRow(next)},
+            .rule_id = "wpa.effect.unknown.support.v2",
+            .derivation_key = derivation_key,
+            .input = facts::SemanticKey{row},
+            .input_ordinal = 1});
+      }
+    }
+  }
+
+  for (const auto& tuple : derived) {
+    raw.results.push_back(UnknownResultRow(tuple));
+  }
+
+  // SoundnessCoverage: a function carrying an unknown effect is marked
+  // incomplete (gapped); the closed-world "complete" state is the absence of
+  // this fact at the query layer. Each unknown effect witnesses the gap, but
+  // the fact itself is emitted once per function.
+  std::set<std::string> emitted_scopes;
+  for (const auto& tuple : derived) {
+    const auto it = function_stable.find(tuple.function);
+    if (it == function_stable.end())
+      continue;
+    const std::string& scope = it->second;
+    raw.witnesses.push_back(facts::WitnessEdge{
+        .result = facts::SemanticKey{CoverageResultRow(scope, 0)},
+        .rule_id = "wpa.coverage.incomplete.v2",
+        .derivation_key = facts::EncodeSemanticKey(UnknownResultRow(tuple)),
+        .input = facts::SemanticKey{UnknownResultRow(tuple)},
+        .input_ordinal = 0});
+    if (emitted_scopes.insert(scope).second) {
+      raw.results.push_back(CoverageResultRow(scope, 0));
+    }
+  }
+
+  std::ranges::sort(raw.witnesses);
+  raw.witnesses.erase(std::unique(raw.witnesses.begin(), raw.witnesses.end()),
+                      raw.witnesses.end());
+  return raw;
+}
+
 }  // namespace
 
 StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
     const WpaLogicalComponentInput& input) const {
   if (input.component == WpaComponentKind::kFlow) {
     return EvaluateFlow(input);
+  }
+  if (input.component == WpaComponentKind::kEffects) {
+    return EvaluateEffects(input);
   }
   const auto domains = DomainsFor(input.component);
 

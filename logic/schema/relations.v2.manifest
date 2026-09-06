@@ -45,3 +45,6 @@ MayRead	idb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST
 SupportMayRead	edb	function_id:function_id,memory_id:memory_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
 GlobalFlow	idb	source_id:value_id,sink_id:value_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
 SupportGlobalFlow	edb	source_id:value_id,sink_id:value_id,epistemic:epistemic	MUST,MAY,INFERRED,ASSUMED,UNKNOWN
+UnknownEffect	idb	function_id:function_id,subject:string,reason:string,epistemic:epistemic	MAY,UNKNOWN
+SupportUnknownEffect	edb	function_id:function_id,subject:string,reason:string,epistemic:epistemic	MAY,UNKNOWN
+SoundnessCoverage	idb	scope_id:string,coverage_kind:string,complete:uint64,epistemic:epistemic	MUST,UNKNOWN

@@ -13,7 +13,8 @@
 # limitations under the License.
 
 foreach(_required IN ITEMS MANIFEST SOUFFLE RUNNER FUNCTOR REACH_BUNDLE
-                           MEMORY_EFFECTS_BUNDLE FLOW_BUNDLE EXPECTED_REVISION)
+                           MEMORY_EFFECTS_BUNDLE FLOW_BUNDLE EFFECTS_BUNDLE
+                           EXPECTED_REVISION)
   if(NOT DEFINED ${_required})
     message(FATAL_ERROR "VerifySouffleProvenance: missing -D${_required}")
   endif()
@@ -48,6 +49,7 @@ assert_digest("functor_library_sha256" "${FUNCTOR}" _functor_digest)
 assert_digest("reachability_bundle_sha256" "${REACH_BUNDLE}" _reach_digest)
 assert_digest("memory_effects_bundle_sha256" "${MEMORY_EFFECTS_BUNDLE}" _memory_effects_digest)
 assert_digest("flow_bundle_sha256" "${FLOW_BUNDLE}" _flow_digest)
+assert_digest("effects_bundle_sha256" "${EFFECTS_BUNDLE}" _effects_digest)
 
 read_field("executable_sha256" _compatibility_digest)
 if(NOT _compatibility_digest STREQUAL _souffle_digest)
@@ -81,6 +83,7 @@ string(CONCAT _canonical
   "reachability_bundle_sha256=${_reach_digest}\n"
   "memory_effects_bundle_sha256=${_memory_effects_digest}\n"
   "flow_bundle_sha256=${_flow_digest}\n"
+  "effects_bundle_sha256=${_effects_digest}\n"
   "compiler_id=${_compiler_id}\n"
   "compiler_version=${_compiler_version}\n"
   "compiler_path=${_compiler_path}\n"

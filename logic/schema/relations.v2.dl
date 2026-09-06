@@ -106,3 +106,11 @@
 .input ParameterFlow(IO=file, filename="ParameterFlow.facts")
 .input ReturnFlow(IO=file, filename="ReturnFlow.facts")
 .input SupportGlobalFlow(IO=file, filename="SupportGlobalFlow.facts")
+
+// Unknown effect and its successor support. UnknownEffect is keyed on the
+// function that carries the unknown plus a subject/reason pair; its epistemic
+// state is MAY or UNKNOWN only.
+.decl SupportUnknownEffect(function_id:FunctionId, subject:symbol,
+                           reason:symbol, epistemic:Epistemic)
+
+.input SupportUnknownEffect(IO=file, filename="SupportUnknownEffect.facts")

@@ -245,10 +245,11 @@ Status RunWpa(const std::filesystem::path &output_root,
   limits.memory_mb = config.wpa_component_memory_mb;
   limits.threads = config.wpa_threads;
 
-  const std::array<wpa::WpaComponentKind, 3> components = {
+  const std::array<wpa::WpaComponentKind, 4> components = {
       wpa::WpaComponentKind::kReachability,
       wpa::WpaComponentKind::kMemoryEffects,
-      wpa::WpaComponentKind::kFlow};
+      wpa::WpaComponentKind::kFlow,
+      wpa::WpaComponentKind::kEffects};
 
   wpa::WpaRunRequest wpa_request;
   wpa_request.run = *run;
