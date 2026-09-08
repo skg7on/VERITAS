@@ -195,6 +195,7 @@ add_subdirectory(src/wpa)
 add_subdirectory(src/cpg)
 add_subdirectory(src/frontend)
 add_subdirectory(src/analysis)
+add_subdirectory(src/evidence)
 
 if(VERITAS_BUILD_TOOLS)
   add_subdirectory(src/tools)

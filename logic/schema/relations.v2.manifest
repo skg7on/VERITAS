@@ -49,3 +49,4 @@ UnknownEffect	idb	function_id:function_id,subject:string,reason:string,epistemic
 SupportUnknownEffect	edb	function_id:function_id,subject:string,reason:string,epistemic:epistemic	MAY,UNKNOWN
 SoundnessCoverage	idb	scope_id:string,coverage_kind:string,complete:uint64,epistemic:epistemic	MUST,UNKNOWN
 UnmodeledExternal	edb	function_id:function_id	-
+evidence.query_completion.v1	edb	query_kind:string,ordered_scope_refs:string,budget:string,query_implementation_version:string,input_snapshot_fingerprint:string,completeness:string,ordered_truncation_reasons:string,examined_items:uint64,returned_member_digest:string	-

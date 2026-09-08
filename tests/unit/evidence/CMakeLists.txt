@@ -12,18 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(veritas_unit_test_support INTERFACE)
-target_link_libraries(veritas_unit_test_support INTERFACE
+add_executable(EvidenceContractTest EvidenceContractTest.cpp)
+target_link_libraries(EvidenceContractTest PRIVATE
+  veritas::evidence
+  veritas::test_support
   GTest::gtest_main
 )
-
-add_subdirectory(core)
-add_subdirectory(build)
-add_subdirectory(summary)
-add_subdirectory(summarydb)
-add_subdirectory(runtime)
-add_subdirectory(cpg)
-add_subdirectory(analysis)
-add_subdirectory(facts)
-add_subdirectory(wpa)
-add_subdirectory(evidence)
+veritas_add_warnings(EvidenceContractTest)
+gtest_discover_tests(EvidenceContractTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-contract")
