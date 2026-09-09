@@ -1,0 +1,18 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-O0", "-g", "-fno-inline",
+      "-fno-rtti", "-fno-exceptions", "-c", "copy.cpp"
+    ],
+    "file": "copy.cpp"
+  },
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-O0", "-g", "-fno-inline",
+      "-fno-rtti", "-fno-exceptions", "-c", "entry.cpp"
+    ],
+    "file": "entry.cpp"
+  }
+]
