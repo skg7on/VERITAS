@@ -22,3 +22,25 @@ veritas_add_warnings(EvidenceContractTest)
 gtest_discover_tests(EvidenceContractTest DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
   PROPERTIES LABELS "evidence-contract")
+
+add_executable(EvidenceQueryServiceTest EvidenceQueryServiceTest.cpp)
+target_link_libraries(EvidenceQueryServiceTest PRIVATE
+  veritas::evidence
+  veritas::test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(EvidenceQueryServiceTest)
+gtest_discover_tests(EvidenceQueryServiceTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-unit")
+
+add_executable(EvidenceHandoffTest EvidenceHandoffTest.cpp)
+target_link_libraries(EvidenceHandoffTest PRIVATE
+  veritas::evidence
+  veritas::test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(EvidenceHandoffTest)
+gtest_discover_tests(EvidenceHandoffTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-unit\;evidence-contract")
