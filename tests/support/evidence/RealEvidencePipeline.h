@@ -17,6 +17,13 @@
 // exercise EvidenceQueryService against genuinely produced facts.
 //
 // Header-only so integration tests share it without a new library target.
+//
+// Scope note (descoped demo): the pipeline produces flow (GlobalFlow), unknowns
+// (UnknownEffect), reachability, provenance with summary_id, and the negative
+// "dominating_check_absence" SoundnessCoverage certificate. Value-range,
+// capacity, alias, and positive dominating-check facts are DEFERRED to a later
+// milestone (M9/M10A does not emit them); the query service therefore returns
+// complete-empty open-world results for those queries.
 
 #ifndef VERITAS_TESTING_REAL_EVIDENCE_PIPELINE_H_
 #define VERITAS_TESTING_REAL_EVIDENCE_PIPELINE_H_
