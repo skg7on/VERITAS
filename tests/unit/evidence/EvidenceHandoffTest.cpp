@@ -149,19 +149,28 @@ ClaimSeed Claim(const EvidenceScenarioBuilder& builder) {
   return seed;
 }
 
-// A CPG with a function containing the sink and one flow edge from the source
-// to the sink.
+// A CPG with a function containing the sink and a value-flow path
+// srcbuf -> v1 -> v2 -> memcpy. The intermediate kValueRef nodes let flow facts
+// be scoped to the query's discovered path.
 cpg::ThinCpg FlowCpg(const EvidenceScenarioBuilder& builder,
                      const ClaimSeed& seed) {
   cpg::ThinCpg cpg;
   cpg.AddNode(builder.MakeNode("copy", cpg::NodeKind::kFunction));
   cpg.AddNode(builder.MakeNode("srcbuf", cpg::NodeKind::kGlobal));
+  cpg.AddNode(builder.MakeNode("v1", cpg::NodeKind::kParameter));
+  cpg.AddNode(builder.MakeNode("v2", cpg::NodeKind::kParameter));
   cpg.AddNode(builder.MakeNode("memcpy", cpg::NodeKind::kCallSite));
+
+  const auto v1 = builder.Id(core::IdKind::kValueRef, "v1");
+  const auto v2 = builder.Id(core::IdKind::kValueRef, "v2");
 
   cpg.AddEdge(builder.MakeEdge(
       "contains", cpg::EdgeKind::kContains,
       builder.Id(core::IdKind::kFunctionVariant, "copy"), seed.sink_ref));
-  cpg.AddEdge(builder.MakeEdge("flow", cpg::EdgeKind::kFlowsTo, seed.source_ref,
+  cpg.AddEdge(builder.MakeEdge("flow1", cpg::EdgeKind::kFlowsTo, seed.source_ref,
+                               v1));
+  cpg.AddEdge(builder.MakeEdge("flow2", cpg::EdgeKind::kFlowsTo, v1, v2));
+  cpg.AddEdge(builder.MakeEdge("flow3", cpg::EdgeKind::kFlowsTo, v2,
                                seed.sink_ref));
   return cpg;
 }
@@ -275,22 +284,30 @@ TEST(EvidenceHandoffTest, UsesOneImmutableSnapshot) {
 
 // HND-003: supporting and contradicting facts for one predicate stay separate,
 // retaining IDs and epistemic states; the conflict is not resolved by dropping
-// one side.
+// one side. Flow facts are scoped to the query's discovered path, so an
+// unrelated value-pair fact is excluded.
 TEST(EvidenceHandoffTest, KeepsSupportingAndContradictingFactsSeparate) {
   EvidenceScenarioBuilder builder;
   const ClaimSeed seed = Claim(builder);
 
-  const auto supporting =
-      GlobalFlowFact(builder, builder.Id(core::IdKind::kValueRef, "v1"),
-                     builder.Id(core::IdKind::kValueRef, "v2"),
-                     sem::EpistemicState::kMay);
+  const auto v1 = builder.Id(core::IdKind::kValueRef, "v1");
+  const auto v2 = builder.Id(core::IdKind::kValueRef, "v2");
+
+  const auto supporting = GlobalFlowFact(builder, v1, v2, sem::EpistemicState::kMay);
+  // kMustNot GlobalFlow is a schema-invalid placeholder by GlobalFlow's
+  // allowed_epistemic (which excludes MUST_NOT and is not yet enforced by
+  // facts::MakeFact); it stands in for the currently unrepresentable
+  // "contradicting flow" shape.
   const auto contradicting =
-      GlobalFlowFact(builder, builder.Id(core::IdKind::kValueRef, "v1"),
-                     builder.Id(core::IdKind::kValueRef, "v2"),
-                     sem::EpistemicState::kMustNot);
+      GlobalFlowFact(builder, v1, v2, sem::EpistemicState::kMustNot);
+  // An unrelated flow fact whose endpoints are not on the src->dst path.
+  const auto unrelated =
+      GlobalFlowFact(builder, builder.Id(core::IdKind::kValueRef, "ux"),
+                     builder.Id(core::IdKind::kValueRef, "uy"),
+                     sem::EpistemicState::kMust);
 
   FakeEvidenceBackend backend(Descriptor(builder));
-  backend.SetFacts({supporting, contradicting});
+  backend.SetFacts({supporting, contradicting, unrelated});
 
   cpg::ThinCpg cpg = FlowCpg(builder, seed);
   EvidenceQueryService service(cpg, backend, backend.run_id());
@@ -302,6 +319,15 @@ TEST(EvidenceHandoffTest, KeepsSupportingAndContradictingFactsSeparate) {
   ASSERT_EQ(slice.contradicting_facts.size(), 1u);
   EXPECT_EQ(slice.supporting_facts[0].fact_id, supporting.fact_id);
   EXPECT_EQ(slice.contradicting_facts[0].fact_id, contradicting.fact_id);
+
+  // The unrelated flow fact is excluded from every collection.
+  for (const auto& fact : slice.supporting_facts) {
+    EXPECT_NE(fact.fact_id, unrelated.fact_id);
+  }
+  for (const auto& fact : slice.contradicting_facts) {
+    EXPECT_NE(fact.fact_id, unrelated.fact_id);
+  }
+  EXPECT_TRUE(slice.unknowns.empty());
 
   const auto* supporting_state =
       std::get_if<sem::EpistemicState>(&slice.supporting_facts[0].row.cells[2]);

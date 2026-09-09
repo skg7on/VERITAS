@@ -480,7 +480,16 @@ StatusOr<FlowQueryOutcome> RunValueFlow(
   slice.metadata.examined_items = examined;
 
   // Supporting, contradicting, and unknown flow facts are classified from the
-  // value-flow closure relations and stay separate.
+  // value-flow closure relations and stay separate. A fact is in scope only
+  // when its (source_id, sink_id) pair is relevant to this query: either an
+  // endpoint matches src/dst, or both endpoints are nodes on a discovered
+  // src->dst path. Unrelated flow facts are excluded so a query never leaks
+  // flow evidence for other value pairs.
+  std::set<core::StableId> path_nodes;
+  for (const Path& path : paths) {
+    path_nodes.insert(path.nodes.begin(), path.nodes.end());
+  }
+
   auto facts = snapshot.GetCurrentFacts();
   if (!facts.ok()) {
     return facts.status();
@@ -488,6 +497,16 @@ StatusOr<FlowQueryOutcome> RunValueFlow(
   for (const auto& fact : *facts) {
     if (fact.row.relation != facts::RelationId::kGlobalFlow &&
         fact.row.relation != facts::RelationId::kSupportGlobalFlow) {
+      continue;
+    }
+    const core::StableId* source_id = StableIdCell(fact.row, 0);
+    const core::StableId* sink_id = StableIdCell(fact.row, 1);
+    const bool relevant =
+        (source_id != nullptr && *source_id == src) ||
+        (sink_id != nullptr && *sink_id == dst) ||
+        (source_id != nullptr && sink_id != nullptr &&
+         path_nodes.count(*source_id) != 0 && path_nodes.count(*sink_id) != 0);
+    if (!relevant) {
       continue;
     }
     const sem::EpistemicState* state = EpistemicCell(fact.row, 2);
