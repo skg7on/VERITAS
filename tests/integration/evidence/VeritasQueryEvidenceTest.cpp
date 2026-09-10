@@ -345,21 +345,37 @@ std::string ReadFile(const std::filesystem::path& path) {
 struct JsonNode {
   enum class Kind { kNull, kBool, kNumber, kString, kArray, kObject };
 
+  // Object members are a vector of a nested struct rather than
+  // std::vector<std::pair<std::string, JsonNode>>. std::pair needs both of its
+  // types complete where the vector is declared, and JsonNode is still
+  // incomplete there; libstdc++ instantiates std::pair eagerly and rejects the
+  // declaration, while libc++ accepts it lazily. The element type is completed
+  // below, once JsonNode is closed, and std::vector tolerates an incomplete
+  // element type.
+  struct Field;
+
   Kind kind = Kind::kNull;
   bool boolean = false;
   std::string text;  // string body, number literal, or "true"/"false"/"null"
-  std::vector<JsonNode> items;                             // array elements
-  std::vector<std::pair<std::string, JsonNode>> members;   // object members
+  std::vector<JsonNode> items;  // array elements
+  std::vector<Field> members;   // object members
 
-  const JsonNode* Member(std::string_view name) const {
-    for (const auto& entry : members) {
-      if (entry.first == name) {
-        return &entry.second;
-      }
-    }
-    return nullptr;
-  }
+  const JsonNode* Member(std::string_view name) const;
 };
+
+struct JsonNode::Field {
+  std::string name;
+  JsonNode value;
+};
+
+const JsonNode* JsonNode::Member(std::string_view name) const {
+  for (const auto& entry : members) {
+    if (entry.name == name) {
+      return &entry.value;
+    }
+  }
+  return nullptr;
+}
 
 class JsonReader {
  public:
@@ -435,7 +451,7 @@ class JsonReader {
       if (!ParseValue(&value)) {
         return false;
       }
-      out->members.emplace_back(std::move(key), std::move(value));
+      out->members.push_back(JsonNode::Field{std::move(key), std::move(value)});
       SkipSpace();
       if (pos_ >= text_.size()) {
         return false;
