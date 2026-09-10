@@ -133,6 +133,35 @@ bool HasUnknownWithReason(const std::vector<facts::AnalysisFact>& facts,
   return false;
 }
 
+// Positively asserts the completeness-qualified check output: the run must emit
+// at least one SoundnessCoverage fact whose coverage_kind is
+// "dominating_check_absence" and whose complete cell is present and gapped
+// (Uint64 0). The "complete" (no-absence) state is represented by the ABSENCE
+// of this fact, not by a 1 here. A regression that stopped emitting the
+// certificate — or dropped the completeness cell — fails these assertions.
+void ExpectDominatingCheckAbsenceCertificate(
+    const std::vector<facts::AnalysisFact>& facts) {
+  const auto coverage =
+      FactsOfRelation(facts, facts::RelationId::kSoundnessCoverage);
+  EXPECT_FALSE(coverage.empty()) << "no SoundnessCoverage certificate emitted";
+  bool saw_absence = false;
+  bool saw_gapped_complete = false;
+  for (const auto& fact : coverage) {
+    const std::string* kind = StringCell(fact.row, 1);
+    if (kind == nullptr || *kind != "dominating_check_absence") {
+      continue;
+    }
+    saw_absence = true;
+    const auto* complete = std::get_if<std::uint64_t>(&fact.row.cells[2]);
+    if (complete != nullptr && *complete == 0) {
+      saw_gapped_complete = true;
+    }
+  }
+  EXPECT_TRUE(saw_absence) << "no dominating_check_absence coverage fact";
+  EXPECT_TRUE(saw_gapped_complete)
+      << "dominating_check_absence fact missing gapped complete cell";
+}
+
 TEST(OverflowEvidenceFixtureTest, UnsafeFixtureProducesFlowAndUnknownFacts) {
   auto snapshot = AnalyzeRealFixture("evidence_overflow_unsafe");
   ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
@@ -146,6 +175,9 @@ TEST(OverflowEvidenceFixtureTest, UnsafeFixtureProducesFlowAndUnknownFacts) {
   // The unmodeled memcpy call surfaces as an unknown effect on the sink's
   // function (the opaque-callee half of the unknown surface).
   EXPECT_TRUE(HasUnknownWithReason(*facts, "llvm.memcpy.p0.p0.i64"));
+
+  // Positive: the completeness-qualified check output is actually emitted.
+  ExpectDominatingCheckAbsenceCertificate(*facts);
 
   // Forbidden: the pipeline must never manufacture a positive dominating-check
   // fact. The only soundness-coverage fact it derives is the negative
@@ -169,6 +201,9 @@ TEST(OverflowEvidenceFixtureTest, OpaqueValidatorRemainsUnknown) {
   ASSERT_TRUE(facts.ok()) << facts.status().message();
 
   EXPECT_TRUE(HasUnknownWithReason(*facts, "vendor_validate"));
+
+  // Positive: the completeness-qualified check output is actually emitted.
+  ExpectDominatingCheckAbsenceCertificate(*facts);
 
   // Forbidden: the unknown external validator must not be promoted to a
   // dominating check (positive) or a MUST_NOT/negative fact.
@@ -360,6 +395,10 @@ TEST(OverflowEvidenceFixtureTest,
     ASSERT_TRUE(facts.ok()) << facts.status().message();
     EXPECT_FALSE(FactsOfRelation(*facts, facts::RelationId::kGlobalFlow).empty())
         << fixture;
+
+    // Positive: the completeness-qualified check output is actually emitted for
+    // each shape.
+    ExpectDominatingCheckAbsenceCertificate(*facts);
 
     // Forbidden: no positive dominating-check fact is fabricated.
     const auto coverage =
