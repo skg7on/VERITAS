@@ -19,9 +19,29 @@
 // M1→M6→M9→M10A pipeline, build the typed oracle in process, then run the
 // PUBLIC CLI against the same materialized store. Typed content is validated
 // first (claim seed, the real value-flow path, the pinned run, provenance, and
-// the completeness of every fact set), and only then are bytes compared: CLI
-// stdout vs `ToDiagnosticJson(oracle)`, vs the checked-in golden, and across a
-// second independent materialization ("second clean store").
+// the completeness of every fact set), and only then is output compared.
+//
+// Two comparison strengths are used, deliberately:
+//
+//   * BYTE-identical, for runs inside one build: CLI stdout vs
+//     `ToDiagnosticJson(oracle)`, vs a second fresh store in another checkout
+//     root, and vs the same store with its fact bindings re-inserted backwards.
+//     Same toolchain → same `analysis_run_id` → byte-stable output.
+//
+//   * SEMANTIC, against the checked-in golden. The golden CANNOT be compared
+//     byte-for-byte: `analysis_run_id` derives from
+//     `engine_toolchain_identity = "souffle-" + SHA256(<vendored souffle
+//     executable bytes>)`, and that executable is not bit-reproducible, so a
+//     clean rebuild of the vendored subtree changes the digest and with it the
+//     run id, the six query-completion fact ids, the run bindings, the
+//     per-query provenance ids, and the canonical ordering that sorts by those
+//     ids (Task 5 verification reproduced three distinct digests and three
+//     distinct run ids from three clean rebuilds). Everything semantic — the
+//     claim seed, the CPG flow nodes/edges, the GlobalFlow support, the fact
+//     sets, and every completeness state — is identical across those builds.
+//     The golden comparison therefore parses both documents and compares only
+//     the toolchain-stable fields; see `SemanticSlice`. Making the vendored
+//     Soufflé build bit-reproducible is a third_party build follow-up.
 //
 // The JSON is the DESC0PED slice. What the real pipeline produces and what this
 // CLI therefore publishes is the value-flow closure (GlobalFlow projected onto
@@ -48,6 +68,8 @@
 // materializations of the same source (asserted below).
 
 #include <array>
+#include <cassert>
+#include <charconv>
 #include <cstddef>
 #include <cstdio>
 #include <cstdint>
@@ -58,6 +80,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -309,6 +332,623 @@ std::string ReadFile(const std::filesystem::path& path) {
   return contents.str();
 }
 
+// ---------------------------------------------------------------------------
+// Semantic (toolchain-stable) comparison of two slice documents
+// ---------------------------------------------------------------------------
+//
+// ToDiagnosticJson is a debug representation with no production reader, so the
+// reader below is test-local by design: DEM-001 exists precisely to pin the
+// `--format json` document's shape and content.
+
+// A minimal JSON tree: objects, arrays, strings, numbers, booleans, null. The
+// slice document contains nothing else.
+struct JsonNode {
+  enum class Kind { kNull, kBool, kNumber, kString, kArray, kObject };
+
+  Kind kind = Kind::kNull;
+  bool boolean = false;
+  std::string text;  // string body, number literal, or "true"/"false"/"null"
+  std::vector<JsonNode> items;                             // array elements
+  std::vector<std::pair<std::string, JsonNode>> members;   // object members
+
+  const JsonNode* Member(std::string_view name) const {
+    for (const auto& entry : members) {
+      if (entry.first == name) {
+        return &entry.second;
+      }
+    }
+    return nullptr;
+  }
+};
+
+class JsonReader {
+ public:
+  explicit JsonReader(std::string_view text) : text_(text) {}
+
+  bool Parse(JsonNode* out) {
+    SkipSpace();
+    if (!ParseValue(out)) {
+      return false;
+    }
+    SkipSpace();
+    return pos_ == text_.size();
+  }
+
+ private:
+  bool ParseValue(JsonNode* out) {
+    if (pos_ >= text_.size()) {
+      return false;
+    }
+    switch (text_[pos_]) {
+      case '{':
+        return ParseObject(out);
+      case '[':
+        return ParseArray(out);
+      case '"':
+        out->kind = JsonNode::Kind::kString;
+        return ParseString(&out->text);
+      case 't':
+        return ParseLiteral("true", JsonNode::Kind::kBool, true, out);
+      case 'f':
+        return ParseLiteral("false", JsonNode::Kind::kBool, false, out);
+      case 'n':
+        return ParseLiteral("null", JsonNode::Kind::kNull, false, out);
+      default:
+        out->kind = JsonNode::Kind::kNumber;
+        return ParseNumber(&out->text);
+    }
+  }
+
+  bool ParseLiteral(std::string_view literal, JsonNode::Kind kind, bool boolean,
+                    JsonNode* out) {
+    if (text_.compare(pos_, literal.size(), literal) != 0) {
+      return false;
+    }
+    pos_ += literal.size();
+    out->kind = kind;
+    out->boolean = boolean;
+    out->text = std::string(literal);
+    return true;
+  }
+
+  bool ParseObject(JsonNode* out) {
+    out->kind = JsonNode::Kind::kObject;
+    ++pos_;  // '{'
+    SkipSpace();
+    if (pos_ < text_.size() && text_[pos_] == '}') {
+      ++pos_;
+      return true;
+    }
+    while (true) {
+      SkipSpace();
+      std::string key;
+      if (!ParseString(&key)) {
+        return false;
+      }
+      SkipSpace();
+      if (pos_ >= text_.size() || text_[pos_] != ':') {
+        return false;
+      }
+      ++pos_;
+      SkipSpace();
+      JsonNode value;
+      if (!ParseValue(&value)) {
+        return false;
+      }
+      out->members.emplace_back(std::move(key), std::move(value));
+      SkipSpace();
+      if (pos_ >= text_.size()) {
+        return false;
+      }
+      if (text_[pos_] == ',') {
+        ++pos_;
+        continue;
+      }
+      if (text_[pos_] == '}') {
+        ++pos_;
+        return true;
+      }
+      return false;
+    }
+  }
+
+  bool ParseArray(JsonNode* out) {
+    out->kind = JsonNode::Kind::kArray;
+    ++pos_;  // '['
+    SkipSpace();
+    if (pos_ < text_.size() && text_[pos_] == ']') {
+      ++pos_;
+      return true;
+    }
+    while (true) {
+      SkipSpace();
+      JsonNode value;
+      if (!ParseValue(&value)) {
+        return false;
+      }
+      out->items.push_back(std::move(value));
+      SkipSpace();
+      if (pos_ >= text_.size()) {
+        return false;
+      }
+      if (text_[pos_] == ',') {
+        ++pos_;
+        continue;
+      }
+      if (text_[pos_] == ']') {
+        ++pos_;
+        return true;
+      }
+      return false;
+    }
+  }
+
+  bool ParseString(std::string* out) {
+    if (pos_ >= text_.size() || text_[pos_] != '"') {
+      return false;
+    }
+    ++pos_;
+    out->clear();
+    while (pos_ < text_.size()) {
+      const char c = text_[pos_++];
+      if (c == '"') {
+        return true;
+      }
+      if (c != '\\') {
+        out->push_back(c);
+        continue;
+      }
+      if (pos_ >= text_.size()) {
+        return false;
+      }
+      const char escape = text_[pos_++];
+      switch (escape) {
+        case '"':
+        case '\\':
+        case '/':
+          out->push_back(escape);
+          break;
+        case 'b':
+          out->push_back('\b');
+          break;
+        case 'f':
+          out->push_back('\f');
+          break;
+        case 'n':
+          out->push_back('\n');
+          break;
+        case 'r':
+          out->push_back('\r');
+          break;
+        case 't':
+          out->push_back('\t');
+          break;
+        case 'u':
+          // The slice document carries only ASCII (ids, symbol names, enums),
+          // so the four hex digits are consumed and dropped.
+          if (pos_ + 4 > text_.size()) {
+            return false;
+          }
+          pos_ += 4;
+          out->push_back('?');
+          break;
+        default:
+          return false;
+      }
+    }
+    return false;
+  }
+
+  bool ParseNumber(std::string* out) {
+    const std::size_t start = pos_;
+    while (pos_ < text_.size()) {
+      const char c = text_[pos_];
+      if ((c >= '0' && c <= '9') || c == '-' || c == '+' || c == '.' ||
+          c == 'e' || c == 'E') {
+        ++pos_;
+        continue;
+      }
+      break;
+    }
+    if (pos_ == start) {
+      return false;
+    }
+    *out = std::string(text_.substr(start, pos_ - start));
+    return true;
+  }
+
+  void SkipSpace() {
+    while (pos_ < text_.size()) {
+      const char c = text_[pos_];
+      if (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+        ++pos_;
+        continue;
+      }
+      break;
+    }
+  }
+
+  std::string_view text_;
+  std::size_t pos_ = 0;
+};
+
+Status ParseJson(std::string_view text, JsonNode* out) {
+  if (!JsonReader(text).Parse(out)) {
+    return Status::InvalidArgument("malformed slice JSON");
+  }
+  return Status::Ok();
+}
+
+const JsonNode& RequireMember(const JsonNode& node, std::string_view name) {
+  const JsonNode* member = node.Member(name);
+  // Every call site checks presence first and reports a Status, so reaching
+  // here without the member is a bug in this file, not bad input.
+  assert(member != nullptr);
+  return *member;
+}
+
+// A fact set reduced to the fields that survive an independent clean build of
+// the toolchain: `QueryResultMetadata` minus its run-derived `analysis_run_id`
+// and `query_provenance_id`.
+struct FactSetView {
+  std::vector<core::StableId> fact_ids;
+  ev::QueryCompleteness completeness = ev::QueryCompleteness::kUnspecified;
+  std::vector<ev::TruncationReason> truncation_reasons;
+  std::size_t examined_items = 0;
+};
+
+// The toolchain-stable projection of one slice document.
+struct SemanticSlice {
+  ev::ClaimSeed claim_seed;
+  std::vector<core::StableId> flow_nodes;
+  std::vector<core::StableId> flow_edges;
+  std::vector<core::StableId> flow_supporting_facts;
+  FactSetView flow;
+  FactSetView ranges;
+  FactSetView capacities;
+  FactSetView aliases;
+  FactSetView dominating_checks;
+  FactSetView unknowns;
+};
+
+StatusOr<std::size_t> ReadCount(const JsonNode& node) {
+  if (node.kind != JsonNode::Kind::kNumber) {
+    return Status::InvalidArgument("expected a JSON number");
+  }
+  std::size_t value = 0;
+  const auto [ptr, ec] =
+      std::from_chars(node.text.data(), node.text.data() + node.text.size(),
+                      value);
+  if (ec != std::errc() || ptr != node.text.data() + node.text.size()) {
+    return Status::InvalidArgument("malformed JSON number '" + node.text + "'");
+  }
+  return value;
+}
+
+StatusOr<core::StableId> ReadStableId(const JsonNode& node) {
+  if (node.kind != JsonNode::Kind::kString) {
+    return Status::InvalidArgument("expected a JSON string id");
+  }
+  return core::ParseStableId(node.text);
+}
+
+// Reads the `QueryResultMetadata` members that a clean rebuild cannot change.
+// `analysis_run_id` and `query_provenance_id` are deliberately not read.
+StatusOr<FactSetView> ReadMetadataView(const JsonNode& metadata) {
+  if (metadata.kind != JsonNode::Kind::kObject) {
+    return Status::InvalidArgument("metadata is not an object");
+  }
+  for (const std::string_view name :
+       {"completeness", "truncation_reasons", "examined_items"}) {
+    if (metadata.Member(name) == nullptr) {
+      return Status::InvalidArgument("metadata is missing '" +
+                                     std::string(name) + "'");
+    }
+  }
+  FactSetView view;
+  auto completeness =
+      ev::ParseQueryCompleteness(RequireMember(metadata, "completeness").text);
+  if (!completeness.ok()) {
+    return completeness.status();
+  }
+  view.completeness = *completeness;
+  const JsonNode& reasons = RequireMember(metadata, "truncation_reasons");
+  if (reasons.kind != JsonNode::Kind::kArray) {
+    return Status::InvalidArgument("truncation_reasons is not an array");
+  }
+  for (const JsonNode& reason : reasons.items) {
+    auto parsed = ev::ParseTruncationReason(reason.text);
+    if (!parsed.ok()) {
+      return parsed.status();
+    }
+    view.truncation_reasons.push_back(*parsed);
+  }
+  auto examined = ReadCount(RequireMember(metadata, "examined_items"));
+  if (!examined.ok()) {
+    return examined.status();
+  }
+  view.examined_items = *examined;
+  return view;
+}
+
+StatusOr<FactSetView> ReadFactSet(const JsonNode& node) {
+  if (node.kind != JsonNode::Kind::kObject) {
+    return Status::InvalidArgument("expected a JSON fact set object");
+  }
+  if (node.Member("facts") == nullptr || node.Member("metadata") == nullptr) {
+    return Status::InvalidArgument("fact set is missing facts or metadata");
+  }
+  const JsonNode& facts = RequireMember(node, "facts");
+  if (facts.kind != JsonNode::Kind::kArray) {
+    return Status::InvalidArgument("fact set 'facts' is not an array");
+  }
+  auto view = ReadMetadataView(RequireMember(node, "metadata"));
+  if (!view.ok()) {
+    return view.status();
+  }
+  for (const JsonNode& fact : facts.items) {
+    const JsonNode* id = fact.Member("fact_id");
+    if (id == nullptr) {
+      return Status::InvalidArgument("fact is missing fact_id");
+    }
+    auto parsed = ReadStableId(*id);
+    if (!parsed.ok()) {
+      return parsed.status();
+    }
+    view->fact_ids.push_back(*parsed);
+  }
+  return view;
+}
+
+// The ids of the array member `name` of `node`, in document order.
+StatusOr<std::vector<core::StableId>> ReadIdArray(const JsonNode& node,
+                                                  std::string_view name,
+                                                  std::string_view id_key) {
+  const JsonNode* member = node.Member(name);
+  if (member == nullptr) {
+    return Status::InvalidArgument("missing JSON member '" + std::string(name) +
+                                   "'");
+  }
+  if (member->kind != JsonNode::Kind::kArray) {
+    return Status::InvalidArgument("'" + std::string(name) +
+                                   "' is not a JSON array");
+  }
+  std::vector<core::StableId> ids;
+  ids.reserve(member->items.size());
+  for (const JsonNode& item : member->items) {
+    const JsonNode* id = item.Member(id_key);
+    if (id == nullptr) {
+      return Status::InvalidArgument("'" + std::string(name) +
+                                     "' entry is missing '" +
+                                     std::string(id_key) + "'");
+    }
+    auto parsed = ReadStableId(*id);
+    if (!parsed.ok()) {
+      return parsed.status();
+    }
+    ids.push_back(*parsed);
+  }
+  return ids;
+}
+
+// Parses one slice document into its toolchain-stable projection. Every member
+// the diagnostic format defines is required to be present (DEM-001's point is
+// that `--format json` stays slice JSON); only the run-bearing members are
+// dropped from the result.
+StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
+  JsonNode root;
+  if (Status status = ParseJson(json, &root); !status.ok()) {
+    return status;
+  }
+  if (root.kind != JsonNode::Kind::kObject) {
+    return Status::InvalidArgument("slice JSON is not an object");
+  }
+  for (const std::string_view name :
+       {"claim_seed", "flow_slice", "ranges", "capacities", "aliases",
+        "dominating_checks", "unknowns", "query_completion_facts",
+        "query_completion_bindings", "provenance"}) {
+    if (root.Member(name) == nullptr) {
+      return Status::InvalidArgument("slice JSON is missing '" +
+                                     std::string(name) + "'");
+    }
+  }
+
+  SemanticSlice slice;
+  const JsonNode& seed = RequireMember(root, "claim_seed");
+  for (const std::string_view name :
+       {"finding_id", "kind", "severity", "subject_ref", "source_ref",
+        "sink_ref"}) {
+    if (seed.Member(name) == nullptr) {
+      return Status::InvalidArgument("claim seed is missing '" +
+                                     std::string(name) + "'");
+    }
+  }
+  auto finding_id = ReadStableId(RequireMember(seed, "finding_id"));
+  auto kind = ev::ParseClaimKind(RequireMember(seed, "kind").text);
+  auto severity = ev::ParseSeverity(RequireMember(seed, "severity").text);
+  auto subject = ReadStableId(RequireMember(seed, "subject_ref"));
+  auto source = ReadStableId(RequireMember(seed, "source_ref"));
+  auto sink = ReadStableId(RequireMember(seed, "sink_ref"));
+  if (!finding_id.ok() || !kind.ok() || !severity.ok() || !subject.ok() ||
+      !source.ok() || !sink.ok()) {
+    return Status::InvalidArgument("claim seed is malformed");
+  }
+  slice.claim_seed = ev::ClaimSeed{.finding_id = *finding_id,
+                                   .kind = *kind,
+                                   .severity = *severity,
+                                   .subject_ref = *subject,
+                                   .source_ref = *source,
+                                   .sink_ref = *sink};
+
+  const JsonNode& flow = RequireMember(root, "flow_slice");
+  for (const std::string_view name :
+       {"nodes", "edges", "supporting_facts", "metadata"}) {
+    if (flow.Member(name) == nullptr) {
+      return Status::InvalidArgument("flow slice is missing '" +
+                                     std::string(name) + "'");
+    }
+  }
+  auto nodes = ReadIdArray(flow, "nodes", "node_id");
+  auto edges = ReadIdArray(flow, "edges", "edge_id");
+  auto supporting = ReadIdArray(flow, "supporting_facts", "fact_id");
+  auto flow_metadata = ReadMetadataView(RequireMember(flow, "metadata"));
+  if (!nodes.ok() || !edges.ok() || !supporting.ok() || !flow_metadata.ok()) {
+    return Status::InvalidArgument("flow slice is malformed");
+  }
+  slice.flow_nodes = std::move(*nodes);
+  slice.flow_edges = std::move(*edges);
+  slice.flow_supporting_facts = std::move(*supporting);
+  slice.flow = std::move(*flow_metadata);
+
+  const auto read_set = [&](std::string_view name,
+                            FactSetView* out) -> Status {
+    auto parsed = ReadFactSet(RequireMember(root, name));
+    if (!parsed.ok()) {
+      return parsed.status();
+    }
+    *out = std::move(*parsed);
+    return Status::Ok();
+  };
+  if (Status status = read_set("ranges", &slice.ranges); !status.ok()) {
+    return status;
+  }
+  if (Status status = read_set("capacities", &slice.capacities); !status.ok()) {
+    return status;
+  }
+  if (Status status = read_set("aliases", &slice.aliases); !status.ok()) {
+    return status;
+  }
+  if (Status status = read_set("dominating_checks", &slice.dominating_checks);
+      !status.ok()) {
+    return status;
+  }
+  if (Status status = read_set("unknowns", &slice.unknowns); !status.ok()) {
+    return status;
+  }
+  return slice;
+}
+
+// ---------------------------------------------------------------------------
+// Comparing the toolchain-stable projections
+// ---------------------------------------------------------------------------
+
+std::string RenderId(const core::StableId& id) { return core::ToString(id); }
+
+template <typename T, typename Render>
+bool SameList(std::string_view name, const std::vector<T>& left,
+              const std::vector<T>& right, Render render, std::string* mismatch) {
+  if (left.size() != right.size()) {
+    *mismatch = std::string(name) + ": " + std::to_string(left.size()) +
+                " entries vs " + std::to_string(right.size());
+    return false;
+  }
+  for (std::size_t i = 0; i < left.size(); ++i) {
+    if (!(left[i] == right[i])) {
+      *mismatch = std::string(name) + "[" + std::to_string(i) + "]: " +
+                  render(left[i]) + " vs " + render(right[i]);
+      return false;
+    }
+  }
+  return true;
+}
+
+template <typename T, typename Render>
+bool SameValue(std::string_view name, const T& left, const T& right,
+               Render render, std::string* mismatch) {
+  if (left == right) {
+    return true;
+  }
+  *mismatch = std::string(name) + ": " + render(left) + " vs " + render(right);
+  return false;
+}
+
+bool SameFactSet(std::string_view name, const FactSetView& left,
+                 const FactSetView& right, std::string* mismatch) {
+  if (!SameList(std::string(name) + ".fact_ids", left.fact_ids, right.fact_ids,
+                RenderId, mismatch)) {
+    return false;
+  }
+  if (!SameValue(std::string(name) + ".completeness", left.completeness,
+                 right.completeness,
+                 [](ev::QueryCompleteness value) {
+                   return std::string(ev::ToString(value));
+                 },
+                 mismatch)) {
+    return false;
+  }
+  if (!SameList(std::string(name) + ".truncation_reasons",
+                left.truncation_reasons, right.truncation_reasons,
+                [](ev::TruncationReason value) {
+                  return std::string(ev::ToString(value));
+                },
+                mismatch)) {
+    return false;
+  }
+  return SameValue(std::string(name) + ".examined_items", left.examined_items,
+                   right.examined_items,
+                   [](std::size_t value) { return std::to_string(value); },
+                   mismatch);
+}
+
+// True when two slices agree on every field an independent clean build of the
+// toolchain cannot change. The first disagreement is written to `mismatch`.
+bool SameStableSlice(const SemanticSlice& left, const SemanticSlice& right,
+                     std::string* mismatch) {
+  if (!SameValue("claim_seed.finding_id", left.claim_seed.finding_id,
+                 right.claim_seed.finding_id, RenderId, mismatch)) {
+    return false;
+  }
+  if (!SameValue("claim_seed.kind", left.claim_seed.kind, right.claim_seed.kind,
+                 [](ev::ClaimKind value) {
+                   return std::string(ev::ToString(value));
+                 },
+                 mismatch)) {
+    return false;
+  }
+  if (!SameValue("claim_seed.severity", left.claim_seed.severity,
+                 right.claim_seed.severity,
+                 [](ev::Severity value) {
+                   return std::string(ev::ToString(value));
+                 },
+                 mismatch)) {
+    return false;
+  }
+  if (!SameValue("claim_seed.subject_ref", left.claim_seed.subject_ref,
+                 right.claim_seed.subject_ref, RenderId, mismatch)) {
+    return false;
+  }
+  if (!SameValue("claim_seed.source_ref", left.claim_seed.source_ref,
+                 right.claim_seed.source_ref, RenderId, mismatch)) {
+    return false;
+  }
+  if (!SameValue("claim_seed.sink_ref", left.claim_seed.sink_ref,
+                 right.claim_seed.sink_ref, RenderId, mismatch)) {
+    return false;
+  }
+  if (!SameList("flow_slice.nodes", left.flow_nodes, right.flow_nodes, RenderId,
+                mismatch)) {
+    return false;
+  }
+  if (!SameList("flow_slice.edges", left.flow_edges, right.flow_edges, RenderId,
+                mismatch)) {
+    return false;
+  }
+  if (!SameList("flow_slice.supporting_facts", left.flow_supporting_facts,
+                right.flow_supporting_facts, RenderId, mismatch)) {
+    return false;
+  }
+  if (!SameFactSet("flow_slice.metadata", left.flow, right.flow, mismatch)) {
+    return false;
+  }
+  return SameFactSet("ranges", left.ranges, right.ranges, mismatch) &&
+         SameFactSet("capacities", left.capacities, right.capacities,
+                     mismatch) &&
+         SameFactSet("aliases", left.aliases, right.aliases, mismatch) &&
+         SameFactSet("dominating_checks", left.dominating_checks,
+                     right.dominating_checks, mismatch) &&
+         SameFactSet("unknowns", left.unknowns, right.unknowns, mismatch);
+}
+
 TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
   auto oracle = BuildOracle("evidence_overflow_unsafe");
   ASSERT_TRUE(oracle.ok()) << oracle.status().message();
@@ -345,13 +985,50 @@ TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
   EXPECT_EQ(second_cli.stdout_text, cli.stdout_text)
       << "slice JSON is not byte-stable across stores/checkout roots";
 
-  // The checked-in golden is the slice JSON the CLI publishes.
+  // The checked-in golden carries the same slice semantics. It is compared
+  // SEMANTICALLY, never byte-for-byte: the golden embeds the analysis run id,
+  // which derives from the digest of the vendored Soufflé executable, and that
+  // executable is not bit-reproducible across clean builds (see the file
+  // header). The run-derived members — analysis_run_id, the six query
+  // provenance ids, the completion-fact ids, the run bindings, and the
+  // provenance graph — are therefore excluded from the comparison, while
+  // everything a clean rebuild cannot change (claim seed, CPG flow nodes and
+  // edges, GlobalFlow support, fact sets, and every completeness state) is
+  // required to match exactly.
   const std::filesystem::path golden =
       std::filesystem::path(VERITAS_GOLDEN_DIR) / "overflow_unsafe.slice.json";
   ASSERT_TRUE(std::filesystem::exists(golden))
       << "missing golden; regenerate with the CLI: " << golden;
-  EXPECT_EQ(cli.stdout_text, ReadFile(golden))
-      << "CLI output drifted from " << golden;
+
+  auto cli_slice = ParseSemanticSlice(cli.stdout_text);
+  ASSERT_TRUE(cli_slice.ok()) << cli_slice.status().message();
+  auto golden_slice = ParseSemanticSlice(ReadFile(golden));
+  ASSERT_TRUE(golden_slice.ok()) << golden_slice.status().message();
+
+  std::string mismatch;
+  EXPECT_TRUE(SameStableSlice(*cli_slice, *golden_slice, &mismatch))
+      << "CLI output no longer matches " << golden << ": " << mismatch;
+
+  // Non-vacuity guard: the comparison must actually inspect the fields it
+  // claims to compare, so a single mutated semantic field has to be caught.
+  // The baseline is the CLI's own slice, so this guard is independent of the
+  // golden's state.
+  SemanticSlice mutated = *cli_slice;
+  mutated.claim_seed.sink_ref = mutated.claim_seed.finding_id;
+  std::string mutation_mismatch;
+  EXPECT_FALSE(SameStableSlice(mutated, *cli_slice, &mutation_mismatch))
+      << "the semantic comparison does not inspect the claim seed";
+  EXPECT_NE(mutation_mismatch.find("claim_seed.sink_ref"), std::string::npos)
+      << mutation_mismatch;
+
+  SemanticSlice truncated = *cli_slice;
+  truncated.flow_supporting_facts.clear();
+  std::string truncation_mismatch;
+  EXPECT_FALSE(SameStableSlice(truncated, *cli_slice, &truncation_mismatch))
+      << "the semantic comparison does not inspect the flow support";
+  EXPECT_NE(truncation_mismatch.find("flow_slice.supporting_facts"),
+            std::string::npos)
+      << truncation_mismatch;
 }
 
 TEST(VeritasQueryEvidenceTest, RejectsInvalidOptionSurface) {
