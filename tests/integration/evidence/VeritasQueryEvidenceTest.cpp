@@ -1163,6 +1163,7 @@ TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
   // mutation of one cell of one flow fact must be caught. M10C adds cells to
   // these rows, so a cell dropped from the comparison has to fail here.
   ASSERT_FALSE(cli_slice->flow_supporting_facts.empty());
+  ASSERT_FALSE(cli_slice->flow_supporting_facts[0].cells.empty());
   SemanticSlice cell_mutated = *cli_slice;
   cell_mutated.flow_supporting_facts[0].cells[0] = "s:mutated-cell";
   std::string cell_mismatch;

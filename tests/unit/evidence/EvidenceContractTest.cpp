@@ -281,11 +281,12 @@ TEST(EvidenceContractTest, FactBudgetOverflowReturnsCanonicalPrefix) {
   EXPECT_EQ(result.metadata.examined_items, 3u);
 }
 
-// AC-004 (discriminating case): a candidate set larger than limit + 1 must
-// record every assessed candidate, not the limit + 1 "probe" count that happens
-// to coincide with `matches.size()` when the set is exactly one over the limit.
-// Both budget paths — ApplyFactBudget and RunFactQuery — must agree on the
-// honest reading of examined_items: "candidates assessed by the query".
+// Contract regression guard, not itself a catalog case: the AC-003 and AC-004
+// shapes cannot discriminate the two readings of `examined_items`, because in
+// both of them the candidate count equals limit + 1. A candidate set larger
+// than limit + 1 must record every assessed candidate, not the limit + 1
+// "probe" count. Both budget paths — ApplyFactBudget and RunFactQuery — must
+// agree on the honest reading: "candidates assessed by the query".
 TEST(EvidenceContractTest, FactBudgetCountsEveryAssessedCandidate) {
   EvidenceScenarioBuilder builder;
   const EvidenceQueryBudget budget = Budget(8, 256, 5, 2, 8);
