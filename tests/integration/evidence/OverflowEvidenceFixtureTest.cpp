@@ -42,7 +42,7 @@
 
 #include <gtest/gtest.h>
 
-#include "evidence/FactStoreEvidenceBackend.h"
+#include "veritas/evidence/FactStoreEvidenceBackend.h"
 #include "evidence/RealEvidencePipeline.h"
 #include "veritas/analysis/semantic/SemanticTypes.h"
 #include "veritas/core/Ids.h"
@@ -238,7 +238,7 @@ TEST(OverflowEvidenceFixtureTest, UnknownsQuerySurfacesRealFacts) {
   auto function = FunctionNode(snapshot->cpg);
   ASSERT_TRUE(function.ok()) << function.status().message();
 
-  FactStoreEvidenceBackend backend(snapshot->fact_store, snapshot->descriptor);
+  evidence::FactStoreEvidenceBackend backend(snapshot->fact_store, snapshot->descriptor);
   ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
 
   auto unknowns = service.GetUnknowns(*function, Budget());
@@ -263,7 +263,7 @@ TEST(OverflowEvidenceFixtureTest, NoRangeCapacityAliasOrCheckFactIsManufactured)
   auto function = FunctionNode(snapshot->cpg);
   ASSERT_TRUE(function.ok()) << function.status().message();
 
-  FactStoreEvidenceBackend backend(snapshot->fact_store, snapshot->descriptor);
+  evidence::FactStoreEvidenceBackend backend(snapshot->fact_store, snapshot->descriptor);
   ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
 
   const core::StableId ref = *function;
@@ -412,7 +412,7 @@ TEST(OverflowEvidenceFixtureTest,
 
     auto function = FunctionNode(snapshot->cpg);
     ASSERT_TRUE(function.ok()) << function.status().message();
-    FactStoreEvidenceBackend backend(snapshot->fact_store, snapshot->descriptor);
+    evidence::FactStoreEvidenceBackend backend(snapshot->fact_store, snapshot->descriptor);
     ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
     auto checks = service.GetDominatingChecks(*function, Budget());
     ASSERT_TRUE(checks.ok()) << fixture << ": " << checks.status().message();

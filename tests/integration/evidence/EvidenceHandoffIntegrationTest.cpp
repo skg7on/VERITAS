@@ -27,7 +27,7 @@
 
 #include <gtest/gtest.h>
 
-#include "evidence/FactStoreEvidenceBackend.h"
+#include "veritas/evidence/FactStoreEvidenceBackend.h"
 #include "evidence/RealEvidencePipeline.h"
 #include "veritas/core/Ids.h"
 #include "veritas/facts/ProvenanceStore.h"

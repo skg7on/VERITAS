@@ -40,8 +40,9 @@
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 #include "veritas/cpg/CpgRepository.h"
-#include "veritas/evidence/EvidenceReadBackend.h"
 #include "veritas/evidence/EvidenceQueryService.h"
+#include "veritas/evidence/EvidenceReadBackend.h"
+#include "veritas/evidence/FactStoreEvidenceBackend.h"
 #include "veritas/facts/FactStore.h"
 
 namespace veritas::testing {
@@ -60,8 +61,6 @@ struct RealEvidenceSnapshot {
 };
 
 namespace {
-
-constexpr std::string_view kAnalysisConfig = "veritas-analysis-config.v1";
 
 // The canonical repository id is not carried on the CPG ProjectionMetadata, so
 // it is read back from the manifest context. It is content-derived (a hash of
@@ -133,14 +132,10 @@ inline StatusOr<RealEvidenceSnapshot> AnalyzeRealFixture(std::string_view name) 
     return current_facts.status();
   }
 
-  evidence::SnapshotDescriptor descriptor;
-  descriptor.repository = *repository;
-  descriptor.revision = core::ToString(cpg->metadata().revision_id);
-  descriptor.build_variant = core::ToString(cpg->metadata().build_variant_id);
-  descriptor.analysis_config = std::string(kAnalysisConfig);
-  descriptor.analysis_run_id = *run_id;
-  descriptor.fact_snapshot_fingerprint =
-      evidence::ReturnedMemberDigest(*current_facts);
+  // Shared with the public CLI: one authority for the pinned descriptor.
+  evidence::SnapshotDescriptor descriptor =
+      evidence::DeriveSnapshotDescriptor(*cpg, *repository, *run_id,
+                                         *current_facts);
 
   RealEvidenceSnapshot snapshot{
       .project_root = project_root,

@@ -28,8 +28,10 @@ endforeach()
 # writes the diagnostic manifest, then runs the analyzer.
 target_link_libraries(veritas-build PRIVATE veritas_analysis veritas_build)
 
-# veritas-query queries published CPG projections.
-target_link_libraries(veritas-query PRIVATE veritas_cpg veritas_summarydb)
+# veritas-query queries published CPG projections; its `evidence` subcommand
+# additionally assembles an M10B EvidenceBuildInput from the M9 fact store.
+target_link_libraries(veritas-query PRIVATE veritas_cpg veritas_summarydb
+  veritas_evidence)
 
 # veritas-diff diffs two summaries and reports the impacted consumers through
 # the reverse dependency index.
