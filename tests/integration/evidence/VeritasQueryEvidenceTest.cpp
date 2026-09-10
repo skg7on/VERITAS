@@ -1151,8 +1151,15 @@ TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
   ASSERT_TRUE(golden_slice.ok()) << golden_slice.status().message();
 
   std::string mismatch;
-  EXPECT_TRUE(SameStableSlice(*cli_slice, *golden_slice, &mismatch))
-      << "CLI output no longer matches " << golden << ": " << mismatch;
+  if (!SameStableSlice(*cli_slice, *golden_slice, &mismatch)) {
+    // Print the tool's own slice alongside the mismatch. A stable-projection
+    // disagreement is otherwise unactionable: the comparison stops at the first
+    // field, and the differing hashes are content-addressed, so neither side
+    // can be reconstructed from the golden alone.
+    ADD_FAILURE() << "CLI output no longer matches " << golden << ": "
+                  << mismatch << "\n--- tool slice JSON ---\n"
+                  << cli.stdout_text;
+  }
 
   // Non-vacuity guard: the comparison must actually inspect the fields it
   // claims to compare, so a single mutated semantic field has to be caught.
