@@ -281,6 +281,45 @@ TEST(EvidenceContractTest, FactBudgetOverflowReturnsCanonicalPrefix) {
   EXPECT_EQ(result.metadata.examined_items, 3u);
 }
 
+// AC-004 (discriminating case): a candidate set larger than limit + 1 must
+// record every assessed candidate, not the limit + 1 "probe" count that happens
+// to coincide with `matches.size()` when the set is exactly one over the limit.
+// Both budget paths — ApplyFactBudget and RunFactQuery — must agree on the
+// honest reading of examined_items: "candidates assessed by the query".
+TEST(EvidenceContractTest, FactBudgetCountsEveryAssessedCandidate) {
+  EvidenceScenarioBuilder builder;
+  const EvidenceQueryBudget budget = Budget(8, 256, 5, 2, 8);
+  const std::vector<std::string> names = {"a", "b", "c", "d", "e"};
+  const std::vector<AliasKind> kinds = {
+      AliasKind::kMustAlias, AliasKind::kMayAlias, AliasKind::kNoAlias,
+      AliasKind::kMustAlias, AliasKind::kMayAlias};
+
+  std::vector<AnalysisFact> candidates;
+  for (std::size_t i = 0; i < names.size(); ++i) {
+    candidates.push_back(builder.MakeAliasFact(names[i], kinds[i],
+                                               EpistemicState::kMust));
+  }
+  std::vector<AnalysisFact> canonical = candidates;
+  std::sort(canonical.begin(), canonical.end(),
+            [](const AnalysisFact& x, const AnalysisFact& y) {
+              return x.fact_id < y.fact_id;
+            });
+
+  auto result = ApplyFactBudget(std::move(candidates), budget,
+                                QueryResultMetadata{});
+
+  ASSERT_EQ(result.facts.size(), 2u);
+  EXPECT_EQ(result.facts[0].fact_id, canonical[0].fact_id);
+  EXPECT_EQ(result.facts[1].fact_id, canonical[1].fact_id);
+  EXPECT_EQ(result.metadata.completeness, QueryCompleteness::kTruncated);
+  ASSERT_EQ(result.metadata.truncation_reasons.size(), 1u);
+  EXPECT_EQ(result.metadata.truncation_reasons[0], TruncationReason::kMaxFacts);
+  // Five candidates were assessed even though two were returned: limit + 1
+  // would have claimed three (and passed under the AC-004 shape).
+  EXPECT_EQ(result.metadata.examined_items, 5u);
+  EXPECT_GT(result.metadata.examined_items, budget.max_facts_per_query + 1);
+}
+
 // AC-005: duplicate truncation reasons are rejected, and valid inputs differing
 // only in insertion order serialize identically.
 TEST(EvidenceContractTest, MetadataOrderingIsCanonical) {

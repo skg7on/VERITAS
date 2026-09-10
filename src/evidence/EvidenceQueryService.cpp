@@ -246,6 +246,12 @@ StatusOr<FactQueryOutcome> RunDominatingChecks(
     if (fact.row.relation != facts::RelationId::kSoundnessCoverage) {
       continue;
     }
+    // Closed-world predicate: this matches coverage_kind == "dominating_check"
+    // with a callsite scope. The only producer today is M10A's CppRuleEvaluator,
+    // which emits coverage_kind == "dominating_check_absence" scoped by function
+    // symbol — so on real data no candidate matches and this query is
+    // complete-empty by construction. Aligning the kind/scope encoding is
+    // M10A's when a positive dominating-check fact actually lands.
     const std::string* kind = StringCell(fact.row, 1);
     if (kind == nullptr || *kind != kDominatingCheckKind) {
       continue;

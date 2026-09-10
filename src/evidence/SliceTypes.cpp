@@ -778,9 +778,12 @@ EvidenceFactSet ApplyFactBudget(std::vector<facts::AnalysisFact> candidates,
         candidates.begin() + static_cast<std::ptrdiff_t>(limit));
     result.metadata.completeness = QueryCompleteness::kTruncated;
     result.metadata.truncation_reasons = {TruncationReason::kMaxFacts};
-    // The query probed one row beyond the limit to detect the overflow; that
-    // extra assessment proves the boundary without exposing the probe row.
-    result.metadata.examined_items = limit + 1;
+    // examined_items counts candidates the query assessed, not rows returned:
+    // the caller hands over every matching candidate and the budget only
+    // truncates the returned prefix, so the whole candidate vector was examined.
+    // This is the same honest reading RunFactQuery records for the open-world
+    // budget, and it never understates the examination that proved the overflow.
+    result.metadata.examined_items = candidates.size();
   } else {
     result.facts = std::move(candidates);
     result.metadata.completeness = QueryCompleteness::kComplete;

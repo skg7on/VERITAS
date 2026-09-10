@@ -587,11 +587,34 @@ const JsonNode& RequireMember(const JsonNode& node, std::string_view name) {
   return *member;
 }
 
+// One fact row reduced to everything an independent clean build of the
+// toolchain cannot change: the canonical fact id, the relation name, and every
+// cell. Cells are rendered with an explicit kind tag so a string cell never
+// compares equal to a numeric cell carrying the same digits.
+struct FactRowView {
+  core::StableId fact_id;
+  std::string relation;
+  std::vector<std::string> cells;
+
+  bool operator==(const FactRowView& other) const {
+    return fact_id == other.fact_id && relation == other.relation &&
+           cells == other.cells;
+  }
+};
+
+std::string RenderFactRow(const FactRowView& row) {
+  std::string out = core::ToString(row.fact_id) + " [" + row.relation + "]";
+  for (const std::string& cell : row.cells) {
+    out += " | " + cell;
+  }
+  return out;
+}
+
 // A fact set reduced to the fields that survive an independent clean build of
 // the toolchain: `QueryResultMetadata` minus its run-derived `analysis_run_id`
 // and `query_provenance_id`.
 struct FactSetView {
-  std::vector<core::StableId> fact_ids;
+  std::vector<FactRowView> facts;
   ev::QueryCompleteness completeness = ev::QueryCompleteness::kUnspecified;
   std::vector<ev::TruncationReason> truncation_reasons;
   std::size_t examined_items = 0;
@@ -602,7 +625,10 @@ struct SemanticSlice {
   ev::ClaimSeed claim_seed;
   std::vector<core::StableId> flow_nodes;
   std::vector<core::StableId> flow_edges;
-  std::vector<core::StableId> flow_supporting_facts;
+  std::vector<FactRowView> flow_supporting_facts;
+  std::vector<FactRowView> flow_contradicting_facts;
+  std::vector<FactRowView> flow_unknowns;
+  std::vector<core::StableId> flow_provenance_refs;
   FactSetView flow;
   FactSetView ranges;
   FactSetView capacities;
@@ -671,6 +697,97 @@ StatusOr<FactSetView> ReadMetadataView(const JsonNode& metadata) {
   return view;
 }
 
+// One serialized fact row: `fact_id`, `relation`, and the ordered `cells`.
+StatusOr<FactRowView> ReadFactRow(const JsonNode& fact) {
+  if (fact.kind != JsonNode::Kind::kObject) {
+    return Status::InvalidArgument("expected a JSON fact object");
+  }
+  const JsonNode* id = fact.Member("fact_id");
+  if (id == nullptr) {
+    return Status::InvalidArgument("fact is missing fact_id");
+  }
+  const JsonNode* relation = fact.Member("relation");
+  if (relation == nullptr || relation->kind != JsonNode::Kind::kString) {
+    return Status::InvalidArgument("fact is missing a string relation");
+  }
+  const JsonNode* cells = fact.Member("cells");
+  if (cells == nullptr || cells->kind != JsonNode::Kind::kArray) {
+    return Status::InvalidArgument("fact is missing a cells array");
+  }
+  auto parsed_id = ReadStableId(*id);
+  if (!parsed_id.ok()) {
+    return parsed_id.status();
+  }
+  FactRowView row;
+  row.fact_id = *parsed_id;
+  row.relation = relation->text;
+  row.cells.reserve(cells->items.size());
+  for (const JsonNode& cell : cells->items) {
+    switch (cell.kind) {
+      case JsonNode::Kind::kString:
+        row.cells.push_back("s:" + cell.text);
+        break;
+      case JsonNode::Kind::kNumber:
+        row.cells.push_back("n:" + cell.text);
+        break;
+      case JsonNode::Kind::kBool:
+        row.cells.push_back("b:" + cell.text);
+        break;
+      default:
+        return Status::InvalidArgument("unsupported fact cell encoding");
+    }
+  }
+  return row;
+}
+
+// The fact rows of the array member `name` of `node`.
+StatusOr<std::vector<FactRowView>> ReadFactRows(const JsonNode& node,
+                                                std::string_view name) {
+  const JsonNode* member = node.Member(name);
+  if (member == nullptr) {
+    return Status::InvalidArgument("missing JSON member '" + std::string(name) +
+                                   "'");
+  }
+  if (member->kind != JsonNode::Kind::kArray) {
+    return Status::InvalidArgument("'" + std::string(name) +
+                                   "' is not a JSON array");
+  }
+  std::vector<FactRowView> rows;
+  rows.reserve(member->items.size());
+  for (const JsonNode& item : member->items) {
+    auto row = ReadFactRow(item);
+    if (!row.ok()) {
+      return row.status();
+    }
+    rows.push_back(std::move(*row));
+  }
+  return rows;
+}
+
+// The ids of an array of bare ID strings (`provenance_refs`), in document order.
+StatusOr<std::vector<core::StableId>> ReadPlainIdArray(const JsonNode& node,
+                                                       std::string_view name) {
+  const JsonNode* member = node.Member(name);
+  if (member == nullptr) {
+    return Status::InvalidArgument("missing JSON member '" + std::string(name) +
+                                   "'");
+  }
+  if (member->kind != JsonNode::Kind::kArray) {
+    return Status::InvalidArgument("'" + std::string(name) +
+                                   "' is not a JSON array");
+  }
+  std::vector<core::StableId> ids;
+  ids.reserve(member->items.size());
+  for (const JsonNode& item : member->items) {
+    auto parsed = ReadStableId(item);
+    if (!parsed.ok()) {
+      return parsed.status();
+    }
+    ids.push_back(*parsed);
+  }
+  return ids;
+}
+
 StatusOr<FactSetView> ReadFactSet(const JsonNode& node) {
   if (node.kind != JsonNode::Kind::kObject) {
     return Status::InvalidArgument("expected a JSON fact set object");
@@ -678,25 +795,15 @@ StatusOr<FactSetView> ReadFactSet(const JsonNode& node) {
   if (node.Member("facts") == nullptr || node.Member("metadata") == nullptr) {
     return Status::InvalidArgument("fact set is missing facts or metadata");
   }
-  const JsonNode& facts = RequireMember(node, "facts");
-  if (facts.kind != JsonNode::Kind::kArray) {
-    return Status::InvalidArgument("fact set 'facts' is not an array");
-  }
   auto view = ReadMetadataView(RequireMember(node, "metadata"));
   if (!view.ok()) {
     return view.status();
   }
-  for (const JsonNode& fact : facts.items) {
-    const JsonNode* id = fact.Member("fact_id");
-    if (id == nullptr) {
-      return Status::InvalidArgument("fact is missing fact_id");
-    }
-    auto parsed = ReadStableId(*id);
-    if (!parsed.ok()) {
-      return parsed.status();
-    }
-    view->fact_ids.push_back(*parsed);
+  auto rows = ReadFactRows(node, "facts");
+  if (!rows.ok()) {
+    return rows.status();
   }
+  view->facts = std::move(*rows);
   return view;
 }
 
@@ -782,7 +889,8 @@ StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
 
   const JsonNode& flow = RequireMember(root, "flow_slice");
   for (const std::string_view name :
-       {"nodes", "edges", "supporting_facts", "metadata"}) {
+       {"nodes", "edges", "supporting_facts", "contradicting_facts", "unknowns",
+        "provenance_refs", "metadata"}) {
     if (flow.Member(name) == nullptr) {
       return Status::InvalidArgument("flow slice is missing '" +
                                      std::string(name) + "'");
@@ -790,14 +898,22 @@ StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
   }
   auto nodes = ReadIdArray(flow, "nodes", "node_id");
   auto edges = ReadIdArray(flow, "edges", "edge_id");
-  auto supporting = ReadIdArray(flow, "supporting_facts", "fact_id");
+  auto supporting = ReadFactRows(flow, "supporting_facts");
+  auto contradicting = ReadFactRows(flow, "contradicting_facts");
+  auto flow_unknowns = ReadFactRows(flow, "unknowns");
+  auto provenance_refs = ReadPlainIdArray(flow, "provenance_refs");
   auto flow_metadata = ReadMetadataView(RequireMember(flow, "metadata"));
-  if (!nodes.ok() || !edges.ok() || !supporting.ok() || !flow_metadata.ok()) {
+  if (!nodes.ok() || !edges.ok() || !supporting.ok() ||
+      !contradicting.ok() || !flow_unknowns.ok() || !provenance_refs.ok() ||
+      !flow_metadata.ok()) {
     return Status::InvalidArgument("flow slice is malformed");
   }
   slice.flow_nodes = std::move(*nodes);
   slice.flow_edges = std::move(*edges);
   slice.flow_supporting_facts = std::move(*supporting);
+  slice.flow_contradicting_facts = std::move(*contradicting);
+  slice.flow_unknowns = std::move(*flow_unknowns);
+  slice.flow_provenance_refs = std::move(*provenance_refs);
   slice.flow = std::move(*flow_metadata);
 
   const auto read_set = [&](std::string_view name,
@@ -864,8 +980,8 @@ bool SameValue(std::string_view name, const T& left, const T& right,
 
 bool SameFactSet(std::string_view name, const FactSetView& left,
                  const FactSetView& right, std::string* mismatch) {
-  if (!SameList(std::string(name) + ".fact_ids", left.fact_ids, right.fact_ids,
-                RenderId, mismatch)) {
+  if (!SameList(std::string(name) + ".facts", left.facts, right.facts,
+                RenderFactRow, mismatch)) {
     return false;
   }
   if (!SameValue(std::string(name) + ".completeness", left.completeness,
@@ -934,7 +1050,20 @@ bool SameStableSlice(const SemanticSlice& left, const SemanticSlice& right,
     return false;
   }
   if (!SameList("flow_slice.supporting_facts", left.flow_supporting_facts,
-                right.flow_supporting_facts, RenderId, mismatch)) {
+                right.flow_supporting_facts, RenderFactRow, mismatch)) {
+    return false;
+  }
+  if (!SameList("flow_slice.contradicting_facts",
+                left.flow_contradicting_facts, right.flow_contradicting_facts,
+                RenderFactRow, mismatch)) {
+    return false;
+  }
+  if (!SameList("flow_slice.unknowns", left.flow_unknowns, right.flow_unknowns,
+                RenderFactRow, mismatch)) {
+    return false;
+  }
+  if (!SameList("flow_slice.provenance_refs", left.flow_provenance_refs,
+                right.flow_provenance_refs, RenderId, mismatch)) {
     return false;
   }
   if (!SameFactSet("flow_slice.metadata", left.flow, right.flow, mismatch)) {
@@ -1029,6 +1158,56 @@ TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
   EXPECT_NE(truncation_mismatch.find("flow_slice.supporting_facts"),
             std::string::npos)
       << truncation_mismatch;
+
+  // Cells, not just fact ids, are inside the comparison: an equal-length
+  // mutation of one cell of one flow fact must be caught. M10C adds cells to
+  // these rows, so a cell dropped from the comparison has to fail here.
+  ASSERT_FALSE(cli_slice->flow_supporting_facts.empty());
+  SemanticSlice cell_mutated = *cli_slice;
+  cell_mutated.flow_supporting_facts[0].cells[0] = "s:mutated-cell";
+  std::string cell_mismatch;
+  EXPECT_FALSE(SameStableSlice(cell_mutated, *cli_slice, &cell_mismatch))
+      << "the semantic comparison does not inspect fact cells";
+  EXPECT_NE(cell_mismatch.find("flow_slice.supporting_facts"),
+            std::string::npos)
+      << cell_mismatch;
+
+  // The three flow-slice fields M10C materializes must already be inside the
+  // comparison even while they are empty in the demo slice, so a future field
+  // removal (or a dropped element) fails the golden rather than passing
+  // vacuously. Each mutation injects one semantic element.
+  FactRowView injected;
+  injected.fact_id = cli_slice->claim_seed.finding_id;
+  injected.relation = "GlobalFlow";
+  injected.cells = {"s:injected"};
+
+  SemanticSlice with_contradiction = *cli_slice;
+  with_contradiction.flow_contradicting_facts.push_back(injected);
+  std::string contradiction_mismatch;
+  EXPECT_FALSE(
+      SameStableSlice(with_contradiction, *cli_slice, &contradiction_mismatch))
+      << "the semantic comparison does not inspect flow contradicting facts";
+  EXPECT_NE(contradiction_mismatch.find("flow_slice.contradicting_facts"),
+            std::string::npos)
+      << contradiction_mismatch;
+
+  SemanticSlice with_unknown = *cli_slice;
+  with_unknown.flow_unknowns.push_back(injected);
+  std::string unknown_mismatch;
+  EXPECT_FALSE(SameStableSlice(with_unknown, *cli_slice, &unknown_mismatch))
+      << "the semantic comparison does not inspect flow unknowns";
+  EXPECT_NE(unknown_mismatch.find("flow_slice.unknowns"), std::string::npos)
+      << unknown_mismatch;
+
+  ASSERT_FALSE(cli_slice->flow_provenance_refs.empty());
+  SemanticSlice with_ref = *cli_slice;
+  with_ref.flow_provenance_refs.push_back(
+      cli_slice->flow_provenance_refs.front());
+  std::string ref_mismatch;
+  EXPECT_FALSE(SameStableSlice(with_ref, *cli_slice, &ref_mismatch))
+      << "the semantic comparison does not inspect flow provenance refs";
+  EXPECT_NE(ref_mismatch.find("flow_slice.provenance_refs"), std::string::npos)
+      << ref_mismatch;
 }
 
 TEST(VeritasQueryEvidenceTest, RejectsInvalidOptionSurface) {

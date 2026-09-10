@@ -140,10 +140,11 @@ bool HasUnknownWithReason(const std::vector<facts::AnalysisFact>& facts,
 // of this fact, not by a 1 here. A regression that stopped emitting the
 // certificate — or dropped the completeness cell — fails these assertions.
 void ExpectDominatingCheckAbsenceCertificate(
-    const std::vector<facts::AnalysisFact>& facts) {
+    const std::vector<facts::AnalysisFact>& facts,
+    std::string_view fixture = {}) {
   const auto coverage =
       FactsOfRelation(facts, facts::RelationId::kSoundnessCoverage);
-  EXPECT_FALSE(coverage.empty()) << "no SoundnessCoverage certificate emitted";
+  EXPECT_FALSE(coverage.empty()) << fixture << ": no SoundnessCoverage emitted";
   bool saw_absence = false;
   bool saw_gapped_complete = false;
   for (const auto& fact : coverage) {
@@ -157,9 +158,24 @@ void ExpectDominatingCheckAbsenceCertificate(
       saw_gapped_complete = true;
     }
   }
-  EXPECT_TRUE(saw_absence) << "no dominating_check_absence coverage fact";
+  EXPECT_TRUE(saw_absence) << fixture << ": no dominating_check_absence fact";
   EXPECT_TRUE(saw_gapped_complete)
-      << "dominating_check_absence fact missing gapped complete cell";
+      << fixture << ": dominating_check_absence fact missing gapped cell";
+}
+
+// The forbidden-output half of the check surface: no producer may promote an
+// unknown/absent check into a positive "dominating_check" fact. Every fixture
+// the demo materializes goes through both this and the certificate assertion.
+void ExpectNoFabricatedPositiveCheck(
+    const std::vector<facts::AnalysisFact>& facts, std::string_view fixture) {
+  const auto coverage =
+      FactsOfRelation(facts, facts::RelationId::kSoundnessCoverage);
+  for (const auto& fact : coverage) {
+    const std::string* kind = StringCell(fact.row, 1);
+    ASSERT_NE(kind, nullptr) << fixture;
+    EXPECT_NE(*kind, "dominating_check")
+        << fixture << " fabricated a positive check fact";
+  }
 }
 
 TEST(OverflowEvidenceFixtureTest, UnsafeFixtureProducesFlowAndUnknownFacts) {
@@ -397,18 +413,9 @@ TEST(OverflowEvidenceFixtureTest,
         << fixture;
 
     // Positive: the completeness-qualified check output is actually emitted for
-    // each shape.
-    ExpectDominatingCheckAbsenceCertificate(*facts);
-
-    // Forbidden: no positive dominating-check fact is fabricated.
-    const auto coverage =
-        FactsOfRelation(*facts, facts::RelationId::kSoundnessCoverage);
-    for (const auto& fact : coverage) {
-      const std::string* kind = StringCell(fact.row, 1);
-      ASSERT_NE(kind, nullptr) << fixture;
-      EXPECT_NE(*kind, "dominating_check")
-          << fixture << " fabricated a positive check fact";
-    }
+    // each shape. Forbidden: no positive dominating-check fact is fabricated.
+    ExpectDominatingCheckAbsenceCertificate(*facts, fixture);
+    ExpectNoFabricatedPositiveCheck(*facts, fixture);
 
     auto function = FunctionNode(snapshot->cpg);
     ASSERT_TRUE(function.ok()) << function.status().message();
@@ -419,6 +426,45 @@ TEST(OverflowEvidenceFixtureTest,
     EXPECT_EQ(checks->metadata.completeness, ev::QueryCompleteness::kComplete)
         << fixture;
     EXPECT_TRUE(checks->facts.empty()) << fixture;
+  }
+}
+
+TEST(OverflowEvidenceFixtureTest,
+     AliasUncertainAndSummaryFixturesDoNotFabricateChecks) {
+  // T3m1/T3m5: the remaining two demo fixtures must go through the same
+  // real-pipeline surface as the shapes above. evidence_overflow_alias_uncertain
+  // exists to keep capacity/alias reasoning unstrengthened under may-alias, and
+  // evidence_overflow_summary crosses a translation unit — both emit the
+  // SoundnessCoverage surface, so both must carry a real flow closure, a
+  // complete-empty dominating-check query (no fabricated positive check), and
+  // the negative "dominating_check_absence" certificate.
+  for (const char* fixture :
+       {"evidence_overflow_alias_uncertain", "evidence_overflow_summary"}) {
+    auto snapshot = AnalyzeRealFixture(fixture);
+    ASSERT_TRUE(snapshot.ok()) << fixture << ": " << snapshot.status().message();
+
+    auto facts = snapshot->fact_store.GetCurrentFacts(snapshot->run_id);
+    ASSERT_TRUE(facts.ok()) << fixture << ": " << facts.status().message();
+    EXPECT_FALSE(FactsOfRelation(*facts, facts::RelationId::kGlobalFlow).empty())
+        << fixture;
+
+    // Positive: the completeness-qualified check output is actually emitted.
+    ExpectDominatingCheckAbsenceCertificate(*facts, fixture);
+
+    // Forbidden: no positive dominating-check fact is fabricated.
+    ExpectNoFabricatedPositiveCheck(*facts, fixture);
+
+    auto function = FunctionNode(snapshot->cpg);
+    ASSERT_TRUE(function.ok()) << fixture << ": " << function.status().message();
+    evidence::FactStoreEvidenceBackend backend(snapshot->fact_store,
+                                               snapshot->descriptor);
+    ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
+    auto checks = service.GetDominatingChecks(*function, Budget());
+    ASSERT_TRUE(checks.ok()) << fixture << ": " << checks.status().message();
+    EXPECT_EQ(checks->metadata.completeness, ev::QueryCompleteness::kComplete)
+        << fixture;
+    EXPECT_TRUE(checks->facts.empty())
+        << fixture << " fabricated a positive dominating-check fact";
   }
 }
 

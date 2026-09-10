@@ -182,8 +182,10 @@ EvidenceFactSet EmptyFactSet(
 // Deterministically applies max_facts_per_query to a candidate list. Candidates
 // are sorted by fact ID before the limit applies, so the returned prefix is
 // canonical and independent of backend insertion order. An overflow marks the
-// result kTruncated with kMaxFacts and records examined_items as limit + 1 (the
-// single extra probe), which proves the boundary without exposing the probe row.
+// result kTruncated with kMaxFacts and records examined_items as the number of
+// matching candidates the query assessed — the full candidate vector, since the
+// budget truncates only the returned prefix, never the assessment itself. This
+// matches RunFactQuery's open-world count so the two budget paths agree.
 EvidenceFactSet ApplyFactBudget(std::vector<facts::AnalysisFact> candidates,
                                 const EvidenceQueryBudget& budget,
                                 QueryResultMetadata base_metadata);
