@@ -60,6 +60,9 @@ enum class IdKind {
   kCpgProjection,
   kCpgEdge,
   kUnknownNode,
+  // Evidence IR (M10C) identity: the content address of a canonical
+  // `eir.v1` Evidence Case, serialized with the stable spelling `evidence`.
+  kEvidence,
 };
 
 struct StableId {

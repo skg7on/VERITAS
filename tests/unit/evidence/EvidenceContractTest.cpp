@@ -35,6 +35,11 @@ using namespace veritas::evidence;
 using namespace veritas::facts;
 using namespace veritas::testing;
 
+// Both `veritas::evidence` and `veritas::analysis::semantic` are open here and
+// both name an `EpistemicState` (the fact-level one and the case-level one), so
+// the semantic enum this file means is written through an alias.
+namespace sem = veritas::analysis::semantic;
+
 namespace {
 
 // A valid, complete base metadata record against which invalid shapes are
@@ -156,7 +161,7 @@ EvidenceBuildInput BuildInput() {
       MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete, {},
                   1,
                   {builder.MakeAliasFact("alias", AliasKind::kMayAlias,
-                                         EpistemicState::kMay)});
+                                         sem::EpistemicState::kMay)});
   input.dominating_checks =
       MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete, {},
                   1, {builder.MakeCheckFact("check")});
@@ -234,9 +239,9 @@ TEST(EvidenceContractTest, ExactFactBudgetBoundaryIsComplete) {
   EvidenceScenarioBuilder builder;
   const EvidenceQueryBudget budget = Budget(8, 256, 5, 3, 8);
   std::vector<AnalysisFact> candidates = {
-      builder.MakeAliasFact("a", AliasKind::kMustAlias, EpistemicState::kMust),
-      builder.MakeAliasFact("b", AliasKind::kMayAlias, EpistemicState::kMay),
-      builder.MakeAliasFact("c", AliasKind::kNoAlias, EpistemicState::kMust),
+      builder.MakeAliasFact("a", AliasKind::kMustAlias, sem::EpistemicState::kMust),
+      builder.MakeAliasFact("b", AliasKind::kMayAlias, sem::EpistemicState::kMay),
+      builder.MakeAliasFact("c", AliasKind::kNoAlias, sem::EpistemicState::kMust),
   };
   auto result = ApplyFactBudget(std::move(candidates), budget,
                                 QueryResultMetadata{});
@@ -252,11 +257,11 @@ TEST(EvidenceContractTest, FactBudgetOverflowReturnsCanonicalPrefix) {
   EvidenceScenarioBuilder builder;
   const EvidenceQueryBudget budget = Budget(8, 256, 5, 2, 8);
   const auto fact_a =
-      builder.MakeAliasFact("a", AliasKind::kMustAlias, EpistemicState::kMust);
+      builder.MakeAliasFact("a", AliasKind::kMustAlias, sem::EpistemicState::kMust);
   const auto fact_m =
-      builder.MakeAliasFact("m", AliasKind::kMayAlias, EpistemicState::kMay);
+      builder.MakeAliasFact("m", AliasKind::kMayAlias, sem::EpistemicState::kMay);
   const auto fact_z =
-      builder.MakeAliasFact("z", AliasKind::kNoAlias, EpistemicState::kMust);
+      builder.MakeAliasFact("z", AliasKind::kNoAlias, sem::EpistemicState::kMust);
 
   // Canonical order is by fact ID, not by the symbolic names used here.
   std::vector<AnalysisFact> canonical = {fact_a, fact_m, fact_z};
@@ -298,7 +303,7 @@ TEST(EvidenceContractTest, FactBudgetCountsEveryAssessedCandidate) {
   std::vector<AnalysisFact> candidates;
   for (std::size_t i = 0; i < names.size(); ++i) {
     candidates.push_back(builder.MakeAliasFact(names[i], kinds[i],
-                                               EpistemicState::kMust));
+                                               sem::EpistemicState::kMust));
   }
   std::vector<AnalysisFact> canonical = candidates;
   std::sort(canonical.begin(), canonical.end(),
@@ -332,9 +337,9 @@ TEST(EvidenceContractTest, MetadataOrderingIsCanonical) {
   EXPECT_FALSE(ValidateQueryResultMetadata(duplicate).ok());
 
   const auto fact_a =
-      builder.MakeAliasFact("a", AliasKind::kMustAlias, EpistemicState::kMust);
+      builder.MakeAliasFact("a", AliasKind::kMustAlias, sem::EpistemicState::kMust);
   const auto fact_b =
-      builder.MakeAliasFact("b", AliasKind::kMayAlias, EpistemicState::kMay);
+      builder.MakeAliasFact("b", AliasKind::kMayAlias, sem::EpistemicState::kMay);
 
   EvidenceFactSet first;
   first.facts = {fact_b, fact_a};

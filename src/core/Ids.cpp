@@ -66,6 +66,8 @@ std::string_view IdKindToString(IdKind kind) {
     return "edge";
   case IdKind::kUnknownNode:
     return "unknown";
+  case IdKind::kEvidence:
+    return "evidence";
   }
   return "unknown";
 }
@@ -92,6 +94,7 @@ std::optional<IdKind> StringToIdKind(std::string_view str) {
       {"cpgproj", IdKind::kCpgProjection},
       {"edge", IdKind::kCpgEdge},
       {"unknown", IdKind::kUnknownNode},
+      {"evidence", IdKind::kEvidence},
   };
   auto it = mapping.find(str);
   if (it != mapping.end()) {

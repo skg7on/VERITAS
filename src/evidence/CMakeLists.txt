@@ -21,6 +21,7 @@ add_library(veritas_evidence
   SliceTypes.cpp
   QueryCompletion.cpp
   EvidenceQueryService.cpp
+  EvidenceCase.cpp
 )
 
 target_include_directories(veritas_evidence

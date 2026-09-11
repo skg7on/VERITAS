@@ -138,7 +138,10 @@ facts::AnalysisFact CheckFact(const EvidenceScenarioBuilder& builder,
   return MakeFactOrAbort(std::move(row));
 }
 
-ClaimSeed Claim(const EvidenceScenarioBuilder& builder) {
+// Named for its role rather than `Claim`: the semantic model's
+// `evidence::Claim` record reaches this translation unit through
+// EvidenceScenario.h, so an unqualified local `Claim` is ambiguous with it.
+ClaimSeed MakeClaimSeed(const EvidenceScenarioBuilder& builder) {
   ClaimSeed seed;
   seed.finding_id = builder.Id(core::IdKind::kFact, "finding");
   seed.kind = ClaimKind::kBufferOverflow;
@@ -181,7 +184,7 @@ cpg::ThinCpg FlowCpg(const EvidenceScenarioBuilder& builder,
 // query-completion facts and run bindings, and a selected witness per result.
 TEST(EvidenceHandoffTest, BundlesEveryRequiredQueryResult) {
   EvidenceScenarioBuilder builder;
-  const ClaimSeed seed = Claim(builder);
+  const ClaimSeed seed = MakeClaimSeed(builder);
   const auto function_id = builder.Id(core::IdKind::kFunctionVariant, "copy");
 
   FakeEvidenceBackend backend(Descriptor(builder));
@@ -263,7 +266,7 @@ TEST(EvidenceHandoffTest, BundlesEveryRequiredQueryResult) {
 // stable retryable failure, never a mixed-run success.
 TEST(EvidenceHandoffTest, UsesOneImmutableSnapshot) {
   EvidenceScenarioBuilder builder;
-  const ClaimSeed seed = Claim(builder);
+  const ClaimSeed seed = MakeClaimSeed(builder);
   const auto function_id = builder.Id(core::IdKind::kFunctionVariant, "copy");
 
   FakeEvidenceBackend backend(Descriptor(builder));
@@ -288,7 +291,7 @@ TEST(EvidenceHandoffTest, UsesOneImmutableSnapshot) {
 // unrelated value-pair fact is excluded.
 TEST(EvidenceHandoffTest, KeepsSupportingAndContradictingFactsSeparate) {
   EvidenceScenarioBuilder builder;
-  const ClaimSeed seed = Claim(builder);
+  const ClaimSeed seed = MakeClaimSeed(builder);
 
   const auto v1 = builder.Id(core::IdKind::kValueRef, "v1");
   const auto v2 = builder.Id(core::IdKind::kValueRef, "v2");
@@ -343,7 +346,7 @@ TEST(EvidenceHandoffTest, KeepsSupportingAndContradictingFactsSeparate) {
 // its scope, run, query provenance, examined count, and complete state.
 TEST(EvidenceHandoffTest, CarriesCompleteEmptyCheckEvidence) {
   EvidenceScenarioBuilder builder;
-  const ClaimSeed seed = Claim(builder);
+  const ClaimSeed seed = MakeClaimSeed(builder);
 
   // One dominating check for a *different* callsite, so this sink has none but
   // the query still examines a candidate.
@@ -369,7 +372,7 @@ TEST(EvidenceHandoffTest, CarriesCompleteEmptyCheckEvidence) {
 // distinguishable from HND-004's complete-empty result.
 TEST(EvidenceHandoffTest, CarriesTruncatedEmptyCheckEvidence) {
   EvidenceScenarioBuilder builder;
-  const ClaimSeed seed = Claim(builder);
+  const ClaimSeed seed = MakeClaimSeed(builder);
 
   // Many candidate checks (for other callsites) exceed the fact budget, so the
   // closed-world search for this sink truncates without finding a match.

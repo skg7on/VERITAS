@@ -46,6 +46,7 @@ add_executable(IdsTest IdsTest.cpp)
 target_link_libraries(IdsTest PRIVATE
   veritas_core
   GTest::gtest_main
+  GTest::gmock
 )
 veritas_add_warnings(IdsTest)
 gtest_discover_tests(IdsTest DISCOVERY_TIMEOUT 60)
