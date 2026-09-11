@@ -21,3 +21,12 @@ add_test(
 )
 
 set_tests_properties(veritas_ci_workflow PROPERTIES TIMEOUT 30)
+
+add_test(
+  NAME veritas_eir_contract_docs
+  COMMAND
+    "${CMAKE_COMMAND}"
+    "-DVERITAS_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/ValidateEvidenceIrContract.cmake"
+)
+set_tests_properties(veritas_eir_contract_docs PROPERTIES TIMEOUT 30)

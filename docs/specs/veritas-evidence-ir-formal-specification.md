@@ -1,9 +1,16 @@
 # VERITAS Evidence IR — Formal Specification
 
-**Status:** Draft Formal Specification  
-**Version:** 0.1  
-**Project:** VERITAS — Verified Evidence Reasoning IR for Trans-program Analysis and Semantics  
+**Status:** Stabilized Formal Specification (EIR-T 1.0)
+**Version:** 1.0
+**Project:** VERITAS — Verified Evidence Reasoning IR for Trans-program Analysis and Semantics
 **Depends on:** `docs/architecture/04-evidence-ir-architecture.md`
+
+> **Stability:** the grammar in this document is the frozen EIR-T 1.0 contract.
+> The lexer, parser, and writer of M10C implement exactly these productions;
+> they do not add silent syntax extensions. The `veritas_eir_contract_docs`
+> CTest, driven by `tests/ci/ValidateEvidenceIrContract.cmake`, pins the required
+> productions of §3.1 and §5.1 in this file and fails if any of them is removed
+> or rewritten.
 
 ---
 
@@ -80,7 +87,7 @@ Keyword ::=
     | "type" | "origin" | "allocation_site" | "machine" | "effect"
     | "expr" | "must" | "may" | "inferred" | "assumed" | "unknown"
     | "must_not" | "and" | "or" | "not" | "implies" | "forall" 
-    | "exists" | "in" ;
+    | "exists" | "in" | "dependency" | "omission" ;
 ```
 
 ### 2.5 Operators
@@ -95,6 +102,10 @@ LogicalOp ::= "and" | "or" | "not" | "implies" ;
 PathOp ::= "->" ;
 ```
 
+`LogicalOp` names the logical operator terminals as a lexical class. The predicate
+productions of §5.1 spell those terminals directly, so `LogicalOp` is not
+referenced by any production.
+
 ---
 
 ## 3. Top-Level Grammar
@@ -104,9 +115,21 @@ PathOp ::= "->" ;
 ```ebnf
 EvidenceCase ::=
     "evidence" Identifier "{"
-        [ ContextDecl ]
+        SchemaDecl
+        LevelDecl
+        StateDecl
+        ContextDecl
         { EvidenceMember }
     "}" ;
+
+SchemaDecl ::= "schema" "=" StringLiteral ";" ;
+LevelDecl ::= "level" "=" EvidenceLevel ";" ;
+EvidenceLevel ::= "l0" | "l1" | "l2" ;
+StateDecl ::= "state" "=" EvidenceState ";" ;
+EvidenceState ::=
+      "UNREVIEWED" | "POSSIBLE_DEFECT" | "LIKELY_DEFECT"
+    | "VERIFIED_DEFECT" | "LIKELY_FALSE_POSITIVE"
+    | "VERIFIED_SAFE" | "INCONCLUSIVE" ;
 
 ContextDecl ::=
     "context" "{"
@@ -122,20 +145,49 @@ ContextProperty ::=
     ;
 
 EvidenceMember ::=
-      Claim
-    | EntityDecl
-    | FactDecl
-    | AssumptionDecl
-    | HypothesisDecl
-    | UnknownDecl
-    | EdgeDecl
-    | PathDecl
-    | ConstraintDecl
-    | ProvenanceDecl
-    | VerificationDecl
-    | SummaryReference
-    ;
+      Claim | EntityDecl | FactDecl | AssumptionDecl | HypothesisDecl
+    | UnknownDecl | EdgeDecl | PathDecl | ConstraintDecl
+    | ProvenanceDecl | VerificationDecl | SummaryReference
+    | DependencyDecl | OmissionDecl ;
+
+DependencyDecl ::=
+    "dependency" Identifier "{"
+        "kind" "=" DependencyKind ";"
+        "stable_id" "=" StringLiteral ";"
+    "}" ;
+DependencyKind ::=
+      "summary" | "fact" | "type_layout"
+    | "configuration" | "specification" ;
+
+OmissionDecl ::=
+    "omission" Identifier "{"
+        "kind" "=" QualifiedId ";"
+        "subject" "=" Reference ";"
+        "reason" "=" StringLiteral ";"
+        "expandable" "=" BooleanLiteral ";"
+    "}" ;
 ```
+
+`SchemaDecl`, `LevelDecl`, and `StateDecl` are mandatory and appear once each, in
+that order, before `ContextDecl`. `ContextDecl` is likewise mandatory and
+appears exactly once, before any `EvidenceMember`. `SchemaDecl` binds the
+semantic schema version: the string literal must equal `eir.v1`. Any other value
+is rejected as a well-formedness error; it is not an extension point.
+
+`LevelDecl` selects the abstraction level (`EIR-L0`, `EIR-L1`, or `EIR-L2`).
+`StateDecl` carries the overall case verification state; its alternatives follow
+the verification state transitions of §18. Both enumerations are closed: no other
+alternative is defined in this revision, and unknown alternatives are rejected
+rather than ignored.
+
+`DependencyDecl` records one semantic input the case consumed, identified by a
+`DependencyKind` and a stable ID string of the form
+`<kind>:sha256:<digest>`. `OmissionDecl` records one semantic member that was
+deliberately withheld at the declared level; `kind` is a qualified identifier
+(for example `analyzer_expansion`), `subject` names the referenced member or
+expansion target, and `expandable` states whether a higher level can recover
+it. A withheld member is never represented by its absence alone: an omission that
+cannot be expanded at any higher level must still be declared.
 
 ---
 
@@ -186,15 +238,21 @@ ArgumentList ::= PropertyValue { "," PropertyValue } ;
 
 ### 5.1 Predicate Expression
 
+The predicate grammar is factored into precedence levels. It contains no left
+recursion, so it is directly parsable by a recursive-descent parser or a
+table-driven generator without precedence annotations.
+
 ```ebnf
-Predicate ::=
-      AtomicPredicate
-    | "(" Predicate ")"
-    | "not" Predicate
-    | Predicate LogicalOp Predicate
-    | Predicate ComparisonOp Predicate
-    | QuantifiedPredicate
-    ;
+Predicate ::= QuantifiedPredicate | ImplicationExpr ;
+ImplicationExpr ::= OrExpr [ "implies" ImplicationExpr ] ;
+OrExpr ::= AndExpr { "or" AndExpr } ;
+AndExpr ::= ComparisonExpr { "and" ComparisonExpr } ;
+ComparisonExpr ::= UnaryExpr [ ComparisonOp UnaryExpr ] ;
+UnaryExpr ::= "not" UnaryExpr | PrimaryExpr ;
+PrimaryExpr ::= AtomicPredicate | "(" Predicate ")" ;
+QuantifiedPredicate ::=
+      "forall" Identifier "in" Domain ":" Predicate
+    | "exists" Identifier "in" Domain ":" Predicate ;
 
 AtomicPredicate ::=
       Identifier "(" [ PredicateArgumentList ] ")"
@@ -212,16 +270,52 @@ PredicateArgument ::=
     | Predicate
     ;
 
-QuantifiedPredicate ::=
-      "forall" Identifier "in" Domain ":" Predicate
-    | "exists" Identifier "in" Domain ":" Predicate
-    ;
-
 Domain ::=
       Identifier "(" [ ArgumentList ] ")"
     | Reference
     ;
 ```
+
+### 5.2 Precedence and Associativity
+
+Binding tightest first:
+
+| Level | Production | Associativity |
+| --- | --- | --- |
+| 1 (tightest) | `PrimaryExpr` — atom or `"(" Predicate ")"` | n/a |
+| 2 | `UnaryExpr` — prefix `not` | right (prefix) |
+| 3 | `ComparisonExpr` — `ComparisonOp` | **non-associative** |
+| 4 | `AndExpr` — `and` | left |
+| 5 | `OrExpr` — `or` | left |
+| 6 | `ImplicationExpr` — `implies` | right |
+| 7 (loosest) | `QuantifiedPredicate` — `forall` / `exists` | prefix; owns everything after `:` |
+
+Rules that follow from the factored grammar:
+
+1. **Comparisons are non-associative.** The optional trailing comparison in
+   `ComparisonExpr` is never repeated, so `a < b < c` is not a predicate. A
+   chained comparison must be written as an explicit conjunction:
+   `a < b and b < c`.
+2. **`and` and `or` are left-associative.** `a and b and c` groups as
+   `(a and b) and c` and `a or b or c` groups as `(a or b) or c`. Because the
+   two operators sit at different levels, `and` binds tighter than `or`:
+   `a or b and c` groups as `a or (b and c)`.
+3. **`implies` is right-associative.** `a implies b implies c` groups as
+   `a implies (b implies c)`, and `implies` binds loosest of the logical
+   operators, so `a and b implies c` groups as `(a and b) implies c`.
+4. **A quantifier owns the full predicate after its colon.** The body of
+   `forall x in D: P` and `exists x in D: P` is a complete `Predicate`, so the
+   scope of `x` extends as far right as possible and the body may itself
+   contain `and`, `or`, `implies`, comparisons, and nested quantifiers. To
+   restrict the body, parenthesize it explicitly.
+5. **`not` binds tighter than every binary operator.** `not a == b` groups as
+   `(not a) == b`; write `not (a == b)` to negate a comparison. Consecutive
+   prefixes (`not not a`) are legal.
+
+A writer must emit parentheses whenever the child production's binding level is
+looser than the parent's, whenever a second comparison would otherwise be
+juxtaposed, or whenever right-associative `implies` would regroup. Re-serializing
+a parsed predicate must reproduce the same grouping.
 
 ---
 
@@ -590,10 +684,14 @@ Type ::=
 
 ## 15. Concrete Syntax Example
 
-The following complete example demonstrates the formal grammar:
+The following complete example demonstrates the formal grammar, including the
+three mandatory top-level declarations, one dependency, and one omission:
 
 ```eir
 evidence Overflow_001 {
+    schema = "eir.v1";
+    level = l1;
+    state = POSSIBLE_DEFECT;
 
     context {
         repository = "radio-stack";
@@ -679,6 +777,18 @@ evidence Overflow_001 {
     provenance PR3 {
         producer = analysis.dominator;
         version = "0.2";
+    }
+
+    dependency DEP1 {
+        kind = summary;
+        stable_id = "summary:sha256:62be5c86c9bef6e9230c791dc8fa6cd426a3495aecd14df5a03430b3ba5e7dd7";
+    }
+
+    omission OM1 {
+        kind = analyzer_expansion;
+        subject = @U1;
+        reason = "vendor_validate contract is unavailable for expansion";
+        expandable = true;
     }
 }
 ```
@@ -774,14 +884,14 @@ EvidenceID = sha256(CanonicalForm(EvidenceCase))
 ## 20. Grammar Summary Statistics
 
 ### Terminal Symbols
-- Keywords: 67
+- Keywords: 73 entries (72 distinct; `unknown` is listed twice)
 - Operators: 12
 - Delimiters: 8 (`{`, `}`, `[`, `]`, `(`, `)`, `;`, `,`)
 
 ### Non-Terminal Symbols
-- Top-level: 4 (EvidenceCase, ContextDecl, ContextProperty, EvidenceMember)
+- Top-level: 12 (EvidenceCase, SchemaDecl, LevelDecl, EvidenceLevel, StateDecl, EvidenceState, ContextDecl, ContextProperty, EvidenceMember, DependencyDecl, DependencyKind, OmissionDecl)
 - Entities: 5 (EntityDecl, EntityKind, EntityProperty, PropertyKey, PropertyValue)
-- Predicates: 7 (Predicate, AtomicPredicate, QuantifiedPredicate, etc.)
+- Predicates: 12 (Predicate, ImplicationExpr, OrExpr, AndExpr, ComparisonExpr, UnaryExpr, PrimaryExpr, QuantifiedPredicate, AtomicPredicate, PredicateArgumentList, PredicateArgument, Domain)
 - Facts: 4 (FactDecl, EpistemicState, Confidence, Producer)
 - Assumptions/Hypotheses/Unknowns: 6
 - Claims: 3 (Claim, ClaimKind, Severity)
@@ -792,7 +902,7 @@ EvidenceID = sha256(CanonicalForm(EvidenceCase))
 - Summaries: 2 (SummaryReference, SummaryComponentList)
 - Types: 2 (PrimitiveType, Type)
 
-**Total Non-Terminals**: ~50
+**Total productions**: 86 (including the lexical productions of §2)
 
 ---
 
@@ -802,7 +912,7 @@ EvidenceID = sha256(CanonicalForm(EvidenceCase))
 
 This grammar is suitable for:
 - **ANTLR 4** — direct EBNF translation
-- **Bison/Yacc** — with minor operator precedence annotations
+- **Bison/Yacc** — direct translation; predicate precedence is already factored into the productions (§5.2), so no `%left`/`%right` declarations are required
 - **Hand-written recursive descent** — straightforward due to keyword-driven structure
 
 ### 21.2 Type Checking
@@ -858,6 +968,7 @@ Well-formedness checking requires:
 | Version | Date | Changes |
 |---------|------|---------|
 | 0.1 | 2026-08-16 | Initial formal specification consolidating architecture document grammar |
+| 1.0 | 2026-09-11 | Stabilized EIR-T 1.0. Added the mandatory top-level `SchemaDecl`, `LevelDecl`, and `StateDecl` (with `EvidenceLevel` and `EvidenceState`); added the `DependencyDecl`/`DependencyKind` and `OmissionDecl` evidence members and the `dependency`/`omission` reserved keywords; replaced the left-recursive predicate production with the precedence-factored `ImplicationExpr`/`OrExpr`/`AndExpr`/`ComparisonExpr`/`UnaryExpr`/`PrimaryExpr` chain and documented precedence, associativity, and quantifier scope in §5.2; updated the concrete syntax example. The grammar is frozen as the M10C implementation contract. |
 
 ---
 
