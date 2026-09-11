@@ -434,6 +434,26 @@ The seven evidence fixtures each also carry `-fdebug-prefix-map=@PROJECT_ROOT@=.
 so the materialized checkout root cannot leak into the LLVM module hash and
 therefore into the CPG projection identity (`HND-006`).
 
+That flag is necessary but not sufficient for a portable identity. The fixtures
+deliberately do **not** pin an analysis target, so the target triple and its
+`target-features` come from the analysis host, and every
+`function_variant` / `valref` / `memref` digest in the slice is derived from
+them.
+
+Pinning a target does not close the gap. Adding an explicit
+`--target=x86_64-unknown-linux-gnu` — the triple CI runs on natively — still
+produces different digests from CI's run at the *identical* pinned LLVM
+revision (`f9bda52e57a759d20224cd581f73f61ee3220e74` in both). The IR is
+emitted in-process, so the residual is host-scoped: CI configures LLVM with
+`-DLLVM_TARGETS_TO_BUILD=X86` on `ubuntu-24.04`, while a developer machine has
+the full target list and a different host OS.
+
+The consequence is recorded where it matters: no case may assert digest
+equality across hosts, and §6.4 defines the digest-masked projection the golden
+comparison uses instead. Making the identity genuinely host-independent — the
+`FunctionVariantID` input that embeds a host-derived `target-features` value —
+is a follow-up to M10B, not a fixture concern.
+
 | Fixture project | Semantic shape | Required distinguishing outcome |
 | --- | --- | --- |
 | `evidence_overflow_unsafe` | `packet.length` flows directly to `memcpy` size | Complete unsafe flow reaching the sink; no proven dominating check. `DEFERRED (§2.3)`: range exceeds capacity |
@@ -502,16 +522,36 @@ Protobuf is decoded and compared semantically; raw Protobuf bytes are not a
 golden or an identity oracle.
 
 The goldens are compared **semantically**, not byte-for-byte, even within one
-build. The slice JSON embeds the analysis run ID, which derives from
+build. Two independent properties make a byte comparison impossible.
+
+**Run identity.** The slice JSON embeds the analysis run ID, which derives from
 `engine_toolchain_identity` — the digest of the vendored Soufflé executable —
-and that executable is not bit-reproducible across clean builds. The comparison
-therefore parses both the golden and the tool output into the typed projection
-and requires every toolchain-stable field to match: claim seed, CPG flow nodes
-and edges, every fact set with its cells, and every completeness and truncation
-state. Byte-identical determinism is asserted separately and only *within* one
-build (store re-ordered, second materialization in a different checkout root).
-Making Soufflé bit-reproducible is a third-party build follow-up, not an M10B
-deliverable.
+and that executable is not bit-reproducible across clean builds. That digest
+propagates into the run ID, the six query-completion fact IDs, the run
+bindings, the per-query provenance IDs, and the canonical ordering that sorts
+by those IDs. Making Soufflé bit-reproducible is a third-party build
+follow-up, not an M10B deliverable.
+
+**Content addressing.** Every other reference in the slice is a content address
+over the analysis IR. That IR is emitted by the in-process `ClangTool` linked
+into the VERITAS build, and the `veritas.function-variant.v1` component of
+those addresses hashes LLVM's `target-features` function attribute, which the
+driver fills from the **analysis host's** default CPU. A digest is therefore
+scoped to the host that produced it: CI (`ubuntu-24.04`, x86_64) and a
+macOS/arm64 developer machine disagree on every digest in the document — even
+at the identical pinned LLVM revision and an identical explicit `--target` —
+while agreeing on every kind tag, relation, cell, and completeness state. The
+golden is only reproducible on the host that generated it, so digest equality
+is not a cross-host invariant and must not be asserted as one.
+
+The comparison therefore parses both the golden and the tool output into the
+typed projection, masks every 64-character sha256 digest, and requires every
+remaining field to match exactly: claim-seed kinds, CPG flow nodes and edges,
+every fact set with its relations, cells, and truncation reasons, and every
+completeness and examined-count state. Byte-identical determinism — including
+digest equality — is asserted separately and only *within* one build (CLI
+versus the typed oracle, store re-ordered by fact-binding insertion, second
+materialization in a different checkout root).
 
 ---
 

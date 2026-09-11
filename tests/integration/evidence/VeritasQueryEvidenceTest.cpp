@@ -29,19 +29,32 @@
 //     Same toolchain → same `analysis_run_id` → byte-stable output.
 //
 //   * SEMANTIC, against the checked-in golden. The golden CANNOT be compared
-//     byte-for-byte: `analysis_run_id` derives from
+//     byte-for-byte, for two independent reasons.
+//
+//     The run identity: `analysis_run_id` derives from
 //     `engine_toolchain_identity = "souffle-" + SHA256(<vendored souffle
 //     executable bytes>)`, and that executable is not bit-reproducible, so a
 //     clean rebuild of the vendored subtree changes the digest and with it the
 //     run id, the six query-completion fact ids, the run bindings, the
 //     per-query provenance ids, and the canonical ordering that sorts by those
 //     ids (Task 5 verification reproduced three distinct digests and three
-//     distinct run ids from three clean rebuilds). Everything semantic — the
-//     claim seed, the CPG flow nodes/edges, the GlobalFlow support, the fact
-//     sets, and every completeness state — is identical across those builds.
-//     The golden comparison therefore parses both documents and compares only
-//     the toolchain-stable fields; see `SemanticSlice`. Making the vendored
-//     Soufflé build bit-reproducible is a third_party build follow-up.
+//     distinct run ids from three clean rebuilds). Making the vendored Soufflé
+//     build bit-reproducible is a third_party build follow-up.
+//
+//     The content addresses: every other reference in the slice is a content
+//     address over the analysis IR, and that IR is emitted by the in-process
+//     ClangTool linked into this build. The function-variant component of those
+//     addresses hashes LLVM's `target-features` attribute, which the driver
+//     fills from the analysis host's default CPU, so a golden regenerated on
+//     one host disagrees with another host on every digest even at an identical
+//     LLVM revision and an identical target triple. A digest is therefore only
+//     meaningful within the toolchain that produced it.
+//
+//     Everything semantic — the claim-seed kinds, the CPG flow nodes/edges, the
+//     GlobalFlow support, the fact sets with their relations and cells, and
+//     every completeness state — IS identical across toolchains, and that is
+//     exactly what the golden comparison asserts. See `StabilizeDigests` and
+//     `SameStableSlice`.
 //
 // The JSON is the DESC0PED slice. What the real pipeline produces and what this
 // CLI therefore publishes is the value-flow closure (GlobalFlow projected onto
@@ -611,11 +624,6 @@ struct FactRowView {
   core::StableId fact_id;
   std::string relation;
   std::vector<std::string> cells;
-
-  bool operator==(const FactRowView& other) const {
-    return fact_id == other.fact_id && relation == other.relation &&
-           cells == other.cells;
-  }
 };
 
 std::string RenderFactRow(const FactRowView& row) {
@@ -626,9 +634,56 @@ std::string RenderFactRow(const FactRowView& row) {
   return out;
 }
 
+// True for a lowercase hexadecimal digit, the alphabet of a sha256 digest.
+bool IsLowerHex(char c) {
+  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+}
+
+// Replaces every content-addressed sha256 digest with a fixed placeholder, so
+// two documents produced by different analysis toolchains can be compared on
+// everything except the digest values themselves.
+//
+// A digest is stable within one toolchain but not across toolchains. The IR
+// every identity is derived from is emitted by the in-process ClangTool linked
+// into this build, and `veritas.function-variant.v1` hashes LLVM's
+// `target-features` function attribute, which the driver fills from the
+// analysis host's default CPU. CI (Ubuntu/x86_64) and a developer's macOS/arm64
+// machine therefore disagree on every digest while agreeing on every kind tag,
+// relation, cell, and completeness state. Digest equality is still asserted,
+// byte-for-byte, by the same-build assertions that precede the golden
+// comparison; this projection is what the golden adds across toolchains.
+std::string StabilizeDigests(std::string_view text) {
+  std::string out;
+  out.reserve(text.size());
+  std::size_t i = 0;
+  while (i < text.size()) {
+    std::size_t end = i;
+    while (end < text.size() && IsLowerHex(text[end])) {
+      ++end;
+    }
+    if (end == i) {
+      out.push_back(text[i]);
+      ++i;
+      continue;
+    }
+    // Exactly 64 lowercase hex characters is a sha256 digest. Shorter runs are
+    // ordinary numbers, identifiers, or hex-looking text and are compared
+    // exactly.
+    if (end - i == 64) {
+      out += "<digest>";
+    } else {
+      out.append(text, i, end - i);
+    }
+    i = end;
+  }
+  return out;
+}
+
 // A fact set reduced to the fields that survive an independent clean build of
 // the toolchain: `QueryResultMetadata` minus its run-derived `analysis_run_id`
-// and `query_provenance_id`.
+// and `query_provenance_id`. The fact ids it keeps are compared with their
+// digests masked (see `StabilizeDigests`), so the fact set's structure, cells,
+// and completeness survive a change of analysis host.
 struct FactSetView {
   std::vector<FactRowView> facts;
   ev::QueryCompleteness completeness = ev::QueryCompleteness::kUnspecified;
@@ -636,7 +691,9 @@ struct FactSetView {
   std::size_t examined_items = 0;
 };
 
-// The toolchain-stable projection of one slice document.
+// The toolchain-stable projection of one slice document: every field of the
+// slice, with each reference held as its typed value so the comparators below
+// can mask the digest before comparing.
 struct SemanticSlice {
   ev::ClaimSeed claim_seed;
   std::vector<core::StableId> flow_nodes;
@@ -966,6 +1023,10 @@ StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
 
 std::string RenderId(const core::StableId& id) { return core::ToString(id); }
 
+// Both comparators below reduce their operands through `render` and mask the
+// content-addressed digests before comparing, so `SameStableSlice` compares the
+// toolchain-stable projection of two documents rather than their identity
+// digests. See `StabilizeDigests`.
 template <typename T, typename Render>
 bool SameList(std::string_view name, const std::vector<T>& left,
               const std::vector<T>& right, Render render, std::string* mismatch) {
@@ -975,7 +1036,8 @@ bool SameList(std::string_view name, const std::vector<T>& left,
     return false;
   }
   for (std::size_t i = 0; i < left.size(); ++i) {
-    if (!(left[i] == right[i])) {
+    if (StabilizeDigests(render(left[i])) !=
+        StabilizeDigests(render(right[i]))) {
       *mismatch = std::string(name) + "[" + std::to_string(i) + "]: " +
                   render(left[i]) + " vs " + render(right[i]);
       return false;
@@ -987,7 +1049,7 @@ bool SameList(std::string_view name, const std::vector<T>& left,
 template <typename T, typename Render>
 bool SameValue(std::string_view name, const T& left, const T& right,
                Render render, std::string* mismatch) {
-  if (left == right) {
+  if (StabilizeDigests(render(left)) == StabilizeDigests(render(right))) {
     return true;
   }
   *mismatch = std::string(name) + ": " + render(left) + " vs " + render(right);
@@ -1023,7 +1085,11 @@ bool SameFactSet(std::string_view name, const FactSetView& left,
 }
 
 // True when two slices agree on every field an independent clean build of the
-// toolchain cannot change. The first disagreement is written to `mismatch`.
+// toolchain cannot change: the claim-seed kinds, the CPG flow nodes and edges,
+// every fact set with its relations, cells, completeness, and truncation
+// state. The reference digests themselves are masked, because a content
+// address is scoped to the toolchain that produced it (see
+// `StabilizeDigests`). The first disagreement is written to `mismatch`.
 bool SameStableSlice(const SemanticSlice& left, const SemanticSlice& right,
                      std::string* mismatch) {
   if (!SameValue("claim_seed.finding_id", left.claim_seed.finding_id,
@@ -1131,15 +1197,26 @@ TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
       << "slice JSON is not byte-stable across stores/checkout roots";
 
   // The checked-in golden carries the same slice semantics. It is compared
-  // SEMANTICALLY, never byte-for-byte: the golden embeds the analysis run id,
-  // which derives from the digest of the vendored Soufflé executable, and that
-  // executable is not bit-reproducible across clean builds (see the file
-  // header). The run-derived members — analysis_run_id, the six query
-  // provenance ids, the completion-fact ids, the run bindings, and the
-  // provenance graph — are therefore excluded from the comparison, while
-  // everything a clean rebuild cannot change (claim seed, CPG flow nodes and
-  // edges, GlobalFlow support, fact sets, and every completeness state) is
-  // required to match exactly.
+  // SEMANTICALLY, never byte-for-byte, on two independent counts.
+  //
+  // The golden embeds the analysis run id, which derives from the digest of the
+  // vendored Soufflé executable, and that executable is not bit-reproducible
+  // across clean builds (see the file header). The run-derived members —
+  // analysis_run_id, the six query provenance ids, the completion-fact ids, the
+  // run bindings, and the provenance graph — are therefore excluded from the
+  // comparison.
+  //
+  // Every remaining reference is a content address over the analysis IR, and
+  // the IR is emitted by the in-process ClangTool linked into this build. The
+  // function-variant component of those addresses hashes LLVM's
+  // `target-features` attribute, which the driver fills from the analysis
+  // host's default CPU, so a golden regenerated on one host cannot match
+  // another host's digests even at the same LLVM revision. Those digests are
+  // therefore masked, and everything a change of analysis host cannot affect —
+  // claim-seed kinds, CPG flow nodes and edges, GlobalFlow support, every fact
+  // set's relations, cells, completeness, and truncation state — is required to
+  // match exactly. Same-host digest equality is asserted byte-for-byte by the
+  // three comparisons above, which run before this one.
   const std::filesystem::path golden =
       std::filesystem::path(VERITAS_GOLDEN_DIR) / "overflow_unsafe.slice.json";
   ASSERT_TRUE(std::filesystem::exists(golden))
@@ -1164,7 +1241,9 @@ TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
   // Non-vacuity guard: the comparison must actually inspect the fields it
   // claims to compare, so a single mutated semantic field has to be caught.
   // The baseline is the CLI's own slice, so this guard is independent of the
-  // golden's state.
+  // golden's state. The mutation swaps in an id of a *different kind*, which is
+  // what the masked projection still distinguishes; mutating only a digest
+  // would (correctly) compare equal, so it would prove nothing.
   SemanticSlice mutated = *cli_slice;
   mutated.claim_seed.sink_ref = mutated.claim_seed.finding_id;
   std::string mutation_mismatch;
