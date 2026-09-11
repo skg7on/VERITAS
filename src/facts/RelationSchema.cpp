@@ -233,6 +233,22 @@ const RelationTable& Table() {
       RelationSchema{"UnmodeledExternal", RelationOwnership::kEdb,
                      {{"function_id", ColumnDomain::kFunctionId}},
                      NoEpistemic()},
+      // The M10B query-completion certificate. Nine canonical cells record the
+      // query kind, ordered scope, budget, implementation version, snapshot
+      // fingerprint, completeness, ordered reasons, examined count, and
+      // returned-member digest. Lists are carried as canonical text; the row is
+      // query-time only and never enters the WPA/Soufflé fact stream.
+      RelationSchema{"evidence.query_completion.v1", RelationOwnership::kEdb,
+                     {{"query_kind", ColumnDomain::kString},
+                      {"ordered_scope_refs", ColumnDomain::kString},
+                      {"budget", ColumnDomain::kString},
+                      {"query_implementation_version", ColumnDomain::kString},
+                      {"input_snapshot_fingerprint", ColumnDomain::kString},
+                      {"completeness", ColumnDomain::kString},
+                      {"ordered_truncation_reasons", ColumnDomain::kString},
+                      {"examined_items", ColumnDomain::kUint64},
+                      {"returned_member_digest", ColumnDomain::kString}},
+                     NoEpistemic()},
   };
   return table;
 }

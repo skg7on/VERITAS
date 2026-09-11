@@ -1,6 +1,6 @@
 # M10B–M10C API-to-Evidence-IR Test Design Spec
 
-**Status:** Approved
+**Status:** Approved — M10B-owned cases carry a documented partial deferral, see §2.3
 **Milestones:** M10B Evidence Builder inputs and M10C Evidence IR semantic serialization
 **Depends on:** M6 thin CPG, M9 fact/provenance store, M10A recursive domain expansion
 **Validates:** M10B issue #13 and M10C issue #70
@@ -72,6 +72,49 @@ This specification does not:
 * require whole source files inside `EvidenceBuildInput` or `EvidenceCase`;
 * authorize flaky, disabled, or environment-dependent acceptance tests; or
 * duplicate every parser token test already owned by the M10C plan.
+
+## 2.3 Deferred M10B oracles (2026-09-10)
+
+M10B completes against the semantic state the current M6/M9/M10A pipeline
+actually produces. That pipeline does not yet emit four of the facts the M10B
+fixture oracles below were written against:
+
+```text
+value range [0, 65535]         no value-range relation is produced; the
+                               closest facts (DirectRead/DirectWrite byte
+                               ranges) are EDB base facts that are not
+                               run-bound and so are invisible to queries
+capacity 2048                  no capacity relation is produced
+alias states                   no Alias relation fact is materialized anywhere;
+                               alias uncertainty is folded into SVF-merged
+                               memory effects instead of a queryable fact
+positive dominating_check      M10A derives only the negative
+                               `dominating_check_absence` coverage certificate
+```
+
+These oracles are **deferred**, not deleted and not weakened implicitly. Each
+case keeps its catalog position and ID; the contracts that define the affected
+`EvidenceBuildInput` slots — completeness, truncation, absence semantics, and
+"never manufacture a fact" — stay in force and are still asserted. What is
+deferred is only the *producer* of the missing facts. Ownership of the
+deferral sits with the milestone that introduces that producer: a
+value-range/capacity relation in M10A, an alias relation, and M10A's positive
+dominating-check encoding. Because the fact sets remain present-but-empty on
+real fixtures, M10C must keep treating them under the open-world rows of the
+§4.3 absence truth table.
+
+What M10B does prove today, for those same cases: the flow reaches the `memcpy`
+sink; the unmodeled external validator surfaces as an honest unknown; provenance
+carries summary references; the dominating-check query is complete and empty
+with a negative `dominating_check_absence` certificate; no range, capacity,
+alias, or positive-check fact is ever fabricated; and repeated clean stores and
+alternate checkout roots produce byte-identical output within a build.
+
+Affected catalog rows are marked **DEFERRED (§2.3)** in §6.1, §8, and §9, and
+the affected demonstrations are annotated in §14. Synthetically constructible cases
+are *not* deferred: `AC-*`, and the `QRY-004`/`QRY-008` budget and alias-state
+cases, build their facts through `EvidenceScenarioBuilder` and remain fully
+asserted.
 
 ---
 
@@ -381,19 +424,45 @@ struct Buffer {
 };
 ```
 
-The unsigned 16-bit length provides the expected `[0, 65535]` range and the
-array provides the expected 2048-byte capacity without a handwritten test
-fact.
+The unsigned 16-bit length is the intended source of the `[0, 65535]` range and
+the array is the intended source of the 2048-byte capacity. Both are **deferred**
+as query oracles — the pipeline produces neither fact (§2.3). The declared types
+stay as written because they define the fixture's semantics for the milestone
+that adds the producers; the fixtures keep the exact same source shape.
+
+The seven evidence fixtures each also carry `-fdebug-prefix-map=@PROJECT_ROOT@=.`
+so the materialized checkout root cannot leak into the LLVM module hash and
+therefore into the CPG projection identity (`HND-006`).
+
+That flag is necessary but not sufficient for a portable identity. The fixtures
+deliberately do **not** pin an analysis target, so the target triple and its
+`target-features` come from the analysis host, and every
+`function_variant` / `valref` / `memref` digest in the slice is derived from
+them.
+
+Pinning a target does not close the gap. Adding an explicit
+`--target=x86_64-unknown-linux-gnu` — the triple CI runs on natively — still
+produces different digests from CI's run at the *identical* pinned LLVM
+revision (`f9bda52e57a759d20224cd581f73f61ee3220e74` in both). The IR is
+emitted in-process, so the residual is host-scoped: CI configures LLVM with
+`-DLLVM_TARGETS_TO_BUILD=X86` on `ubuntu-24.04`, while a developer machine has
+the full target list and a different host OS.
+
+The consequence is recorded where it matters: no case may assert digest
+equality across hosts, and §6.4 defines the digest-masked projection the golden
+comparison uses instead. Making the identity genuinely host-independent — the
+`FunctionVariantID` input that embeds a host-derived `target-features` value —
+is a follow-up to M10B, not a fixture concern.
 
 | Fixture project | Semantic shape | Required distinguishing outcome |
 | --- | --- | --- |
-| `evidence_overflow_unsafe` | `packet.length` flows directly to `memcpy` size | Complete unsafe flow; range exceeds capacity; no proven dominating check |
-| `evidence_overflow_safe` | `length <= sizeof(buffer.data)` dominates sink | Positive dominating-check fact; no verified-safe promotion |
-| `evidence_overflow_non_dominating` | Check occurs only on a sibling branch | Check existence does not become sink dominance |
-| `evidence_overflow_mixed_paths` | One checked and one unchecked path reaches sink | No universal safety; both paths remain visible or truncation is explicit |
+| `evidence_overflow_unsafe` | `packet.length` flows directly to `memcpy` size | Complete unsafe flow reaching the sink; no proven dominating check. `DEFERRED (§2.3)`: range exceeds capacity |
+| `evidence_overflow_safe` | `length <= sizeof(buffer.data)` dominates sink | No verified-safe promotion, and no fabricated positive check. `DEFERRED (§2.3)`: positive dominating-check fact |
+| `evidence_overflow_non_dominating` | Check occurs only on a sibling branch | Check existence does not become sink dominance (asserted as a negative oracle; non-discriminating until a positive producer exists) |
+| `evidence_overflow_mixed_paths` | One checked and one unchecked path reaches sink | Flow closure present; no fabricated check. `DEFERRED (§2.3)`: checked/unchecked path disambiguation by dominance or capacity |
 | `evidence_overflow_opaque_validator` | External validator guards the sink but has no model | External postcondition remains unknown |
-| `evidence_overflow_alias_uncertain` | Destination may alias another object | Alias remains `MAY_ALIAS`; capacity reasoning is not strengthened |
-| `evidence_overflow_summary` | Source and sink cross translation units and summary edges | Flow retains immutable summary references and expansion markers |
+| `evidence_overflow_alias_uncertain` | Destination may alias another object | No fabricated alias or capacity conclusion. `DEFERRED (§2.3)`: `MAY_ALIAS` alias fact and the capacity reasoning it would constrain |
+| `evidence_overflow_summary` | Source and sink cross translation units and summary edges | Flow retains immutable summary references and expansion markers; dominating-check-absence certificate present |
 
 No fixture depends on undefined behavior before the sink, optimizer-specific
 constant folding, source line numbers for identity, or platform-specific type
@@ -452,6 +521,38 @@ tests/golden/evidence/overflow_truncated.l1.eir
 Protobuf is decoded and compared semantically; raw Protobuf bytes are not a
 golden or an identity oracle.
 
+The goldens are compared **semantically**, not byte-for-byte, even within one
+build. Two independent properties make a byte comparison impossible.
+
+**Run identity.** The slice JSON embeds the analysis run ID, which derives from
+`engine_toolchain_identity` — the digest of the vendored Soufflé executable —
+and that executable is not bit-reproducible across clean builds. That digest
+propagates into the run ID, the six query-completion fact IDs, the run
+bindings, the per-query provenance IDs, and the canonical ordering that sorts
+by those IDs. Making Soufflé bit-reproducible is a third-party build
+follow-up, not an M10B deliverable.
+
+**Content addressing.** Every other reference in the slice is a content address
+over the analysis IR. That IR is emitted by the in-process `ClangTool` linked
+into the VERITAS build, and the `veritas.function-variant.v1` component of
+those addresses hashes LLVM's `target-features` function attribute, which the
+driver fills from the **analysis host's** default CPU. A digest is therefore
+scoped to the host that produced it: CI (`ubuntu-24.04`, x86_64) and a
+macOS/arm64 developer machine disagree on every digest in the document — even
+at the identical pinned LLVM revision and an identical explicit `--target` —
+while agreeing on every kind tag, relation, cell, and completeness state. The
+golden is only reproducible on the host that generated it, so digest equality
+is not a cross-host invariant and must not be asserted as one.
+
+The comparison therefore parses both the golden and the tool output into the
+typed projection, masks every 64-character sha256 digest, and requires every
+remaining field to match exactly: claim-seed kinds, CPG flow nodes and edges,
+every fact set with its relations, cells, and truncation reasons, and every
+completeness and examined-count state. Byte-identical determinism — including
+digest equality — is asserted separately and only *within* one build (CLI
+versus the typed oracle, store re-ordered by fact-binding insertion, second
+materialization in a different checkout root).
+
 ---
 
 # 7. Contract Test Catalog (`AC`)
@@ -471,13 +572,13 @@ golden or an identity oracle.
 
 | ID and test | Scenario | Required oracle | Forbidden outcome |
 | --- | --- | --- | --- |
-| `QRY-001 UnsafeDirectReturnsFlowRangeAndCapacity` | Real `evidence_overflow_unsafe` fixture | Flow reaches `memcpy.size`; range `[0,65535]`; capacity `2048`; all refs share one run | Source-text blob or missing capacity |
+| `QRY-001 UnsafeDirectReturnsFlowRangeAndCapacity` | Real `evidence_overflow_unsafe` fixture | Flow reaches the `memcpy` size formal; all refs share one run. `DEFERRED (§2.3)`: range `[0,65535]`; capacity `2048` | Source-text blob or missing capacity |
 | `QRY-002 NoPathIsCompleteEmpty` | Synthetic disconnected graph with ample budget | Empty paths, `kComplete`, no reasons, valid query provenance | Empty result marked truncated or treated as error |
 | `QRY-003 ReportsEachTraversalBudget` | Parameterized depth, node, and path overflow | Canonical partial result plus exact stable reason for each limit | Limit silently drops work or reports wrong reason |
 | `QRY-004 RangeAndCapacityFactBudgetsAreVisible` | More range/capacity facts than fact limit | Canonical partial facts and `kMaxFacts` for each query independently | One query's truncation contaminates another result |
-| `QRY-005 SafeCheckDominatesSink` | Real `evidence_overflow_safe` fixture | Returned check references exact condition and sink and has authoritative provenance | Mere lexical check match without dominance |
-| `QRY-006 SiblingCheckDoesNotDominateSink` | Real `evidence_overflow_non_dominating` fixture | No positive dominance fact; complete scoped outcome or explicit incompleteness | Check existence promoted to dominance |
-| `QRY-007 MixedPathsDoNotClaimUniversalCheck` | Real `evidence_overflow_mixed_paths` fixture | Checked and unchecked paths are both represented, or result is visibly truncated | One checked path hides unchecked path |
+| `QRY-005 SafeCheckDominatesSink` | Real `evidence_overflow_safe` fixture | `DEFERRED (§2.3)`: a returned positive check referencing the exact condition and sink with authoritative provenance. Not deferrable: no fabricated positive check, and the dominating-check query stays complete-empty | Mere lexical check match without dominance |
+| `QRY-006 SiblingCheckDoesNotDominateSink` | Real `evidence_overflow_non_dominating` fixture | No positive dominance fact; complete scoped outcome or explicit incompleteness. Held as a negative oracle — non-discriminating until `QRY-005`'s producer exists (`DEFERRED (§2.3)`) | Check existence promoted to dominance |
+| `QRY-007 MixedPathsDoNotClaimUniversalCheck` | Real `evidence_overflow_mixed_paths` fixture | No fabricated check and the flow closure is present. `DEFERRED (§2.3)`: checked and unchecked paths disambiguated by dominance or capacity, or the result visibly truncated on those grounds | One checked path hides unchecked path |
 | `QRY-008 PreservesAllAliasStates` | Parameterized `MUST_ALIAS`, `MAY_ALIAS`, `NO_ALIAS`, and `UNKNOWN_ALIAS` facts | Exact alias semantic and epistemic values round-trip | `MAY_ALIAS` or `UNKNOWN_ALIAS` converted to `MUST_ALIAS`/`NO_ALIAS` |
 | `QRY-009 OpaqueValidatorRemainsUnknown` | Real `evidence_overflow_opaque_validator` fixture without external model | Unknown result references callsite, requested property, and resolution hint | Assumed postcondition or negative check fact |
 | `QRY-010 ProvenanceBudgetIsIndependentAndVisible` | Complete semantic facts with provenance depth below required closure | Facts remain present; provenance result truncates with its own reason | Fact disappearance or fabricated closed provenance |
@@ -488,7 +589,7 @@ golden or an identity oracle.
 
 | ID and test | Scenario | Required oracle | Forbidden outcome |
 | --- | --- | --- | --- |
-| `HND-001 BundlesEveryRequiredQueryResult` | Unsafe claim with complete service responses | Claim, flow, ranges, capacities, aliases, checks, unknowns, summaries, anchors, completion facts, and witnesses are present | M10C must issue an additional analysis or provenance query |
+| `HND-001 BundlesEveryRequiredQueryResult` | Unsafe claim with complete service responses | Claim, flow, ranges, capacities, aliases, checks, unknowns, summaries, anchors, completion facts, and witnesses are present — every slot is carried with its own completeness metadata and query provenance. `DEFERRED (§2.3)`: on real fixtures the range, capacity, alias, and positive-check slots are complete-empty rather than populated | M10C must issue an additional analysis or provenance query, or an absent slot arrives without its completeness metadata |
 | `HND-002 UsesOneImmutableSnapshot` | Backend current run changes between subquery opportunities | Input is wholly from the pinned first snapshot or returns retryable failure | Mixed-run input returned as success |
 | `HND-003 KeepsSupportingAndContradictingFactsSeparate` | Same predicate has support and counterevidence | Both collections retain IDs, epistemic states, and provenance | Conflict resolved by dropping one side |
 | `HND-004 CarriesCompleteEmptyCheckEvidence` | Closed-world dominating-check query completes empty | Empty set retains scope, run, query provenance, examined count, and complete state | Bare empty vector interpreted as proof |
@@ -571,9 +672,13 @@ veritas-query evidence overflow \
   --sink memcpy --level l1 --format eir-t
 ```
 
-Demonstrates complete flow, `[0,65535]` range, 2048-byte capacity, scoped check
-outcome, explicit unknown external semantics, provenance, summaries, and a
-pending proof obligation. It does not claim a verified defect.
+Demonstrates the complete flow reaching the sink, the scoped check outcome
+(complete and empty, with the negative dominating-check-absence certificate),
+explicit unknown external semantics, provenance, summaries, and a pending proof
+obligation. It does not claim a verified defect.
+
+`DEFERRED (§2.3)`: the `[0,65535]` range and the 2048-byte capacity are not
+yet produced by the pipeline and appear as complete-empty fact sets.
 
 ## 14.2 Safe counterevidence without premature verdict
 
@@ -582,8 +687,12 @@ veritas-query evidence overflow \
   --sink memcpy --level l1 --format eir-t
 ```
 
-Demonstrates a positive dominating check and different Evidence ID while
-remaining below `VERIFIED_SAFE` until a later verifier supplies authority.
+Demonstrates a distinct Evidence ID and that the case remains below
+`VERIFIED_SAFE` until a later verifier supplies authority.
+
+`DEFERRED (§2.3)`: the positive dominating check is not yet produced, so the
+safe fixture currently demonstrates the counterevidence shape through the
+negative certificate and the absence of any fabricated positive check.
 
 ## 14.3 Truncation blocks negative proof
 
@@ -697,6 +806,9 @@ skip.
 | Representation failures are deterministic and atomic | `REP-005`–`REP-008`, `DEM-004` |
 | First demo is understandable and regression-safe | `QRY-001`, `BLD-001`, `DEM-001`–`DEM-006` |
 
+`QRY-001` and `HND-001` carry the §2.3 partial deferral; `BLD-001` and the
+`DEM-*` rows are M10C-owned and are not modified by it.
+
 ---
 
 # 18. Milestone Ownership
@@ -729,7 +841,10 @@ the prerequisite contract.
 
 The API-to-Evidence-IR boundary is qualified only when:
 
-* all 54 catalog cases are executable and passing;
+* all 54 catalog cases are executable and passing — for the M10B-owned cases
+  whose producers do not yet exist, "passing" means passing under the §2.3
+  deferral, which keeps every case's completeness, absence, and
+  no-fabrication assertions live while deferring only the missing facts;
 * the four demonstrations produce reviewed, validated outputs;
 * complete and truncated absence remain distinguishable through every layer;
 * no forbidden epistemic promotion or hidden omission occurs;

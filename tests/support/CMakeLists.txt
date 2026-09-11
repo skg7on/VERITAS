@@ -19,6 +19,7 @@
 
 add_library(veritas_test_support STATIC
   ProjectFixture.cpp
+  evidence/EvidenceScenario.cpp
 )
 
 target_include_directories(veritas_test_support PUBLIC
@@ -27,6 +28,10 @@ target_include_directories(veritas_test_support PUBLIC
 
 target_compile_definitions(veritas_test_support PRIVATE
   VERITAS_TESTS_SOURCE_DIR="${CMAKE_SOURCE_DIR}/tests"
+)
+
+target_link_libraries(veritas_test_support PRIVATE
+  veritas::evidence
 )
 
 target_compile_features(veritas_test_support PUBLIC cxx_std_20)

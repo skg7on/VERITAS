@@ -85,11 +85,14 @@ enum class RelationId : std::uint16_t {
   kSoundnessCoverage,
   // M10A: an external callee the analysis could not model.
   kUnmodeledExternal,
+  // M10B: the query-completion certificate every bounded query result carries.
+  // Query-time only; it never enters the WPA/Soufflé fact stream.
+  kQueryCompletion,
 };
 
 // Number of relations in the relations.v2 registry. Single authority for both
 // the registry table and relation-id range validation.
-inline constexpr std::size_t kRelationCountV2 = 27;
+inline constexpr std::size_t kRelationCountV2 = 28;
 
 // Semantic domain of a relation column. ID domains are carried as a stable ID
 // in a semantic row and as a typed dense ID in an execution row (model IDs are

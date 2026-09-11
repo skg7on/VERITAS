@@ -1,0 +1,10 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-O0", "-g", "-fdebug-prefix-map=@PROJECT_ROOT@=.", "-fno-inline",
+      "-fno-rtti", "-fno-exceptions", "-c", "main.cpp"
+    ],
+    "file": "main.cpp"
+  }
+]

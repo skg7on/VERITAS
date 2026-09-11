@@ -33,6 +33,18 @@ capacity(destination) = 2048
 no dominating bounds check
 ```
 
+**Deferred as produced facts (2026-09-10).** The M6/M9/M10A pipeline does not yet
+emit a value-range relation, a capacity relation, an alias relation, or a
+positive dominating-check fact. M10B therefore ships the demo over the state the
+pipeline actually produces — the flow reaching the sink, the honest unknown for
+an unmodeled external validator, provenance with summary references, and the
+complete-empty dominating-check result carrying the negative
+`dominating_check_absence` certificate — and the four missing producer facts are
+deferred to the milestone that adds them (M10A). The query slots, their
+completeness metadata, and the absence rules below are unchanged and remain in
+force; only their population is deferred. See the companion test design spec
+§2.3 for the exact case-level scope.
+
 ---
 
 # 2. Evidence Query Model
@@ -264,6 +276,11 @@ provenance refs
 truncation
 per-query completeness and truncation reasons
 ```
+
+Every listed category is emitted. Per the deferral above, on real fixtures the
+range, capacity, and positive-dominating-check categories are emitted as
+complete-empty fact sets with their completeness metadata, not as populated
+facts.
 
 This JSON is diagnostic. M10C owns EIR-T, Protobuf, and full-EIR diagnostic
 JSON.

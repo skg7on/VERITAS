@@ -419,8 +419,16 @@ git commit -m "test: add comprehensive overflow evidence fixtures"
 Use the established `CliResult`, shell-quoting, temporary-output, and
 `RunVeritasQuery` pattern from
 `tests/integration/build/VeritasBuildAnalyzeCliTest.cpp`. Run the unsafe fixture
-through the public command, parse its JSON into the typed oracle, then compare
-bytes with `overflow_unsafe.slice.json`.
+through the public command, parse its JSON into the typed oracle, and compare
+the checked-in `overflow_unsafe.slice.json` SEMANTICALLY — never byte-for-byte.
+Parse both documents into the test-local typed projection and require the
+toolchain-stable fields (claim seed, CPG flow nodes/edges, every fact set and
+its cells, and every completeness state) to match exactly. Byte determinism is
+asserted separately, and only within a build: the same store re-ordered, and a
+second materialization in a different checkout root. Bytes cannot be compared
+against the golden because the document embeds the analysis run id, which
+derives from the digest of the vendored Soufflé executable, and that executable
+is not bit-reproducible across clean builds.
 
 - [ ] **Step 2: Run the CLI test to verify it fails**
 
