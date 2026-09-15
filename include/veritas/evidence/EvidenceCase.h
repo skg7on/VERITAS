@@ -188,11 +188,36 @@ enum class ProofGoalKind {
   kCheck,
 };
 
+// Why the analysis could not establish a property. This is the grammar's closed
+// `UnknownReason` classification, in the grammar's terminal order after the
+// sentinel; its textual spellings are UPPERCASE. It is carried alongside
+// `Unknown::reason`, which stays the free-text sentence the case records: the
+// closed code is what the grammar can express, and the free text is what the
+// analysis observed, so neither replaces the other.
+enum class UnknownReasonCode {
+  kUnspecified,
+  kUnresolvedCall,
+  kUnknownAlias,
+  kExternalFunction,
+  kMissingSpecification,
+  kAnalysisTimeout,
+  kStateExplosion,
+  kUnsupportedLanguageFeature,
+  kInlineAssembly,
+  kDynamicLoading,
+  kUnknownBuildConfiguration,
+};
+
 // Textual spellings of the semantic enums, and their rejecting parsers. The
-// parsers accept only the grammar's closed spelling sets; every unknown
-// spelling, including the "unspecified" rendering of the invalid default, is
-// rejected with InvalidArgument. `ToString` is total so it stays usable in
-// diagnostics.
+// parsers accept the EIR V0.1 subset the M10C design spec selects (§1 and
+// §2.2), as fixed by the implementation plan's enum lists. The formal
+// specification's terminal sets are the full EIR-T 1.0 language surface and are
+// deliberately wider, so a grammar-valid spelling outside the subset is
+// rejected here too. Rejection is always diagnosed, never coerced and never
+// dropped: silently accepting an unrepresentable terminal would break REP-001
+// losslessness. Every unknown spelling, including the "unspecified" rendering
+// of the invalid default, is rejected with InvalidArgument. `ToString` is total
+// so it stays usable in diagnostics.
 //
 // The M10B textual enums (QueryCompleteness, TruncationReason, ClaimKind,
 // Severity) keep their own helpers in SliceTypes.h; they are reused, not
@@ -208,6 +233,7 @@ std::string_view ToString(ProofStatus value);
 std::string_view ToString(DependencyKind value);
 std::string_view ToString(Feasibility value);
 std::string_view ToString(ProofGoalKind value);
+std::string_view ToString(UnknownReasonCode value);
 
 StatusOr<EvidenceLevel> ParseEvidenceLevel(std::string_view text);
 StatusOr<VerificationState> ParseVerificationState(std::string_view text);
@@ -220,6 +246,7 @@ StatusOr<ProofStatus> ParseProofStatus(std::string_view text);
 StatusOr<DependencyKind> ParseDependencyKind(std::string_view text);
 StatusOr<Feasibility> ParseFeasibility(std::string_view text);
 StatusOr<ProofGoalKind> ParseProofGoalKind(std::string_view text);
+StatusOr<UnknownReasonCode> ParseUnknownReasonCode(std::string_view text);
 
 // A byte offset within a source text plus its 1-based line and column. Used for
 // EIR-T parse and validation diagnostics only: a source span never enters
@@ -423,9 +450,15 @@ struct Hypothesis {
 // A property the analysis could not establish. Absence of a fact is never
 // converted into this member's negation: an unknown records that the question
 // is open, and `blocking_ids` names the facts that block resolution.
+//
+// Both reason fields are carried. `reason_code` is the grammar's closed
+// classification and travels with `reason`, the free-text sentence the case
+// records; a case that carries observed detail keeps it rather than rounding it
+// to the nearest terminal.
 struct Unknown {
   std::string id;
   Expression property;
+  UnknownReasonCode reason_code = UnknownReasonCode::kUnspecified;
   std::string reason;
   std::vector<std::string> blocking_ids;
   std::string suggested_resolution;

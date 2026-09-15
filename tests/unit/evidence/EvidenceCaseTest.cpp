@@ -353,6 +353,47 @@ TEST(EvidenceCaseTest, SemanticEnumSpellingsMatchStabilizedGrammar) {
       [](std::string_view text) { return ParseProofGoalKind(text); });
 }
 
+// EIR-T 1.0 §7.3: the closed `UnknownReason` set, in the grammar's terminal
+// order.
+TEST(EvidenceCaseTest, UnknownReasonCodeSpellingsMatchStabilizedGrammar) {
+  const std::array<std::pair<UnknownReasonCode, std::string_view>, 10> codes{{
+      {UnknownReasonCode::kUnresolvedCall, "UNRESOLVED_CALL"},
+      {UnknownReasonCode::kUnknownAlias, "UNKNOWN_ALIAS"},
+      {UnknownReasonCode::kExternalFunction, "EXTERNAL_FUNCTION"},
+      {UnknownReasonCode::kMissingSpecification, "MISSING_SPECIFICATION"},
+      {UnknownReasonCode::kAnalysisTimeout, "ANALYSIS_TIMEOUT"},
+      {UnknownReasonCode::kStateExplosion, "STATE_EXPLOSION"},
+      {UnknownReasonCode::kUnsupportedLanguageFeature,
+       "UNSUPPORTED_LANGUAGE_FEATURE"},
+      {UnknownReasonCode::kInlineAssembly, "INLINE_ASSEMBLY"},
+      {UnknownReasonCode::kDynamicLoading, "DYNAMIC_LOADING"},
+      {UnknownReasonCode::kUnknownBuildConfiguration,
+       "UNKNOWN_BUILD_CONFIGURATION"},
+  }};
+  ExpectRoundTrips<UnknownReasonCode>(
+      codes, [](UnknownReasonCode v) { return ToString(v); },
+      [](std::string_view text) { return ParseUnknownReasonCode(text); });
+}
+
+// The invalid default is domain-only in every family: `ToString` stays total
+// and renders it, and no parser accepts that rendering as a spelling. The
+// grammar's own spellings are UPPERCASE, so a lowercased one is not a terminal
+// either.
+TEST(EvidenceCaseTest, UnknownReasonCodeSentinelIsNotASpelling) {
+  EXPECT_EQ(ToString(UnknownReasonCode::kUnspecified), "unspecified");
+  EXPECT_FALSE(ParseUnknownReasonCode("unspecified").ok());
+  EXPECT_EQ(ToString(EvidenceLevel::kUnspecified), "unspecified");
+  EXPECT_FALSE(ParseEvidenceLevel("unspecified").ok());
+}
+
+TEST(EvidenceCaseTest, UnknownReasonCodeRejectsOtherSpellings) {
+  EXPECT_FALSE(ParseUnknownReasonCode("analysis_timeout").ok());
+  EXPECT_FALSE(ParseUnknownReasonCode("").ok());
+  EXPECT_FALSE(ParseUnknownReasonCode("UNRESOLVED").ok());
+  EXPECT_FALSE(ParseUnknownReasonCode("UNKNOWN").ok());
+  EXPECT_FALSE(ParseUnknownReasonCode("dominating-check query truncated").ok());
+}
+
 // The closed enumerations of the stabilized grammar reject anything else.
 TEST(EvidenceCaseTest, EnumParsersRejectUnknownSpellings) {
   EXPECT_FALSE(ParseVerificationState("possible_defect").ok());
@@ -532,6 +573,33 @@ TEST(EvidenceCaseTest, OverflowCaseRecordsTruncationWithoutNegativeFact) {
     }
   }
   EXPECT_TRUE(expandable_omission);
+}
+
+// The truncated-check unknown keeps both reason ends: the grammar's closed code
+// and the exact free-text sentence the demo pins. Neither replaces the other.
+TEST(EvidenceCaseTest, OverflowCaseCarriesBothTruncationReasonForms) {
+  const EvidenceCase value = MakeOverflowEvidenceCase();
+
+  std::size_t matching = 0;
+  for (const auto& unknown : value.unknowns) {
+    if (unknown.reason_code == UnknownReasonCode::kAnalysisTimeout) {
+      ++matching;
+      EXPECT_EQ(unknown.reason, "dominating-check query truncated");
+    }
+  }
+  EXPECT_EQ(matching, 1U);
+
+  bool vendor_code = false;
+  for (const auto& unknown : value.unknowns) {
+    if (unknown.reason == "EXTERNAL_FUNCTION") {
+      vendor_code = unknown.reason_code == UnknownReasonCode::kExternalFunction;
+    }
+  }
+  EXPECT_TRUE(vendor_code);
+
+  for (const auto& unknown : value.unknowns) {
+    EXPECT_NE(unknown.reason_code, UnknownReasonCode::kUnspecified);
+  }
 }
 
 TEST(EvidenceCaseTest, OverflowCaseBindsOneAnalysisRun) {

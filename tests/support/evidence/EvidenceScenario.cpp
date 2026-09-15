@@ -477,12 +477,13 @@ ev::Hypothesis MakeHypothesis(std::string id, ev::Expression predicate,
 }
 
 ev::Unknown MakeUnknown(std::string id, ev::Expression property,
-                        std::string reason,
+                        ev::UnknownReasonCode reason_code, std::string reason,
                         std::vector<std::string> blocking_ids,
                         std::string suggested_resolution) {
   ev::Unknown unknown;
   unknown.id = std::move(id);
   unknown.property = std::move(property);
+  unknown.reason_code = reason_code;
   unknown.reason = std::move(reason);
   unknown.blocking_ids = std::move(blocking_ids);
   unknown.suggested_resolution = std::move(suggested_resolution);
@@ -1346,11 +1347,13 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
       std::string(kUnknownCheckId),
       Call("dominates", {Reference(EntityLocalId(kVendorValidateLabel)),
                          Reference(EntityLocalId(kMemcpyLabel))}),
+      ev::UnknownReasonCode::kAnalysisTimeout,
       std::string(kTruncationReasonText), {std::string(kFactAliasId)},
       "expand_dominating_check_query(E_memcpy)"));
   value.unknowns.push_back(MakeUnknown(
       std::string(kUnknownVendorId),
       Call("postcondition", {Reference(EntityLocalId(kVendorValidateLabel))}),
+      ev::UnknownReasonCode::kExternalFunction,
       std::string(kVendorUnknownReason), {std::string(kFactCapacityId)},
       "infer_contract(E_vendor_validate)"));
 

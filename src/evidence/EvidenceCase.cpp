@@ -17,10 +17,14 @@
 //
 // The spellings are the EIR-T 1.0 grammar's
 // (docs/specs/veritas-evidence-ir-formal-specification.md), which is the
-// frozen syntax contract. Every enumeration there is closed, so each parser
-// accepts exactly its grammar spelling set and rejects everything else —
-// including the "unspecified" rendering of the invalid default, which is never
-// a grammar terminal.
+// frozen syntax contract. That grammar's terminal sets are the full EIR-T 1.0
+// language surface and are deliberately wider than this model: each parser
+// accepts the EIR V0.1 subset the M10C design spec selects (§1 and §2.2), as
+// fixed by the implementation plan's enum lists, and rejects everything else —
+// including a grammar-valid spelling outside the subset, and the "unspecified"
+// rendering of the invalid default, which is never a grammar terminal.
+// Rejection is diagnosed, never coerced or dropped: silently accepting an
+// unrepresentable terminal would break REP-001 losslessness.
 
 #include "veritas/evidence/EvidenceCase.h"
 
@@ -277,6 +281,34 @@ std::string_view ToString(ProofGoalKind value) {
   return kUnspecifiedSpelling;
 }
 
+std::string_view ToString(UnknownReasonCode value) {
+  switch (value) {
+    case UnknownReasonCode::kUnspecified:
+      return kUnspecifiedSpelling;
+    case UnknownReasonCode::kUnresolvedCall:
+      return "UNRESOLVED_CALL";
+    case UnknownReasonCode::kUnknownAlias:
+      return "UNKNOWN_ALIAS";
+    case UnknownReasonCode::kExternalFunction:
+      return "EXTERNAL_FUNCTION";
+    case UnknownReasonCode::kMissingSpecification:
+      return "MISSING_SPECIFICATION";
+    case UnknownReasonCode::kAnalysisTimeout:
+      return "ANALYSIS_TIMEOUT";
+    case UnknownReasonCode::kStateExplosion:
+      return "STATE_EXPLOSION";
+    case UnknownReasonCode::kUnsupportedLanguageFeature:
+      return "UNSUPPORTED_LANGUAGE_FEATURE";
+    case UnknownReasonCode::kInlineAssembly:
+      return "INLINE_ASSEMBLY";
+    case UnknownReasonCode::kDynamicLoading:
+      return "DYNAMIC_LOADING";
+    case UnknownReasonCode::kUnknownBuildConfiguration:
+      return "UNKNOWN_BUILD_CONFIGURATION";
+  }
+  return kUnspecifiedSpelling;
+}
+
 StatusOr<EvidenceLevel> ParseEvidenceLevel(std::string_view text) {
   if (text == "l0") return EvidenceLevel::kL0;
   if (text == "l1") return EvidenceLevel::kL1;
@@ -377,6 +409,28 @@ StatusOr<ProofGoalKind> ParseProofGoalKind(std::string_view text) {
   if (text == "refute") return ProofGoalKind::kRefute;
   if (text == "check") return ProofGoalKind::kCheck;
   return Unrecognized("proof goal kind", text);
+}
+
+StatusOr<UnknownReasonCode> ParseUnknownReasonCode(std::string_view text) {
+  if (text == "UNRESOLVED_CALL") return UnknownReasonCode::kUnresolvedCall;
+  if (text == "UNKNOWN_ALIAS") return UnknownReasonCode::kUnknownAlias;
+  if (text == "EXTERNAL_FUNCTION") {
+    return UnknownReasonCode::kExternalFunction;
+  }
+  if (text == "MISSING_SPECIFICATION") {
+    return UnknownReasonCode::kMissingSpecification;
+  }
+  if (text == "ANALYSIS_TIMEOUT") return UnknownReasonCode::kAnalysisTimeout;
+  if (text == "STATE_EXPLOSION") return UnknownReasonCode::kStateExplosion;
+  if (text == "UNSUPPORTED_LANGUAGE_FEATURE") {
+    return UnknownReasonCode::kUnsupportedLanguageFeature;
+  }
+  if (text == "INLINE_ASSEMBLY") return UnknownReasonCode::kInlineAssembly;
+  if (text == "DYNAMIC_LOADING") return UnknownReasonCode::kDynamicLoading;
+  if (text == "UNKNOWN_BUILD_CONFIGURATION") {
+    return UnknownReasonCode::kUnknownBuildConfiguration;
+  }
+  return Unrecognized("unknown reason code", text);
 }
 
 }  // namespace veritas::evidence
