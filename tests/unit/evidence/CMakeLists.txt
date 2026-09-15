@@ -55,3 +55,14 @@ veritas_add_warnings(EvidenceCaseTest)
 gtest_discover_tests(EvidenceCaseTest DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
   PROPERTIES LABELS "evidence-unit\;evidence-contract")
+
+add_executable(EvidenceValidatorTest EvidenceValidatorTest.cpp)
+target_link_libraries(EvidenceValidatorTest PRIVATE
+  veritas::evidence
+  veritas::test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(EvidenceValidatorTest)
+gtest_discover_tests(EvidenceValidatorTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-unit\;evidence-contract")
