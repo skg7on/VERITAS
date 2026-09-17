@@ -14,8 +14,43 @@
 
 # src/evidence/CMakeLists.txt
 #
-# Builds `veritas_evidence`, the M10B evidence slice, completion-fact, and
-# diagnostic-JSON contract shared by the query service and the CLI.
+# Builds `veritas_evidence`, the M10B evidence slice, completion-fact,
+# diagnostic-JSON, and Evidence IR contract shared by the query service and the
+# CLI.
+
+find_package(Protobuf REQUIRED)
+
+# Generated protobuf code for the `eir.v1` Evidence IR wire contract. Mirrors
+# src/summary and src/facts: IMPORT_DIRS points at proto/ so the generated
+# header path keeps the veritas/evidence/v1/ prefix, matching
+# #include "veritas/evidence/v1/evidence.pb.h".
+add_library(veritas_evidence_proto OBJECT
+  "${CMAKE_SOURCE_DIR}/proto/veritas/evidence/v1/evidence.proto"
+)
+
+target_include_directories(veritas_evidence_proto PUBLIC
+  "${CMAKE_CURRENT_BINARY_DIR}"
+  ${Protobuf_INCLUDE_DIRS}
+)
+
+target_link_libraries(veritas_evidence_proto PUBLIC
+  protobuf::libprotobuf
+)
+
+# Protobuf 22.0+ generated code references Abseil logging/checking symbols
+# directly; link them when present (see cmake/Dependencies.cmake).
+if(TARGET absl::absl_log)
+  target_link_libraries(veritas_evidence_proto PUBLIC
+    absl::absl_log
+    absl::absl_check
+  )
+endif()
+
+protobuf_generate(
+  TARGET veritas_evidence_proto
+  IMPORT_DIRS "${CMAKE_SOURCE_DIR}/proto"
+  PROTOC_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}"
+)
 
 add_library(veritas_evidence
   SliceTypes.cpp
@@ -24,11 +59,13 @@ add_library(veritas_evidence
   EvidenceCase.cpp
   EvidenceValidator.cpp
   EvidenceCanonicalizer.cpp
+  EvidenceProto.cpp
 )
 
 target_include_directories(veritas_evidence
   PUBLIC
     "${PROJECT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
 target_link_libraries(veritas_evidence
@@ -36,6 +73,7 @@ target_link_libraries(veritas_evidence
     veritas::core
     veritas::facts
     veritas::cpg
+    veritas_evidence_proto
 )
 
 target_compile_features(veritas_evidence PUBLIC cxx_std_20)

@@ -1,0 +1,414 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// evidence.proto — the `eir.v1` Evidence IR wire schema.
+//
+// This file mirrors, field for field, the `veritas::evidence` semantic model in
+// `include/veritas/evidence/EvidenceCase.h`. It is a *representation* of that
+// model, never a competitor to it: wire bytes are not an identity, the
+// canonical byte encoding is (`EvidenceCanonicalizer.h`), and the codec in
+// `EvidenceProto.h` converts explicitly in both directions and validates after
+// decoding. Nothing here may be read as authoritative for semantics.
+//
+// CONVENTIONS THE CODEC DEPENDS ON
+//
+//   * One message and one enum per semantic record and enum, with the same
+//     fields in the same order the model declares them.
+//   * Case-local identifiers (syntax handles such as `E_memcpy`) are plain
+//     strings. Globally resolvable VERITAS identities are canonical stable-ID
+//     strings (`<kind>:sha256:<digest>`) and are re-parsed by the codec.
+//   * An empty string or an absent message field means "absent" — that is the
+//     model's own convention. `evidence_id`, the optional `stable_id` fields,
+//     and the optional `analysis_run_id` fields use the empty string; an
+//     absent `Claim.predicate` or `ProofObligation.budget` is an expression the
+//     grammar made optional.
+//   * proto3 forces a zero-valued enumerator on every enum. Those zeros are
+//     *not* semantic values: the codec rejects a zero-valued enum wherever the
+//     domain declares one, and validation rejects the rest. The two fields
+//     whose absence the domain genuinely expresses — the proof budget and the
+//     hypothesis confidence — use message/field presence instead of a
+//     sentinel, so a legal case round-trips losslessly.
+//   * No timestamps, debug text, filesystem paths, or `Any` appear anywhere:
+//     every field is a semantic input to the canonical encoding, and Protobuf
+//     enum numbers never influence it.
+//   * Field numbers are stable contract. Never reuse or renumber one.
+
+syntax = "proto3";
+
+package veritas.evidence.v1;
+
+// --- Semantic enumerations --------------------------------------------------
+//
+// Each value is prefixed with its enum's name because proto3 enum values share
+// the enclosing package's scope. The zero value is the invalid default that no
+// serializer emits and the codec rejects.
+
+// The EIR abstraction level.
+enum EvidenceLevel {
+  EVIDENCE_LEVEL_UNSPECIFIED = 0;
+  EVIDENCE_LEVEL_L0 = 1;
+  EVIDENCE_LEVEL_L1 = 2;
+  EVIDENCE_LEVEL_L2 = 3;
+}
+
+// The overall case verification state.
+enum VerificationState {
+  VERIFICATION_STATE_UNSPECIFIED = 0;
+  VERIFICATION_STATE_UNREVIEWED = 1;
+  VERIFICATION_STATE_POSSIBLE_DEFECT = 2;
+  VERIFICATION_STATE_LIKELY_DEFECT = 3;
+  VERIFICATION_STATE_VERIFIED_DEFECT = 4;
+  VERIFICATION_STATE_LIKELY_FALSE_POSITIVE = 5;
+  VERIFICATION_STATE_VERIFIED_SAFE = 6;
+  VERIFICATION_STATE_INCONCLUSIVE = 7;
+}
+
+// The initial entity kinds.
+enum EntityKind {
+  ENTITY_KIND_UNSPECIFIED = 0;
+  ENTITY_KIND_FUNCTION = 1;
+  ENTITY_KIND_CALL_SITE = 2;
+  ENTITY_KIND_VALUE = 3;
+  ENTITY_KIND_MEMORY_OBJECT = 4;
+  ENTITY_KIND_BASIC_BLOCK = 5;
+}
+
+// The initial relation kinds.
+enum RelationKind {
+  RELATION_KIND_UNSPECIFIED = 0;
+  RELATION_KIND_CALLS = 1;
+  RELATION_KIND_FLOWS_TO = 2;
+  RELATION_KIND_READS = 3;
+  RELATION_KIND_WRITES = 4;
+  RELATION_KIND_DOMINATES = 5;
+  RELATION_KIND_MAY_ALIAS = 6;
+}
+
+// The initial path kinds.
+enum PathKind {
+  PATH_KIND_UNSPECIFIED = 0;
+  PATH_KIND_CALL = 1;
+  PATH_KIND_VALUE_FLOW = 2;
+  PATH_KIND_CONTROL = 3;
+}
+
+// The epistemic state of a fact.
+enum EpistemicState {
+  EPISTEMIC_STATE_UNSPECIFIED = 0;
+  EPISTEMIC_STATE_MUST = 1;
+  EPISTEMIC_STATE_MAY = 2;
+  EPISTEMIC_STATE_MUST_NOT = 3;
+  EPISTEMIC_STATE_INFERRED = 4;
+  EPISTEMIC_STATE_ASSUMED = 5;
+  EPISTEMIC_STATE_UNKNOWN = 6;
+}
+
+// Confidence, independent of epistemic state.
+enum Confidence {
+  CONFIDENCE_UNSPECIFIED = 0;
+  CONFIDENCE_EXACT = 1;
+  CONFIDENCE_HIGH = 2;
+  CONFIDENCE_MEDIUM = 3;
+  CONFIDENCE_LOW = 4;
+  CONFIDENCE_UNKNOWN = 5;
+}
+
+// The status of a proof obligation.
+enum ProofStatus {
+  PROOF_STATUS_UNSPECIFIED = 0;
+  PROOF_STATUS_PENDING = 1;
+  PROOF_STATUS_PROVED = 2;
+  PROOF_STATUS_REFUTED = 3;
+  PROOF_STATUS_UNKNOWN = 4;
+  PROOF_STATUS_TIMEOUT = 5;
+  PROOF_STATUS_UNSUPPORTED = 6;
+}
+
+// One semantic input the case consumed.
+enum DependencyKind {
+  DEPENDENCY_KIND_UNSPECIFIED = 0;
+  DEPENDENCY_KIND_SUMMARY = 1;
+  DEPENDENCY_KIND_FACT = 2;
+  DEPENDENCY_KIND_TYPE_LAYOUT = 3;
+  DEPENDENCY_KIND_CONFIGURATION = 4;
+  DEPENDENCY_KIND_SPECIFICATION = 5;
+}
+
+// Path feasibility.
+enum Feasibility {
+  FEASIBILITY_UNSPECIFIED = 0;
+  FEASIBILITY_PROVED_FEASIBLE = 1;
+  FEASIBILITY_SAT = 2;
+  FEASIBILITY_MAYBE = 3;
+  FEASIBILITY_UNTESTED = 4;
+  FEASIBILITY_UNSAT = 5;
+  FEASIBILITY_PROVED_INFEASIBLE = 6;
+  FEASIBILITY_UNKNOWN = 7;
+}
+
+// The kind of goal a proof obligation requests.
+enum ProofGoalKind {
+  PROOF_GOAL_KIND_UNSPECIFIED = 0;
+  PROOF_GOAL_KIND_PROVE = 1;
+  PROOF_GOAL_KIND_REFUTE = 2;
+  PROOF_GOAL_KIND_CHECK = 3;
+}
+
+// Why the analysis could not establish a property.
+enum UnknownReasonCode {
+  UNKNOWN_REASON_CODE_UNSPECIFIED = 0;
+  UNKNOWN_REASON_CODE_UNRESOLVED_CALL = 1;
+  UNKNOWN_REASON_CODE_UNKNOWN_ALIAS = 2;
+  UNKNOWN_REASON_CODE_EXTERNAL_FUNCTION = 3;
+  UNKNOWN_REASON_CODE_MISSING_SPECIFICATION = 4;
+  UNKNOWN_REASON_CODE_ANALYSIS_TIMEOUT = 5;
+  UNKNOWN_REASON_CODE_STATE_EXPLOSION = 6;
+  UNKNOWN_REASON_CODE_UNSUPPORTED_LANGUAGE_FEATURE = 7;
+  UNKNOWN_REASON_CODE_INLINE_ASSEMBLY = 8;
+  UNKNOWN_REASON_CODE_DYNAMIC_LOADING = 9;
+  UNKNOWN_REASON_CODE_UNKNOWN_BUILD_CONFIGURATION = 10;
+}
+
+// The M10B-owned finding classification that crosses the M10B/M10C boundary.
+enum ClaimKind {
+  CLAIM_KIND_UNSPECIFIED = 0;
+  CLAIM_KIND_BUFFER_OVERFLOW = 1;
+}
+
+// The M10B-owned severity that crosses the M10B/M10C boundary.
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_CRITICAL = 1;
+  SEVERITY_HIGH = 2;
+  SEVERITY_MEDIUM = 3;
+  SEVERITY_LOW = 4;
+  SEVERITY_INFO = 5;
+}
+
+// The kind of an `Expression` node.
+enum ExpressionKind {
+  EXPRESSION_KIND_UNSPECIFIED = 0;
+  EXPRESSION_KIND_BOOL = 1;
+  EXPRESSION_KIND_INTEGER = 2;
+  EXPRESSION_KIND_STRING = 3;
+  EXPRESSION_KIND_SYMBOL = 4;
+  EXPRESSION_KIND_REFERENCE = 5;
+  EXPRESSION_KIND_CALL = 6;
+  EXPRESSION_KIND_NOT = 7;
+  EXPRESSION_KIND_COMPARE = 8;
+  EXPRESSION_KIND_AND = 9;
+  EXPRESSION_KIND_OR = 10;
+  EXPRESSION_KIND_IMPLIES = 11;
+  EXPRESSION_KIND_FOR_ALL = 12;
+  EXPRESSION_KIND_EXISTS = 13;
+}
+
+// --- The root case ----------------------------------------------------------
+
+// One `eir.v1` Evidence Case. Field numbers are stable contract; the gaps
+// between 5 and 10 are reserved so the header and the primary claim stay
+// adjacent to the identity they belong to.
+message EvidenceCase {
+  string evidence_id = 1;
+  string schema_version = 2;
+  EvidenceLevel level = 3;
+  ProgramBinding program = 4;
+  Claim primary_claim = 5;
+  repeated Entity entities = 10;
+  repeated Edge edges = 11;
+  repeated Path paths = 12;
+  repeated Fact facts = 13;
+  repeated Assumption assumptions = 14;
+  repeated Hypothesis hypotheses = 15;
+  repeated Unknown unknowns = 16;
+  repeated Constraint constraints = 17;
+  repeated Provenance provenance = 18;
+  repeated ProofObligation proof_obligations = 19;
+  repeated SummaryReference summaries = 20;
+  repeated Dependency dependencies = 21;
+  VerificationState verification_state = 22;
+  repeated Omission omissions = 23;
+}
+
+// --- Expressions ------------------------------------------------------------
+
+// The typed predicate/property abstract syntax tree. `text` carries only the
+// operator, callee, or literal payload; structure lives in `operands`, whose
+// order is semantic except for the commutative `AND`/`OR` pair, which the
+// canonicalizer orders.
+message Expression {
+  ExpressionKind kind = 1;
+  string text = 2;
+  int64 integer = 3;
+  bool boolean = 4;
+  repeated Expression operands = 5;
+}
+
+// --- Program identity -------------------------------------------------------
+
+message AnalyzerVersion {
+  string producer = 1;
+  string version = 2;
+  string configuration = 3;
+}
+
+message ProgramBinding {
+  string repository_id = 1;
+  string revision_id = 2;
+  string build_variant_id = 3;
+  string target_triple = 4;
+  string analysis_configuration_id = 5;
+  string type_layout_id = 6;
+  // Empty when the case carries no analysis run.
+  string analysis_run_id = 7;
+  repeated AnalyzerVersion analyzer_versions = 8;
+}
+
+// --- Graph members ----------------------------------------------------------
+
+message Entity {
+  string id = 1;
+  EntityKind kind = 2;
+  // Empty when the entity is synthetic and has no VERITAS identity.
+  string stable_id = 3;
+  map<string, Expression> properties = 4;
+}
+
+message Edge {
+  string id = 1;
+  string from = 2;
+  string to = 3;
+  RelationKind kind = 4;
+  EpistemicState epistemic = 5;
+  string provenance_id = 6;
+  string summarized_by = 7;
+  bool expandable = 8;
+}
+
+message Path {
+  string id = 1;
+  PathKind kind = 2;
+  // Semantically ordered: the sequence is the path.
+  repeated string entity_ids = 3;
+  repeated Expression conditions = 4;
+  Feasibility feasibility = 5;
+  string provenance_id = 6;
+}
+
+// --- Claims and evidence members --------------------------------------------
+
+message Claim {
+  string id = 1;
+  ClaimKind kind = 2;
+  string subject = 3;
+  // Absent when the claim carries no predicate.
+  Expression predicate = 4;
+  Severity severity = 5;
+  string description = 6;
+}
+
+message Fact {
+  string id = 1;
+  // Empty when the fact has no VERITAS identity.
+  string stable_id = 2;
+  Expression predicate = 3;
+  EpistemicState epistemic = 4;
+  Confidence confidence = 5;
+  string producer = 6;
+  string provenance_id = 7;
+  bool derived = 8;
+}
+
+message Assumption {
+  string id = 1;
+  Expression predicate = 2;
+  string source = 3;
+  string scope = 4;
+}
+
+message Hypothesis {
+  string id = 1;
+  Expression predicate = 2;
+  string producer = 3;
+  string reason = 4;
+  // Explicit presence: an absent confidence is `Confidence::kUnspecified`,
+  // which is a legal state for a hypothesis and is distinct from an explicitly
+  // encoded zero.
+  optional Confidence confidence = 5;
+}
+
+message Unknown {
+  string id = 1;
+  Expression property = 2;
+  UnknownReasonCode reason_code = 3;
+  string reason = 4;
+  repeated string blocking_ids = 5;
+  string suggested_resolution = 6;
+}
+
+message Constraint {
+  string id = 1;
+  Expression expression = 2;
+  string scope = 3;
+  EpistemicState epistemic = 4;
+  string provenance_id = 5;
+}
+
+message Provenance {
+  string id = 1;
+  string producer = 2;
+  string rule = 3;
+  repeated string input_fact_ids = 4;
+  string source_anchor_id = 5;
+  // Empty when the record names no analysis run.
+  string analysis_run_id = 6;
+  string version = 7;
+  string configuration = 8;
+}
+
+message ProofObligation {
+  string id = 1;
+  ProofGoalKind goal_kind = 2;
+  Expression predicate = 3;
+  repeated string verifier_kinds = 4;
+  // Absent when the grammar's optional budget is not declared; an absent
+  // budget and an empty expression are the same semantic value.
+  Expression budget = 5;
+  ProofStatus status = 6;
+  string result_id = 7;
+  string verification_producer = 8;
+}
+
+message SummaryReference {
+  string id = 1;
+  string function_id = 2;
+  // A canonical stable-ID string; required and never empty.
+  string summary_id = 3;
+  repeated string components = 4;
+}
+
+message Dependency {
+  string id = 1;
+  DependencyKind kind = 2;
+  // A canonical stable-ID string; required and never empty.
+  string stable_id = 3;
+}
+
+message Omission {
+  string id = 1;
+  string kind = 2;
+  string subject = 3;
+  string reason = 4;
+  bool expandable = 5;
+}
