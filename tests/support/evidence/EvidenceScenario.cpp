@@ -1221,7 +1221,8 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeValidMinimalEvidenceCase()
   const facts::AnalysisFact& range_fact = SingleFactOrAbort(demo.input.ranges);
   value.facts.push_back(MakeEirFact(
       std::string(kFactRangeId), range_fact.fact_id,
-      RangePredicate(kCopyLengthLabel, kCopyLengthMin, kCopyLengthMax),
+      RangePredicate(EntityLocalId(kCopyLengthLabel), kCopyLengthMin,
+                     kCopyLengthMax),
       evidence::EpistemicState::kMust, evidence::Confidence::kExact,
       std::string(kRangeProducer), std::string(kProvenanceRangeId),
       /*derived=*/false));
@@ -1273,7 +1274,8 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
       std::string(kPathValueFlowId), evidence::PathKind::kValueFlow,
       {EntityLocalId(kSrcBufLabel), EntityLocalId(kCopyLengthLabel),
        EntityLocalId(kMemcpyLabel)},
-      {AliasPredicate(kSrcBufLabel, kDstBufLabel)},
+      {AliasPredicate(EntityLocalId(kSrcBufLabel),
+                      EntityLocalId(kDstBufLabel))},
       evidence::Feasibility::kSat, std::string(kProvenanceFlowId)));
 
   value.provenance = {
@@ -1309,19 +1311,20 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
       SingleFactOrAbort(demo.input.aliases);
   value.facts.push_back(MakeEirFact(
       std::string(kFactRangeId), range_fact.fact_id,
-      RangePredicate(kCopyLengthLabel, kCopyLengthMin, kCopyLengthMax),
+      RangePredicate(EntityLocalId(kCopyLengthLabel), kCopyLengthMin,
+                     kCopyLengthMax),
       evidence::EpistemicState::kMust, evidence::Confidence::kExact,
       std::string(kRangeProducer), std::string(kProvenanceRangeId),
       /*derived=*/false));
   value.facts.push_back(MakeEirFact(
       std::string(kFactCapacityId), capacity_fact.fact_id,
-      CapacityPredicate(kDstBufLabel, kDstBufCapacity),
+      CapacityPredicate(EntityLocalId(kDstBufLabel), kDstBufCapacity),
       evidence::EpistemicState::kMust, evidence::Confidence::kExact,
       std::string(kCapacityProducer), std::string(kProvenanceCapacityId),
       /*derived=*/false));
   value.facts.push_back(MakeEirFact(
       std::string(kFactAliasId), alias_fact.fact_id,
-      AliasPredicate(kSrcBufLabel, kDstBufLabel),
+      AliasPredicate(EntityLocalId(kSrcBufLabel), EntityLocalId(kDstBufLabel)),
       evidence::EpistemicState::kMay, evidence::Confidence::kMedium,
       std::string(kAliasProducer), std::string(kProvenanceAliasId),
       /*derived=*/true));

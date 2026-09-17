@@ -43,6 +43,7 @@
 
 #include <algorithm>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -59,6 +60,11 @@ using namespace veritas::evidence;
 using namespace veritas::testing;
 
 namespace {
+
+// The handle prefix `veritas_evidence` declares an entity's local identifier
+// with: the entity whose analysis label is `copy_length` is declared `E_` plus
+// that label. Only the handle is a declaration; the label it wraps is not.
+constexpr std::string_view kEntityHandlePrefix = "E_";
 
 bool HasCode(const EvidenceValidationReport& report,
              EvidenceValidationCode code) {
@@ -170,9 +176,31 @@ TEST(EvidenceValidatorTest, VID002RejectsDanglingOmissionSubject) {
 
 TEST(EvidenceValidatorTest, VID002RejectsDanglingExpressionReference) {
   auto value = MakeValidMinimalEvidenceCase();
-  // The range predicate addresses its value by name; a name that is neither a
-  // declared member nor an entity label resolves to nothing.
+  // The range predicate addresses its value by name; a name no member declares
+  // resolves to nothing.
   value.facts.front().predicate.operands.front().text = "missing";
+  const auto report = ValidateEvidenceCase(value);
+  ASSERT_FALSE(report.ok());
+  EXPECT_EQ(report.issues.front().code,
+            EvidenceValidationCode::kDanglingReference);
+  EXPECT_EQ(report.issues.front().member_id, value.facts.front().id);
+}
+
+TEST(EvidenceValidatorTest, VID002RejectsBareAnalysisLabelAsReference) {
+  auto value = MakeValidMinimalEvidenceCase();
+  ASSERT_FALSE(value.entities.empty());
+  const std::string handle = value.entities.front().id;
+  // Derive the bare label from the declared handle rather than naming it, so
+  // this tracks whatever the fixture declares.
+  ASSERT_GT(handle.size(), kEntityHandlePrefix.size()) << handle;
+  ASSERT_EQ(handle.compare(0, kEntityHandlePrefix.size(), kEntityHandlePrefix),
+            0)
+      << handle;
+  // An entity is addressable only under the handle it is declared with. The
+  // bare analysis label the handle wraps names no declaration, so a reference
+  // spelled that way is dangling — never resolved by stripping the prefix.
+  value.facts.front().predicate.operands.front().text =
+      handle.substr(kEntityHandlePrefix.size());
   const auto report = ValidateEvidenceCase(value);
   ASSERT_FALSE(report.ok());
   EXPECT_EQ(report.issues.front().code,

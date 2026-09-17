@@ -51,10 +51,6 @@ namespace {
 // fixtures nest three levels deep.
 constexpr std::size_t kMaxExpressionDepth = 64;
 
-// The handle prefix `veritas_evidence` spells an entity's local identifier
-// with: an entity named `copy_length` is declared as `E_copy_length`.
-constexpr std::string_view kEntityHandlePrefix = "E_";
-
 // The case-local member families that share one flat identifier space.
 enum class MemberKind {
   kClaim,
@@ -277,11 +273,6 @@ class CaseValidator {
     Declare(value_.primary_claim.id, MemberKind::kClaim);
     for (const Entity& entity : value_.entities) {
       Declare(entity.id, MemberKind::kEntity);
-      if (entity.id.size() > kEntityHandlePrefix.size() &&
-          entity.id.compare(0, kEntityHandlePrefix.size(),
-                            kEntityHandlePrefix) == 0) {
-        entity_labels_.insert(entity.id.substr(kEntityHandlePrefix.size()));
-      }
     }
     for (const Edge& edge : value_.edges) {
       Declare(edge.id, MemberKind::kEdge);
@@ -675,11 +666,10 @@ class CaseValidator {
     }
   }
 
-  // An expression reference names a declared member. Entities are declared
-  // under their handle `E_<label>`, and an entity is also addressable by the
-  // bare analysis label that handle wraps (`copy_length` for `E_copy_length`):
-  // both spellings occur in `eir.v1` predicates, so both resolve. Anything
-  // that resolves under neither spelling is dangling.
+  // An expression reference resolves against the declared member set alone: a
+  // reference names the identifier a member is declared under, and an entity
+  // is addressable only under the handle it is declared with (`E_copy_length`),
+  // never under the bare analysis label that handle wraps (`copy_length`).
   void ResolveReference(const std::string& text, const std::string& owner) {
     if (text.empty()) {
       Add(EvidenceValidationCode::kDanglingReference, owner,
@@ -687,9 +677,6 @@ class CaseValidator {
       return;
     }
     if (members_.find(text) != members_.end()) {
-      return;
-    }
-    if (entity_labels_.find(text) != entity_labels_.end()) {
       return;
     }
     Add(EvidenceValidationCode::kDanglingReference, owner,
@@ -1113,7 +1100,6 @@ class CaseValidator {
   EvidenceValidationReport report_;
   std::vector<std::pair<std::string, MemberKind>> declarations_;
   std::map<std::string, MemberKind> members_;
-  std::set<std::string> entity_labels_;
   std::map<std::string, const Provenance*> provenance_;
 };
 

@@ -58,9 +58,10 @@
 //   * Visible omissions — withheld detail is declared, never implied by
 //     absence.
 //
-// An expression reference resolves to a declared member, and also to the bare
-// analysis label an entity handle wraps (`copy_length` for `E_copy_length`),
-// because `eir.v1` predicates use both spellings.
+// An expression reference resolves against the declared member set alone: an
+// entity is addressable only under the handle it is declared with
+// (`E_copy_length`), never under the bare analysis label that handle wraps
+// (`copy_length`).
 //
 // A note on the model's shape, because it fixes what "declared" can mean: the
 // only member that can declare a withheld target is `Omission`, whose
