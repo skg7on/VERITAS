@@ -39,7 +39,6 @@
 #include <gtest/gtest.h>
 
 #include "evidence/EvidenceScenario.h"
-#include "veritas/core/CanonicalValue.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 #include "veritas/evidence/EvidenceCanonicalizer.h"
@@ -55,6 +54,12 @@ namespace {
 // A deterministic run identity for the mutations that rebind the case.
 core::StableId RunId(std::string_view name) {
   return EvidenceScenarioBuilder().Id(core::IdKind::kAnalysisRun, name);
+}
+
+// A `kEvidence`-kind identity: what a finalized case's own `evidence_id`
+// actually is, and so what a stale value in that field would actually hold.
+core::StableId EvidenceIdentity(std::string_view name) {
+  return EvidenceScenarioBuilder().Id(core::IdKind::kEvidence, name);
 }
 
 // Expression builders for the operand-order tests: the shared fixtures carry
@@ -87,6 +92,190 @@ Expression AndOp(std::vector<Expression> operands) {
 void SetConstraintExpression(EvidenceCase& value, Expression expression) {
   ASSERT_FALSE(value.constraints.empty());
   value.constraints.front().expression = std::move(expression);
+}
+
+// Gives every collection the fixtures leave at a single member a second,
+// distinct one. Reversing a one-member collection is a no-op, so without this
+// the canonical sort of that collection is never exercised: a canonicalizer
+// that emitted it in input order would still pass every test below. A clone
+// keeps every reference the original already resolved and changes only its
+// local handle — plus, for the reference lists, nothing at all — so the case
+// stays well-formed.
+void PopulateSecondMembers(EvidenceCase& value) {
+  // The path's conditions first, so the path clone inherits two. The second is
+  // the first under `not`, not a copy of it: two equal values encode
+  // identically, so the canonical sort would have nothing to do and the
+  // reversal below would pass against an encoder that emitted conditions in
+  // input order. Negating keeps every reference the first already resolved, so
+  // the case stays well-formed.
+  for (Path& path : value.paths) {
+    if (path.conditions.size() == 1) {
+      Expression negated;
+      negated.kind = Expression::Kind::kNot;
+      negated.operands.push_back(path.conditions.front());
+      path.conditions.push_back(std::move(negated));
+    }
+  }
+  // Each unknown blocks one fact; the second is a *different* declared fact, so
+  // it still resolves. A copy would encode identically and leave the sort
+  // untested, for the same reason as the conditions above.
+  for (Unknown& unknown : value.unknowns) {
+    if (unknown.blocking_ids.size() != 1) {
+      continue;
+    }
+    for (const Fact& fact : value.facts) {
+      if (fact.id != unknown.blocking_ids.front()) {
+        unknown.blocking_ids.push_back(fact.id);
+        break;
+      }
+    }
+  }
+  if (value.paths.size() == 1) {
+    Path second = value.paths.front();
+    second.id = "P_second";
+    value.paths.push_back(std::move(second));
+  }
+  if (value.assumptions.size() == 1) {
+    Assumption second = value.assumptions.front();
+    second.id = "A_second";
+    value.assumptions.push_back(std::move(second));
+  }
+  if (value.hypotheses.size() == 1) {
+    Hypothesis second = value.hypotheses.front();
+    second.id = "H_second";
+    value.hypotheses.push_back(std::move(second));
+  }
+  if (value.constraints.size() == 1) {
+    Constraint second = value.constraints.front();
+    second.id = "C_second";
+    value.constraints.push_back(std::move(second));
+  }
+  if (value.proof_obligations.size() == 1) {
+    ProofObligation second = value.proof_obligations.front();
+    second.id = "PO_second";
+    value.proof_obligations.push_back(std::move(second));
+  }
+  if (value.summaries.size() == 1) {
+    SummaryReference second = value.summaries.front();
+    second.id = "S_second";
+    value.summaries.push_back(std::move(second));
+  }
+  if (value.facts.size() == 1) {
+    Fact second = value.facts.front();
+    second.id = "F_second";
+    value.facts.push_back(std::move(second));
+  }
+  if (value.omissions.size() == 1) {
+    Omission second = value.omissions.front();
+    second.id = "O_second";
+    value.omissions.push_back(std::move(second));
+  }
+}
+
+// Every collection the reversal touches carries at least two members, so the
+// reversal is a real reorder and the canonical sort is exercised. A failure
+// here means the fixture lost the population that makes the reversal
+// meaningful — the guard is the point, not decoration.
+::testing::AssertionResult EveryReversedCollectionIsPopulated(
+    const EvidenceCase& value) {
+  const std::pair<std::string_view, std::size_t> members[] = {
+      {"program.analyzer_versions", value.program.analyzer_versions.size()},
+      {"entities", value.entities.size()},
+      {"edges", value.edges.size()},
+      {"paths", value.paths.size()},
+      {"facts", value.facts.size()},
+      {"assumptions", value.assumptions.size()},
+      {"hypotheses", value.hypotheses.size()},
+      {"unknowns", value.unknowns.size()},
+      {"constraints", value.constraints.size()},
+      {"provenance", value.provenance.size()},
+      {"proof_obligations", value.proof_obligations.size()},
+      {"summaries", value.summaries.size()},
+      {"dependencies", value.dependencies.size()},
+      {"omissions", value.omissions.size()},
+  };
+  for (const auto& member : members) {
+    if (member.second < 2) {
+      return ::testing::AssertionFailure()
+             << member.first << " carries " << member.second
+             << " member(s), so reversing it tests nothing";
+    }
+  }
+  for (const Path& path : value.paths) {
+    if (path.conditions.size() < 2) {
+      return ::testing::AssertionFailure()
+             << "path " << path.id << " carries " << path.conditions.size()
+             << " condition(s), so reversing them tests nothing";
+    }
+  }
+  for (const Unknown& unknown : value.unknowns) {
+    if (unknown.blocking_ids.size() < 2) {
+      return ::testing::AssertionFailure()
+             << "unknown " << unknown.id << " carries "
+             << unknown.blocking_ids.size()
+             << " blocking id(s), so reversing them tests nothing";
+    }
+  }
+  for (const SummaryReference& summary : value.summaries) {
+    if (summary.components.size() < 2) {
+      return ::testing::AssertionFailure()
+             << "summary " << summary.id << " carries "
+             << summary.components.size()
+             << " component(s), so reversing them tests nothing";
+    }
+  }
+  for (const ProofObligation& obligation : value.proof_obligations) {
+    if (obligation.verifier_kinds.size() < 2) {
+      return ::testing::AssertionFailure()
+             << "obligation " << obligation.id << " carries "
+             << obligation.verifier_kinds.size()
+             << " verifier kind(s), so reversing them tests nothing";
+    }
+  }
+  // The input list is reversed on every provenance record; one record with two
+  // inputs is enough to exercise the sort it uses.
+  for (const Provenance& record : value.provenance) {
+    if (record.input_fact_ids.size() >= 2) {
+      return ::testing::AssertionSuccess();
+    }
+  }
+  return ::testing::AssertionFailure()
+         << "no provenance record carries two input fact ids, so reversing "
+            "them tests nothing";
+}
+
+// Size is not the invariant the reversal needs — distinctness is. Two equal
+// values encode identically, so reversing them leaves the bytes unchanged:
+// an encoder that emitted the collection in input order would pass exactly as
+// an encoder that sorted it, and the guard above would still be satisfied.
+// Collapsing the second element onto the first must therefore change the
+// case's canonical bytes; when it does not, the pair is a duplicate and the
+// reversal proves nothing about the sort.
+template <typename Collapse>
+::testing::AssertionResult CollapsingSecondElementChangesBytes(
+    const EvidenceCase& value, Collapse collapse, const char* what) {
+  EvidenceCase collapsed = value;
+  collapse(collapsed);
+
+  const auto original_bytes = CanonicalEvidenceBytes(value);
+  if (!original_bytes.ok()) {
+    return ::testing::AssertionFailure()
+           << what << ": canonicalization failed: "
+           << original_bytes.status().message();
+  }
+  const auto collapsed_bytes = CanonicalEvidenceBytes(collapsed);
+  if (!collapsed_bytes.ok()) {
+    return ::testing::AssertionFailure()
+           << what << ": canonicalization failed: "
+           << collapsed_bytes.status().message();
+  }
+  if (*original_bytes == *collapsed_bytes) {
+    return ::testing::AssertionFailure()
+           << what
+           << ": its two elements encode identically, so reversing them "
+              "reorders nothing and the canonical sort goes untested";
+  }
+  return ::testing::AssertionSuccess();
 }
 
 // Reverses every collection whose order the canonical contract declares
@@ -124,6 +313,29 @@ void ReverseUnorderedCollections(EvidenceCase& value) {
   for (ProofObligation& obligation : value.proof_obligations) {
     EvidenceScenarioBuilder::Reverse(obligation.verifier_kinds);
   }
+}
+
+// The offset of `needle` in `bytes`, or `std::string::npos` when it is absent.
+// The canonical order is only observable through the emitted bytes, so the one
+// test that pins it reads them directly.
+std::size_t OffsetOf(const std::vector<std::byte>& bytes,
+                     std::string_view needle) {
+  for (std::size_t offset = 0; offset + needle.size() <= bytes.size();
+       ++offset) {
+    bool matches = true;
+    for (std::size_t index = 0; index < needle.size(); ++index) {
+      const auto expected =
+          static_cast<std::byte>(static_cast<unsigned char>(needle[index]));
+      if (bytes[offset + index] != expected) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return offset;
+    }
+  }
+  return std::string::npos;
 }
 
 // The canonical bytes of two cases are equal, or a failure that says which
@@ -217,23 +429,40 @@ void ExpectMutationChangesBytesAndId(EvidenceCase left, Mutation mutate,
 // --- VID-007: construction order and local paths do not affect identity ------
 
 TEST(EvidenceCanonicalizerTest, VID007IdentityIgnoresUnorderedConstruction) {
-  const EvidenceCase original = MakeOverflowEvidenceCase();
+  EvidenceCase original = MakeOverflowEvidenceCase();
+  PopulateSecondMembers(original);
+  // Guard before reversing: a one-member collection reverses to itself, so the
+  // sort for it would go untested.
+  ASSERT_TRUE(EveryReversedCollectionIsPopulated(original));
+
+  // Population is not enough for the two collections whose second element is
+  // derived rather than cloned: the pair must also differ by canonical
+  // encoding, or reversing it still reorders nothing.
+  EXPECT_TRUE(CollapsingSecondElementChangesBytes(
+      original,
+      [](EvidenceCase& value) {
+        for (Path& path : value.paths) {
+          if (path.conditions.size() >= 2) {
+            path.conditions[1] = path.conditions[0];
+          }
+        }
+      },
+      "path conditions"));
+  EXPECT_TRUE(CollapsingSecondElementChangesBytes(
+      original,
+      [](EvidenceCase& value) {
+        for (Unknown& unknown : value.unknowns) {
+          if (unknown.blocking_ids.size() >= 2) {
+            unknown.blocking_ids[1] = unknown.blocking_ids[0];
+          }
+        }
+      },
+      "unknown blocking ids"));
 
   EvidenceCase reversed = original;
   ReverseUnorderedCollections(reversed);
 
   EXPECT_TRUE(SameCanonicalBytes(original, reversed));
-
-  // The reversals that actually carry the assertion: a one-element collection
-  // reverses to itself and would prove nothing.
-  ASSERT_EQ(reversed.entities.size(), original.entities.size());
-  ASSERT_GE(reversed.entities.size(), 2u);
-  ASSERT_GE(reversed.facts.size(), 2u);
-  ASSERT_GE(reversed.provenance.size(), 2u);
-  ASSERT_GE(reversed.dependencies.size(), 2u);
-  ASSERT_GE(reversed.omissions.size(), 2u);
-  ASSERT_GE(reversed.unknowns.size(), 2u);
-  ASSERT_GE(reversed.program.analyzer_versions.size(), 2u);
 
   EvidenceCase left = original;
   EvidenceCase right = reversed;
@@ -241,7 +470,20 @@ TEST(EvidenceCanonicalizerTest, VID007IdentityIgnoresUnorderedConstruction) {
 }
 
 TEST(EvidenceCanonicalizerTest, VID007IdentityIgnoresUnorderedConstructionL0) {
-  const EvidenceCase original = MakeValidMinimalEvidenceCase();
+  EvidenceCase original = MakeValidMinimalEvidenceCase();
+  PopulateSecondMembers(original);
+
+  // The minimal case deliberately carries one member of some collections and
+  // none of the others: the guard covers what it does carry, because an empty
+  // collection has nothing to reverse while a one-member one would make the
+  // reversal a no-op. Its causal slice is a single edge, so reversing edges
+  // here is vacuous by construction and is guarded by the L1 test instead.
+  ASSERT_GE(original.program.analyzer_versions.size(), 2u);
+  ASSERT_GE(original.entities.size(), 2u);
+  ASSERT_GE(original.provenance.size(), 2u);
+  ASSERT_GE(original.paths.size(), 2u);
+  ASSERT_GE(original.facts.size(), 2u);
+  ASSERT_GE(original.omissions.size(), 2u);
 
   EvidenceCase reversed = original;
   ReverseUnorderedCollections(reversed);
@@ -258,7 +500,7 @@ TEST(EvidenceCanonicalizerTest, VID007CanonicalBytesIgnoreExistingEvidenceId) {
   const EvidenceCase original = MakeOverflowEvidenceCase();
 
   EvidenceCase with_stale_id = original;
-  with_stale_id.evidence_id = RunId("stale_evidence_identity");
+  with_stale_id.evidence_id = EvidenceIdentity("stale_evidence_identity");
 
   EXPECT_TRUE(SameCanonicalBytes(original, with_stale_id));
 
@@ -266,7 +508,7 @@ TEST(EvidenceCanonicalizerTest, VID007CanonicalBytesIgnoreExistingEvidenceId) {
   EvidenceCase right = with_stale_id;
   EXPECT_TRUE(SameEvidenceId(&left, &right));
   EXPECT_NE(left.evidence_id, std::optional<core::StableId>(
-                                  RunId("stale_evidence_identity")));
+                                  EvidenceIdentity("stale_evidence_identity")));
 }
 
 // The case carries no top-level display name: `EvidenceCase`'s members are the
@@ -282,6 +524,45 @@ TEST(EvidenceCanonicalizerTest, VID007IdentityIsStableAcrossConstructions) {
   EvidenceCase left = first;
   EvidenceCase right = second;
   EXPECT_TRUE(SameEvidenceId(&left, &right));
+}
+
+// --- The sort key is a spelling, not an enumerator value --------------------
+
+// `EntityKind` declares `kFunction` (1) before `kBasicBlock` (5), while the
+// spellings run the other way ("basic_block" < "function"), so a group keyed
+// on the enumerator value emits these two entities in the opposite order from
+// one keyed on the spelling. Enumerators cannot be renumbered at runtime, so
+// the property is pinned where it is observable: the emitted bytes of a case
+// whose only two entities are of those kinds.
+TEST(EvidenceCanonicalizerTest, SortOrderFollowsKindSpellingNotEnumeratorValue) {
+  const auto entity_of_kind = [](EntityKind kind, std::string id) {
+    Entity entity;
+    entity.id = std::move(id);
+    entity.kind = kind;
+    return entity;
+  };
+
+  EvidenceCase value;
+  value.entities.push_back(entity_of_kind(EntityKind::kFunction, "E_one"));
+  value.entities.push_back(entity_of_kind(EntityKind::kBasicBlock, "E_two"));
+
+  const auto bytes = CanonicalEvidenceBytes(value);
+  ASSERT_TRUE(bytes.ok()) << bytes.status().message();
+  // Each spelling occurs exactly once in this case, so the two offsets are the
+  // positions of the two entity records and nothing else.
+  const std::size_t basic_block = OffsetOf(*bytes, "basic_block");
+  const std::size_t function = OffsetOf(*bytes, "function");
+  ASSERT_NE(basic_block, std::string::npos);
+  ASSERT_NE(function, std::string::npos);
+  EXPECT_LT(basic_block, function)
+      << "the entity group is ordered by enumerator value, not by spelling";
+
+  // The order follows the key alone, never the input: the same two entities
+  // declared the other way round produce the same bytes.
+  EvidenceCase reversed;
+  reversed.entities.push_back(entity_of_kind(EntityKind::kBasicBlock, "E_two"));
+  reversed.entities.push_back(entity_of_kind(EntityKind::kFunction, "E_one"));
+  EXPECT_TRUE(SameCanonicalBytes(value, reversed));
 }
 
 // --- VID-008: one semantic change at a time changes bytes and identity -------

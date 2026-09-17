@@ -29,7 +29,9 @@
 //   * VID-003 RejectsDerivedFactWithoutProvenance — a derived fact with no
 //     provenance, and with provenance the case does not declare.
 //   * VID-004 RejectsInvalidExpressionAndDisconnectedPath — arity and type
-//     failures, and a path whose consecutive segments are not adjacent.
+//     failures, a connective that directly nests inside itself, the
+//     connective shapes that must stay legal, and a path whose consecutive
+//     segments are not adjacent.
 //   * VID-005 EnforcesProofAuthority — a decided result without a producer,
 //     a pending obligation carrying a result, a promoted case state without
 //     proof, and the accepted authority-bearing combination.
@@ -89,6 +91,15 @@ template <typename T, typename Predicate>
 void EraseIf(std::vector<T>& values, Predicate predicate) {
   values.erase(std::remove_if(values.begin(), values.end(), predicate),
                values.end());
+}
+
+// A connective over `operands`, for shaping the expression the fixture's
+// constraint carries.
+Expression Connective(Expression::Kind kind, std::vector<Expression> operands) {
+  Expression expression;
+  expression.kind = kind;
+  expression.operands = std::move(operands);
+  return expression;
 }
 
 // The interrupted dominating-check unknown the truncated demo fixture records.
@@ -274,6 +285,55 @@ TEST(EvidenceValidatorTest, VID004RejectsInvalidExpressionType) {
   const auto report = ValidateEvidenceCase(value);
   EXPECT_TRUE(HasCode(report, EvidenceValidationCode::kExpressionType));
   EXPECT_EQ(report.issues.front().member_id, value.constraints.front().id);
+}
+
+// `EvidenceCase.h` declares `kAnd`/`kOr` "two or more operands, flattened",
+// and the grammar reaches that shape directly: `OrExpr ::= AndExpr { "or"
+// AndExpr }` builds one n-ary node, and parentheses around a conjunction group
+// nothing, so no legal EIR-T parses into a directly nested connective.
+// Enforcing it here — and only here — keeps one formula to one canonical
+// encoding, and so to one identity.
+TEST(EvidenceValidatorTest, VID004RejectsDirectlyNestedConnective) {
+  auto value = MakeOverflowEvidenceCase();
+  const Expression predicate = value.constraints.front().expression;
+  value.constraints.front().expression = Connective(
+      Expression::Kind::kAnd,
+      {Connective(Expression::Kind::kAnd, {predicate, predicate}), predicate});
+
+  const auto report = ValidateEvidenceCase(value);
+  ASSERT_FALSE(report.ok());
+  EXPECT_EQ(report.issues.front().code,
+            EvidenceValidationCode::kExpressionType);
+  EXPECT_EQ(report.issues.front().member_id, value.constraints.front().id);
+}
+
+// The negative control, and the half that matters: over-rejection is the risk
+// this rule carries, so the shapes that must stay legal are asserted
+// explicitly. Only direct same-kind nesting is rejected; a connective under
+// `not`, or under the other connective, is untouched.
+TEST(EvidenceValidatorTest, VID004AcceptsConnectivesNestedInOtherShapes) {
+  const EvidenceCase fixture = MakeOverflowEvidenceCase();
+  const Expression predicate = fixture.constraints.front().expression;
+  const Expression conjunction = Connective(
+      Expression::Kind::kAnd, {predicate, predicate});
+
+  auto negated = fixture;
+  negated.constraints.front().expression =
+      Connective(Expression::Kind::kNot, {conjunction});
+  {
+    const auto report = ValidateEvidenceCase(negated);
+    EXPECT_TRUE(report.ok()) << "a conjunction under a negation: "
+                             << FirstIssue(report);
+  }
+
+  auto disjoined = fixture;
+  disjoined.constraints.front().expression =
+      Connective(Expression::Kind::kOr, {conjunction, predicate});
+  {
+    const auto report = ValidateEvidenceCase(disjoined);
+    EXPECT_TRUE(report.ok()) << "a conjunction under a disjunction: "
+                             << FirstIssue(report);
+  }
 }
 
 TEST(EvidenceValidatorTest, VID004RejectsDisconnectedPath) {

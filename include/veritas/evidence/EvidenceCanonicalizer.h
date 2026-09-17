@@ -29,11 +29,15 @@
 //
 // WHAT IS ENCODED
 //
-// One root object carrying the case's semantic content, in the model's declared
-// field order: `schema`, `level`, `state`, `program` (the whole program
-// binding, analyzer versions included), `claim`, then every member collection,
-// each one canonically ordered as described below. Every field of every record
-// is encoded, with two deliberate exceptions:
+// One root object carrying the case's semantic content. The invariant is the
+// object's **key set**, not the order the keys are emplaced in: a
+// `core::CanonicalObject` is a `std::map` and `CanonicalEncode` emits its
+// members lexicographically, so the source order below is cosmetic and no
+// reader should try to "restore" it. The key set covers `schema`, `level`,
+// `state`, `program` (the whole program binding, analyzer versions included),
+// `claim`, and the thirteen member collections, and is canonically ordered as
+// described below. Every field of every record is encoded, with two deliberate
+// exceptions:
 //
 //   * `EvidenceCase::evidence_id` is excluded. It is the output of this
 //     function, so hashing it would be circular; a case that already carries an
@@ -63,10 +67,14 @@
 // Collections that denote an unordered set are sorted by a total, deterministic
 // key. The key is `(kind, canonical stable-ID string, local ID)`, where `kind`
 // is the record's declared kind family (`EntityKind`, `RelationKind`,
-// `PathKind`, `DependencyKind`, `ProofGoalKind`) or `0` for a record with no
-// kind family, the stable-ID component is `core::ToString(stable_id)` when the
-// `std::optional` is engaged and the empty string when it is not, and the local
-// ID component is the record's case-local handle. Because a record can have no
+// `PathKind`, `DependencyKind`, `ProofGoalKind`) **spelled as the payload
+// spells it** — never its enumerator value, because inserting an enumerator
+// into the middle of a family renumbers its successors and would then reorder
+// the bytes of a case whose meaning never changed — or the empty string for a
+// record with no kind family. The stable-ID component is
+// `core::ToString(stable_id)` when the `std::optional` is engaged and the empty
+// string when it is not, and the local ID component is the record's case-local
+// handle. Because a record can have no
 // identity at all (`AnalyzerVersion` has neither a kind nor any ID), the key is
 // completed by the record's own canonical encoding as the final tie-break, so
 // the order is total and never depends on the input order. Applying it:

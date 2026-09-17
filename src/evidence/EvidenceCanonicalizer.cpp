@@ -16,8 +16,10 @@
 // case.
 //
 // The implementation is one deterministic value tree built with
-// `core::CanonicalValue`, in the model's declared field order, plus one sort
-// discipline for every collection the header declares unordered. Every enum
+// `core::CanonicalValue`, whose root object covers every model field (the
+// object is a `std::map`, so the emplace order below is cosmetic), plus one
+// sort discipline for every collection the header declares unordered. Every
+// enum
 // enters the bytes through its stable textual spelling and every engaged stable
 // ID through `core::ToString`, so identity never depends on an enumerator's
 // numeric value or on a struct's memory layout.
@@ -79,10 +81,14 @@ std::string_view ExpressionKindName(Expression::Kind kind) {
 }
 
 // The sort key of one element of a canonically ordered collection. `kind` is
-// the record's declared kind family, or 0 for a record that has none; the
-// stable-ID component is empty when the record carries no engaged identity.
+// the record's declared kind family **spelled as the payload spells it**, not
+// its enumerator value: an enumerator inserted into the middle of a family
+// renumbers its successors, and an order keyed on that number would change the
+// bytes — and so the identity — of a case whose meaning never changed. The
+// component is empty for a record with no kind family. The stable-ID component
+// is empty when the record carries no engaged identity.
 struct SortKey {
-  int kind = 0;
+  std::string kind;
   std::string stable_id;
   std::string local_id;
 };
@@ -119,8 +125,8 @@ StatusOr<KeyedElement> MakeKeyedElement(SortKey key,
   return KeyedElement{std::move(key), std::move(*bytes), std::move(value)};
 }
 
-// A collection sorted by the canonical order: kind, stable identity, local
-// handle, then the element's own encoding.
+// A collection sorted by the canonical order: kind spelling, stable identity,
+// local handle, then the element's own encoding.
 core::CanonicalValue SortedArray(std::vector<KeyedElement> elements) {
   std::sort(elements.begin(), elements.end(), KeyedLess);
   core::CanonicalArray array;
@@ -139,33 +145,30 @@ core::CanonicalValue OrderedArray(std::vector<core::CanonicalValue> values) {
 // Orders values that carry no identity of their own by their canonical
 // encodings alone. Deterministic and total for distinct values; equal
 // encodings are interchangeable by construction.
-std::vector<core::CanonicalValue> SortValuesByEncoding(
+//
+// A value that cannot be encoded is a hard failure, never a value appended
+// after the ordered ones: an element that skipped the sort would put the
+// collection back in input order and reintroduce the construction-order
+// dependence `VID-007` forbids. Today `core::CanonicalEncode` has no failure
+// path at all — it encodes every kind, a `TaggedPath` included — so this
+// status never fires; it exists so that it cannot start failing silently.
+StatusOr<std::vector<core::CanonicalValue>> SortValuesByEncoding(
     std::vector<core::CanonicalValue> values) {
   std::vector<KeyedElement> elements;
   elements.reserve(values.size());
-  std::vector<core::CanonicalValue> unorderable;
   for (core::CanonicalValue& value : values) {
-    auto bytes = core::CanonicalEncode(value);
-    if (!bytes.ok()) {
-      // `core::CanonicalEncode` rejects only a value carrying a `TaggedPath`,
-      // and this encoder builds none, so this branch never runs. It keeps the
-      // value rather than dropping it: a case member is never lost to an
-      // ordering step, even one that cannot fail.
-      unorderable.push_back(std::move(value));
-      continue;
+    auto element = MakeKeyedElement(SortKey{}, std::move(value));
+    if (!element.ok()) {
+      return element.status();
     }
-    elements.push_back(
-        KeyedElement{SortKey{}, std::move(*bytes), std::move(value)});
+    elements.push_back(std::move(*element));
   }
   std::sort(elements.begin(), elements.end(), KeyedLess);
 
   std::vector<core::CanonicalValue> sorted;
-  sorted.reserve(elements.size() + unorderable.size());
+  sorted.reserve(elements.size());
   for (KeyedElement& element : elements) {
     sorted.push_back(std::move(element.value));
-  }
-  for (core::CanonicalValue& value : unorderable) {
-    sorted.push_back(std::move(value));
   }
   return sorted;
 }
@@ -210,11 +213,15 @@ core::CanonicalValue EncodeSortedStrings(
 
 // --- Expressions ------------------------------------------------------------
 
-core::CanonicalValue EncodeExpression(const Expression& expression) {
+StatusOr<core::CanonicalValue> EncodeExpression(const Expression& expression) {
   std::vector<core::CanonicalValue> operands;
   operands.reserve(expression.operands.size());
   for (const Expression& operand : expression.operands) {
-    operands.push_back(EncodeExpression(operand));
+    auto encoded = EncodeExpression(operand);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
+    operands.push_back(std::move(*encoded));
   }
 
   // `and` and `or` are commutative: their operands are ordered by their own
@@ -223,7 +230,11 @@ core::CanonicalValue EncodeExpression(const Expression& expression) {
   // consequent, and call arguments keep their positions.
   if (expression.kind == Expression::Kind::kAnd ||
       expression.kind == Expression::Kind::kOr) {
-    operands = SortValuesByEncoding(std::move(operands));
+    auto sorted = SortValuesByEncoding(std::move(operands));
+    if (!sorted.ok()) {
+      return sorted.status();
+    }
+    operands = std::move(*sorted);
   }
 
   core::CanonicalObject object;
@@ -272,12 +283,16 @@ StatusOr<core::CanonicalValue> EncodeProgramBinding(
   return core::Object(std::move(object));
 }
 
-core::CanonicalValue EncodeEntity(const Entity& entity) {
+StatusOr<core::CanonicalValue> EncodeEntity(const Entity& entity) {
   // The property bag is key-sorted structurally: `CanonicalObject` is a
   // `std::map`, so its order never depends on how the bag was filled.
   core::CanonicalObject properties;
   for (const auto& property : entity.properties) {
-    properties.emplace(property.first, EncodeExpression(property.second));
+    auto value = EncodeExpression(property.second);
+    if (!value.ok()) {
+      return value.status();
+    }
+    properties.emplace(property.first, std::move(*value));
   }
 
   core::CanonicalObject object;
@@ -302,14 +317,22 @@ core::CanonicalValue EncodeEdge(const Edge& edge) {
   return core::Object(std::move(object));
 }
 
-core::CanonicalValue EncodePath(const Path& path) {
+StatusOr<core::CanonicalValue> EncodePath(const Path& path) {
   // A path's conditions constrain it conjunctively, so the set is ordered like
   // an `and` over the same predicates. Its segments are not: the sequence is
   // the path.
   std::vector<core::CanonicalValue> conditions;
   conditions.reserve(path.conditions.size());
   for (const Expression& condition : path.conditions) {
-    conditions.push_back(EncodeExpression(condition));
+    auto encoded = EncodeExpression(condition);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
+    conditions.push_back(std::move(*encoded));
+  }
+  auto sorted_conditions = SortValuesByEncoding(std::move(conditions));
+  if (!sorted_conditions.ok()) {
+    return sorted_conditions.status();
   }
 
   std::vector<core::CanonicalValue> segments;
@@ -319,8 +342,7 @@ core::CanonicalValue EncodePath(const Path& path) {
   }
 
   core::CanonicalObject object;
-  object.emplace("conditions",
-                 OrderedArray(SortValuesByEncoding(std::move(conditions))));
+  object.emplace("conditions", OrderedArray(std::move(*sorted_conditions)));
   object.emplace("entity_ids", OrderedArray(std::move(segments)));
   object.emplace("feasibility",
                  core::String(std::string(ToString(path.feasibility))));
@@ -330,19 +352,29 @@ core::CanonicalValue EncodePath(const Path& path) {
   return core::Object(std::move(object));
 }
 
-core::CanonicalValue EncodeClaim(const Claim& claim) {
+StatusOr<core::CanonicalValue> EncodeClaim(const Claim& claim) {
+  auto predicate = EncodeExpression(claim.predicate);
+  if (!predicate.ok()) {
+    return predicate.status();
+  }
+
   core::CanonicalObject object;
   object.emplace("description", core::String(claim.description));
   object.emplace("id", core::String(claim.id));
   object.emplace("kind", core::String(std::string(ToString(claim.kind))));
-  object.emplace("predicate", EncodeExpression(claim.predicate));
+  object.emplace("predicate", std::move(*predicate));
   object.emplace("severity",
                  core::String(std::string(ToString(claim.severity))));
   object.emplace("subject", core::String(claim.subject));
   return core::Object(std::move(object));
 }
 
-core::CanonicalValue EncodeFact(const Fact& fact) {
+StatusOr<core::CanonicalValue> EncodeFact(const Fact& fact) {
+  auto predicate = EncodeExpression(fact.predicate);
+  if (!predicate.ok()) {
+    return predicate.status();
+  }
+
   core::CanonicalObject object;
   object.emplace("confidence",
                  core::String(std::string(ToString(fact.confidence))));
@@ -350,38 +382,53 @@ core::CanonicalValue EncodeFact(const Fact& fact) {
   object.emplace("epistemic",
                  core::String(std::string(ToString(fact.epistemic))));
   object.emplace("id", core::String(fact.id));
-  object.emplace("predicate", EncodeExpression(fact.predicate));
+  object.emplace("predicate", std::move(*predicate));
   object.emplace("producer", core::String(fact.producer));
   object.emplace("provenance_id", core::String(fact.provenance_id));
   object.emplace("stable_id", EncodeOptionalStableId(fact.stable_id));
   return core::Object(std::move(object));
 }
 
-core::CanonicalValue EncodeAssumption(const Assumption& assumption) {
+StatusOr<core::CanonicalValue> EncodeAssumption(const Assumption& assumption) {
+  auto predicate = EncodeExpression(assumption.predicate);
+  if (!predicate.ok()) {
+    return predicate.status();
+  }
+
   core::CanonicalObject object;
   object.emplace("id", core::String(assumption.id));
-  object.emplace("predicate", EncodeExpression(assumption.predicate));
+  object.emplace("predicate", std::move(*predicate));
   object.emplace("scope", core::String(assumption.scope));
   object.emplace("source", core::String(assumption.source));
   return core::Object(std::move(object));
 }
 
-core::CanonicalValue EncodeHypothesis(const Hypothesis& hypothesis) {
+StatusOr<core::CanonicalValue> EncodeHypothesis(const Hypothesis& hypothesis) {
+  auto predicate = EncodeExpression(hypothesis.predicate);
+  if (!predicate.ok()) {
+    return predicate.status();
+  }
+
   core::CanonicalObject object;
   object.emplace("confidence",
                  core::String(std::string(ToString(hypothesis.confidence))));
   object.emplace("id", core::String(hypothesis.id));
-  object.emplace("predicate", EncodeExpression(hypothesis.predicate));
+  object.emplace("predicate", std::move(*predicate));
   object.emplace("producer", core::String(hypothesis.producer));
   object.emplace("reason", core::String(hypothesis.reason));
   return core::Object(std::move(object));
 }
 
-core::CanonicalValue EncodeUnknown(const Unknown& unknown) {
+StatusOr<core::CanonicalValue> EncodeUnknown(const Unknown& unknown) {
+  auto property = EncodeExpression(unknown.property);
+  if (!property.ok()) {
+    return property.status();
+  }
+
   core::CanonicalObject object;
   object.emplace("blocking_ids", EncodeSortedStrings(unknown.blocking_ids));
   object.emplace("id", core::String(unknown.id));
-  object.emplace("property", EncodeExpression(unknown.property));
+  object.emplace("property", std::move(*property));
   object.emplace("reason", core::String(unknown.reason));
   object.emplace("reason_code",
                  core::String(std::string(ToString(unknown.reason_code))));
@@ -390,11 +437,16 @@ core::CanonicalValue EncodeUnknown(const Unknown& unknown) {
   return core::Object(std::move(object));
 }
 
-core::CanonicalValue EncodeConstraint(const Constraint& constraint) {
+StatusOr<core::CanonicalValue> EncodeConstraint(const Constraint& constraint) {
+  auto expression = EncodeExpression(constraint.expression);
+  if (!expression.ok()) {
+    return expression.status();
+  }
+
   core::CanonicalObject object;
   object.emplace("epistemic",
                  core::String(std::string(ToString(constraint.epistemic))));
-  object.emplace("expression", EncodeExpression(constraint.expression));
+  object.emplace("expression", std::move(*expression));
   object.emplace("id", core::String(constraint.id));
   object.emplace("provenance_id", core::String(constraint.provenance_id));
   object.emplace("scope", core::String(constraint.scope));
@@ -415,13 +467,23 @@ core::CanonicalValue EncodeProvenance(const Provenance& record) {
   return core::Object(std::move(object));
 }
 
-core::CanonicalValue EncodeProofObligation(const ProofObligation& obligation) {
+StatusOr<core::CanonicalValue> EncodeProofObligation(
+    const ProofObligation& obligation) {
+  auto budget = EncodeExpression(obligation.budget);
+  if (!budget.ok()) {
+    return budget.status();
+  }
+  auto predicate = EncodeExpression(obligation.predicate);
+  if (!predicate.ok()) {
+    return predicate.status();
+  }
+
   core::CanonicalObject object;
-  object.emplace("budget", EncodeExpression(obligation.budget));
+  object.emplace("budget", std::move(*budget));
   object.emplace("goal_kind",
                  core::String(std::string(ToString(obligation.goal_kind))));
   object.emplace("id", core::String(obligation.id));
-  object.emplace("predicate", EncodeExpression(obligation.predicate));
+  object.emplace("predicate", std::move(*predicate));
   object.emplace("result_id", core::String(obligation.result_id));
   object.emplace("status",
                  core::String(std::string(ToString(obligation.status))));
@@ -466,10 +528,14 @@ StatusOr<core::CanonicalValue> EncodeEntities(
   std::vector<KeyedElement> elements;
   elements.reserve(entities.size());
   for (const Entity& entity : entities) {
+    auto encoded = EncodeEntity(entity);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
     auto element = MakeKeyedElement(
-        SortKey{static_cast<int>(entity.kind),
+        SortKey{std::string(ToString(entity.kind)),
                 StableIdComponent(entity.stable_id), entity.id},
-        EncodeEntity(entity));
+        std::move(*encoded));
     if (!element.ok()) {
       return element.status();
     }
@@ -483,7 +549,7 @@ StatusOr<core::CanonicalValue> EncodeEdges(const std::vector<Edge>& edges) {
   elements.reserve(edges.size());
   for (const Edge& edge : edges) {
     auto element = MakeKeyedElement(
-        SortKey{static_cast<int>(edge.kind), std::string(), edge.id},
+        SortKey{std::string(ToString(edge.kind)), std::string(), edge.id},
         EncodeEdge(edge));
     if (!element.ok()) {
       return element.status();
@@ -497,9 +563,13 @@ StatusOr<core::CanonicalValue> EncodePaths(const std::vector<Path>& paths) {
   std::vector<KeyedElement> elements;
   elements.reserve(paths.size());
   for (const Path& path : paths) {
+    auto encoded = EncodePath(path);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
     auto element = MakeKeyedElement(
-        SortKey{static_cast<int>(path.kind), std::string(), path.id},
-        EncodePath(path));
+        SortKey{std::string(ToString(path.kind)), std::string(), path.id},
+        std::move(*encoded));
     if (!element.ok()) {
       return element.status();
     }
@@ -512,9 +582,13 @@ StatusOr<core::CanonicalValue> EncodeFacts(const std::vector<Fact>& facts) {
   std::vector<KeyedElement> elements;
   elements.reserve(facts.size());
   for (const Fact& fact : facts) {
+    auto encoded = EncodeFact(fact);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
     auto element = MakeKeyedElement(
-        SortKey{0, StableIdComponent(fact.stable_id), fact.id},
-        EncodeFact(fact));
+        SortKey{std::string(), StableIdComponent(fact.stable_id), fact.id},
+        std::move(*encoded));
     if (!element.ok()) {
       return element.status();
     }
@@ -528,8 +602,13 @@ StatusOr<core::CanonicalValue> EncodeAssumptions(
   std::vector<KeyedElement> elements;
   elements.reserve(assumptions.size());
   for (const Assumption& assumption : assumptions) {
-    auto element = MakeKeyedElement(SortKey{0, std::string(), assumption.id},
-                                    EncodeAssumption(assumption));
+    auto encoded = EncodeAssumption(assumption);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
+    auto element = MakeKeyedElement(
+        SortKey{std::string(), std::string(), assumption.id},
+        std::move(*encoded));
     if (!element.ok()) {
       return element.status();
     }
@@ -543,8 +622,13 @@ StatusOr<core::CanonicalValue> EncodeHypotheses(
   std::vector<KeyedElement> elements;
   elements.reserve(hypotheses.size());
   for (const Hypothesis& hypothesis : hypotheses) {
-    auto element = MakeKeyedElement(SortKey{0, std::string(), hypothesis.id},
-                                    EncodeHypothesis(hypothesis));
+    auto encoded = EncodeHypothesis(hypothesis);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
+    auto element = MakeKeyedElement(
+        SortKey{std::string(), std::string(), hypothesis.id},
+        std::move(*encoded));
     if (!element.ok()) {
       return element.status();
     }
@@ -558,8 +642,13 @@ StatusOr<core::CanonicalValue> EncodeUnknowns(
   std::vector<KeyedElement> elements;
   elements.reserve(unknowns.size());
   for (const Unknown& unknown : unknowns) {
-    auto element = MakeKeyedElement(SortKey{0, std::string(), unknown.id},
-                                    EncodeUnknown(unknown));
+    auto encoded = EncodeUnknown(unknown);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
+    auto element =
+        MakeKeyedElement(SortKey{std::string(), std::string(), unknown.id},
+                         std::move(*encoded));
     if (!element.ok()) {
       return element.status();
     }
@@ -573,8 +662,13 @@ StatusOr<core::CanonicalValue> EncodeConstraints(
   std::vector<KeyedElement> elements;
   elements.reserve(constraints.size());
   for (const Constraint& constraint : constraints) {
-    auto element = MakeKeyedElement(SortKey{0, std::string(), constraint.id},
-                                    EncodeConstraint(constraint));
+    auto encoded = EncodeConstraint(constraint);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
+    auto element = MakeKeyedElement(
+        SortKey{std::string(), std::string(), constraint.id},
+        std::move(*encoded));
     if (!element.ok()) {
       return element.status();
     }
@@ -588,8 +682,9 @@ StatusOr<core::CanonicalValue> EncodeProvenanceRecords(
   std::vector<KeyedElement> elements;
   elements.reserve(records.size());
   for (const Provenance& record : records) {
-    auto element = MakeKeyedElement(SortKey{0, std::string(), record.id},
-                                    EncodeProvenance(record));
+    auto element =
+        MakeKeyedElement(SortKey{std::string(), std::string(), record.id},
+                         EncodeProvenance(record));
     if (!element.ok()) {
       return element.status();
     }
@@ -603,10 +698,14 @@ StatusOr<core::CanonicalValue> EncodeProofObligations(
   std::vector<KeyedElement> elements;
   elements.reserve(obligations.size());
   for (const ProofObligation& obligation : obligations) {
+    auto encoded = EncodeProofObligation(obligation);
+    if (!encoded.ok()) {
+      return encoded.status();
+    }
     auto element = MakeKeyedElement(
-        SortKey{static_cast<int>(obligation.goal_kind), std::string(),
+        SortKey{std::string(ToString(obligation.goal_kind)), std::string(),
                 obligation.id},
-        EncodeProofObligation(obligation));
+        std::move(*encoded));
     if (!element.ok()) {
       return element.status();
     }
@@ -620,8 +719,9 @@ StatusOr<core::CanonicalValue> EncodeSummaries(
   std::vector<KeyedElement> elements;
   elements.reserve(summaries.size());
   for (const SummaryReference& summary : summaries) {
-    auto element = MakeKeyedElement(SortKey{0, std::string(), summary.id},
-                                    EncodeSummaryReference(summary));
+    auto element =
+        MakeKeyedElement(SortKey{std::string(), std::string(), summary.id},
+                         EncodeSummaryReference(summary));
     if (!element.ok()) {
       return element.status();
     }
@@ -636,7 +736,7 @@ StatusOr<core::CanonicalValue> EncodeDependencies(
   elements.reserve(dependencies.size());
   for (const Dependency& dependency : dependencies) {
     auto element = MakeKeyedElement(
-        SortKey{static_cast<int>(dependency.kind), std::string(),
+        SortKey{std::string(ToString(dependency.kind)), std::string(),
                 dependency.id},
         EncodeDependency(dependency));
     if (!element.ok()) {
@@ -652,8 +752,9 @@ StatusOr<core::CanonicalValue> EncodeOmissions(
   std::vector<KeyedElement> elements;
   elements.reserve(omissions.size());
   for (const Omission& omission : omissions) {
-    auto element = MakeKeyedElement(SortKey{0, std::string(), omission.id},
-                                    EncodeOmission(omission));
+    auto element = MakeKeyedElement(
+        SortKey{std::string(), std::string(), omission.id},
+        EncodeOmission(omission));
     if (!element.ok()) {
       return element.status();
     }
@@ -679,7 +780,11 @@ StatusOr<core::CanonicalValue> CanonicalEvidenceValue(
     return program.status();
   }
   root.emplace("program", std::move(*program));
-  root.emplace("claim", EncodeClaim(value.primary_claim));
+  auto claim = EncodeClaim(value.primary_claim);
+  if (!claim.ok()) {
+    return claim.status();
+  }
+  root.emplace("claim", std::move(*claim));
 
   auto entities = EncodeEntities(value.entities);
   if (!entities.ok()) {

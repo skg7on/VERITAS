@@ -865,6 +865,22 @@ class CaseValidator {
         for (std::size_t index = 0; index < arity; ++index) {
           CheckOperand(expression, index, owner, position,
                        /*require_formula=*/true);
+          // The connective is n-ary flat by construction: the grammar builds
+          // `a and b and c` as one node with three operands, and parentheses
+          // around a conjunction group nothing, so a parser that lowers them
+          // cannot produce this shape. Rejecting only direct same-kind nesting
+          // therefore cannot over-reject a legal EIR-T — a connective inside
+          // `not` or inside the other connective stays legal — while leaving
+          // `and` associative by accident would give the same formula two
+          // canonical encodings, and so two identities.
+          if (expression.operands[index].kind == expression.kind) {
+            Add(EvidenceValidationCode::kExpressionType, owner,
+                Joined(position, ": operand ") + std::to_string(index + 1) +
+                    " is a directly nested " +
+                    std::string(ExpressionKindName(expression.kind)) +
+                    "; a " + std::string(ExpressionKindName(expression.kind)) +
+                    " expression must be flattened into one operand list");
+          }
         }
         break;
       case Expression::Kind::kImplies:
