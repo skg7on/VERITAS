@@ -86,9 +86,13 @@ string(REGEX REPLACE " +" " " EIR_SPEC_S31 "${EIR_S31_UNWRAPPED}")
 foreach(S31_REQUIRED_LITERAL IN ITEMS
     # The production: the case label is optional.
     "\"evidence\" [ Identifier ] \"{\""
-    # The normative paragraph, which is what Tasks 7 and 8 are written against.
-    "The case `Identifier` is a display label and carries no semantic content"
-    "The canonical writer emits no label")
+    # The normative paragraph in full -- what Tasks 7 and 8 are written against.
+    # Pinned whole rather than by sampled sentences: pinning the first sentence
+    # and the last clause left the middle sentence, which carries the
+    # anti-over-rejection rule and "preserves no label in the semantic model",
+    # deletable with the test still green. The slice is already unwrapped, so
+    # this survives a reflow but not a lost or reworded clause.
+    "The case `Identifier` is a display label and carries no semantic content: it is not an input to `EvidenceID`, and the semantic model has no member for it. A parser must accept any well-formed label, and must not reject a case for carrying one, but it preserves no label in the semantic model. The canonical writer emits no label, so canonical text is a function of the case's semantics alone.")
   string(FIND "${EIR_SPEC_S31}" "${S31_REQUIRED_LITERAL}" FOUND_AT)
   if(FOUND_AT EQUAL -1)
     message(FATAL_ERROR
