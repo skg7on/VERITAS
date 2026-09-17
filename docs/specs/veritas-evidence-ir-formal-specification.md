@@ -278,14 +278,19 @@ string. Such a value is reachable: `AnalyzerVersion`'s producer and
 form hashes verbatim, and no validator constrains their shape — the analyzer
 list is not examined at all, and a decided result's producer is required only to
 be non-empty. This is a known limitation of EIR-T 1.0's identifier alphabet for
-string-valued fields, not of any one declaration: it applies to those two
-carriers and equally to the pre-existing `FactDecl`'s `source` and
-`ProvenanceDecl`'s `producer`. It is deliberately not widened here. `Producer`
-is shared by all five carriers, so relaxing it would change productions this
-amendment did not introduce and would need a canonical-spelling rule for the
-one-value-two-spellings case, with no writer yet to test that rule against; the
-repair belongs to a coherent change to string-valued fields as a class, not to
-ad hoc widening of a single production.
+string-valued fields, not of any one declaration. `Producer` has five carriers —
+`AnalyzerVersion`'s producer and `VerificationDecl`'s, `FactDecl`'s `source`,
+`HypothesisDecl`'s `producer`, and `ProvenanceDecl`'s `producer` — and the limit
+reaches every one of them. `AssumptionDecl`'s `source` is not a `Producer`
+carrier, and the limit reaches it only in part: `AssumptionSource` admits
+`FunctionCall`, so a call-shaped source is spellable, while its other branch is
+the identifier-shaped `QualifiedId`, and a source that is neither — a plain
+`src/main.c` — has no spelling at all. It is deliberately not widened here.
+Relaxing `Producer` would change a production this amendment did not introduce
+and would need a canonical-spelling rule for the one-value-two-spellings case,
+with no writer yet to test that rule against; the repair belongs to a coherent
+change to string-valued fields as a class, not to ad hoc widening of a single
+production.
 
 ---
 
@@ -1072,7 +1077,7 @@ Well-formedness checking requires:
 | Version | Date | Changes |
 |---------|------|---------|
 | 0.1 | 2026-08-16 | Initial formal specification consolidating architecture document grammar |
-| 1.0 | 2026-09-11 … 2026-09-17 | Stabilized EIR-T 1.0. Added the mandatory top-level `SchemaDecl`, `LevelDecl`, and `StateDecl` (with `EvidenceLevel` and `EvidenceState`); added the `DependencyDecl`/`DependencyKind` and `OmissionDecl` evidence members and the `dependency`/`omission` reserved keywords; replaced the left-recursive predicate production with the precedence-factored `ImplicationExpr`/`OrExpr`/`AndExpr`/`ComparisonExpr`/`UnaryExpr`/`PrimaryExpr` chain and documented precedence, associativity, and quantifier scope in §5.2; updated the concrete syntax example. The grammar is frozen as the M10C implementation contract. Made the case-level `Identifier` optional and non-semantic: `REP-001` names "parser depends on original display label/whitespace" as a failure mode, and the `eir.v1` model carries no case name member, so the label is a display label only and the canonical writer emits none. The superseded production `"evidence" Identifier "{"` now reads `"evidence" [ Identifier ] "{"`; still within the EIR-T 1.0 stabilization window, so the version does not change. Narrowed the losslessness gap the semantic model exposed and the stabilization had left open, without closing it: §4.1 records the single value that stays unwritable, a property-bag entry named `stable_id` on an entity that declares no identity. The context gained the type-layout and analysis-run properties and a repeatable analyzer property with its own `AnalyzerVersion` production, and `EntityDecl`, `FactDecl`, `UnknownDecl`, `ProvenanceDecl`, and `VerificationDecl` each gained the optional attributes their `eir.v1` records already carry — the entity and fact stable IDs, the fact derived marker, the free-text detail carried beside the unknown's closed reason code, the provenance source anchor and its explicit analysis run, and the obligation's verification producer. The provenance run is written explicitly rather than derived from the case binding. **Additive only: no production was removed, narrowed, or reordered**, every existing declaration keeps parsing, and the version stays 1.0 — the amendment is recorded here rather than as 1.1 so that no consumer of the frozen contract sees a version change for syntax that only widens what was already legal. |
+| 1.0 | 2026-09-11 … 2026-09-17 | Stabilized EIR-T 1.0. Added the mandatory top-level `SchemaDecl`, `LevelDecl`, and `StateDecl` (with `EvidenceLevel` and `EvidenceState`); added the `DependencyDecl`/`DependencyKind` and `OmissionDecl` evidence members and the `dependency`/`omission` reserved keywords; replaced the left-recursive predicate production with the precedence-factored `ImplicationExpr`/`OrExpr`/`AndExpr`/`ComparisonExpr`/`UnaryExpr`/`PrimaryExpr` chain and documented precedence, associativity, and quantifier scope in §5.2; updated the concrete syntax example. The grammar is frozen as the M10C implementation contract. Made the case-level `Identifier` optional and non-semantic: `REP-001` names "parser depends on original display label/whitespace" as a failure mode, and the `eir.v1` model carries no case name member, so the label is a display label only and the canonical writer emits none. The superseded production `"evidence" Identifier "{"` now reads `"evidence" [ Identifier ] "{"`; still within the EIR-T 1.0 stabilization window, so the version does not change. Narrowed the losslessness gap the semantic model exposed and the stabilization had left open, without closing it: §4.1 records the values that stay unwritable — the property-bag entry named `stable_id` on an entity that declares no identity, and the producer strings the identifier alphabet cannot spell. The context gained the type-layout and analysis-run properties and a repeatable analyzer property with its own `AnalyzerVersion` production, and `EntityDecl`, `FactDecl`, `UnknownDecl`, `ProvenanceDecl`, and `VerificationDecl` each gained the optional attributes their `eir.v1` records already carry — the entity and fact stable IDs, the fact derived marker, the free-text detail carried beside the unknown's closed reason code, the provenance source anchor and its explicit analysis run, and the obligation's verification producer. The provenance run is written explicitly rather than derived from the case binding. **Additive only: no production was removed, narrowed, or reordered**, every existing declaration keeps parsing, and the version stays 1.0 — the amendment is recorded here rather than as 1.1 so that no consumer of the frozen contract sees a version change for syntax that only widens what was already legal. |
 
 ---
 

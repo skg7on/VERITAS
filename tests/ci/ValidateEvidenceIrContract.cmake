@@ -146,7 +146,7 @@ veritas_require_literals("${EIR_SECTION_ENTITY}" "§4.1"
     # and that leaving it is a decision rather than an oversight -- and a
     # sampled pin lets any unsampled sentence go silently. The slice is already
     # unwrapped, so this survives a reflow but not a reworded clause.
-    "A second limit is systematic rather than local. `Producer` is `QualifiedId`, which admits letters, digits, underscores, and interior dots and nothing else, so a producer value that is empty or that carries a character outside that alphabet has no spelling at all — although every field it feeds holds a plain string. Such a value is reachable: `AnalyzerVersion`'s producer and `ProofObligation`'s verification producer are `std::string` fields the canonical form hashes verbatim, and no validator constrains their shape — the analyzer list is not examined at all, and a decided result's producer is required only to be non-empty. This is a known limitation of EIR-T 1.0's identifier alphabet for string-valued fields, not of any one declaration: it applies to those two carriers and equally to the pre-existing `FactDecl`'s `source` and `ProvenanceDecl`'s `producer`. It is deliberately not widened here. `Producer` is shared by all five carriers, so relaxing it would change productions this amendment did not introduce and would need a canonical-spelling rule for the one-value-two-spellings case, with no writer yet to test that rule against; the repair belongs to a coherent change to string-valued fields as a class, not to ad hoc widening of a single production.")
+    "A second limit is systematic rather than local. `Producer` is `QualifiedId`, which admits letters, digits, underscores, and interior dots and nothing else, so a producer value that is empty or that carries a character outside that alphabet has no spelling at all — although every field it feeds holds a plain string. Such a value is reachable: `AnalyzerVersion`'s producer and `ProofObligation`'s verification producer are `std::string` fields the canonical form hashes verbatim, and no validator constrains their shape — the analyzer list is not examined at all, and a decided result's producer is required only to be non-empty. This is a known limitation of EIR-T 1.0's identifier alphabet for string-valued fields, not of any one declaration. `Producer` has five carriers — `AnalyzerVersion`'s producer and `VerificationDecl`'s, `FactDecl`'s `source`, `HypothesisDecl`'s `producer`, and `ProvenanceDecl`'s `producer` — and the limit reaches every one of them. `AssumptionDecl`'s `source` is not a `Producer` carrier, and the limit reaches it only in part: `AssumptionSource` admits `FunctionCall`, so a call-shaped source is spellable, while its other branch is the identifier-shaped `QualifiedId`, and a source that is neither — a plain `src/main.c` — has no spelling at all. It is deliberately not widened here. Relaxing `Producer` would change a production this amendment did not introduce and would need a canonical-spelling rule for the one-value-two-spellings case, with no writer yet to test that rule against; the repair belongs to a coherent change to string-valued fields as a class, not to ad hoc widening of a single production.")
 
 # §6.1 -- the fact stable ID and the derived marker.
 veritas_spec_section("${EIR_SPEC_CONTENT}"
@@ -171,13 +171,14 @@ veritas_spec_section("${EIR_SPEC_CONTENT}"
 veritas_require_literals("${EIR_SECTION_PROVENANCE}" "§11.1"
     "[ \"configuration\" \"=\" StringLiteral \";\" ] [ \"source_anchor\" \"=\" StringLiteral \";\" ]"
     "[ \"source_anchor\" \"=\" StringLiteral \";\" ] [ \"analysis_run\" \"=\" StringLiteral \";\" ]"
-    # The whole normative sentence: the diagnostic, the two substitutions the
-    # parser must refuse, and the reason (an `EvidenceID` change is a REP-001
-    # breach). Not sampled -- either substitution clause alone would leave the
-    # other deletable.
-    "A parser must reject a declaration that carries `location` with a typed \"unsupported in EIR V0.1\" diagnostic; it must never lower the value onto `source_anchor_id`, and must never silently drop it."
-    # And the distinction itself, so neither name can be dropped from the prose.
-    "`location` and `source_anchor` are distinct, and only `source_anchor` has a home in the EIR V0.1 model")
+    # The whole normative paragraph, pinned as one literal for the same reason
+    # as §4.1's below: pinning the operative sentence and the distinction
+    # separately left "is grammar-valid but model-unrepresentable, because" and
+    # the closing REP-001 clause each silently deletable. This is the paragraph
+    # whose absence lets a parser lower `location` onto `source_anchor_id`, so
+    # every sentence of it is load-bearing. The slice is already unwrapped, so
+    # this survives a reflow but not a reworded clause.
+    "`location` and `source_anchor` are distinct, and only `source_anchor` has a home in the EIR V0.1 model: `ProvenanceDecl`'s `location` is grammar-valid but model-unrepresentable, because the `eir.v1` provenance record carries no location member and no member that could hold one. A parser must reject a declaration that carries `location` with a typed \"unsupported in EIR V0.1\" diagnostic; it must never lower the value onto `source_anchor_id`, and must never silently drop it. Either substitution would change `EvidenceID` for such an input and break REP-001 losslessness, which is the whole reason the EIR-T 1.0 language surface is wider than the V0.1 model it is parsed into.")
 
 # §12.1 -- the verification producer travels with the obligation's result.
 veritas_spec_section("${EIR_SPEC_CONTENT}"
@@ -198,17 +199,20 @@ foreach(S31_FORBIDDEN_LITERAL IN ITEMS
 endforeach()
 
 # Falsifying half of §24's revision record. The 1.0 row must not claim the
-# losslessness gap was closed: §4.1 records the one value the amendment leaves
-# unwritable, so a row asserting closure contradicts the section it describes.
-# Only the overclaim is forbidden, not the row's wording -- a version record
-# has to stay rewritable, so this is a negative pin rather than a quotation of
-# the replacement sentence.
+# losslessness gap was closed, and must not describe the residue in the
+# singular: §4.1 records two things the amendment leaves unwritable -- the
+# entity `stable_id` corner and the `Producer` alphabet -- so a row asserting
+# closure, or counting one, contradicts the section it describes. Only the two
+# wrong claims are forbidden, not the row's wording -- a version record has to
+# stay rewritable, so these are negative pins rather than a quotation of the
+# replacement sentence.
 veritas_spec_section("${EIR_SPEC_CONTENT}"
     "## 24. Grammar Version History" "**End of Formal Specification**"
     EIR_SECTION_S24)
 
 foreach(S24_FORBIDDEN_LITERAL IN ITEMS
-    "Closed the losslessness gap")
+    "Closed the losslessness gap"
+    "the single value that stays unwritable")
   string(FIND "${EIR_SECTION_S24}" "${S24_FORBIDDEN_LITERAL}" FOUND_AT)
   if(NOT FOUND_AT EQUAL -1)
     message(FATAL_ERROR
