@@ -60,12 +60,16 @@ add_library(veritas_evidence
   EvidenceValidator.cpp
   EvidenceCanonicalizer.cpp
   EvidenceProto.cpp
+  EirLexer.cpp
 )
 
 target_include_directories(veritas_evidence
   PUBLIC
     "${PROJECT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_BINARY_DIR}"
+  PRIVATE
+    # EirSyntax.h — the token model and lexer — is private to src/evidence.
+    "${PROJECT_SOURCE_DIR}/src"
 )
 
 target_link_libraries(veritas_evidence

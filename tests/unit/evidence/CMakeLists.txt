@@ -88,3 +88,19 @@ veritas_add_warnings(EvidenceProtoTest)
 gtest_discover_tests(EvidenceProtoTest DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
   PROPERTIES LABELS "evidence-unit\;evidence-roundtrip")
+
+add_executable(EirLexerTest EirLexerTest.cpp)
+# The token model and the lexer are private to src/evidence; only
+# `EirParseError` is installed under include/.
+target_include_directories(EirLexerTest PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+target_link_libraries(EirLexerTest PRIVATE
+  veritas::evidence
+  veritas::test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(EirLexerTest)
+gtest_discover_tests(EirLexerTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-unit\;evidence-eir-text")
