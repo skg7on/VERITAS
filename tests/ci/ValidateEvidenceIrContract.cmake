@@ -148,12 +148,24 @@ veritas_spec_section("${EIR_SPEC_CONTENT}"
 veritas_require_literals("${EIR_SECTION_UNKNOWN}" "§7.3"
     "\"reason\" \"=\" UnknownReason \";\" [ \"detail\" \"=\" StringLiteral \";\" ]")
 
-# §11.1 -- the provenance source anchor and its explicit analysis run.
+# §11.1 -- the provenance source anchor, its explicit analysis run, and the
+# rejection rule for `location`, which the production still admits but the
+# V0.1 model cannot represent. The slice runs to the next section heading, not
+# to the end of the EBNF block, so it covers the normative prose as well as the
+# production: the `location` rule is prose, and a slice that stopped at
+# `FactReferenceList ::=` would pin nothing but syntax.
 veritas_spec_section("${EIR_SPEC_CONTENT}"
-    "ProvenanceDecl ::=" "FactReferenceList ::=" EIR_SECTION_PROVENANCE)
+    "ProvenanceDecl ::=" "## 12. Verification Grammar" EIR_SECTION_PROVENANCE)
 veritas_require_literals("${EIR_SECTION_PROVENANCE}" "§11.1"
     "[ \"configuration\" \"=\" StringLiteral \";\" ] [ \"source_anchor\" \"=\" StringLiteral \";\" ]"
-    "[ \"source_anchor\" \"=\" StringLiteral \";\" ] [ \"analysis_run\" \"=\" StringLiteral \";\" ]")
+    "[ \"source_anchor\" \"=\" StringLiteral \";\" ] [ \"analysis_run\" \"=\" StringLiteral \";\" ]"
+    # The whole normative sentence: the diagnostic, the two substitutions the
+    # parser must refuse, and the reason (an `EvidenceID` change is a REP-001
+    # breach). Not sampled -- either substitution clause alone would leave the
+    # other deletable.
+    "A parser must reject a declaration that carries `location` with a typed \"unsupported in EIR V0.1\" diagnostic; it must never lower the value onto `source_anchor_id`, and must never silently drop it."
+    # And the distinction itself, so neither name can be dropped from the prose.
+    "`location` and `source_anchor` are distinct, and only `source_anchor` has a home in the EIR V0.1 model")
 
 # §12.1 -- the verification producer travels with the obligation's result.
 veritas_spec_section("${EIR_SPEC_CONTENT}"
@@ -170,5 +182,24 @@ foreach(S31_FORBIDDEN_LITERAL IN ITEMS
   if(NOT FOUND_AT EQUAL -1)
     message(FATAL_ERROR
         "EIR formal spec §3.1 must not contain: ${S31_FORBIDDEN_LITERAL}")
+  endif()
+endforeach()
+
+# Falsifying half of §24's revision record. The 1.0 row must not claim the
+# losslessness gap was closed: §4.1 records the one value the amendment leaves
+# unwritable, so a row asserting closure contradicts the section it describes.
+# Only the overclaim is forbidden, not the row's wording -- a version record
+# has to stay rewritable, so this is a negative pin rather than a quotation of
+# the replacement sentence.
+veritas_spec_section("${EIR_SPEC_CONTENT}"
+    "## 24. Grammar Version History" "**End of Formal Specification**"
+    EIR_SECTION_S24)
+
+foreach(S24_FORBIDDEN_LITERAL IN ITEMS
+    "Closed the losslessness gap")
+  string(FIND "${EIR_SECTION_S24}" "${S24_FORBIDDEN_LITERAL}" FOUND_AT)
+  if(NOT FOUND_AT EQUAL -1)
+    message(FATAL_ERROR
+        "EIR formal spec §24 must not claim: ${S24_FORBIDDEN_LITERAL}")
   endif()
 endforeach()
