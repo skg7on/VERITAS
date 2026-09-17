@@ -46,14 +46,15 @@
 //   * There is no second exception. `Claim::description`, provenance text,
 //     `Omission::reason`, and the rest are model fields, so they are hashed.
 //
-// `core::CanonicalValue` has no filesystem-path carrier here: nothing in an
-// `EvidenceCase` encodes as `core::Path` (`TaggedPath`), and untagged local
-// paths are in any case rejected by `CanonicalEncode`. Path independence is
-// structural, not a rule the encoder enforces — `ProgramBinding` has no
+// Path independence is structural, not a rule the encoder enforces: nothing in
+// an `EvidenceCase` declares a path-typed field, and `ProgramBinding` has no
 // member that can hold a checkout root, so two checkouts of the same revision
-// produce byte-identical canonical input and therefore one identity. (The
-// executable path-variation test belongs at the M10B-to-EIR assembly boundary,
-// where a real checkout path exists.)
+// produce byte-identical canonical input and therefore one identity. Note that
+// `core::CanonicalEncode` would *not* catch a path-typed field if one were ever
+// added — it encodes every kind, `TaggedPath` included — so this property rests
+// entirely on the model and is not guarded by anything here. (The executable
+// path-variation test belongs at the M10B-to-EIR assembly boundary, where a real
+// checkout path exists.)
 //
 // CANONICAL ORDER
 //
@@ -100,9 +101,12 @@
 // operands by their canonical encodings, so `a and b` and `b and a` are one
 // case. Nothing else is reordered and no algebraic rewriting is performed:
 // a comparison stays left-to-right, implication keeps its antecedent and
-// consequent, call arguments keep their positions, quantifier bodies keep their
-// binding, and a nested `and` inside an `and` keeps its structure (only the
-// operand order among the node's own children is normalized).
+// consequent, call arguments keep their positions, and quantifier bodies keep
+// their binding. A same-kind connective nested directly inside another is
+// rejected by `EvidenceValidator`: the grammar's `{ ... }` repetitions are
+// n-ary and flat, so such a node is not a legal EIR-T shape. This function does
+// not validate, and would preserve the nesting if handed one directly, ordering
+// only each node's own children.
 //
 // FAILURE MODES
 //
