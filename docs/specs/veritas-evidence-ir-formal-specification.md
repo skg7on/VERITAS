@@ -269,6 +269,24 @@ identity — the attribute is optional, so the first such property in the bag's
 position is read as the identity. An entity declared without `stable_id` has no
 identity beyond its case-local `Identifier`.
 
+A second limit is systematic rather than local. `Producer` is `QualifiedId`,
+which admits letters, digits, underscores, and interior dots and nothing else,
+so a producer value that is empty or that carries a character outside that
+alphabet has no spelling at all — although every field it feeds holds a plain
+string. Such a value is reachable: `AnalyzerVersion`'s producer and
+`ProofObligation`'s verification producer are `std::string` fields the canonical
+form hashes verbatim, and no validator constrains their shape — the analyzer
+list is not examined at all, and a decided result's producer is required only to
+be non-empty. This is a known limitation of EIR-T 1.0's identifier alphabet for
+string-valued fields, not of any one declaration: it applies to those two
+carriers and equally to the pre-existing `FactDecl`'s `source` and
+`ProvenanceDecl`'s `producer`. It is deliberately not widened here. `Producer`
+is shared by all five carriers, so relaxing it would change productions this
+amendment did not introduce and would need a canonical-spelling rule for the
+one-value-two-spellings case, with no writer yet to test that rule against; the
+repair belongs to a coherent change to string-valued fields as a class, not to
+ad hoc widening of a single production.
+
 ---
 
 ## 5. Predicate Language
