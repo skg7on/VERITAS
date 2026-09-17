@@ -61,6 +61,7 @@ add_library(veritas_evidence
   EvidenceCanonicalizer.cpp
   EvidenceProto.cpp
   EirLexer.cpp
+  EirParser.cpp
 )
 
 target_include_directories(veritas_evidence

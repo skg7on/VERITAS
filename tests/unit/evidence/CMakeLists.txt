@@ -104,3 +104,21 @@ veritas_add_warnings(EirLexerTest)
 gtest_discover_tests(EirLexerTest DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
   PROPERTIES LABELS "evidence-unit\;evidence-eir-text")
+
+add_executable(EirParserTest EirParserTest.cpp)
+# The token model, the lexer, and the parser are private to src/evidence; only
+# `EirParseError` is installed under include/. The integer-range test drives
+# `EirParser` from a lexed token vector, so the test needs the same private
+# include the lexer suite uses.
+target_include_directories(EirParserTest PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+target_link_libraries(EirParserTest PRIVATE
+  veritas::evidence
+  veritas::test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(EirParserTest)
+gtest_discover_tests(EirParserTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-unit\;evidence-eir-text")

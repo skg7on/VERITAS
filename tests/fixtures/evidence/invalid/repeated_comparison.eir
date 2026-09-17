@@ -1,0 +1,37 @@
+// REP-007: `ComparisonExpr` carries at most one `ComparisonOp`, so a
+// comparison is not associative and `a == b == c` is not a predicate. The
+// chained spelling is refused rather than grouped, because neither grouping is
+// what the writer wrote.
+//
+// Everything else in this document is a complete, valid case, so the refusal is
+// the chain itself and nothing else.
+evidence RepeatedComparison {
+    schema = "eir.v1";
+    level = l1;
+    state = POSSIBLE_DEFECT;
+
+    context {
+        repository = "radio-stack";
+        revision = "a87f03e";
+        build_variant = "ARM64_RELEASE";
+        target = "aarch64-unknown-linux-gnu";
+        analyzer_configuration = "veritas.default";
+        type_layout = "layout:aapcs64";
+        analysis_run = "run:sha256:0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5";
+    }
+
+    entity E_len : value {
+        origin = "packet.length";
+    }
+
+    entity E_sink : callsite {
+        function = "memcpy";
+    }
+
+    claim C1 {
+        kind = buffer_overflow;
+        subject = @E_sink;
+        predicate = @E_len == @E_len == @E_len;
+        severity = high;
+    }
+}

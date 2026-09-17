@@ -1,0 +1,34 @@
+// REP-007: a string literal is `'"' { StringCharacter } '"'`, and the closing
+// quote is not optional. The literal opened in the claim's description below is
+// never closed, so it runs to the end of the document and the lexical stage
+// refuses it at the quote that opened it.
+//
+// Everything before the opening quote is a complete, valid case, so the refusal
+// is the missing terminator and nothing else.
+evidence UnterminatedString {
+    schema = "eir.v1";
+    level = l1;
+    state = POSSIBLE_DEFECT;
+
+    context {
+        repository = "radio-stack";
+        revision = "a87f03e";
+        build_variant = "ARM64_RELEASE";
+        target = "aarch64-unknown-linux-gnu";
+        analyzer_configuration = "veritas.default";
+        type_layout = "layout:aapcs64";
+        analysis_run = "run:sha256:0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5";
+    }
+
+    entity E_sink : callsite {
+        function = "memcpy";
+    }
+
+    claim C1 {
+        kind = buffer_overflow;
+        subject = @E_sink;
+        predicate = reachable(@E_sink);
+        severity = high;
+        description = "the destination buffer is smaller than the length copied;
+    }
+}

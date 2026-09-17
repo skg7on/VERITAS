@@ -85,12 +85,15 @@
 #define VERITAS_EVIDENCE_EIR_SYNTAX_H_
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "veritas/core/Status.h"
 #include "veritas/evidence/EirText.h"
+#include "veritas/evidence/EvidenceCase.h"
 
 namespace veritas::evidence {
 
@@ -210,6 +213,199 @@ class EirLexer {
   std::size_t cursor_ = 0;
   std::size_t line_ = 1;
   std::size_t line_start_ = 0;
+};
+
+// Recursive descent over the token stream `EirLexer` produced.
+//
+// One method per production of the stabilized grammar
+// (`docs/specs/veritas-evidence-ir-formal-specification.md` §3–§13), each
+// lowering directly into the `eir.v1` records of
+// `veritas/evidence/EvidenceCase.h`. No intermediate syntax tree is built and
+// no Protobuf message is constructed: the domain records are the only product,
+// which is what keeps the parser and the Protobuf codec agreeing on one model.
+//
+// The parser owns three structural rules the grammar states in prose rather
+// than in a production, and each is a rejection rather than a repair:
+//
+//   * the three case declarations and `ContextDecl` appear once each, in §3.1's
+//     order, before any `EvidenceMember`;
+//   * exactly one `claim` member is declared;
+//   * every attribute is declared at most once, and an attribute the production
+//     does not list is refused rather than ignored.
+//
+// The third rule is what makes the widening of the language surface safe: a
+// construct the model cannot carry is refused with a typed diagnostic instead of
+// being dropped or lowered onto a neighbouring field, so no two documents that
+// differ only in such an attribute can share an `EvidenceID`.
+class EirParser {
+ public:
+  // `tokens` must be the lexer's output and must still be alive, and must end
+  // with `kEnd`. `error` receives the position and message of the first
+  // rejection and may be null.
+  EirParser(const std::vector<Token>& tokens, EirParseError* error);
+
+  // Parses one `EvidenceCase`. Does not validate and does not compute an
+  // identity: `ParseEirText` owns both, so a parser test can inspect a case the
+  // validator would refuse.
+  //
+  // Returns `InvalidArgument` for the first construct the grammar does not
+  // admit, and for the first construct it admits but the model cannot carry.
+  StatusOr<EvidenceCase> Parse();
+
+ private:
+  // --- Cursor ---------------------------------------------------------------
+
+  const Token& Peek(std::size_t lookahead = 0) const;
+  const Token& Advance();
+  bool AtEnd() const { return Peek().kind == TokenKind::kEnd; }
+
+  // Consumes the token when it has `kind` (or is an identifier spelling
+  // `keyword`) and reports whether it did.
+  bool Match(TokenKind kind);
+  bool MatchKeyword(std::string_view keyword);
+
+  // Requires the next token, consuming it on success.
+  Status Expect(TokenKind kind, std::string_view what);
+  Status ExpectKeyword(std::string_view keyword);
+  // `ExpectKeyword`, with the rejection explaining where the keyword belongs.
+  // The case header's four keywords are single-valued and ordered; `position`
+  // distinguishes the four sites so a reader sees which one was expected.
+  Status ExpectPositionedKeyword(std::string_view keyword,
+                                 std::string_view position);
+
+  // Requires an identifier and consumes it, returning its spelling.
+  StatusOr<Token> TakeIdentifier(std::string_view what);
+  // Requires a string literal and consumes it, returning its decoded value.
+  StatusOr<std::string> TakeString(std::string_view what);
+  // Requires `"@" Identifier` and consumes both, returning the bare identifier.
+  StatusOr<std::string> TakeReference(std::string_view what);
+
+  // Requires an identifier naming one terminal of a textual enum family and
+  // consumes it. Rejection covers two cases: the token is not an identifier,
+  // and the spelling is outside the family.
+  //
+  // The model's `kUnspecified` enumerators have no spelling any of the M10B
+  // `Parse*` helpers admits, so no identifier reaches this point carrying one
+  // and there is no third case to refuse here. Absence is expressed by the
+  // attribute being absent — which the enclosing declaration decides — never by
+  // a spelling.
+  template <typename T>
+  StatusOr<T> TakeEnum(std::string_view what,
+                       StatusOr<T> (*parse)(std::string_view)) {
+    const Token& token = Peek();
+    if (token.kind != TokenKind::kIdentifier) {
+      std::string message = "expected ";
+      message.append(what);
+      message += ", found ";
+      message += Describe(token);
+      return FailAt(token, std::move(message));
+    }
+    StatusOr<T> parsed = parse(token.text);
+    std::string message = "expected ";
+    message.append(what);
+    message += ", found \"";
+    message.append(token.text);
+    message += '\"';
+    if (!parsed.ok()) {
+      message += ", which is not a valid ";
+      message.append(what);
+      return FailAt(token, std::move(message));
+    }
+    Advance();
+    return parsed;
+  }
+
+  // The spelling of `token` as a diagnostic names it. Defined in the
+  // implementation with the rest of the message vocabulary.
+  static std::string Describe(const Token& token);
+
+  // --- Diagnostics ----------------------------------------------------------
+
+  // Records a rejection at `token` and returns it as the `Status` to propagate.
+  Status FailAt(const Token& token, std::string message);
+  // `FailAt(Peek(), message)`.
+  Status Fail(std::string message);
+
+  // --- Productions ----------------------------------------------------------
+
+  Status ParseEvidenceCase(EvidenceCase* out);
+  Status ParseContext(ProgramBinding* out);
+  Status ParseAnalyzerVersion(AnalyzerVersion* out);
+  Status ParseEvidenceMember(EvidenceCase* out);
+
+  Status ParseClaim(EvidenceCase* out);
+  Status ParseEntity(EvidenceCase* out);
+  Status ParseFact(EvidenceCase* out);
+  Status ParseAssumption(EvidenceCase* out);
+  Status ParseHypothesis(EvidenceCase* out);
+  Status ParseUnknown(EvidenceCase* out);
+  Status ParseEdge(EvidenceCase* out);
+  Status ParsePath(EvidenceCase* out);
+  Status ParseConstraint(EvidenceCase* out);
+  Status ParseProvenance(EvidenceCase* out);
+  Status ParseVerification(EvidenceCase* out);
+  Status ParseSummary(EvidenceCase* out);
+  Status ParseDependency(EvidenceCase* out);
+  Status ParseOmission(EvidenceCase* out);
+
+  // `Predicate ::= QuantifiedPredicate | ImplicationExpr`, and the precedence
+  // chain the grammar factors out of it (§5.1).
+  StatusOr<Expression> ParsePredicate();
+  StatusOr<Expression> ParseImplication();
+  StatusOr<Expression> ParseOr();
+  StatusOr<Expression> ParseAnd();
+  StatusOr<Expression> ParseComparison();
+  StatusOr<Expression> ParseUnary();
+  StatusOr<Expression> ParsePrimary();
+  StatusOr<Expression> ParseQuantified(Expression::Kind kind);
+
+  // `PropertyValue`, the value production of the open entity-property bag and
+  // of every `FunctionCall` argument list.
+  StatusOr<Expression> ParsePropertyValue();
+  StatusOr<std::vector<Expression>> ParsePropertyValueList();
+  StatusOr<std::vector<Expression>> ParsePredicateArgumentList();
+
+  // `ResourceBudget ::= IntegerLiteral | FunctionCall`.
+  StatusOr<Expression> ParseResourceBudget();
+
+  // Re-reads an `IntegerLiteral` token under the `std::int64_t` bound the lexer
+  // already applied, so the parser never depends on a property of its input
+  // beyond the token contract, and lowers it into a `kInteger` expression.
+  StatusOr<Expression> ParseIntegerToken(const Token& token);
+
+  // `"[" Identifier { "," Identifier } "]"` for `using`, `components`, and the
+  // backend lists.
+  StatusOr<std::vector<std::string>> ParseIdentifierList(std::string_view what);
+
+  // `ReferenceList ::= "[" [ Reference { "," Reference } ] "]"`, for the open
+  // question's blocking facts. The `@` belongs to the syntax, so each entry
+  // lowers to its bare case-local handle.
+  StatusOr<std::vector<std::string>> ParseReferenceList(std::string_view what);
+
+  // `FactReferenceList ::= "[" [ FactReference { "," FactReference } ] "]"`,
+  // for a provenance record's inputs. `FactReference ::= "$" Identifier` is a
+  // distinct spelling from `Reference`: a `$` names a case-local fact member,
+  // and it lowers to the same bare handle.
+  StatusOr<std::vector<std::string>> ParseFactReferenceList();
+
+  // `FunctionCall | QualifiedId`, the shape `AssumptionSource` is and the two
+  // identifier-shaped alternatives of `Scope` share. Both lower into a
+  // `std::string` carrier — the call as its canonical EIR-T spelling, the
+  // identifier as itself — and `attribute` is the attribute being read, for the
+  // diagnostic.
+  StatusOr<std::string> ParseCallOrQualifiedId(const Token& attribute,
+                                               std::string_view what);
+
+  // Reads one `{ attribute = value ";" ... }` body, refusing an attribute named
+  // twice and one the production does not list. It owns the attribute names and
+  // the value grammar; a caller dispatches on the name it returns. Defined in
+  // the implementation.
+  class AttributeReader;
+
+  std::vector<Token> tokens_;
+  EirParseError* error_;
+  std::size_t cursor_ = 0;
+  bool claim_declared_ = false;
 };
 
 }  // namespace veritas::evidence

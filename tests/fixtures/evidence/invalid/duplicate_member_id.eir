@@ -1,0 +1,37 @@
+// Every case-local identifier is declared once: one flat identifier space is
+// shared by all fourteen member families, so a second declaration of `E_sink`
+// names the same member twice and leaves every `@E_sink` reference ambiguous.
+//
+// Everything else in this document is a complete, valid case, and both
+// declarations are individually well-formed, so the only reason it can be
+// refused is the collision.
+evidence DuplicateMemberId {
+    schema = "eir.v1";
+    level = l1;
+    state = POSSIBLE_DEFECT;
+
+    context {
+        repository = "radio-stack";
+        revision = "a87f03e";
+        build_variant = "ARM64_RELEASE";
+        target = "aarch64-unknown-linux-gnu";
+        analyzer_configuration = "veritas.default";
+        type_layout = "layout:aapcs64";
+        analysis_run = "run:sha256:0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5";
+    }
+
+    entity E_sink : callsite {
+        function = "memcpy";
+    }
+
+    entity E_sink : value {
+        origin = "packet.length";
+    }
+
+    claim C1 {
+        kind = buffer_overflow;
+        subject = @E_sink;
+        predicate = reachable(@E_sink);
+        severity = high;
+    }
+}
