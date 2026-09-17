@@ -32,7 +32,7 @@
 //     case that arrives through Protobuf re-canonicalizes to the identity the
 //     domain case carries.
 //
-// Two properties beyond the catalog rows are pinned here because the codec's
+// Three properties beyond the catalog rows are pinned here because the codec's
 // design depends on them and nothing else would catch their loss:
 //
 //   * A legal case that expresses an absence — the grammar's optional proof
@@ -43,6 +43,11 @@
 //     decodes into a case with the same canonical bytes and the same
 //     `EvidenceID` as the canonical encoding. Protobuf preserves repeated-field
 //     order, so the reordering genuinely reaches the decoder.
+//   * Entity properties and boolean-valued expressions are carried, even though
+//     no shared fixture populates either. Deleting their conversion would leave
+//     every other test here green, so the losslessness of those two paths is
+//     asserted directly rather than left to a fixture that does not exercise
+//     them.
 
 #include <cstddef>
 #include <string>
@@ -166,6 +171,80 @@ TEST(EvidenceProtoTest, RoundTripReproducesEveryFixtureCase) {
     EXPECT_TRUE(*decoded == value);
     EXPECT_TRUE(SameCanonicalBytes(value, *decoded));
   }
+}
+
+// `Entity::properties` and `Expression::boolean` are carried by the codec but
+// no shared fixture populates either, so every test above would still pass if
+// both conversions were deleted. This test populates them directly: a two-entry
+// property map, so the map is exercised as a map and not as a single element,
+// with one boolean-valued expression and one integer-valued one, so a `kBool`
+// that encoded its value into `integer` or `text` is caught by the wire
+// assertions rather than only by the round trip.
+TEST(EvidenceProtoTest, RoundTripCarriesEntityPropertiesAndBooleanExpressions) {
+  EvidenceCase input = MakeValidMinimalEvidenceCase();
+  ASSERT_FALSE(input.entities.empty());
+  Entity& entity = input.entities[0];
+  ASSERT_TRUE(entity.properties.empty());
+
+  Expression flag;
+  flag.kind = Expression::Kind::kBool;
+  flag.boolean = true;
+  entity.properties.emplace("concrete", flag);
+
+  Expression capacity;
+  capacity.kind = Expression::Kind::kInteger;
+  capacity.integer = 64;
+  entity.properties.emplace("capacity", capacity);
+  ASSERT_EQ(entity.properties.size(), 2u);
+  ASSERT_TRUE(FinalizeEvidenceIdentity(&input).ok());
+
+  auto proto = ToEvidenceProto(input);
+  ASSERT_TRUE(proto.ok()) << proto.status().message();
+  ASSERT_EQ(proto->entities_size(), input.entities.size());
+  const auto& wire_properties = proto->entities(0).properties();
+  ASSERT_EQ(wire_properties.size(), 2);
+
+  auto wire_flag = wire_properties.find("concrete");
+  ASSERT_NE(wire_flag, wire_properties.end());
+  EXPECT_EQ(wire_flag->second.kind(), v1::EXPRESSION_KIND_BOOL);
+  EXPECT_TRUE(wire_flag->second.boolean());
+  EXPECT_EQ(wire_flag->second.integer(), 0);
+  EXPECT_TRUE(wire_flag->second.text().empty());
+
+  auto wire_capacity = wire_properties.find("capacity");
+  ASSERT_NE(wire_capacity, wire_properties.end());
+  EXPECT_EQ(wire_capacity->second.kind(), v1::EXPRESSION_KIND_INTEGER);
+  EXPECT_EQ(wire_capacity->second.integer(), 64);
+  EXPECT_FALSE(wire_capacity->second.boolean());
+
+  auto bytes = EncodeEvidenceProto(input);
+  ASSERT_TRUE(bytes.ok()) << bytes.status().message();
+  auto decoded = DecodeEvidenceProto(*bytes);
+  ASSERT_TRUE(decoded.ok()) << decoded.status().message();
+
+  ASSERT_EQ(decoded->entities.size(), input.entities.size());
+  const auto& decoded_properties = decoded->entities[0].properties;
+  ASSERT_EQ(decoded_properties.size(), 2u);
+
+  auto decoded_flag = decoded_properties.find("concrete");
+  ASSERT_NE(decoded_flag, decoded_properties.end());
+  EXPECT_EQ(decoded_flag->second.kind, Expression::Kind::kBool);
+  EXPECT_TRUE(decoded_flag->second.boolean);
+  EXPECT_EQ(decoded_flag->second.integer, 0);
+
+  auto decoded_capacity = decoded_properties.find("capacity");
+  ASSERT_NE(decoded_capacity, decoded_properties.end());
+  EXPECT_EQ(decoded_capacity->second.kind, Expression::Kind::kInteger);
+  EXPECT_EQ(decoded_capacity->second.integer, 64);
+  EXPECT_FALSE(decoded_capacity->second.boolean);
+
+  EXPECT_TRUE(*decoded == input);
+  EXPECT_TRUE(SameCanonicalBytes(input, *decoded));
+  auto input_id = ComputeEvidenceId(input);
+  ASSERT_TRUE(input_id.ok()) << input_id.status().message();
+  auto decoded_id = ComputeEvidenceId(*decoded);
+  ASSERT_TRUE(decoded_id.ok()) << decoded_id.status().message();
+  EXPECT_EQ(*decoded_id, *input_id);
 }
 
 // The grammar's proof budget is optional. A case without one must stay

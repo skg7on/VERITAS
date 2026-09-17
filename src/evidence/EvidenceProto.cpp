@@ -15,12 +15,15 @@
 // EvidenceProto.cpp — the explicit `eir.v1` model/Protobuf conversion.
 //
 // One function per record and per enum, in both directions, plus the four
-// public entry points. The conversion is written out by hand rather than
-// generated or reflected over for one reason: a field the model gains must be
-// a compile error here until someone decides how it is carried, and a field
-// the wire format gains must be a deliberate act rather than a silent default.
-// A missing conversion is therefore a visible omission, not a silent loss of
-// `EvidenceID` input.
+// public entry points. The conversion is written out by hand.
+//
+// Exhaustiveness over the semantic model is maintained by hand, not by the
+// compiler: C++20 has no reflection, so there is no static check that every
+// field of every record in `EvidenceCase.h` is carried here. It is enforced by
+// review and by the round-trip tests. Adding a field to a record in
+// `EvidenceCase.h` therefore requires a matching change in this file plus a
+// fixture or test that populates the new field; without both, the field is
+// dropped silently and `EvidenceID` changes with no failing test to say so.
 //
 // Between the two directions, four rules hold together:
 //
