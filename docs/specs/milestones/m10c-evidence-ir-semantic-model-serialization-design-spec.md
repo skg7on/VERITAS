@@ -472,9 +472,12 @@ M10C adds `core::IdKind::kEvidence` with the stable serialized spelling
 `evidence`; `MakeStableId`, `ToString`, and `ParseStableId` remain the only ID
 construction and parsing boundary.
 
-The canonical EIR-T writer derives the top-level identifier from this digest,
-so semantically equivalent input names do not change identity. Protobuf wire
-ordering and non-canonical EIR-T whitespace are never hash inputs.
+The case-level identifier is a display label only. It is not an input to
+`EvidenceID` and the `eir.v1` model has no member for it, so the canonical
+EIR-T writer emits no label at all and semantically equivalent input names do
+not change identity: canonical text is a function of the case's semantics
+alone. Protobuf wire ordering and non-canonical EIR-T whitespace are never hash
+inputs.
 
 Parsing canonical EIR-T or Protobuf and re-canonicalizing must reproduce the
 same bytes and `EvidenceID`. Reordering semantically unordered input members
