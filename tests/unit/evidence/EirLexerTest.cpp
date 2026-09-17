@@ -455,6 +455,70 @@ TEST(EirLexerTest, KeepsWellFormedNonAsciiBytesInStringsAndComments) {
   EXPECT_EQ(after[0].line, 2U);
 }
 
+TEST(EirLexerTest, RejectsMalformedUtf8InALineComment) {
+  // The line-comment arm validates the bytes it skips, so the malformed pair
+  // inside the comment is caught even though nothing about the comment is ever
+  // emitted as a token. The `0xC3` here leads a two-byte sequence and is
+  // followed by `(`, which is not a continuation byte.
+  const char source[] = {'/', '/', ' ', 'f', 'i', 'r', 's', 't', '\n',
+                         '/', '/', ' ', 'n', 'o', 't', 'e', ' ',
+                         static_cast<char>(0xC3), '(', '\n', 'x'};
+  const EirParseError error = Reject(std::string_view(source, sizeof(source)));
+  EXPECT_EQ(error.offset, 17U);
+  EXPECT_EQ(error.line, 2U);
+  EXPECT_EQ(error.column, 9U);
+  ExpectMessageMentions(error.message, "UTF-8");
+  ExpectMessageMentions(error.message, "comment");
+}
+
+TEST(EirLexerTest, SkipsWellFormedNonAsciiInALineComment) {
+  // The positive control for the rejection above: the same comment with a
+  // well-formed sequence is skipped byte for byte, and the token after it keeps
+  // its own coordinates — so the rejection is about the bytes, not about
+  // non-ASCII content in a line comment.
+  const char source[] = {'/', '/', ' ', 'f', 'i', 'r', 's', 't', '\n',
+                         '/', '/', ' ', 'c', 'a', 'f',
+                         static_cast<char>(0xC3), static_cast<char>(0xA9),
+                         '\n', 'x'};
+  const std::vector<Token> tokens =
+      Lex(std::string_view(source, sizeof(source)));
+  ASSERT_EQ(tokens.size(), 2U);
+  ExpectToken(tokens, 0, TokenKind::kIdentifier, "x");
+  EXPECT_EQ(tokens[0].line, 3U);
+  EXPECT_EQ(tokens[0].column, 1U);
+}
+
+TEST(EirLexerTest, RejectsMalformedUtf8InABlockComment) {
+  // The block-comment arm keeps its own UTF-8 check, and reports the first
+  // invalid byte by its position in the source, not in the comment: this one is
+  // five bytes into line 2. The comment closes with `*/` and nothing else in
+  // the source is malformed, so the byte pair is the only thing that can fail.
+  const char source[] = {'e', 'v', 'i', 'd', 'e', 'n', 'c', 'e', ' ', '/', '*',
+                         ' ', 'n', 'o', 't', 'e', '\n', ' ', ' ', 'x', 'x',
+                         static_cast<char>(0xC3), '(', ' ', '*', '/', ' ', 'x'};
+  const EirParseError error = Reject(std::string_view(source, sizeof(source)));
+  EXPECT_EQ(error.offset, 21U);
+  EXPECT_EQ(error.line, 2U);
+  EXPECT_EQ(error.column, 5U);
+  ExpectMessageMentions(error.message, "UTF-8");
+  ExpectMessageMentions(error.message, "comment");
+}
+
+TEST(EirLexerTest, SkipsWellFormedNonAsciiInABlockComment) {
+  // The positive control for the rejection above.
+  const char source[] = {'e', 'v', 'i', 'd', 'e', 'n', 'c', 'e', ' ', '/', '*',
+                         ' ', 'c', 'a', 'f', static_cast<char>(0xC3),
+                         static_cast<char>(0xA9), '\n', ' ', ' ', 'o', 'k', ' ',
+                         '*', '/', ' ', 'x'};
+  const std::vector<Token> tokens =
+      Lex(std::string_view(source, sizeof(source)));
+  ASSERT_EQ(tokens.size(), 3U);
+  ExpectToken(tokens, 0, TokenKind::kIdentifier, "evidence");
+  ExpectToken(tokens, 1, TokenKind::kIdentifier, "x");
+  EXPECT_EQ(tokens[1].line, 2U);
+  EXPECT_EQ(tokens[1].column, 9U);
+}
+
 TEST(EirLexerTest, RejectsWellFormedNonAsciiOutsideAStringOrComment) {
   // A distinct rejection from the malformed-byte one: these bytes *are* valid
   // UTF-8, but `Letter ::= "a".."z" | "A".."Z"` admits them in no token.
@@ -500,9 +564,12 @@ TEST(EirLexerTest, AcceptsTheInt64Extremes) {
 }
 
 TEST(EirLexerTest, ReportsTheSameFailureThroughStatusAndError) {
-  // The error source here is deliberately a bare `!`, which no other test in
-  // this file depends on, so this test fails only when the error channel it
-  // exercises is itself broken.
+  // The error source here is deliberately a bare `!`, which is a different
+  // rejection from the `/*` these two plumbing tests once used: the comment-arm
+  // tests no longer reach this one. (`!` is also an input of
+  // `RejectsACharacterThatBeginsNoToken`, which pins that arm's own message and
+  // position; this test pins only that a failure reaches both the `Status` and
+  // the `EirParseError`.)
   EirParseError error;
   EirLexer lexer("!", &error);
   const auto tokens = lexer.Tokenize();
