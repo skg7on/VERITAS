@@ -114,7 +114,7 @@ referenced by any production.
 
 ```ebnf
 EvidenceCase ::=
-    "evidence" Identifier "{"
+    "evidence" [ Identifier ] "{"
         SchemaDecl
         LevelDecl
         StateDecl
@@ -167,6 +167,13 @@ OmissionDecl ::=
         "expandable" "=" BooleanLiteral ";"
     "}" ;
 ```
+
+The case `Identifier` is a display label and carries no semantic content: it is
+not an input to `EvidenceID`, and the semantic model has no member for it. A
+parser must accept any well-formed label, and must not reject a case for
+carrying one, but it preserves no label in the semantic model. The canonical
+writer emits no label, so canonical text is a function of the case's semantics
+alone.
 
 `SchemaDecl`, `LevelDecl`, and `StateDecl` are mandatory and appear once each, in
 that order, before `ContextDecl`. `ContextDecl` is likewise mandatory and

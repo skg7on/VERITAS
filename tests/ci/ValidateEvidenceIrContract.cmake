@@ -30,9 +30,23 @@ foreach(REQUIRED_LITERAL IN ITEMS
     "OrExpr ::="
     "AndExpr ::="
     "ComparisonExpr ::="
-    "UnaryExpr ::=")
+    "UnaryExpr ::="
+    "\"evidence\" [ Identifier ] \"{\"")
   string(FIND "${EIR_SPEC_CONTENT}" "${REQUIRED_LITERAL}" FOUND_AT)
   if(FOUND_AT EQUAL -1)
     message(FATAL_ERROR "EIR formal spec is missing: ${REQUIRED_LITERAL}")
+  endif()
+endforeach()
+
+# Falsifying half of the case-label contract. The label is a display label and
+# carries no semantic content, so the mandatory form of the production must not
+# reappear anywhere in the spec. The required-literal list above cannot see
+# that: a spec that keeps the optional production and also restores the
+# mandatory form elsewhere would still satisfy every required literal.
+foreach(FORBIDDEN_LITERAL IN ITEMS
+    "\"evidence\" Identifier \"{\"")
+  string(FIND "${EIR_SPEC_CONTENT}" "${FORBIDDEN_LITERAL}" FOUND_AT)
+  if(NOT FOUND_AT EQUAL -1)
+    message(FATAL_ERROR "EIR formal spec must not contain: ${FORBIDDEN_LITERAL}")
   endif()
 endforeach()
