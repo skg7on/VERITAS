@@ -1095,16 +1095,17 @@ class Builder {
     // What this choice does not settle, recorded so the claim is not read as
     // wider than it is: the obligation below quantifies over
     // `feasible_paths(...)`, and no artefact in this repository defines that
-    // domain. It appears only in examples (architecture §12 and §32, formal
-    // specification §11) and the `Domain` production attaches no membership rule
-    // to it. Under a reading where membership demands a feasibility stronger
-    // than `UNKNOWN`, that `forall` would range over an empty set and hold
-    // vacuously. Settling it is a model-level decision this layer has no
-    // authority to make, and it is *not* symmetrical: `SAT` would guarantee
-    // membership under the strictest plausible reading, so the honest value and
-    // the non-vacuous value may differ here. That tension is real and is
-    // carried forward rather than resolved by asserting a feasibility nothing
-    // established.
+    // domain. It appears only in examples — architecture §12 ("Quantifiers"),
+    // §32 ("Proof obligations") and §47 ("Example: complete overflow case"), and
+    // the formal specification §15 ("Concrete Syntax Example") — and the
+    // `Domain` production attaches no membership rule to it. Under a reading
+    // where membership demands a feasibility stronger than `UNKNOWN`, that
+    // `forall` would range over an empty set and hold vacuously. Settling it is
+    // a model-level decision this layer has no authority to make, and it is
+    // *not* symmetrical: `SAT` would guarantee membership under the strictest
+    // plausible reading, so the honest value and the non-vacuous value may
+    // differ here. That tension is real and is carried forward rather than
+    // resolved by asserting a feasibility nothing established.
     path.feasibility = Feasibility::kUnknown;
     const std::string* flow_provenance =
         ProvenanceForFact(input.flow_slice.metadata.query_provenance_id);

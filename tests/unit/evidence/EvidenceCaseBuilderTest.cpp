@@ -1272,11 +1272,12 @@ TEST(EvidenceCaseBuilderTest, Bld007ScopeIsTheQuerysHeadAndTheSinkIsItsSubject) 
 // the one F3 decided — which handles the `dominates_bounds_check` property names
 // — so the pin below states every member's content, not the family's presence.
 //
-// The truncated branch keeps the sink-scoped `(sink, sink)` spelling: the query
-// it reports on was issued over the sink alone, so naming the sink twice is what
-// that result covered. The pin makes that a decision on the record rather than
-// an accident — a later move to `(scope, sink)` here is a behaviour change and
-// has to be argued for, not absorbed.
+// The truncated branch keeps the sink-scoped `(sink, sink)` spelling — the query
+// it reports on was issued over the sink alone — and the pin below fixes that
+// value, so a move to any other handle reddens it. What the pin *cannot* do is
+// tell that spelling apart from `(scope, sink)` in this fixture: both resolve to
+// the same handle here. The note at the operand assertions states that limit in
+// full.
 TEST(EvidenceCaseBuilderTest, UnknownsFamilyPinsItsPropertyHandles) {
   const EvidenceCase value = BuildOrFail(TruncatedRequest(EvidenceLevel::kL1));
   ASSERT_TRUE(RequireValidEvidenceCase(value).ok());
@@ -1284,6 +1285,15 @@ TEST(EvidenceCaseBuilderTest, UnknownsFamilyPinsItsPropertyHandles) {
   // Every member, in declaration order: its handle, the property it states with
   // its operand handles spelled out, and the reason code that justifies it. The
   // order is part of the pin, so a reordering within the family is visible too.
+  //
+  // Two of these spellings have no spec basis, and the pin is a change-detector
+  // for them rather than a conformance check: `effect_of` appears in no document
+  // in this repository — it is invented by the builder's `AddUnknown` — and the
+  // `U_<subject>_<CODE>` handle scheme is the allocator's, while the
+  // hand-authored DEM-001 case spells the analogous member
+  // `postcondition(@vendor_validate)`. Renaming either is a free choice rather
+  // than a violation: this pin exists so a rename is noticed, not so it is
+  // forbidden.
   std::vector<std::string> stated;
   for (const Unknown& unknown : value.unknowns) {
     stated.push_back(unknown.id + " = " + ExpressionText(unknown.property) +
@@ -1307,10 +1317,15 @@ TEST(EvidenceCaseBuilderTest, UnknownsFamilyPinsItsPropertyHandles) {
   // overread them: in this fixture the query's scope *is* the sink, so both
   // operands resolve to the same handle and a change that swaps one for the
   // other is value-preserving here and stays green. That is not a gap in the pin
-  // — the pin fixes the value, and a change to any other handle reddens it — but
-  // it does mean this fixture cannot pose the question of whether the truncated
-  // branch should name an enclosing scope when there is one. That question is
-  // open and is not settled here.
+  // — the pin fixes the value, and a change to any other handle reddens it — it
+  // is a limit of the value this pin fixes.
+  //
+  // The question it leaves unposed is whether the truncated branch should name
+  // an enclosing scope when there is one. This pin does not pose it, and
+  // `TruncatedRequest` cannot — the question is not unposable: the scenario
+  // builder reaches that handoff by combining `WithTruncatedDominatingChecks`
+  // with `WithDominatingCheckScope`. Doing so is deliberately left out of this
+  // pin, and the behaviour such a case would expose is Task 12's to decide.
   const Unknown* check_unknown = nullptr;
   for (const Unknown& unknown : value.unknowns) {
     if (unknown.reason_code == UnknownReasonCode::kMissingSpecification) {

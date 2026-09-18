@@ -113,11 +113,13 @@ class EvidencePredicateMapper {
   // a cell holds a value of the wrong type for its column, when a
   // `DirectRead`/`DirectWrite` row's `range_kind` is `kUnknown`, when the row's
   // epistemic state cannot be read, or when an entity reference has no
-  // case-local handle. The `kUnknown` refusal is the one case where the row is
-  // well formed and still unmappable: the analysis declined to bound the access,
-  // so the row's `offset` and `size` cells are sentinels rather than
-  // measurements, and `range`/`capacity` have no spelling for an unbounded
-  // window. Never fails silently and never drops a fact.
+  // case-local handle. The `kUnknown` refusal differs in kind from the
+  // missing-handle one: the row is well formed for *any* caller — the analysis
+  // declined to bound the access, so its `offset` and `size` cells are sentinels
+  // rather than measurements, and `range`/`capacity` have no spelling for an
+  // unbounded window — so no caller can express it, whereas an unresolvable
+  // reference is the caller's to repair. Never fails silently and never drops a
+  // fact.
   StatusOr<Fact> MapFact(const facts::AnalysisFact& fact,
                          const StableIdResolver& resolver,
                          const FactMappingHandle& handle) const;
