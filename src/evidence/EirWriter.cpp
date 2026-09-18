@@ -52,10 +52,20 @@
 // side's: a model-holdable value must never be silently dropped. `REP-001`
 // cannot detect a dropped value — it is absent from both passes, so the round
 // trip stays green — which is why every value with no spelling is a typed
-// error here rather than an omission. Spec §4.1 records the three that are
-// exactly unwritable (an out-of-set scope, an unspellable producer, and a
-// `stable_id` bag entry on an entity with no identity); the rest are the same
-// obligation applied to the expression grammar and the identifier alphabet.
+// error here rather than an omission. Spec §4.1 records the four that are
+// exactly unwritable (an out-of-set scope, an unspellable producer, a
+// `stable_id` bag entry on an entity with no identity, and a property-bag key
+// that is not an `Identifier`); the rest are the same obligation applied to the
+// expression grammar and the identifier alphabet.
+//
+// The fourth is the one a round trip cannot see at all. The parser refuses
+// whatever it is handed, so a round-trip test only ever exercises keys the
+// fixture already spells legally; a key the writer emits verbatim is either
+// text the parser rejects (`REP-001` broken outright) or — worse — text that
+// reparses into a *different* case, because `"x = 1; y"` is a legal attribute,
+// an assignment, and a second attribute. The key is therefore validated, which
+// is the check that closes both; validating that the output still parses would
+// close neither, the injected document being perfectly well-formed.
 
 #include "veritas/evidence/EirText.h"
 
@@ -396,6 +406,14 @@ bool IsCanonicalCallSpelling(std::string_view text) {
 // then its case-local handle. Every member carries a unique local handle (the
 // validator enforces one flat identifier space), so the key is total and the
 // canonicalizer's final canonical-encoding tie-break is unreachable here.
+//
+// A component the canonicalizer leaves **empty** for a family must be left
+// empty here too, even where the model holds a value that would sort
+// meaningfully in that slot. `summaries` and `dependencies` are exactly that
+// case: the canonicalizer sorts by `id` alone (its middle component is empty),
+// so a writer that sorted by `summary_id`/`stable_id` in the middle would print
+// a different order from the one the case's identity is built on. The key is
+// reproduced, not improved on.
 struct SortKey {
   std::string kind;
   std::string stable_id;
@@ -1028,13 +1046,25 @@ class EirWriter {
     Raw(";\n");
   }
 
-  // A `name = <property value>;` line at `depth`.
-  void ValueLine(int depth, std::string_view name, const Expression& value) {
+  // A `name = <property value>;` line at `depth`. `what` names the carrier in a
+  // refusal.
+  //
+  // `name` is validated before it is emitted, because §4.1 fixes
+  // `PropertyKey ::= Identifier` and `RequireValidEvidenceCase` does not
+  // constrain property keys: this is the only gate. An unvalidated key is not a
+  // cosmetic defect. `"not an identifier"` makes the writer emit text its own
+  // parser refuses, and `"x = 1; y"` makes it emit text that **reparses
+  // cleanly into a different case** — one carrying an injected property and a
+  // different `EvidenceID` — with no error anywhere. Guarding the key is what
+  // closes both; guarding the spelling of the output would not, since the
+  // injected document is well-formed.
+  void ValueLine(int depth, std::string_view what, std::string_view name,
+                 const Expression& value) {
     if (!ok()) {
       return;
     }
     Indent(depth);
-    Raw(name);
+    Identifier(what, name);
     Raw(" = ");
     Value(value);
     Raw(";\n");
@@ -1125,11 +1155,17 @@ void EirWriter::WriteEntity(const Entity& entity) {
            "EIR-T spelling");
   }
 
+  // The entity is named once, not once per property, so the refusal identifies
+  // which bag holds the unspellable key.
+  const std::string key_carrier =
+      entity.properties.empty()
+          ? std::string()
+          : Joined("property key of entity ", Quoted(entity.id));
   for (const auto& property : entity.properties) {
     if (!ok()) {
       return;
     }
-    ValueLine(2, property.first, property.second);
+    ValueLine(2, key_carrier, property.first, property.second);
   }
 
   Indent(1);
@@ -1668,8 +1704,12 @@ Status EirWriter::Run(const EvidenceCase& value) {
     std::vector<SortKey> keys;
     keys.reserve(value.summaries.size());
     for (const SummaryReference& summary : value.summaries) {
-      keys.push_back(SortKey{std::string(),
-                             core::ToString(summary.summary_id), summary.id});
+      // The canonicalizer's key for this family is
+      // `SortKey{"", "", summary.id}` — its middle component is empty, because
+      // `summary_id` is not part of the order. Inserting it here would make the
+      // text's order diverge from the canonicalizer's whenever the two
+      // disagree, so the key is reproduced rather than improved on.
+      keys.push_back(SortKey{std::string(), std::string(), summary.id});
     }
     const std::vector<std::size_t> order = CanonicalOrder(keys);
     for (const std::size_t index : order) {
@@ -1685,9 +1725,11 @@ Status EirWriter::Run(const EvidenceCase& value) {
     std::vector<SortKey> keys;
     keys.reserve(value.dependencies.size());
     for (const Dependency& dependency : value.dependencies) {
+      // `SortKey{ToString(kind), "", id}` — the canonicalizer's key, whose
+      // empty middle component is reproduced for the same reason as the
+      // summaries' above.
       keys.push_back(SortKey{std::string(ToString(dependency.kind)),
-                             core::ToString(dependency.stable_id),
-                             dependency.id});
+                             std::string(), dependency.id});
     }
     const std::vector<std::size_t> order = CanonicalOrder(keys);
     for (const std::size_t index : order) {

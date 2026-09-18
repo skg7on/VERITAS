@@ -104,10 +104,14 @@ enum class EirTextStyle {
 // `entity, claim, fact, assumption, hypothesis, unknown, edge, path,
 // constraint, provenance, verify, summary, dependency, omission`. Within a
 // member category the records are emitted in the canonicalizer's order — its
-// `(kind, stable-id, local-id)` key — so the text's order is a function of the
-// case's meaning rather than of the order the case happened to be assembled
-// in. `ProgramBinding::analyzer_versions` and the four reference lists
-// (`Unknown::blocking_ids`, `Provenance::input_fact_ids`,
+// `(kind, stable-id, local-id)` key, **including the components that key leaves
+// empty** — so the text's order is a function of the case's meaning rather than
+// of the order the case happened to be assembled in. For `summaries` and
+// `dependencies` the canonicalizer's middle component is empty, so those two
+// families sort by kind and local handle alone; a writer that sorted them by
+// `summary_id`/`stable_id` would print a different order from the one their
+// identity is built on. `ProgramBinding::analyzer_versions` and the four
+// reference lists (`Unknown::blocking_ids`, `Provenance::input_fact_ids`,
 // `SummaryReference::components`, `ProofObligation::verifier_kinds`) are
 // sorted, which §19.1 requires.
 //
@@ -126,7 +130,7 @@ enum class EirTextStyle {
 // The writer validates before it emits and returns a typed error rather than
 // producing text its own parser would refuse, or text that would read back as
 // a different case. In particular it refuses, rather than dropping or
-// coercing, the three values §4.1 records as having no EIR-T spelling at all:
+// coercing, the four values §4.1 records as having no EIR-T spelling at all:
 //
 //   * a `scope` outside `"global" | "function" | "path" | "basic_block" |
 //     "callsite" | "entity" | FunctionCall` — `Scope` is deliberately not
@@ -138,7 +142,12 @@ enum class EirTextStyle {
 //     `ProofObligation::verification_producer`;
 //   * a property-bag entry named `stable_id` on an entity that declares no
 //     identity — the leading attribute binds the identity, so emitting such an
-//     entry would have it re-read as one.
+//     entry would have it re-read as one;
+//   * a property-bag **key** that is not an `Identifier` — §4.1 fixes
+//     `PropertyKey ::= Identifier` and nothing upstream of the writer checks
+//     it, so the alphabet is enforced here. The value is emitted verbatim
+//     otherwise, which for `"not an identifier"` is text the parser rejects and
+//     for `"x = 1; y"` is text that reparses into a *different* case, silently.
 //
 // `REP-001` cannot detect any of these: a value the writer dropped would be
 // absent from both passes and the round trip would stay green. Silent omission

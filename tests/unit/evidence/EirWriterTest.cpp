@@ -161,39 +161,40 @@ std::string WithoutBlankLines(std::string_view text) {
   }
 }
 
-// The `context { … }` block's body, so an assertion about a context property
-// cannot be satisfied by a same-named attribute of some later member. Without
-// this an emission disabled in `context` still passes on the strength of the
-// `analysis_run` a provenance record writes, which is exactly the false pass
-// the mutation campaign found.
-std::string ContextBlock(std::string_view text) {
-  const std::string_view open = "    context {\n";
-  const std::size_t start = text.find(open);
-  if (start == std::string_view::npos) {
-    return std::string();
+// The body of the first `    <header> { … }` block in `text`, or empty.
+//
+// Attribute names are not unique across member kinds — `producer` is written by
+// four of them, `analysis_run` by two, `stable_id` by two — so an assertion
+// about one member's field that searches the whole document is satisfied by a
+// sibling's copy and stays green when the field it names is disabled. That is a
+// test with no coverage of the thing it is named for, so every per-field
+// assertion is scoped by this helper rather than by the document.
+// `header` is the declaration up to but not including its brace — `entity
+// E_memcpy` matches `entity E_memcpy : callsite {` as well as `entity E_memcpy
+// {` — and the match must not be a prefix of a longer handle, so `entity E_a`
+// never answers with `entity E_ab`.
+std::string BlockBody(std::string_view text, std::string_view header) {
+  const std::string open = "    " + std::string(header);
+  std::size_t start = text.find(open);
+  while (start != std::string_view::npos) {
+    const std::size_t after = start + open.size();
+    const bool whole_handle =
+        after >= text.size() || text[after] == ' ' || text[after] == ':';
+    if (whole_handle) {
+      const std::size_t brace = text.find(" {\n", after);
+      if (brace == std::string_view::npos) {
+        return std::string();
+      }
+      const std::size_t body = brace + 3;
+      const std::size_t close = text.find("\n    }\n", body);
+      if (close == std::string_view::npos) {
+        return std::string();
+      }
+      return std::string(text.substr(body, close - body + 1));
+    }
+    start = text.find(open, start + 1);
   }
-  const std::size_t body = start + open.size();
-  const std::size_t close = text.find("\n    }\n", body);
-  if (close == std::string_view::npos) {
-    return std::string();
-  }
-  return std::string(text.substr(body, close - body + 1));
-}
-
-// The `hypothesis <id> { … }` block's body, for the same reason: `producer` is
-// written by four members and only a scoped assertion is about one of them.
-std::string HypothesisBlock(std::string_view text, std::string_view id) {
-  const std::string open = "    hypothesis " + std::string(id) + " {\n";
-  const std::size_t start = text.find(open);
-  if (start == std::string_view::npos) {
-    return std::string();
-  }
-  const std::size_t body = start + open.size();
-  const std::size_t close = text.find("\n    }\n", body);
-  if (close == std::string_view::npos) {
-    return std::string();
-  }
-  return std::string(text.substr(body, close - body + 1));
+  return std::string();
 }
 
 // --- Model construction -----------------------------------------------------
@@ -721,7 +722,7 @@ TEST(EirWriterTest, EmitsContextTypeLayoutAndAnalysisRun) {
   // Scoped to `context`, because `analysis_run` is written by provenance
   // records too: an unscoped needle passes even when the context emission is
   // disabled, which is a false pass rather than a test.
-  const std::string context = ContextBlock(text);
+  const std::string context = BlockBody(text, "context");
   ASSERT_FALSE(context.empty()) << text;
   EXPECT_TRUE(Contains(context, "type_layout = \"layout:aapcs64\";")) << text;
   EXPECT_TRUE(Contains(context, std::string("analysis_run = \"") +
@@ -777,16 +778,22 @@ TEST(EirWriterTest, EmitsEveryProvenanceField) {
   }
   ASSERT_NE(record, nullptr);
   ASSERT_TRUE(record->analysis_run_id.has_value());
-  EXPECT_TRUE(Contains(text, "producer = veritas.wpa;")) << text;
-  EXPECT_TRUE(Contains(text, "rule = \"dominates.absence\";")) << text;
-  EXPECT_TRUE(Contains(text, "inputs = [$F_capacity, $F_range];")) << text;
-  EXPECT_TRUE(Contains(text, "source_anchor = \"decode.cpp:281:9\";")) << text;
-  EXPECT_TRUE(Contains(text, "analysis_run = \"" +
+  // Scoped to `PR_check`: `analysis_run` is written by the context block too,
+  // and §11.1 requires the two values to match, so an unscoped needle passes
+  // even with this record's emission disabled. `producer` and `stable_id` are
+  // likewise written by other member kinds.
+  const std::string block = BlockBody(text, "provenance PR_check");
+  ASSERT_FALSE(block.empty()) << text;
+  EXPECT_TRUE(Contains(block, "producer = veritas.wpa;")) << text;
+  EXPECT_TRUE(Contains(block, "rule = \"dominates.absence\";")) << text;
+  EXPECT_TRUE(Contains(block, "inputs = [$F_capacity, $F_range];")) << text;
+  EXPECT_TRUE(Contains(block, "source_anchor = \"decode.cpp:281:9\";")) << text;
+  EXPECT_TRUE(Contains(block, "analysis_run = \"" +
                                   core::ToString(*record->analysis_run_id) +
                                   "\";"))
       << text;
-  EXPECT_TRUE(Contains(text, "version = \"1.0\";")) << text;
-  EXPECT_TRUE(Contains(text, "configuration = \"veritas.default\";")) << text;
+  EXPECT_TRUE(Contains(block, "version = \"1.0\";")) << text;
+  EXPECT_TRUE(Contains(block, "configuration = \"veritas.default\";")) << text;
   // `location` names something else and the model has no member for it, so the
   // writer must never emit it — a document carrying one is refused by the
   // parser with a typed "unsupported in EIR V0.1" diagnostic. The needle is the
@@ -807,11 +814,16 @@ TEST(EirWriterTest, EmitsTheVerificationProducer) {
   const EvidenceCase value = MustParse(kOverflowEirTextWithoutLabel);
   const std::string text = Canonical(value);
   ASSERT_FALSE(value.proof_obligations.empty());
+  // Scoped to the obligation: provenance record `PR_result` writes the same
+  // `producer = veritas.smt;`, so an unscoped needle passes even with this
+  // emission disabled.
+  const std::string block = BlockBody(text, "verify " + value.proof_obligations[0].id);
+  ASSERT_FALSE(block.empty()) << text;
   EXPECT_TRUE(Contains(
-      text, "producer = " + value.proof_obligations[0].verification_producer +
-                ";"))
+      block, "producer = " + value.proof_obligations[0].verification_producer +
+                 ";"))
       << text;
-  EXPECT_TRUE(Contains(text, "prove = @E_len <= capacity(@E_dst);")) << text;
+  EXPECT_TRUE(Contains(block, "prove = @E_len <= capacity(@E_dst);")) << text;
 }
 
 // `Hypothesis::producer` is required by the grammar — unlike `Fact`'s and the
@@ -828,7 +840,7 @@ TEST(EirWriterTest, EmitsTheHypothesisProducer) {
     case_->hypotheses.push_back(std::move(record));
   });
   const std::string text = Canonical(value);
-  const std::string block = HypothesisBlock(text, "H1");
+  const std::string block = BlockBody(text, "hypothesis H1");
   ASSERT_FALSE(block.empty()) << text;
   EXPECT_TRUE(Contains(block, "producer = veritas.agent;")) << text;
   EXPECT_TRUE(Contains(block, "predicate = guessed;")) << text;
@@ -1263,7 +1275,14 @@ TEST(EirWriterTest, RefusesAnUnfinalizedCase) {
       WriteEirText(value, EirTextStyle::kCanonical);
   ASSERT_FALSE(text.ok());
   EXPECT_EQ(text.status().code(), StatusCode::kInvalidArgument);
-  EXPECT_TRUE(Contains(text.status().message(), "evidence_id"))
+  // The wording unique to *this* branch. Both `WriteEirText` refusals name
+  // `evidence_id`, so the loose needle stayed green with the guard deleted —
+  // and that guard is load-bearing beyond the diagnostic: without it the case
+  // falls through to the identity comparison and dereferences an empty
+  // `optional`.
+  EXPECT_TRUE(Contains(text.status().message(), "carries no evidence_id"))
+      << text.status().message();
+  EXPECT_TRUE(Contains(text.status().message(), "FinalizeEvidenceIdentity"))
       << text.status().message();
 }
 
@@ -1281,6 +1300,10 @@ TEST(EirWriterTest, RefusesAnEvidenceIdThatIsNotTheContentAddress) {
       WriteEirText(value, EirTextStyle::kCanonical);
   ASSERT_FALSE(text.ok());
   EXPECT_EQ(text.status().code(), StatusCode::kInvalidArgument);
+  // The sibling of `RefusesAnUnfinalizedCase`'s needle: the two refusals share
+  // the word `evidence_id`, so each asserts the wording only it can produce.
+  EXPECT_TRUE(Contains(text.status().message(), "not the content address"))
+      << text.status().message();
 }
 
 TEST(EirWriterTest, RefusesARawLineBreakInACallShapedCarrier) {
@@ -1361,6 +1384,251 @@ TEST(EirWriterTest, RefusesASymbolThatWouldReadBackAsAnOperatorOrLiteral) {
     ASSERT_FALSE(text.ok()) << name;
     EXPECT_EQ(text.status().code(), StatusCode::kInvalidArgument);
   }
+}
+
+// §4.1's fourth unwritable value, and the only one no round trip can reach: a
+// property-bag key that is not an `Identifier`. The key arrives as an arbitrary
+// `std::string` from an open `std::map`, `RequireValidEvidenceCase` does not
+// examine it, and the grammar fixes `PropertyKey ::= Identifier`, so the writer
+// is the only gate there is.
+//
+// It has two distinct outcomes, and the second is why the guard must be on the
+// key rather than on whether the output parses. Each is a test of its own, so
+// that removing the guard fails both of them by name: an assertion shared with
+// scenario (2) would abort here first and leave that one unobserved.
+//
+// Scenario (1): the key produces text the grammar does not derive.
+TEST(EirWriterTest, RefusesAPropertyKeyTheGrammarCannotDerive) {
+  const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
+  ASSERT_FALSE(base.entities.empty());
+  const std::string owner = base.entities[0].id;
+
+  // `not` is an operator, so the parser stops at `expected '=' after the
+  // attribute 'not'` — `REP-001` broken by text the writer produced itself.
+  const EvidenceCase unparsable = Derive(base, [](EvidenceCase* case_) {
+    case_->entities[0].properties["not an identifier"] = String("v");
+  });
+  // The refusal is the writer's own: the case is well-formed and identified.
+  EXPECT_TRUE(RequireValidEvidenceCase(unparsable).ok());
+  const StatusOr<std::string> refused =
+      WriteEirText(unparsable, EirTextStyle::kCanonical);
+  ASSERT_FALSE(refused.ok());
+  EXPECT_EQ(refused.status().code(), StatusCode::kInvalidArgument);
+  EXPECT_TRUE(Contains(refused.status().message(), owner))
+      << refused.status().message();
+  EXPECT_TRUE(Contains(refused.status().message(), "not an identifier"))
+      << refused.status().message();
+}
+
+// Scenario (2), the silent one: text that *is* derivable and denotes a
+// different case. Emitted verbatim, the key `x = 1; y` writes
+// `x = 1; y = "v";` — a legal property `x`, then a legal property `y` — so the
+// parser accepts it and returns a case the writer was never handed. `denoted`
+// is exactly that case, and its identity differs from `injected`'s, which is
+// the defect in one assertion.
+TEST(EirWriterTest, RefusesAPropertyKeyThatWouldSubstituteADifferentCase) {
+  const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
+  ASSERT_FALSE(base.entities.empty());
+
+  const EvidenceCase injected = Derive(base, [](EvidenceCase* case_) {
+    case_->entities[0].properties["x = 1; y"] = String("v");
+  });
+  const EvidenceCase denoted = Derive(base, [](EvidenceCase* case_) {
+    case_->entities[0].properties["x"] = Integer(1);
+    case_->entities[0].properties["y"] = String("v");
+  });
+  ASSERT_TRUE(injected.evidence_id.has_value());
+  ASSERT_TRUE(denoted.evidence_id.has_value());
+  EXPECT_NE(*denoted.evidence_id, *injected.evidence_id);
+
+  EXPECT_TRUE(RequireValidEvidenceCase(injected).ok());
+  const StatusOr<std::string> injection =
+      WriteEirText(injected, EirTextStyle::kCanonical);
+  ASSERT_FALSE(injection.ok());
+  EXPECT_EQ(injection.status().code(), StatusCode::kInvalidArgument);
+  EXPECT_TRUE(Contains(injection.status().message(), "x = 1; y"))
+      << injection.status().message();
+}
+
+// The positive control for both refusals above: the guard refuses the alphabet,
+// not the bag. A legal key still writes, still round-trips, and — the point of
+// the second half — still spells out what the pre-fix writer would have emitted
+// for scenario (2). That text reparses *without error* into `denoted`, which is
+// what makes scenario (2) a silent substitution rather than a hypothetical.
+TEST(EirWriterTest, WritesALegalPropertyKeyVerbatimAndRoundTrips) {
+  const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
+  ASSERT_FALSE(base.entities.empty());
+  const std::string owner = base.entities[0].id;
+
+  const EvidenceCase legal = Derive(base, [](EvidenceCase* case_) {
+    case_->entities[0].properties["note"] = String("v");
+  });
+  const std::string text = Canonical(legal);
+  EXPECT_TRUE(Contains(BlockBody(text, "entity " + owner), "note = \"v\";"))
+      << text;
+  EXPECT_EQ(*MustParse(text).evidence_id, *legal.evidence_id);
+
+  const EvidenceCase injected = Derive(base, [](EvidenceCase* case_) {
+    case_->entities[0].properties["x = 1; y"] = String("v");
+  });
+  const EvidenceCase denoted = Derive(base, [](EvidenceCase* case_) {
+    case_->entities[0].properties["x"] = Integer(1);
+    case_->entities[0].properties["y"] = String("v");
+  });
+
+  std::string pre_fix = text;
+  const std::size_t at = pre_fix.find("note = \"v\";");
+  ASSERT_NE(at, std::string::npos) << text;
+  pre_fix.replace(at, std::string("note").size(), "x = 1; y");
+  const EvidenceCase reparsed = MustParse(pre_fix);
+  EXPECT_EQ(*reparsed.evidence_id, *denoted.evidence_id);
+  EXPECT_NE(*reparsed.evidence_id, *injected.evidence_id);
+}
+
+// The canonicalizer sorts `summaries` by local handle alone — its middle key
+// component is empty — so the writer must too. A `summary_id` inserted into the
+// middle component reorders the text whenever it disagrees with the handle's
+// order, printing a different sequence from the one the case's identity is
+// built on. `S1` carries the higher `summary_id` and so sorts first by handle
+// and last by summary ID: the two orders disagree by construction.
+TEST(EirWriterTest, SummaryAndDependencyOrderMatchesTheCanonicalizer) {
+  const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
+  ASSERT_FALSE(base.entities.empty());
+  const std::string function = base.entities[0].id;
+
+  const std::string high = "summary:sha256:" + std::string(64, 'f');
+  const std::string low = "summary:sha256:" + std::string(64, '0');
+
+  const EvidenceCase value = Derive(base, [&](EvidenceCase* case_) {
+    // Inserted in the order the pre-fix writer would have printed them, so the
+    // assertion below is not satisfied by the model happening to be sorted.
+    SummaryReference second;
+    second.id = "S2";
+    second.function_id = function;
+    second.summary_id = StableId(low);
+    case_->summaries.push_back(second);
+    SummaryReference first;
+    first.id = "S1";
+    first.function_id = function;
+    first.summary_id = StableId(high);
+    case_->summaries.push_back(first);
+
+    Dependency two;
+    two.id = "D2";
+    two.kind = DependencyKind::kSummary;
+    two.stable_id = StableId(low);
+    case_->dependencies.push_back(two);
+    Dependency one;
+    one.id = "D1";
+    one.kind = DependencyKind::kSummary;
+    one.stable_id = StableId(high);
+    case_->dependencies.push_back(one);
+  });
+
+  const std::string text = Canonical(value);
+  // `id` order, not `summary_id`/`stable_id` order.
+  ASSERT_TRUE(Contains(text, "summary S1 {")) << text;
+  EXPECT_LT(text.find("summary S1 {"), text.find("summary S2 {")) << text;
+  EXPECT_LT(text.find("dependency D1 {"), text.find("dependency D2 {")) << text;
+
+  // The order is the canonicalizer's, so the round trip is exact.
+  const EvidenceCase reparsed = MustParse(text);
+  EXPECT_EQ(*reparsed.evidence_id, *value.evidence_id);
+  EXPECT_EQ(Canonical(reparsed), text);
+}
+
+// --- Reachable refusal guards -----------------------------------------------
+
+// Each guard below is reachable by direct probe but was pinned by no test, so
+// removing it left the whole suite green. That is how an over-accepting writer
+// is re-admitted silently: the guard is the only thing keeping the written
+// language inside the grammar, and nothing would notice its loss. One test per
+// guard, each failing when that guard is removed.
+
+// A `kSymbol` in a *value* position whose text is `true` or `false` reads back
+// as a boolean literal, not as a symbol, so `PropertyValue`'s `kSymbol` branch
+// refuses it. The predicate-position form is a different guard and is covered
+// by `RefusesASymbolThatWouldReadBackAsAnOperatorOrLiteral`.
+TEST(EirWriterTest, RefusesABooleanSpellingAsAPropertyValueSymbol) {
+  const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
+  for (const std::string_view name : {"true", "false"}) {
+    const EvidenceCase value = Derive(base, [&name](EvidenceCase* case_) {
+      case_->entities[0].properties["flag"] = Symbol(std::string(name));
+    });
+    EXPECT_TRUE(RequireValidEvidenceCase(value).ok()) << name;
+    const StatusOr<std::string> text =
+        WriteEirText(value, EirTextStyle::kCanonical);
+    ASSERT_FALSE(text.ok()) << name;
+    EXPECT_EQ(text.status().code(), StatusCode::kInvalidArgument) << name;
+    EXPECT_TRUE(Contains(text.status().message(), "boolean literal")) << name;
+  }
+}
+
+// A callee named `not`, `forall`, or `exists` is claimed by the predicate
+// grammar before a call is ever read, so those three have no spelling in the
+// predicate position. (`and`, `or`, and `implies` are infix and cannot start a
+// call at all, which is why they are not in this set.)
+TEST(EirWriterTest, RefusesAReservedWordAsAPredicatePositionCallee) {
+  const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
+  for (const std::string_view name : {"not", "forall", "exists"}) {
+    const EvidenceCase value = Derive(base, [&name](EvidenceCase* case_) {
+      case_->facts[0].predicate =
+          Call(std::string(name), {Symbol("p")});
+    });
+    EXPECT_TRUE(RequireValidEvidenceCase(value).ok()) << name;
+    const StatusOr<std::string> text =
+        WriteEirText(value, EirTextStyle::kCanonical);
+    ASSERT_FALSE(text.ok()) << name;
+    EXPECT_EQ(text.status().code(), StatusCode::kInvalidArgument) << name;
+    EXPECT_TRUE(Contains(text.status().message(), "claimed by the predicate"))
+        << name;
+  }
+}
+
+// `Domain ::= Identifier "(" [ ArgumentList ] ")" | Reference`: a quantifier's
+// domain is a call or a reference, and nothing else. The validator checks only
+// the arity and the bound variable, so a symbol domain reaches the writer.
+TEST(EirWriterTest, RefusesAQuantifierDomainThatIsNeitherCallNorReference) {
+  const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
+  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+    Expression quantified;
+    quantified.kind = Expression::Kind::kForAll;
+    quantified.text = "i";
+    quantified.operands = {Symbol("length"), Symbol("p")};
+    case_->facts[0].predicate = quantified;
+  });
+  EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
+  const StatusOr<std::string> text =
+      WriteEirText(value, EirTextStyle::kCanonical);
+  ASSERT_FALSE(text.ok());
+  EXPECT_EQ(text.status().code(), StatusCode::kInvalidArgument);
+  EXPECT_TRUE(Contains(text.status().message(), "quantifier domain"))
+      << text.status().message();
+}
+
+// `Budget ::= IntegerLiteral | FunctionCall`, and an absent budget is
+// `kUnspecified`. A string, symbol, or reference budget has no spelling: §12.1
+// admits neither the optional's absence nor a value of another kind, and no
+// validator constrains the field.
+TEST(EirWriterTest, RefusesAProofBudgetThatIsNeitherIntegerNorCall) {
+  const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
+  ASSERT_FALSE(base.facts.empty());
+  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+    ProofObligation obligation;
+    obligation.id = "V1";
+    obligation.goal_kind = ProofGoalKind::kProve;
+    obligation.predicate = Call("holds", {Symbol("p")});
+    obligation.status = ProofStatus::kPending;
+    obligation.budget = String("5000");
+    case_->proof_obligations.push_back(std::move(obligation));
+  });
+  EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
+  const StatusOr<std::string> text =
+      WriteEirText(value, EirTextStyle::kCanonical);
+  ASSERT_FALSE(text.ok());
+  EXPECT_EQ(text.status().code(), StatusCode::kInvalidArgument);
+  EXPECT_TRUE(Contains(text.status().message(), "proof budget"))
+      << text.status().message();
 }
 
 }  // namespace

@@ -308,6 +308,27 @@ gap today, because the scenarios that carry a scope write `global` or `path`;
 it is recorded here so the narrowing is a decision on the record rather than an
 unstated cost.
 
+`PropertyKey` is a fourth limit, and it is the only one of the four that the
+model makes reachable without any string value at all. The production above
+fixes `PropertyKey ::= Identifier`, but the bag it lowers into is an open
+`std::map<std::string, Expression>` and `RequireValidEvidenceCase` does not
+examine property keys, so the alphabet is enforced by nothing upstream of the
+writer. A key outside it — say `not an identifier` — has no spelling: written
+verbatim it produces text this grammar does not derive, so `REP-001` fails
+outright. A key that happens to contain the punctuation of a declaration — say
+`x = 1; y` — is worse, because the text it produces *is* derivable: it reparses
+cleanly into a different entity, one carrying an injected property `x` and an
+extra `y`, and therefore into a case with a different `EvidenceID` and no
+diagnostic anywhere. Serialization that silently denotes a different artifact is
+the failure mode this section exists to prevent, so the writer refuses the key
+rather than emitting it, and an entity whose bag holds one has no EIR-T
+serialization. Widening `PropertyKey` would not repair this: the alphabet is not
+the problem, the absence of any check is, and a wider alphabet would leave the
+injection case reachable through whatever punctuation the wider production
+admitted. No corpus case exercises the gap today, because the scenarios that
+carry properties write identifier keys; it is recorded here so the narrowing is
+a decision on the record rather than an unstated cost.
+
 ---
 
 ## 5. Predicate Language
