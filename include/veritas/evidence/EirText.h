@@ -145,7 +145,7 @@ enum class EirTextStyle {
 //     entry would have it re-read as one;
 //   * a property-bag **key** that is not an `Identifier` — §4.1 fixes
 //     `PropertyKey ::= Identifier` and nothing upstream of the writer checks
-//     it, so the alphabet is enforced here. The value is emitted verbatim
+//     it, so the alphabet is enforced here. The key is emitted verbatim
 //     otherwise, which for `"not an identifier"` is text the parser rejects and
 //     for `"x = 1; y"` is text that reparses into a *different* case, silently.
 //
