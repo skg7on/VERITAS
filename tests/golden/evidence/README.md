@@ -29,7 +29,7 @@ fixpoint, or survive into the content-addressed bytes and change every
 | --- | --- |
 | `overflow_unsafe.l0.eir` | The unsafe fixture projected at `l0`, with the member-withholding omissions a level projection is required to name. |
 | `overflow_unsafe.l1.eir` | The same case at `l1`: the level M10B's demo target actually emits. |
-| `overflow_unsafe.l1.eir.json` | The full-fidelity JSON rendering of `overflow_unsafe.l1.eir`. M10C ships no JSON reader, so this one is write-only. |
+| `overflow_unsafe.l1.eir.json` | The full-fidelity JSON rendering of `overflow_unsafe.l1.eir`. **Read** by DEM-005 and required to be byte-identical to `ToEvidenceJson` of the case the `.eir` beside it parses into, so the two halves of one case cannot drift apart. (M10C ships no JSON *reader*, so this golden is never parsed back into a case; the comparison runs from the text side.) |
 | `overflow_safe.l1.eir` | The safe fixture at `l1`. The difference from unsafe is flow shape, not verdict — both are `POSSIBLE_DEFECT` and both carry the derived `MUST_NOT dominates_bounds_check`. |
 | `overflow_truncated.l1.eir` | The unsafe fixture analysed with `--max-nodes 1`. |
 | `overflow_unsafe.slice.json` | **Not an EIR artefact.** The M10B `EvidenceInput` slice, delivered by M10B. Do not regenerate. |

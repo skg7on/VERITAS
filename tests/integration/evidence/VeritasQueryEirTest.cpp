@@ -69,10 +69,15 @@
 //
 // WHERE THE GOLDENS ARE, AND WHAT THEY ARE NOT
 //
-// `tests/golden/evidence/overflow_{unsafe.l0,unsafe.l1,unsafe.l1.eir.json,
-// safe.l1,truncated.l1}.eir` are reviewed artefacts pinned against the CLI,
-// and they are not the oracle for anything: the same-build comparisons above
-// are strictly stronger, and the golden comparison exists to catch drift in
+// `tests/golden/evidence/overflow_{unsafe.l0,unsafe.l1,safe.l1,truncated.l1}.eir`
+// are reviewed artefacts pinned against the CLI. `overflow_unsafe.l1.eir.json`
+// is a fifth artefact and it is read too, by DEM-005: it is byte-compared
+// against `ToEvidenceJson` of the case `overflow_unsafe.l1.eir` parses into, so
+// the `.eir` and `.json` halves of one case cannot drift apart unnoticed. (There
+// is no JSON *reader* in M10C, so the JSON golden is never parsed back into a
+// case — the comparison runs from the text side.) None of these files is the
+// oracle for anything: the same-build comparisons above are strictly stronger
+// on the axes they measure, and the golden comparison exists to catch drift in
 // the semantics a different toolchain must still reproduce.
 //
 // DEVIATION FROM THE DESIGN SPEC'S §14.3, RECORDED HERE BECAUSE IT IS A FINDING
@@ -326,22 +331,43 @@ StatusOr<std::string> JsonEvidenceId(std::string_view document) {
 //      exactly 64 lowercase hex is replaced by `<digest>`, which catches a
 //      stable identity reached through a `std::string` field the model does
 //      not type (`Constraint::scope`, `Assumption::scope`).
-//   3. Colours are refined over the reference graph for one round per item.
-//      Round `k`'s colour of an item is a hash of its label together with the
-//      round `k-1` colours of its references, in reference order and with
-//      position included, so the invariant distinguishes a chain that visits
-//      A before B from one that visits B before A.
+//   3. Colours are refined over the reference graph for one round per item, in
+//      BOTH directions. Round `k`'s colour of an item is a hash of its label,
+//      the round `k-1` colours of the items it references in reference order
+//      with position included, and the SORTED round `k-1` colours of the items
+//      that reference IT. The outgoing half distinguishes a chain that visits
+//      A before B from one that visits B before A; the incoming half is what
+//      makes the provenance routing visible — a fact and the record certifying
+//      it are joined by an edge the fact owns, and six of this case's seven
+//      provenance records differ in nothing EXCEPT which facts point at them.
+//      Incoming colours are sorted because the order referrers sit in is the
+//      builder's iteration order over the fact lists, not case meaning.
 //   4. The signature is the SORTED multiset of `category::label::colour`. Same
 //      meaning → same signature. A difference in kind, count, wiring, order,
 //      or referenced-member shape → a difference in signature.
 //
-// The invariant is not complete: it is a hash-based refinement, so two cases
-// that are not isomorphic could in principle collide, and it quotients away
-// *which* sibling of a colour class a reference names. Neither gap is load
-// bearing here, because every same-build comparison in this file — including
-// the full byte equality of DEM-003 and DEM-006 — is exact and strictly
-// stronger. This projection is the cross-toolchain instrument, and it is
-// deliberately the strong one for that job.
+// The invariant is still not complete in two ways, and the difference matters
+// for what a reader may conclude from a green run:
+//
+//   * It is a hash-based refinement, so two cases that are not isomorphic
+//     could in principle collide. That is a collision risk, not a blind spot:
+//     nothing here is *known* to be invisible for this reason.
+//   * It quotients away *which* sibling of a colour class a reference names —
+//     two members that both carry the same label and the same incidence (in
+//     and out) are interchangeable, and swapping one for the other moves
+//     neither the signature nor the case's meaning. Symmetric members of this
+//     case are the same-kind `value` entities on a path, and the graph
+//     automorphism that swaps them is a real equivalence, not a loss.
+//
+// What this projection therefore does NOT cover is anything about the
+// comparison's own strength. DEM-003 and DEM-006 compare artefacts of ONE
+// builder, so a builder that mis-routes facts consistently produces artefacts
+// that agree with each other perfectly; byte equality of two self-consistent
+// outputs is not evidence about the routing inside them. Routing is covered
+// HERE instead, and only here: the incoming half of the refinement above, plus
+// the non-vacuity guard in DEM-005 that rebinds a fact across provenance
+// records and requires the signature to move. See also the `StableSignature`
+// body comment.
 
 std::uint64_t Fnv1a(std::string_view text) {
   std::uint64_t hash = 1469598103934665603ULL;
@@ -766,6 +792,23 @@ std::vector<std::string> StableSignature(const ev::EvidenceCase& value) {
   const CaseGraph graph = BuildGraph(value);
   const std::size_t count = graph.items.size();
 
+  // Who points at each item. The refinement below is bidirectional because the
+  // reference graph is not a tree: a fact points AT the provenance record that
+  // certified it, and the only thing distinguishing six of this case's seven
+  // provenance records from one another is which facts point at them. A
+  // forward-only refinement colours those six identically forever, so moving a
+  // fact from one to another would be invisible — and "which query certified
+  // this fact" would stop being part of the case's meaning.
+  std::vector<std::vector<std::size_t>> incoming(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    for (const std::string& reference : graph.items[i].refs) {
+      const auto target = graph.by_handle.find(reference);
+      if (target != graph.by_handle.end()) {
+        incoming[target->second].push_back(i);
+      }
+    }
+  }
+
   std::vector<std::uint64_t> colour(count);
   for (std::size_t i = 0; i < count; ++i) {
     colour[i] = Fnv1a(graph.items[i].label);
@@ -780,6 +823,8 @@ std::vector<std::string> StableSignature(const ev::EvidenceCase& value) {
       std::string material = item.category;
       material.push_back('|');
       material.append(ToHex(colour[i]));
+      // Outgoing references keep their position: a path's segment order is part
+      // of what the path means.
       for (std::size_t position = 0; position < item.refs.size(); ++position) {
         material.push_back('|');
         material.append(std::to_string(position));
@@ -788,6 +833,20 @@ std::vector<std::string> StableSignature(const ev::EvidenceCase& value) {
         material.append(target == graph.by_handle.end()
                             ? std::string("?")
                             : ToHex(colour[target->second]));
+      }
+      // Incoming references are a SET, not a sequence: the order referrers
+      // happen to sit in is the builder's iteration order over the fact lists,
+      // not something the case asserts. Sorting keeps the colour a function of
+      // the incidence pattern alone.
+      std::vector<std::uint64_t> sources;
+      sources.reserve(incoming[i].size());
+      for (const std::size_t source : incoming[i]) {
+        sources.push_back(colour[source]);
+      }
+      std::sort(sources.begin(), sources.end());
+      for (const std::uint64_t source : sources) {
+        material.push_back('<');
+        material.append(ToHex(source));
       }
       next[i] = Fnv1a(material);
     }
@@ -1260,14 +1319,24 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   // not a transcript. ParseEirText validates and finalizes, and refusing a
   // document whose stored identity is not its recomputed content address is
   // part of that contract — so a parse is also a self-consistency proof.
+  //
+  // `json_name` is the full-fidelity JSON document beside the `.eir` golden, and
+  // it is READ here rather than merely checked in. The check is byte equality
+  // against `ToEvidenceJson` of the case this golden's own text parses into, so
+  // it is a SAME-BUILD comparison of two frozen artefacts of one host and byte
+  // equality is the right instrument. It is also host-independent as a test:
+  // both sides are functions of the checked-in bytes, not of the running
+  // toolchain. An empty `json_name` means the golden has no JSON companion.
   struct Golden {
     std::string name;
     const std::string* cli_text;
+    std::string json_name;
   };
   const std::vector<Golden> goldens = {
-      {"overflow_unsafe.l1.eir", &unsafe.stdout_text},
-      {"overflow_safe.l1.eir", &safe.stdout_text},
-      {"overflow_truncated.l1.eir", &truncated.stdout_text},
+      {"overflow_unsafe.l1.eir", &unsafe.stdout_text,
+       "overflow_unsafe.l1.eir.json"},
+      {"overflow_safe.l1.eir", &safe.stdout_text, ""},
+      {"overflow_truncated.l1.eir", &truncated.stdout_text, ""},
   };
   std::map<std::string, ev::EvidenceCase> cases;
   for (const Golden& golden : goldens) {
@@ -1281,6 +1350,24 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
         << golden.name << ": " << from_golden.status().message();
     EXPECT_TRUE(from_golden->evidence_id.has_value()) << golden.name;
     cases.emplace(golden.name, std::move(*from_golden));
+
+    if (!golden.json_name.empty()) {
+      const std::filesystem::path json_path = GoldenPath(golden.json_name);
+      ASSERT_TRUE(std::filesystem::exists(json_path))
+          << "missing golden; regenerate with the CLI: " << json_path;
+      auto expected_json = ev::ToEvidenceJson(cases.at(golden.name));
+      ASSERT_TRUE(expected_json.ok()) << expected_json.status().message();
+      EXPECT_EQ(ReadFile(json_path), *expected_json)
+          << golden.json_name
+          << " is not the JSON of " << golden.name
+          << ": the two checked-in goldens have drifted apart";
+      auto golden_id = JsonEvidenceId(ReadFile(json_path));
+      auto expected_id = JsonEvidenceId(*expected_json);
+      ASSERT_TRUE(golden_id.ok()) << golden_id.status().message();
+      ASSERT_TRUE(expected_id.ok()) << expected_id.status().message();
+      EXPECT_EQ(*golden_id, *expected_id)
+          << golden.json_name << " carries a different evidence_id";
+    }
 
     auto from_cli = ParseOrFail(*golden.cli_text, golden.name + " (CLI)");
     ASSERT_TRUE(from_cli.ok())
@@ -1324,11 +1411,12 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   EXPECT_NE(unsafe_signature, truncated_signature);
   EXPECT_NE(safe_signature, truncated_signature);
 
-  // Non-vacuity, in three directions. The projection has to inspect the case it
+  // Non-vacuity, in four directions. The projection has to inspect the case it
   // is given, and it has to ignore exactly the identities that are not part of
   // the case's meaning — otherwise the golden comparison would pass on any two
   // documents at all, and the masking would be indistinguishable from a
-  // comparison that never looked.
+  // comparison that never looked. The fourth direction is the one the review
+  // found missing: the wiring BETWEEN members, not just the members.
   {
     ev::EvidenceCase retyped = unsafe_case;
     ASSERT_FALSE(retyped.entities.empty());
@@ -1342,13 +1430,16 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
     // comparing labels alone and never reading a handle at all, and every
     // comparison above would still be green on documents of the same shape.
     //
-    // Re-ordering two of the path's own segments would NOT move it, and that is
-    // correct rather than a gap: the path is a chain of same-kind `value`
-    // entities whose labels are identical after masking, and the edge direction
-    // runs from the referrer to the referent, so those entities carry no
-    // references of their own and two of them are genuinely indistinguishable.
-    // A colour-refinement invariant cannot separate a graph's automorphic
-    // vertices, and neither can any reader of the meaning.
+    // An earlier revision of this guard swapped two adjacent segments instead,
+    // on the theory that the chain's same-kind `value` entities are
+    // indistinguishable and a colour refinement cannot separate automorphic
+    // vertices. That was true of the forward-only refinement and is no longer
+    // true of this one: the chain's entities have different INCOMING sets (the
+    // claim, the edges and the path itself do not all name the same ones), so
+    // they take different colours and their positions in the path's reference
+    // list now matter. The re-pointing form is kept because it is the stronger
+    // of the two — it also catches a projection that reads handles but ignores
+    // what they point at.
     ev::EvidenceCase repointed = unsafe_case;
     ASSERT_EQ(repointed.paths.size(), 1u);
     std::vector<std::string>& chain = repointed.paths.front().entity_ids;
@@ -1379,6 +1470,42 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
         << "the projection leaked a content address into the comparison, so it "
            "is not usable across toolchains";
   }
+  {
+    // Routing: rebinding a fact to a different provenance record has to move
+    // the signature. This is the dimension that the byte equality of DEM-003
+    // and DEM-006 cannot see, because both of those compare artefacts of the
+    // SAME builder — a builder that routed every fact to the wrong record
+    // would still be perfectly self-consistent.
+    //
+    // The mutation is deliberately the smallest one that exercises it: one
+    // fact, moved one record over. The seven provenance records of this case
+    // are byte-identical in every projected field except `id`, so a
+    // forward-only refinement colours all of them the same and this assertion
+    // fails. It passes only because the refinement is bidirectional and a
+    // record's colour depends on the sorted colours of the facts that name it.
+    ev::EvidenceCase rerouted = unsafe_case;
+    ASSERT_GE(rerouted.provenance.size(), 2u);
+    std::size_t moved = rerouted.facts.size();
+    std::string destination;
+    for (std::size_t i = 0; i < rerouted.facts.size(); ++i) {
+      for (const ev::Provenance& record : rerouted.provenance) {
+        if (record.id != rerouted.facts[i].provenance_id) {
+          moved = i;
+          destination = record.id;
+          break;
+        }
+      }
+      if (moved != rerouted.facts.size()) {
+        break;
+      }
+    }
+    ASSERT_LT(moved, rerouted.facts.size())
+        << "every fact already names every provenance record";
+    rerouted.facts[moved].provenance_id = destination;
+    EXPECT_NE(SignatureText(StableSignature(rerouted)), unsafe_signature)
+        << "the projection does not see which provenance record certifies a "
+           "fact, so a builder that mis-routes facts is invisible to it";
+  }
 
   // The differences themselves, asserted rather than assumed.
   //
@@ -1405,6 +1532,18 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   // that the path was cut rather than absent. The derived negative absence
   // survives, because the dominating-check query is a different query and is
   // still complete.
+  //
+  // DELIBERATELY CONTRADICTS THE IMPLEMENTATION BRIEF, DO NOT "FIX" THIS BACK.
+  // The brief's Step 6 described this golden as carrying "the stable reason and
+  // NO negative fact". The assertions below require the opposite:
+  // `has_negative_absence(truncated_case)` is TRUE. The observation is the
+  // correct one, and the derivation is why. Truncation removes the FLOW slice's
+  // nodes and edges, which is the query that would have produced the path; it
+  // does not touch the dominating-check query, which is a different query over
+  // a different relation and is still complete, so its derived negative
+  // certificate is still produced. A negative certificate is a fact about the
+  // query that produced it, and that query did run to completion. Suppressing
+  // it here would be the case claiming an unknown it did not observe.
   EXPECT_GT(unsafe_case.paths.size(), 0u);
   EXPECT_EQ(truncated_case.paths.size(), 0u);
   EXPECT_EQ(truncated_case.edges.size(), 0u);
