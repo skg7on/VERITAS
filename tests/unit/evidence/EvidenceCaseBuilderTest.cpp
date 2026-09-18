@@ -1272,12 +1272,13 @@ TEST(EvidenceCaseBuilderTest, Bld007ScopeIsTheQuerysHeadAndTheSinkIsItsSubject) 
 // the one F3 decided — which handles the `dominates_bounds_check` property names
 // — so the pin below states every member's content, not the family's presence.
 //
-// The truncated branch keeps the sink-scoped `(sink, sink)` spelling — the query
-// it reports on was issued over the sink alone — and the pin below fixes that
-// value, so a move to any other handle reddens it. What the pin *cannot* do is
-// tell that spelling apart from `(scope, sink)` in this fixture: both resolve to
-// the same handle here. The note at the operand assertions states that limit in
-// full.
+// The truncated branch renders both operands as the sink, `(sink, sink)`,
+// without consulting the query's scope at all: it never reads the scope it
+// resolved above, and returns before the two sites that do. The pin below fixes
+// that value, so a move to any other handle reddens it. What the pin *cannot*
+// do is tell that spelling apart from a scope-derived one in this fixture,
+// where `TruncatedRequest` issues its query over the sink alone and the two
+// coincide. The note at the operand assertions states that limit in full.
 TEST(EvidenceCaseBuilderTest, UnknownsFamilyPinsItsPropertyHandles) {
   const EvidenceCase value = BuildOrFail(TruncatedRequest(EvidenceLevel::kL1));
   ASSERT_TRUE(RequireValidEvidenceCase(value).ok());
