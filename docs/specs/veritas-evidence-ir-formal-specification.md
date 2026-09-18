@@ -1090,15 +1090,15 @@ EvidenceID = sha256(CanonicalForm(EvidenceCase))
 
 ### Non-Terminal Symbols
 - Top-level: 13 (EvidenceCase, SchemaDecl, LevelDecl, EvidenceLevel, StateDecl, EvidenceState, ContextDecl, ContextProperty, AnalyzerVersion, EvidenceMember, DependencyDecl, DependencyKind, OmissionDecl)
-- Entities: 5 (EntityDecl, EntityKind, EntityProperty, PropertyKey, PropertyValue)
+- Entities: 7 (EntityDecl, EntityKind, EntityProperty, PropertyKey, PropertyValue, FunctionCall, ArgumentList)
 - Predicates: 12 (Predicate, ImplicationExpr, OrExpr, AndExpr, ComparisonExpr, UnaryExpr, PrimaryExpr, QuantifiedPredicate, AtomicPredicate, PredicateArgumentList, PredicateArgument, Domain)
 - Facts: 4 (FactDecl, EpistemicState, Confidence, Producer)
-- Assumptions/Hypotheses/Unknowns: 6
+- Assumptions/Hypotheses/Unknowns: 7 (AssumptionDecl, AssumptionSource, HypothesisDecl, UnknownDecl, UnknownReason, ResolutionAction, ReferenceList)
 - Claims: 3 (Claim, ClaimKind, Severity)
 - Edges/Paths: 7 (EdgeDecl, PathDecl, RelationKind, PathKind, etc.)
 - Constraints: 2 (ConstraintDecl, Scope)
-- Provenance: 2 (ProvenanceDecl, SourceLocation)
-- Verification: 4 (VerificationDecl, VerificationGoal, VerificationStatus, etc.)
+- Provenance: 3 (ProvenanceDecl, FactReferenceList, SourceLocation)
+- Verification: 5 (VerificationDecl, VerificationGoal, VerificationBackendList, ResourceBudget, VerificationStatus)
 - Summaries: 2 (SummaryReference, SummaryComponentList)
 - Types: 2 (PrimitiveType, Type)
 

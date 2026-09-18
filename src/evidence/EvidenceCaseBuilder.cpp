@@ -31,7 +31,6 @@
 #include "veritas/evidence/EvidenceCanonicalizer.h"
 #include "veritas/evidence/EvidencePredicateMapper.h"
 #include "veritas/evidence/EvidenceQueryService.h"
-#include "veritas/evidence/EvidenceValidator.h"
 #include "veritas/evidence/QueryCompletion.h"
 #include "veritas/facts/RelationSchema.h"
 

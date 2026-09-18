@@ -46,9 +46,9 @@ cmake --build --preset default
 - `LLVM_PROJECT_BUILD_DIR` is optional. When set, `cmake/VeritasLLVM.cmake` derives `LLVM_DIR` and `Clang_DIR` from that tree; otherwise `find_package(LLVM/Clang CONFIG)` falls back to explicit `LLVM_DIR` / `Clang_DIR` or system paths.
 - The **host C/C++ compiler** is auto-detected by CMake (or set via `CC`/`CXX` / `CMAKE_C_COMPILER`) and is independent of the LLVM library version: `LLVM_PROJECT_BUILD_DIR` supplies only the LLVM/Clang **headers and libraries**, never the compiler. On the current dev machine the host compiler is llvm@17 (clang 17.0.6) against LLVM 24.x libraries — that skew is intentional. VERITAS code is compiled as C++20.
 - SVF is vendored at `third_party/SVF/` and always builds. Its build tree lives at `build/svf-build/` and stays out of the default `all` target — `SvfCore`/`SvfLLVM` build on demand through the private `veritas_third_party_svf` wrapper.
-- Soufflé is vendored at `third_party/Souffle/` at the pinned revision and builds from source behind `VERITAS_BUILD_SOUFFLE` (default `OFF` until M8R.4). Its build tree lives at `build/souffle-build/`; the `souffle` executable and `libsouffle` build on demand. Building Soufflé from source requires Bison >= 3.2 and Flex (`brew install bison flex` on macOS) — see `docs/third_party/Souffle.md`.
+- Soufflé is vendored at `third_party/Souffle/` at the pinned revision and always builds from source under `VERITAS_WPA_ENGINE=souffle`, the default and the mandatory production WPA engine. Its build tree lives at `build/souffle-build/`; the `souffle` executable and `libsouffle` build on demand (`EXCLUDE_FROM_ALL`, and as inputs to the generated `souffle-gen/` programs). Building Soufflé from source requires Bison >= 3.2 and Flex (`brew install bison flex` on macOS) — see `docs/third_party/Souffle.md`.
 - `BUILD_SHARED_LIBS` defaults to `ON`; VERITAS and SVF both build shared. `--preset static-release` opts out.
-- Other options: `VERITAS_BUILD_TESTS` (ON), `VERITAS_BUILD_TOOLS` (ON), `VERITAS_BUILD_SOUFFLE` (OFF).
+- Other options: `VERITAS_BUILD_TESTS` (ON), `VERITAS_BUILD_TOOLS` (ON), `VERITAS_WPA_ENGINE` (`souffle`, the default; `cpp-emergency` is the explicit degraded Soufflé-less configuration).
 - Non-Ninja generators still configure but emit a warning; only Ninja is exercised in CI.
 
 ---
