@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <algorithm>
 #include <charconv>
 #include <cstddef>
 #include <cstdio>
@@ -25,7 +24,6 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <variant>
 #include <vector>
 
 #include <unistd.h>
@@ -44,7 +42,6 @@
 #include "veritas/evidence/OverflowClaimSeed.h"
 #include "veritas/evidence/FactStoreEvidenceBackend.h"
 #include "veritas/evidence/SliceTypes.h"
-#include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/FactStore.h"
 #include "veritas/summarydb/MetadataStore.h"
 

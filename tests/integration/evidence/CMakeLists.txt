@@ -52,3 +52,18 @@ veritas_add_warnings(VeritasQueryEvidenceTest)
 gtest_discover_tests(VeritasQueryEvidenceTest DISCOVERY_TIMEOUT 120
   PROPERTIES LABELS "evidence-integration\;evidence-cli")
 add_dependencies(VeritasQueryEvidenceTest veritas-query)
+
+add_executable(VeritasQueryEirTest VeritasQueryEirTest.cpp)
+target_link_libraries(VeritasQueryEirTest PRIVATE
+  veritas::evidence
+  veritas_wpa_fixture_support
+  GTest::gtest_main
+)
+target_compile_definitions(VeritasQueryEirTest PRIVATE
+  VERITAS_QUERY_BINARY="$<TARGET_FILE:veritas-query>"
+  VERITAS_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/golden/evidence"
+)
+veritas_add_warnings(VeritasQueryEirTest)
+gtest_discover_tests(VeritasQueryEirTest DISCOVERY_TIMEOUT 120
+  PROPERTIES LABELS "evidence-integration\;evidence-cli\;evidence-roundtrip")
+add_dependencies(VeritasQueryEirTest veritas-query)
