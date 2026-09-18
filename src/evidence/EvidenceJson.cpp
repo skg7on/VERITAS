@@ -45,8 +45,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
-#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -167,23 +165,6 @@ bool JsonTextLess(const llvm::json::Value& left,
   return JsonText(left) < JsonText(right);
 }
 
-llvm::json::Value TextValue(std::string_view text) {
-  return llvm::json::Value(std::string(text));
-}
-
-// Sorts a reference list lexicographically by value, duplicates preserved:
-// §19.1's order for `blocking_ids`, `input_fact_ids`, `components`, and
-// `verifier_kinds`.
-llvm::json::Array SortedStrings(const std::vector<std::string>& values) {
-  std::vector<std::string> sorted(values);
-  std::sort(sorted.begin(), sorted.end());
-  llvm::json::Array array;
-  for (const std::string& value : sorted) {
-    array.push_back(TextValue(value));
-  }
-  return array;
-}
-
 // --- The emitter ------------------------------------------------------------
 
 class JsonEmitter {
@@ -196,21 +177,75 @@ class JsonEmitter {
   llvm::json::Value Case(const EvidenceCase& value);
 
  private:
-  // A string this boundary can spell. JSON text is UTF-8 (RFC 8259 §8.1) and
-  // `llvm::json::Value` asserts on anything else, so an invalid sequence is
-  // refused here rather than asserted on. The failure is recorded once and
-  // every later emit is skipped; the caller returns the status and no document.
+  // --- The one decision -----------------------------------------------------
+  //
+  // Whether `text` has a spelling in JSON text, which is UTF-8 by definition
+  // (RFC 8259 §8.1). Every string this boundary writes — a value, an object
+  // key, a member of one of the sorted reference lists below — is put through
+  // this predicate first, and no other route to `llvm::json` skips it.
+  //
+  // The predicate has to be ours because `llvm::json` does not refuse for us.
+  // `json::Value` asserts on a bad string in a build with asserts on, but
+  // `json::ObjectKey`'s identical assert does not survive this link: the
+  // constructor is inline, and `libLLVMSupport` — a release build — supplies an
+  // assert-free instantiation of the same symbol that the linker prefers, so a
+  // bad key is accepted and `json::OStream` then rewrites it to U+FFFD. A
+  // rewritten key is the worse of the two outcomes: `evidence_id` is the
+  // content address of the *original* bytes, so a document that spells a
+  // different string no longer describes the case it names.
+  static bool IsSpellable(std::string_view text) {
+    return llvm::json::isUTF8(text);
+  }
+
+  // Latches the refusal. The first failure is kept and every later emit is
+  // skipped, so a caller cannot receive a document that looks complete while a
+  // member of it is missing.
+  void Refuse() {
+    if (failed_.ok()) {
+      failed_ = Status::InvalidArgument(
+          "the case holds a string that is not valid UTF-8, and JSON text is "
+          "UTF-8 by definition, so the value has no JSON spelling");
+    }
+  }
+
+  // --- The two spellings of a string ----------------------------------------
+
   llvm::json::Value Text(std::string_view text) {
     if (!ok()) {
       return llvm::json::Value(nullptr);
     }
-    if (!llvm::json::isUTF8(text)) {
-      failed_ = Status::InvalidArgument(
-          "the case holds a string that is not valid UTF-8, and JSON text is "
-          "UTF-8 by definition, so the value has no JSON spelling");
+    if (!IsSpellable(text)) {
+      Refuse();
       return llvm::json::Value(nullptr);
     }
-    return TextValue(text);
+    return llvm::json::Value(std::string(text));
+  }
+
+  // A property key. Keys take the same decision as values, for the reason
+  // above. A refused key yields the empty string, which is spellable; the
+  // object it would have belonged to is discarded along with the latched
+  // status, so the placeholder is never observable.
+  llvm::json::ObjectKey Key(std::string_view text) {
+    if (!IsSpellable(text)) {
+      Refuse();
+      return llvm::json::ObjectKey("");
+    }
+    return llvm::json::ObjectKey(std::string(text));
+  }
+
+  // Sorts a reference list lexicographically by value, duplicates preserved:
+  // §19.1's order for `blocking_ids`, `input_fact_ids`, `components`, and
+  // `verifier_kinds`. Each member goes out through `Text`, so a list is refused
+  // on the same terms as any other string rather than reaching `llvm::json`
+  // unguarded.
+  llvm::json::Array SortedStrings(const std::vector<std::string>& values) {
+    std::vector<std::string> sorted(values);
+    std::sort(sorted.begin(), sorted.end());
+    llvm::json::Array array;
+    for (const std::string& value : sorted) {
+      array.push_back(Text(value));
+    }
+    return array;
   }
 
   llvm::json::Value OptionalText(const std::optional<core::StableId>& id) {
@@ -366,7 +401,7 @@ llvm::json::Value JsonEmitter::EmitClaim(const Claim& value) {
 llvm::json::Value JsonEmitter::EmitEntity(const Entity& value) {
   llvm::json::Object properties;
   for (const auto& entry : value.properties) {
-    properties[entry.first] = EmitExpression(entry.second);
+    properties[Key(entry.first)] = EmitExpression(entry.second);
   }
   llvm::json::Object object;
   object["id"] = Text(value.id);

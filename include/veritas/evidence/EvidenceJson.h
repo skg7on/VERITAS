@@ -118,9 +118,13 @@
 // `MakeOverflowEvidenceCase()`, whose witnesses carry the producer
 // `"evidence-query"`, unwritable. Wider: a string that is not valid UTF-8 is
 // refused, because JSON text is UTF-8 by definition (RFC 8259 §8.1) and
-// `llvm::json` asserts on such a value rather than escaping it. A crash is not
-// a refusal, so the check is explicit. Everything either writer can spell with
-// ASCII, hyphens and all, both writers accept.
+// `llvm::json` will not refuse one on this writer's behalf — a `json::Value`
+// asserts on such a string, a `json::ObjectKey` does not, and `json::OStream`
+// rewrites one to U+FFFD. A crash is not a refusal, and neither is a string
+// quietly replaced by a different one, so the check is explicit and every
+// string path shares it: values, object keys, and sorted reference lists alike.
+// Everything either writer can spell with ASCII, hyphens and all, both writers
+// accept.
 //
 // FAILURE MODES
 //

@@ -66,6 +66,7 @@
 #include "veritas/evidence/EvidenceCanonicalizer.h"
 #include "veritas/evidence/EvidenceCase.h"
 #include "veritas/evidence/EvidenceQueryService.h"
+#include "veritas/evidence/EvidenceValidator.h"
 #include "veritas/evidence/SliceTypes.h"
 
 namespace veritas::evidence {
@@ -1076,6 +1077,91 @@ TEST(EvidenceJsonTest, RefusesAStringThatIsNotValidUtf8) {
   EXPECT_EQ(status.code(), StatusCode::kInvalidArgument);
   EXPECT_NE(status.message().find("UTF-8"), std::string_view::npos)
       << status.message();
+}
+
+// --- Every string path refuses, not just the value path ---------------------
+//
+// A string the case carries reaches `llvm::json` by one of three routes:
+// `JsonEmitter::Text` for an object value, `JsonEmitter::Key` for an object
+// key, and `JsonEmitter::SortedStrings` for a member of a sorted reference
+// list. All three can carry bytes this boundary cannot spell, and all three
+// must refuse. The three tests below pin one route each.
+//
+// Each one asserts first that the mutated case is *legal* —
+// `RequireValidEvidenceCase` accepts it and `FinalizeEvidenceIdentity` assigns
+// it an identity. That is load-bearing: none of these three positions is
+// validated, so a refusal that came from the validator would be the wrong
+// refusal, and the assertion proves the refusal is this boundary's own.
+//
+// `ToEvidenceJson` returns `StatusOr<std::string>`, so "no document" is
+// structural — a failed `StatusOr` has no value to return — and the check is
+// that the result is not `Ok`.
+namespace {
+
+// A property key the validator does not look at, one byte that JSON text
+// cannot carry.
+constexpr char kBadByte = '\xff';
+
+std::string BadUtf8Name() {
+  std::string name = "bad ";
+  name.push_back(kBadByte);
+  name += " name";
+  return name;
+}
+
+// Shared tail: the case is legal, and the writer refuses it with
+// `InvalidArgument` and no document. The two assertions before the refusal are
+// the ones that make the test about this boundary rather than about the
+// validator.
+void ExpectLegalCaseRefused(const EvidenceCase& value, llvm::StringRef what) {
+  const Status valid = RequireValidEvidenceCase(value);
+  ASSERT_TRUE(valid.ok()) << what.str() << ": " << valid.message();
+  ASSERT_TRUE(value.evidence_id.has_value()) << what.str();
+
+  const StatusOr<std::string> json = ToEvidenceJson(value);
+  ASSERT_FALSE(json.ok()) << what.str() << " produced a document";
+  EXPECT_EQ(json.status().code(), StatusCode::kInvalidArgument) << what.str();
+  EXPECT_NE(json.status().message().find("UTF-8"), std::string_view::npos)
+      << what.str() << ": " << json.status().message();
+}
+
+}  // namespace
+
+// The object-key path. Unguarded this returns `Ok`: the key reaches
+// `llvm::json::Object` without the check, `json::OStream` rewrites it to
+// U+FFFD, and the document carries a replaced key while `evidence_id` stays the
+// content address of the original bytes — a document that no longer means what
+// the case says.
+TEST(EvidenceJsonTest, RefusesAnEntityPropertyKeyThatIsNotValidUtf8) {
+  EvidenceCase value = MakeOverflowEvidenceCase();
+  value.entities.front().properties.emplace(
+      BadUtf8Name(), Call("tainted", {Reference(value.entities.front().id)}));
+  const Status status = FinalizeEvidenceIdentity(&value);
+  ASSERT_TRUE(status.ok()) << status.message();
+  ExpectLegalCaseRefused(value, "an entity property key");
+}
+
+// The `SortedStrings` path, one of two positions no validator rule reaches.
+// Unguarded this aborts inside `llvm::json`'s UTF-8 assertion rather than
+// refusing — the header's contract is that a crash is not a refusal, and here a
+// crash was the only thing that happened.
+TEST(EvidenceJsonTest, RefusesASummaryComponentThatIsNotValidUtf8) {
+  EvidenceCase value = MakeOverflowEvidenceCase();
+  ASSERT_FALSE(value.summaries.empty());
+  value.summaries.front().components.push_back(BadUtf8Name());
+  const Status status = FinalizeEvidenceIdentity(&value);
+  ASSERT_TRUE(status.ok()) << status.message();
+  ExpectLegalCaseRefused(value, "a summary component");
+}
+
+// The other unvalidated `SortedStrings` position.
+TEST(EvidenceJsonTest, RefusesAVerifierKindThatIsNotValidUtf8) {
+  EvidenceCase value = MakeOverflowEvidenceCase();
+  ASSERT_FALSE(value.proof_obligations.empty());
+  value.proof_obligations.front().verifier_kinds.push_back(BadUtf8Name());
+  const Status status = FinalizeEvidenceIdentity(&value);
+  ASSERT_TRUE(status.ok()) << status.message();
+  ExpectLegalCaseRefused(value, "a verifier kind");
 }
 
 // The divergence the refusal contract tolerates on purpose. The fixture's
