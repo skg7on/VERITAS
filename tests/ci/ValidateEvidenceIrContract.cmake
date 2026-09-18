@@ -225,12 +225,18 @@ endforeach()
 
 # Falsifying half of §24's revision record. The 1.0 row must not claim the
 # losslessness gap was closed, and must not describe the residue in the
-# singular: §4.1 records two things the amendment leaves unwritable -- the
-# entity `stable_id` corner and the `Producer` alphabet -- so a row asserting
-# closure, or counting one, contradicts the section it describes. Only the two
-# wrong claims are forbidden, not the row's wording -- a version record has to
-# stay rewritable, so these are negative pins rather than a quotation of the
-# replacement sentence.
+# singular: §4.1 records four things the amendment leaves unwritable -- the
+# entity `stable_id` corner, the `Producer` alphabet, the `Scope` alphabet, and
+# a property-bag key outside `Identifier` -- so a row asserting closure, or
+# counting one, contradicts the section it describes.
+#
+# Only those two wrong claims are forbidden, not the row's wording and not its
+# arithmetic -- a version record has to stay rewritable, so these are negative
+# pins rather than a quotation of the replacement sentence. §4.1's list is
+# allowed to grow, so pinning any particular number here would be wrong the
+# moment a fifth limit is recorded, and no pin short of quoting the count could
+# detect a stale one: a row reading "the two values that stay unwritable" would
+# pass these pins today and would have to be corrected against §4.1 itself.
 veritas_spec_section("${EIR_SPEC_CONTENT}"
     "## 24. Grammar Version History" "**End of Formal Specification**"
     EIR_SECTION_S24)

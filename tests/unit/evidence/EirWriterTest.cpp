@@ -47,7 +47,6 @@
 
 #include "veritas/evidence/EirText.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
