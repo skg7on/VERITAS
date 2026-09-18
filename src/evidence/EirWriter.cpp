@@ -55,8 +55,15 @@
 // error here rather than an omission. Spec §4.1 records the four that are
 // exactly unwritable (an out-of-set scope, an unspellable producer, a
 // `stable_id` bag entry on an entity with no identity, and a property-bag key
-// that is not an `Identifier`); the rest are the same obligation applied to the
-// expression grammar and the identifier alphabet.
+// the identifier gate cannot spell); the rest are the same obligation applied
+// to the expression grammar and the identifier alphabet.
+//
+// That gate is the shared `IsIdentifier`, whose predicate is `QualifiedId`'s
+// rather than `Identifier`'s: it admits an interior dot joining two segments,
+// so a key such as `a.b` is admitted and emitted even though
+// `PropertyKey ::= Identifier` does not derive it. Do not "tighten" the gate to
+// `Identifier` exactly. The parser forms `a.b` as one token, so it round-trips
+// today, and a gate that refused it could not re-emit its own parser's output.
 //
 // The fourth is the one a round trip cannot see at all. The parser refuses
 // whatever it is handed, so a round-trip test only ever exercises keys the
@@ -1049,15 +1056,20 @@ class EirWriter {
   // A `name = <property value>;` line at `depth`. `what` names the carrier in a
   // refusal.
   //
-  // `name` is validated before it is emitted, because §4.1 fixes
-  // `PropertyKey ::= Identifier` and `RequireValidEvidenceCase` does not
-  // constrain property keys: this is the only gate. An unvalidated key is not a
-  // cosmetic defect. `"not an identifier"` makes the writer emit text its own
-  // parser refuses, and `"x = 1; y"` makes it emit text that **reparses
-  // cleanly into a different case** — one carrying an injected property and a
-  // different `EvidenceID` — with no error anywhere. Guarding the key is what
-  // closes both; guarding the spelling of the output would not, since the
-  // injected document is well-formed.
+  // `name` is validated before it is emitted, because
+  // `RequireValidEvidenceCase` does not constrain property keys: this is the
+  // only gate. The `Identifier` call below is the shared `IsIdentifier`, so
+  // what it enforces is the token-level `QualifiedId` predicate — wider than
+  // the `PropertyKey ::= Identifier` §4.1 fixes, since it admits an interior
+  // dot. That is a recorded tolerance, not a gap to close: refusing a dotted
+  // key would reject a document the parser accepts, so the writer could not
+  // re-emit its own parser's output and `REP-001` would break. An unvalidated
+  // key is not a cosmetic defect. `"not an identifier"` makes the writer emit
+  // text its own parser refuses, and `"x = 1; y"` makes it emit text that
+  // **reparses cleanly into a different case** — one carrying an injected
+  // property and a different `EvidenceID` — with no error anywhere. Guarding
+  // the key is what closes both; guarding the spelling of the output would
+  // not, since the injected document is well-formed.
   void ValueLine(int depth, std::string_view what, std::string_view name,
                  const Expression& value) {
     if (!ok()) {
