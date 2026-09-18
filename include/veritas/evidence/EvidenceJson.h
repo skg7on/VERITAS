@@ -17,7 +17,7 @@
 // This is the *semantic* JSON boundary, and it is deliberately not the
 // diagnostic JSON that `SliceTypes.h` declares. `evidence::ToDiagnosticJson`
 // is a hand-rolled, hand-indented projection of the M10B *slice* types written
-// for `veritas-query --format json`; it carries no `llvm::json` dependency, it
+// for `veritas-query --format json`; it carries no LLVM JSON dependency, it
 // renders the slice the query returned rather than the case the case can
 // prove, and it drops everything the query did not look at. Nothing here
 // reuses it and nothing here changes it.
@@ -41,7 +41,7 @@
 // The output is a pure function of the case's *meaning*, not of the order the
 // case happened to be assembled in. Two rules produce that:
 //
-//   * Object members are emitted in the `std::map` order `llvm::json::OStream`
+//   * Object members are emitted in the `std::map` order `json::OStream`
 //     fixes for an object — lexicographic by key — which is the same order
 //     `core::CanonicalEncode` emits a `core::CanonicalObject` in, and the same
 //     convention `build::ToDiagnosticJson` documents for its own output.
@@ -117,12 +117,14 @@
 // invent a restriction the format does not have and make the fixture
 // `MakeOverflowEvidenceCase()`, whose witnesses carry the producer
 // `"evidence-query"`, unwritable. Wider: a string that is not valid UTF-8 is
-// refused, because JSON text is UTF-8 by definition (RFC 8259 §8.1) and
-// `llvm::json` will not refuse one on this writer's behalf — a `json::Value`
-// asserts on such a string, a `json::ObjectKey` does not, and `json::OStream`
-// rewrites one to U+FFFD. A crash is not a refusal, and neither is a string
-// quietly replaced by a different one, so the check is explicit and every
-// string path shares it: values, object keys, and sorted reference lists alike.
+// refused, because JSON text is UTF-8 by definition (RFC 8259 §8.1) and the
+// LLVM JSON library will not refuse one on this writer's behalf. A
+// `json::Value` or `json::ObjectKey` built from such a string asserts when
+// asserts are on and is replaced by U+FFFD when they are off; `json::OStream`
+// re-fixes a bad object *key* at output time but never touches a bad string
+// *value*. A crash is not a refusal, and neither is a string quietly replaced
+// by a different one, so the check is explicit and every string path shares
+// it: values, object keys, and sorted reference lists alike.
 // Everything either writer can spell with ASCII, hyphens and all, both writers
 // accept.
 //
