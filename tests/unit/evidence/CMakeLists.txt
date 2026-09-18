@@ -122,3 +122,17 @@ veritas_add_warnings(EirParserTest)
 gtest_discover_tests(EirParserTest DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
   PROPERTIES LABELS "evidence-unit\;evidence-eir-text")
+
+add_executable(EirWriterTest EirWriterTest.cpp)
+# The canonical writer consumes only public headers: `ParseEirText`,
+# `WriteEirText`, the validator, and the canonicalizer. The lexer's token model
+# is deliberately not part of the contract this suite asserts against.
+target_link_libraries(EirWriterTest PRIVATE
+  veritas::evidence
+  veritas::test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(EirWriterTest)
+gtest_discover_tests(EirWriterTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-unit\;evidence-eir-text")

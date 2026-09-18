@@ -61,6 +61,106 @@ struct EirParseError {
   std::string message;
 };
 
+// Which of the two EIR-T text layouts `WriteEirText` produces.
+//
+// The two modes differ in whitespace only — indentation and line breaks — and
+// never in a token, a value, or an order. Both parse back to the same
+// `eir.v1` case, so both encode to the same canonical bytes and therefore to
+// the same `EvidenceID`; a caller may choose either without affecting
+// identity.
+//
+//   * `kCanonical` — the tight, content-addressable layout: one declaration
+//     per line, four spaces of indentation per nesting level, no blank lines,
+//     no comments. This is the layout a caller pins a golden against.
+//   * `kPretty` — the same declarations and the same indentation, with a
+//     blank line between the case's top-level items so the structure is
+//     visible when read.
+//
+// Neither mode assumes one token per line, and neither ever emits a raw
+// newline or carriage return inside a string literal: `\n`, `\r`, `\t`, `\"`,
+// and `\\` are escaped, and every other byte is emitted as itself.
+enum class EirTextStyle {
+  kCanonical,
+  kPretty,
+};
+
+// Writes one `eir.v1` case as EIR-T text, in `style`.
+//
+// This is the inverse of `ParseEirText`: for a case `c` that this function
+// accepts, `ParseEirText(WriteEirText(c))` is a case with the same canonical
+// bytes and the same `EvidenceID`, and writing that result again reproduces
+// the same text byte for byte. That write/parse/write fixpoint is `REP-001`.
+//
+// The writer emits **no top-level case identifier**. §3.1 makes the case label
+// a display label that carries no semantic content and that the `eir.v1` model
+// has no member for, so canonical output is `evidence { … }` — the token after
+// `evidence` is always `{`. Nothing in this file, and nothing anywhere else,
+// derives a label from `EvidenceID`.
+//
+// ORDER
+//
+// Top-level properties are emitted `schema`, `level`, `state`, `context`, then
+// the members in the order
+// `entity, claim, fact, assumption, hypothesis, unknown, edge, path,
+// constraint, provenance, verify, summary, dependency, omission`. Within a
+// member category the records are emitted in the canonicalizer's order — its
+// `(kind, stable-id, local-id)` key — so the text's order is a function of the
+// case's meaning rather than of the order the case happened to be assembled
+// in. `ProgramBinding::analyzer_versions` and the four reference lists
+// (`Unknown::blocking_ids`, `Provenance::input_fact_ids`,
+// `SummaryReference::components`, `ProofObligation::verifier_kinds`) are
+// sorted, which §19.1 requires.
+//
+// Two sequences are emitted exactly as the model declares them, because the
+// model's order is what the reader preserves and neither is reordered for
+// identity: `Path::entity_ids` (the segment sequence *is* the path) and the
+// operands of `kAnd`/`kOr` (written flattened, never re-parenthesised). A case
+// whose commutative operands or path conditions were permuted therefore has
+// one `EvidenceID` — the canonicalizer orders both — but is written with the
+// order it declares. That asymmetry is deliberate and is not a `REP-001`
+// failure: the writer's fixpoint holds for each case, and identity never
+// depended on the text.
+//
+// REFUSALS
+//
+// The writer validates before it emits and returns a typed error rather than
+// producing text its own parser would refuse, or text that would read back as
+// a different case. In particular it refuses, rather than dropping or
+// coercing, the three values §4.1 records as having no EIR-T spelling at all:
+//
+//   * a `scope` outside `"global" | "function" | "path" | "basic_block" |
+//     "callsite" | "entity" | FunctionCall` — `Scope` is deliberately not
+//     widened, so the string has no spelling;
+//   * a producer string the `QualifiedId` alphabet cannot spell — empty, or
+//     carrying a character outside letters, digits, underscores, and interior
+//     dots. `Producer` has five carriers: `AnalyzerVersion::producer`,
+//     `Fact::producer`, `Hypothesis::producer`, `Provenance::producer`, and
+//     `ProofObligation::verification_producer`;
+//   * a property-bag entry named `stable_id` on an entity that declares no
+//     identity — the leading attribute binds the identity, so emitting such an
+//     entry would have it re-read as one.
+//
+// `REP-001` cannot detect any of these: a value the writer dropped would be
+// absent from both passes and the round trip would stay green. Silent omission
+// is therefore the defect, and a typed error is the fix.
+//
+// The same obligation governs the remaining refusals: an expression kind or a
+// value shape with no spelling in the position it occupies, an identifier that
+// is not an EIR-T identifier, a producer-shaped attribute that is not one, and
+// a call-shaped carrier that is not in the canonical spelling `RenderValue`
+// produces or that carries a raw line break. Each is a `Status`, never a
+// dropped value.
+//
+// FAILURE MODES
+//
+// Returns `InvalidArgument` when `value` is not well-formed, when it carries
+// no `evidence_id`, when its `evidence_id` is not its recomputed content
+// address, or when it holds one of the values above. A case that is not
+// finalized (`FinalizeEvidenceIdentity` has not run) is refused rather than
+// written, so a caller cannot serialize a case whose identity is not yet its
+// own. Every failure leaves `value` unchanged — the writer never mutates it.
+StatusOr<std::string> WriteEirText(const EvidenceCase& value, EirTextStyle style);
+
 // Reads one EIR-T document and lowers it to a validated, identity-bearing
 // `eir.v1` case.
 //
