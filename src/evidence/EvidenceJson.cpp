@@ -182,16 +182,17 @@ class JsonEmitter {
   // Whether `text` has a spelling in JSON text, which is UTF-8 by definition
   // (RFC 8259 §8.1). Every string this boundary writes — a value, an object
   // key, a member of one of the sorted reference lists below — is put through
-  // this predicate first, and no other route to the LLVM JSON library skips it.
+  // this predicate first, and no other route to `llvm::json` skips it.
   //
-  // The predicate has to be ours because the LLVM JSON library does not refuse
-  // for us. A `json::Value` or `json::ObjectKey` built from a bad string
-  // asserts when asserts are on and is replaced by U+FFFD when they are off,
-  // and `json::OStream` re-fixes a bad object *key* at output time — its
-  // `attributeBegin` checks the key and substitutes — while never touching a
-  // bad string *value*. A rewritten key is the worse of the two outcomes:
-  // `evidence_id` is the content address of the *original* bytes, so a document
-  // that spells a different string no longer describes the case it names.
+  // The predicate has to be ours because `llvm::json` does not refuse for us.
+  // `json::Value` asserts on a bad string in a build with asserts on, but
+  // `json::ObjectKey`'s identical assert does not survive this link: the
+  // constructor is inline, and `libLLVMSupport` — a release build — supplies an
+  // assert-free instantiation of the same symbol that the linker prefers, so a
+  // bad key is accepted and `json::OStream` then rewrites it to U+FFFD. A
+  // rewritten key is the worse of the two outcomes: `evidence_id` is the
+  // content address of the *original* bytes, so a document that spells a
+  // different string no longer describes the case it names.
   static bool IsSpellable(std::string_view text) {
     return llvm::json::isUTF8(text);
   }
