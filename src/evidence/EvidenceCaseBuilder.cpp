@@ -1075,7 +1075,24 @@ class Builder {
     path.id = std::string(kPathLocalId);
     path.kind = PathKind::kValueFlow;
     path.entity_ids = chain;
-    path.feasibility = Feasibility::kSat;
+    // The M10B handoff carries no feasibility for a path: `EvidenceBuildInput`
+    // is a claim seed, a flow slice, six fact sets, completion certificates,
+    // bindings, witnesses and a program context, and none of them says whether
+    // any path is realizable. So there is nothing to copy, and `kSat` would be
+    // an assertion rather than a transcription — §22 of the EIR architecture
+    // ("Path feasibility") says `SAT` "typically means an SMT/symbolic model was
+    // found", and no model was found here. `kUnspecified` is not available as
+    // the "nothing established"
+    // value: `EvidenceValidator` rejects a path that declares no feasibility
+    // (`kMissingEpistemic`, validator rule for `paths`). `kUnknown` is both
+    // permitted and true — the analysis established the flow, and never
+    // established feasibility — so it is what the case states. `kUntested` is
+    // the near neighbour and is wrong: it would say the question was posed and
+    // skipped, when it was never posed at all. The obligation below is
+    // unaffected: it asks the verifier to *prove* a bound over every path
+    // reaching the sink, and a PENDING proof over an unknown-feasibility path is
+    // exactly the honest statement of that question.
+    path.feasibility = Feasibility::kUnknown;
     const std::string* flow_provenance =
         ProvenanceForFact(input.flow_slice.metadata.query_provenance_id);
     path.provenance_id =
@@ -1166,6 +1183,22 @@ class Builder {
           "OM_sibling_check_scope");
     }
 
+    // The scope the absence is claimed over, resolved to the handle the case
+    // declares it under. The descriptor's scope is an *ordered ref list* and the
+    // predicate is binary (`dominates_bounds_check(scope, sink)`, the plan's
+    // Step 6), so the fact names the list's leading member — the query's scope
+    // anchor — as its scope and the claim's sink as its subject. The check
+    // above already established that the sink is among the refs, so a query
+    // scoped to the sink alone still states `(sink, sink)`, while a query scoped
+    // to an enclosing member first states `(enclosing, sink)` — the convention
+    // the hand-authored fixture uses (`dominates(@vendor_validate, @memcpy)`).
+    // Naming the sink twice unconditionally understated what the query actually
+    // covered: the scope is the query's, and the sink is the absence's subject.
+    auto scope_local = LocalForOrFail(
+        descriptor.value().ordered_scope_refs.front(),
+        "the dominating-check query's scope");
+    if (!scope_local.ok()) return scope_local.status();
+
     const std::string certificate_text = StableText(fact->fact_id);
     auto binding = binding_by_fact_.find(certificate_text);
     if (binding == binding_by_fact_.end() ||
@@ -1234,7 +1267,7 @@ class Builder {
         evidence.stable_id = row->fact_id;
         evidence.predicate =
             Call(std::string(kAbsencePredicate),
-                 {Reference(sink_local.value()), Reference(sink_local.value())});
+                 {Reference(scope_local.value()), Reference(sink_local.value())});
         evidence.epistemic = CopyEpistemicState(raw);
         evidence.confidence = ConfidenceForState(evidence.epistemic);
         evidence.producer = std::string(kCoverageProducerId);
@@ -1281,7 +1314,7 @@ class Builder {
     absence.stable_id = fact->fact_id;
     absence.predicate =
         Call(std::string(kAbsencePredicate),
-             {Reference(sink_local.value()), Reference(sink_local.value())});
+             {Reference(scope_local.value()), Reference(sink_local.value())});
     absence.epistemic = EpistemicState::kMustNot;
     absence.confidence = Confidence::kExact;
     absence.producer = std::string(kClosedWorldProducerId);

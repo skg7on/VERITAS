@@ -147,6 +147,19 @@ const Provenance* FindProvenance(const EvidenceCase& value,
   return nullptr;
 }
 
+// The record declared under a given case-local handle. Distinct from the
+// rule-based finder above, which is what the L49 test wants; here the handles
+// are the point, so this one matches `id`.
+const Provenance* FindProvenanceById(const EvidenceCase& value,
+                                     std::string_view id) {
+  for (const Provenance& record : value.provenance) {
+    if (record.id == id) {
+      return &record;
+    }
+  }
+  return nullptr;
+}
+
 std::set<std::string> IdsOf(const std::vector<Entity>& members) {
   std::set<std::string> ids;
   for (const Entity& member : members) ids.insert(member.id);
@@ -889,6 +902,52 @@ std::vector<std::string> DifferingFamilies(const EvidenceCase& built,
   return differing;
 }
 
+// One expression in the fixture golden's own spelling, so a content pin below
+// reads as the statement the case makes rather than as an operand walk. It is
+// deliberately local to this file: the assertions it feeds are about what these
+// two cases say, and the golden is written in this spelling.
+std::string ExpressionText(const Expression& value) {
+  auto joined = [&value](std::string_view separator) {
+    std::string out;
+    for (std::size_t i = 0; i < value.operands.size(); ++i) {
+      if (i != 0) out += separator;
+      out += ExpressionText(value.operands[i]);
+    }
+    return out;
+  };
+  switch (value.kind) {
+    case Expression::Kind::kBool:
+      return value.boolean ? "true" : "false";
+    case Expression::Kind::kInteger:
+      return std::to_string(value.integer);
+    case Expression::Kind::kString:
+      return "\"" + value.text + "\"";
+    case Expression::Kind::kSymbol:
+      return value.text;
+    case Expression::Kind::kReference:
+      return "@" + value.text;
+    case Expression::Kind::kCall:
+      return value.text + "(" + joined(", ") + ")";
+    case Expression::Kind::kNot:
+      return "!" + joined(", ");
+    case Expression::Kind::kCompare:
+      return joined(" " + value.text + " ");
+    case Expression::Kind::kAnd:
+      return "(" + joined(" and ") + ")";
+    case Expression::Kind::kOr:
+      return "(" + joined(" or ") + ")";
+    case Expression::Kind::kImplies:
+      return "(" + joined(" => ") + ")";
+    case Expression::Kind::kForAll:
+      return "forall " + value.text + ". " + joined(", ");
+    case Expression::Kind::kExists:
+      return "exists " + value.text + ". " + joined(", ");
+    case Expression::Kind::kUnspecified:
+      break;
+  }
+  return "<unspecified>";
+}
+
 // Ruling L52: the builder must reproduce `BindProgram`'s mapping for every
 // binding, and the case it builds must be traceable to the fixture at exactly
 // one point — the L49 producer translation.
@@ -957,25 +1016,56 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
   // this test. Each entry is accounted for by what the handoff cannot carry:
   //
   //   * entities — the builder declares one entity the fixture does not: the
-  //     memory slot the M8R.2 range row keys on. The fixture hand-bridges it
-  //     (its range fact names `E_copy_length` while the row names
-  //     `copy_length:memory`); the builder declares the identity the fact
-  //     actually carries.
+  //     M8R.2 memory slot the range row actually keys on
+  //     (`E_memory_object_46d5ae3e`). The fixture states the same range window
+  //     over the value handle `E_copy_length` and declares no memory-object
+  //     entity at all, so the two cases carry the window under different
+  //     subjects.
   //   * edges — the fixture marks the call into `vendor_validate` expandable
   //     and gives it a `summarized_by` summary reference. The handoff carries
   //     no summary identity, so the builder refuses to name an expansion it
   //     cannot show and the edge is not expandable.
-  //   * facts — the fixture states three; the builder states five. The two it
-  //     adds are the closed-world pair: the completion certificate it
-  //     re-derived and the absence it derived from it.
-  //   * paths — one path in both, stating the same chain and the same alias
-  //     condition; the builder's provenance handle for it is derived from the
-  //     record's content (`PR_value_flow`) rather than hand-named (`PR_flow`).
-  //   * constraints, unknowns, provenance, proof_obligations, dependencies,
-  //     omissions, summaries, assumptions, hypotheses — the fixture hand-authors
-  //     rule IDs, `anchor:*` source anchors, an assumption, a hypothesis, and a
-  //     summary reference. None of those has a source in the request, and the
-  //     builder emits none of them rather than inventing a derivation.
+  //   * facts — both cases state **three**, and they differ in content, not in
+  //     count. The count is three because this test builds the *truncated*
+  //     request, whose dominating-check result is withheld, so the builder
+  //     derives no closed-world pair and adds no fact; a complete request does
+  //     reach five, the three plus the completion certificate and the absence
+  //     derived from it. What differs here is the range fact's subject — the
+  //     builder's memory slot against the fixture's `E_copy_length`, as above —
+  //     and the alias fact's handle (`F_alias` against `F_alias_may`), the
+  //     statement itself being identical in both.
+  //   * paths — one path in both, and it differs in two fields: `feasibility`
+  //     and `provenance_id`. Neither difference is a spelling. See below.
+  //   * constraints — the fixture carries `K_value_within_capacity` as a MUST
+  //     justified by a specification record; the builder carries
+  //     `K_path_safety` as a MAY justified by the query witness. Handle,
+  //     epistemic state, and provenance all differ.
+  //   * unknowns — the fixture states two: a truncated dominating-check unknown
+  //     over `dominates(@E_vendor_validate, @E_memcpy)` and the
+  //     vendor-validate postcondition unknown. The builder states three: the
+  //     two function-effect unknowns the handoff's unknown slot carries, plus
+  //     the truncated dominating-check unknown over the sink.
+  //   * omissions — both state three, and they are different three: the fixture
+  //     carries a `summary_expansion` (recoverable, its summary reference) that
+  //     the builder cannot emit for want of a summary identity, and its
+  //     truncated-query omission names the fixture's unknown.
+  //   * provenance — the fixture hand-authors eight records with per-family
+  //     producers and rules (`analysis.value_range` / `range.known.v1`) and
+  //     `anchor:*` source anchors; the builder derives six, each carrying the
+  //     producer and rule of the M9 witness it was handed and no anchor. (That
+  //     the builder's records all carry one producer is the design question
+  //     carried forward separately; this test pins the count and the path
+  //     record's attribution, not every record's.)
+  //   * proof_obligations — one `prove` obligation, PENDING in both. Its goal
+  //     differs where the entity handles do: the fixture quantifies over
+  //     `feasible_paths(@E_entry, ...)` and the builder over
+  //     `feasible_paths(@E_srcbuf, ...)`, the first member of the value-flow
+  //     chain it was handed.
+  //   * dependencies — the fixture carries five, the builder three: the summary
+  //     and specification dependencies have no source in the handoff.
+  //   * summaries, assumptions, hypotheses — one each in the fixture, none in
+  //     the builder. The handoff carries no summary identity, no assumption, and
+  //     no hypothesis, and the builder invents none of them.
   EXPECT_EQ(DifferingFamilies(built, fixture),
             (std::vector<std::string>{
                 "assumptions",   "constraints", "dependencies", "edges",
@@ -988,23 +1078,237 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
   EXPECT_EQ(IdsOf(built.paths), IdsOf(fixture.paths));
   EXPECT_EQ(built.paths.front().entity_ids, fixture.paths.front().entity_ids);
   EXPECT_EQ(built.paths.front().kind, fixture.paths.front().kind);
-  EXPECT_EQ(built.paths.front().feasibility, fixture.paths.front().feasibility);
   EXPECT_EQ(built.primary_claim.subject, fixture.primary_claim.subject);
   EXPECT_EQ(built.primary_claim.predicate, fixture.primary_claim.predicate);
 
-  // The path differs in exactly one field, and the difference is a local-handle
-  // spelling rather than a statement: the builder derives provenance handles
-  // from the record's content, so the value-flow record is `PR_value_flow` here
-  // and hand-named `PR_flow` in the fixture.
+  // The path differs in exactly two fields. Neither is a cosmetic spelling.
   //
-  // Everything the path *states* is identical, and the load-bearing part is the
-  // condition: an alias the analysis could only establish as MAY is carried as
-  // a condition on the path that depends on it, never promoted to a premise
-  // (BLD-005). Both cases say `alias(E_srcbuf, E_dstbuf)`.
+  // `feasibility` is the first: the fixture is a hand-authored model instance
+  // and says `SAT`, while the builder says `UNKNOWN`, because the M10B handoff
+  // carries no feasibility for a path and `SAT` is reserved for a path an
+  // SMT/symbolic model was found for (EIR architecture §22). Stating `SAT` here
+  // would be the builder asserting a result nothing gave it; the model admits
+  // `UNKNOWN`, and the validator accepts it.
+  EXPECT_EQ(fixture.paths.front().feasibility, Feasibility::kSat);
+  EXPECT_EQ(built.paths.front().feasibility, Feasibility::kUnknown)
+      << "the builder asserted a feasibility the handoff never carried";
+
+  // `provenance_id` is the second: `PR_value_flow` against `PR_flow`. Those are
+  // handles, but the two handles do not name equivalent records:
+  //
+  //   * `PR_flow` (fixture) — producer `analysis.value_flow`, rule
+  //     `value_flow.interprocedural.v1`, anchor `anchor:memcpy`
+  //   * `PR_value_flow` (builder) — producer `evidence.query`, rule
+  //     `evidence.query_completion.v1`, no anchor
+  //
+  // Both the producer and the rule differ, and the reason is structural: the
+  // M10B handoff's only provenance for the facts it carries is the query
+  // witness, so the builder attributes every record it derives to that witness
+  // and has no `analysis.value_flow` record to point at. Whether the builder's
+  // attribution or the fixture's is the better one is the design question
+  // carried forward separately; what this test pins is that the difference is
+  // an attribution and not a renaming.
+  //
+  // Everything the path *states* about the flow is identical, and the
+  // load-bearing part is the condition: an alias the analysis could only
+  // establish as MAY is carried as a condition on the path that depends on it,
+  // never promoted to a premise (BLD-005). Both cases say
+  // `alias(@E_srcbuf, @E_dstbuf)`.
   ASSERT_EQ(built.paths.front().conditions.size(), 1u);
   EXPECT_EQ(built.paths.front().conditions, fixture.paths.front().conditions);
   EXPECT_EQ(built.paths.front().provenance_id, "PR_value_flow");
   EXPECT_EQ(fixture.paths.front().provenance_id, "PR_flow");
+
+  const Provenance* fixture_path_record = FindProvenanceById(fixture, "PR_flow");
+  const Provenance* built_path_record =
+      FindProvenanceById(built, "PR_value_flow");
+  ASSERT_NE(fixture_path_record, nullptr);
+  ASSERT_NE(built_path_record, nullptr);
+  EXPECT_EQ(fixture_path_record->producer, "analysis.value_flow");
+  EXPECT_EQ(fixture_path_record->rule, "value_flow.interprocedural.v1");
+  EXPECT_EQ(built_path_record->producer, std::string(kEvidenceQueryProducerId));
+  EXPECT_EQ(built_path_record->rule, std::string(kQueryCompletionRuleId));
+  EXPECT_NE(fixture_path_record->producer, built_path_record->producer)
+      << "the two records agree on their producer, so the handle difference "
+         "would be a spelling after all";
+  EXPECT_NE(fixture_path_record->rule, built_path_record->rule);
+
+  // --- F8: the residual above names *which* families differ, never how their
+  // members differ, so a value changed inside a listed-differing family would
+  // stay green — which is exactly what the three facts of this case did before
+  // this block existed. These pins are the missing half: they state the built
+  // members' content exactly, so a within-family value error is as visible as a
+  // new family would be.
+  ASSERT_EQ(built.facts.size(), 3u);
+  auto fact_text = [&built](std::string_view id) {
+    for (const Fact& fact : built.facts) {
+      if (fact.id == id) {
+        return ExpressionText(fact.predicate);
+      }
+    }
+    return std::string("<no such fact>");
+  };
+  EXPECT_EQ(fact_text("F_range"), "range(@E_memory_object_46d5ae3e, 0, 65535)")
+      << "the range fact's subject or its window bounds moved";
+  EXPECT_EQ(fact_text("F_capacity"), "capacity(@E_dstbuf, 2048)");
+  EXPECT_EQ(fact_text("F_alias"), "alias(@E_srcbuf, @E_dstbuf)");
+
+  // The alias fact is the one the case could weaken: it is the MAY premise the
+  // whole path condition rests on, so its state is pinned as content too.
+  for (const Fact& fact : built.facts) {
+    if (fact.id != "F_alias") {
+      continue;
+    }
+    EXPECT_EQ(fact.epistemic, EpistemicState::kMay)
+        << "the alias premise was strengthened past the MAY the analysis "
+           "established (BLD-005)";
+    EXPECT_TRUE(fact.derived);
+  }
+
+  // The path family's own content: one path, one condition, the feasibility the
+  // builder is entitled to state, and the record it points at. `IdsOf` above
+  // only says the two cases agree on the handle.
+  ASSERT_EQ(built.paths.size(), 1u);
+  EXPECT_EQ(built.paths.front().id, "P_value_flow");
+  EXPECT_EQ(built.paths.front().provenance_id, "PR_value_flow");
+  EXPECT_EQ(built.paths.front().feasibility, Feasibility::kUnknown);
+
+  // The provenance family is listed as differing, so its count is pinned here
+  // too: six records, all attributed to the one witness the handoff carried.
+  EXPECT_EQ(built.provenance.size(), 6u);
+  for (const Provenance& record : built.provenance) {
+    EXPECT_EQ(record.producer, std::string(kEvidenceQueryProducerId))
+        << "record '" << record.id << "' is attributed to a producer the "
+        << "handoff never carried";
+    EXPECT_EQ(record.rule, std::string(kQueryCompletionRuleId));
+    EXPECT_TRUE(record.source_anchor_id.empty())
+        << "record '" << record.id << "' names a source anchor the handoff "
+        << "never carried";
+  }
+}
+
+// --- The dominating-check absence's two handles -------------------------------
+
+// BLD-003 and BLD-007. The dominating-check query is issued over an *ordered*
+// ref list, and the absence the builder derives from a complete-empty result is
+// binary: `dominates_bounds_check(scope, sink)`. The scope is the query's own
+// list head and the sink is the claim's, so when the query is scoped to an
+// enclosing entity the two operands are different handles. Naming the sink
+// twice regardless would understate what the query actually covered — and would
+// silently agree with the demo request, whose scope really is the sink alone,
+// which is why this test also builds that one.
+//
+// The operand order is load-bearing in the other direction too: the scope must
+// be the *query's* head, not the claim's source. It happens that a scope of
+// `{source, sink}` makes those coincide here, so the test states the query's
+// head explicitly and leaves the claim's source as the value it was given.
+TEST(EvidenceCaseBuilderTest, Bld007ScopeIsTheQuerysHeadAndTheSinkIsItsSubject) {
+  EvidenceScenarioBuilder scenario;
+  const EvidenceBuildRequest defaults =
+      scenario.BuildRequest(EvidenceLevel::kL1);
+  const core::StableId source = defaults.input.claim_seed.source_ref;
+  const core::StableId sink = defaults.input.claim_seed.sink_ref;
+  ASSERT_NE(source, sink) << "the fixture's source and sink are one handle, so "
+                             "this test could not tell them apart";
+
+  // The default scope: the sink alone, as the M10B producer issues it.
+  const EvidenceCase sink_scoped = BuildOrFail(defaults);
+  const std::vector<const Fact*> sink_facts =
+      FindFacts(sink_scoped, kAbsencePredicate);
+  ASSERT_EQ(sink_facts.size(), 1u);
+  EXPECT_EQ(ExpressionText(sink_facts.front()->predicate),
+            "dominates_bounds_check(@E_memcpy, @E_memcpy)")
+      << "the sink-scoped query no longer states the sink twice, so the "
+         "enclosing-scoped assertion below would prove nothing";
+
+  // The enclosing scope: the source first, the sink still among the refs.
+  // Built twice, because the builder emits this predicate from two places and
+  // both must name the query's scope: BLD-007 derives the closed-world absence
+  // from a complete-*empty* result, and BLD-002 records a check it *found* as
+  // counterevidence. The demo request reaches the first; the second needs the
+  // query to return something, which is what `WithDominatingCheckFound` asks
+  // for. A test that built only the demo request would leave BLD-002's operand
+  // free to regress to the sink unnoticed.
+  for (bool check_found : {false, true}) {
+    EvidenceScenarioBuilder scoped;
+    if (check_found) {
+      scoped.WithDominatingCheckFound();
+    }
+    scoped.WithDominatingCheckScope({source, sink});
+    const EvidenceCase enclosing_scoped =
+        BuildOrFail(scoped.BuildRequest(EvidenceLevel::kL1));
+    EXPECT_TRUE(RequireValidEvidenceCase(enclosing_scoped).ok());
+
+    const std::vector<const Fact*> enclosing_facts =
+        FindFacts(enclosing_scoped, kAbsencePredicate);
+    ASSERT_EQ(enclosing_facts.size(), 1u)
+        << (check_found ? "the found-check path emitted no coverage fact"
+                        : "the closed-world path emitted no absence fact");
+    EXPECT_EQ(ExpressionText(enclosing_facts.front()->predicate),
+              "dominates_bounds_check(@E_copy_length, @E_memcpy)")
+        << (check_found
+                ? "the recorded check named the sink twice instead of the "
+                  "scope the query was issued over"
+                : "the derived absence named the sink twice instead of the "
+                  "scope the query was issued over");
+    EXPECT_NE(enclosing_facts.front()->predicate.operands[0].text,
+              enclosing_facts.front()->predicate.operands[1].text)
+        << "the two operands are the same handle, so the fact still states the "
+           "sink twice";
+  }
+}
+
+// --- The path's feasibility --------------------------------------------------
+
+// F5. The M10B handoff carries no feasibility for a path, so the builder has
+// nothing to copy: it states `UNKNOWN`, the model's open value. `SAT` is
+// reserved for a path an SMT or symbolic model was found for (EIR architecture
+// §22) and this layer runs no solver, so asserting it would be the builder
+// inventing a result.
+//
+// The other half of the same choice: `UNSPECIFIED` is not the honest value
+// either. It is the model's *no-value* sentinel, and the validator rejects a
+// path that carries it, which is why the builder cannot simply decline to
+// answer. This test pins both halves.
+TEST(EvidenceCaseBuilderTest, PathFeasibilityIsUnknownAndNoValueIsRejected) {
+  EvidenceCase value = BuildOrFail(PristineRequest(EvidenceLevel::kL1));
+  ASSERT_EQ(value.paths.size(), 1u);
+  EXPECT_EQ(value.paths.front().feasibility, Feasibility::kUnknown)
+      << "the builder stated a feasibility the handoff never carried";
+  EXPECT_NE(value.paths.front().feasibility, Feasibility::kSat);
+  EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
+
+  value.paths.front().feasibility = Feasibility::kUnspecified;
+  const Status status = RequireValidEvidenceCase(value);
+  EXPECT_FALSE(status.ok())
+      << "the validator accepted a path that declares no feasibility at all, "
+         "so declining to answer would have been available to the builder";
+  EXPECT_EQ(status.code(), StatusCode::kInvalidArgument);
+  EXPECT_NE(status.message().find("declares no feasibility"), std::string::npos)
+      << "the refusal did not come from the missing-feasibility rule: "
+      << status.message();
+}
+
+// --- The analyzer list --------------------------------------------------------
+
+// F7. `EvidenceBuildRequest::analyzer_versions` may be empty, and the binding
+// says so rather than refusing: M10C reports the analyzers it was told about
+// and does not synthesize a set. An input taken from a snapshot that recorded
+// no analyzer identity is still a valid case.
+TEST(EvidenceCaseBuilderTest, AnEmptyAnalyzerListIsCarriedNotRefused) {
+  EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
+  ASSERT_FALSE(request.analyzer_versions.empty())
+      << "the fixture no longer carries analyzers, so this test could not tell "
+         "an empty list from a dropped one";
+  request.analyzer_versions.clear();
+
+  const EvidenceCase value = BuildOrFail(request);
+  EXPECT_TRUE(value.program.analyzer_versions.empty());
+  EXPECT_EQ(value.program.analyzer_versions,
+            (std::vector<AnalyzerVersion>{}));
+  EXPECT_TRUE(RequireValidEvidenceCase(value).ok())
+      << "a case bound to a snapshot with no recorded analyzer identity was "
+      << "refused";
 }
 
 // --- Determinism -------------------------------------------------------------

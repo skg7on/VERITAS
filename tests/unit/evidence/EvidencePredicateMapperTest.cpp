@@ -350,5 +350,157 @@ TEST(EvidencePredicateMapperTest, KeepsTheStableIdentityOfTheSourceFact) {
   EXPECT_EQ(mapped.value().provenance_id, "PR_test");
 }
 
+// --- Byte windows: range_kind is read, and the bounds are bounds ------------
+
+// A `DirectRead`/`DirectWrite` row whose `range_kind` is `kUnknown` carries
+// `0/0` sentinels rather than measurements: M10B writes `offset_known() &&
+// size_known()` as one decision, so an unbounded access arrives as
+// `{kUnknown, 0, 0}`. Lowering those sentinels states `range(@mem, 0, 0)` — a
+// zero-length, provably-safe window — for an access the analysis explicitly
+// refused to bound, which is the epistemic strengthening this milestone exists
+// to prevent. The mapper refuses the row instead.
+TEST(EvidencePredicateMapperTest, UnboundedReadWindowIsRefusedNotLoweredToZero) {
+  const EvidenceScenarioBuilder scenario;
+  const core::StableId function =
+      scenario.Id(core::IdKind::kFunctionVariant, "decode");
+  const core::StableId memory =
+      scenario.Id(core::IdKind::kMemoryRef, "left_buffer");
+
+  LocalIdTable table;
+  table.Bind(memory, std::string(kLeftHandle));
+
+  // Exactly the shape `WpaInputMaterializer::MemoryEffectsOf` emits for an
+  // effect the analyzer declined to bound: `kUnknown` with the `0/0` sentinels
+  // and an epistemic state that is emphatically `kMust`.
+  const facts::AnalysisFact fact = MakeRow(
+      facts::RelationId::kDirectRead,
+      {function, memory, sem::ByteRangeKind::kUnknown, std::int64_t{0},
+       std::uint64_t{0}, sem::EpistemicState::kMust});
+
+  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_range"));
+
+  ASSERT_FALSE(mapped.ok())
+      << "an unbounded read window was lowered into a bounded interval";
+  EXPECT_EQ(mapped.status().code(), StatusCode::kInvalidArgument);
+  EXPECT_NE(mapped.status().message().find("range_kind"), std::string::npos)
+      << mapped.status().message();
+}
+
+// The same gate covers `DirectWrite` -> `capacity(@memory, bytes)`: an
+// unbounded write's sentinel `size` would state an object with no room in it.
+TEST(EvidencePredicateMapperTest, UnboundedWriteWindowIsRefusedNotLoweredToZero) {
+  const EvidenceScenarioBuilder scenario;
+  const core::StableId function =
+      scenario.Id(core::IdKind::kFunctionVariant, "decode");
+  const core::StableId memory =
+      scenario.Id(core::IdKind::kMemoryRef, "left_buffer");
+
+  LocalIdTable table;
+  table.Bind(memory, std::string(kLeftHandle));
+
+  const facts::AnalysisFact fact = MakeRow(
+      facts::RelationId::kDirectWrite,
+      {function, memory, sem::ByteRangeKind::kUnknown, std::int64_t{0},
+       std::uint64_t{0}, sem::EpistemicState::kMust});
+
+  auto mapped =
+      EvidencePredicateMapper().MapFact(fact, table, Handle("F_capacity"));
+
+  ASSERT_FALSE(mapped.ok());
+  EXPECT_EQ(mapped.status().code(), StatusCode::kInvalidArgument);
+  EXPECT_NE(mapped.status().message().find("range_kind"), std::string::npos)
+      << mapped.status().message();
+}
+
+// The negative control for the two refusals: a `kKnown` row of the same shape
+// still maps, so the gate turns on `range_kind` alone and not on the row's
+// relation, its `0` offset, or its epistemic state.
+TEST(EvidencePredicateMapperTest, KnownWindowOfTheSameShapeStillMaps) {
+  const EvidenceScenarioBuilder scenario;
+  const core::StableId function =
+      scenario.Id(core::IdKind::kFunctionVariant, "decode");
+  const core::StableId memory =
+      scenario.Id(core::IdKind::kMemoryRef, "left_buffer");
+
+  LocalIdTable table;
+  table.Bind(memory, std::string(kLeftHandle));
+
+  const facts::AnalysisFact fact = MakeRow(
+      facts::RelationId::kDirectRead,
+      {function, memory, sem::ByteRangeKind::kKnown, std::int64_t{0},
+       std::uint64_t{0}, sem::EpistemicState::kMust});
+
+  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_range"));
+  ASSERT_TRUE(mapped.ok()) << mapped.status().message();
+  EXPECT_EQ(mapped.value().predicate.text, "range");
+}
+
+// `range(@value, min, max)` states the *bounds* of the access window. The
+// registry's cells are `(range_kind, offset, size)` — a start and a length — so
+// the third operand is the window's end, not its length. Passing `size` through
+// unchanged narrows every non-zero-offset window and makes the case look safer
+// than the analysis found it; at offset 0 (the demo's row) the two agree, which
+// is exactly why this test uses a non-zero offset.
+TEST(EvidencePredicateMapperTest, RangeStatesTheWindowBoundsNotItsLength) {
+  const EvidenceScenarioBuilder scenario;
+  const core::StableId function =
+      scenario.Id(core::IdKind::kFunctionVariant, "decode");
+  const core::StableId memory =
+      scenario.Id(core::IdKind::kMemoryRef, "left_buffer");
+
+  LocalIdTable table;
+  table.Bind(memory, std::string(kLeftHandle));
+
+  // A 16-byte read starting at byte 8 covers [8, 24).
+  const facts::AnalysisFact fact = MakeRow(
+      facts::RelationId::kDirectRead,
+      {function, memory, sem::ByteRangeKind::kKnown, std::int64_t{8},
+       std::uint64_t{16}, sem::EpistemicState::kMust});
+
+  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_range"));
+
+  ASSERT_TRUE(mapped.ok()) << mapped.status().message();
+  const Expression& predicate = mapped.value().predicate;
+  ASSERT_EQ(predicate.kind, Expression::Kind::kCall);
+  EXPECT_EQ(predicate.text, "range");
+  ASSERT_EQ(predicate.operands.size(), 3u);
+  EXPECT_EQ(predicate.operands[0].text, kLeftHandle);
+  EXPECT_EQ(predicate.operands[1].kind, Expression::Kind::kInteger);
+  EXPECT_EQ(predicate.operands[1].integer, 8);
+  EXPECT_EQ(predicate.operands[2].kind, Expression::Kind::kInteger);
+  EXPECT_EQ(predicate.operands[2].integer, 24)
+      << "the window [8, 24) was lowered as [8, " << predicate.operands[2].integer
+      << "): the length was passed through where the end belongs";
+}
+
+// `capacity(@memory, bytes)` takes the row's `size` cell unchanged: the extent
+// of an object is its length, not a window bound, so a non-zero offset must not
+// inflate it the way F2's correction does for `range`.
+TEST(EvidencePredicateMapperTest, CapacityStatesTheObjectsExtentNotTheWindowEnd) {
+  const EvidenceScenarioBuilder scenario;
+  const core::StableId function =
+      scenario.Id(core::IdKind::kFunctionVariant, "decode");
+  const core::StableId memory =
+      scenario.Id(core::IdKind::kMemoryRef, "left_buffer");
+
+  LocalIdTable table;
+  table.Bind(memory, std::string(kLeftHandle));
+
+  const facts::AnalysisFact fact = MakeRow(
+      facts::RelationId::kDirectWrite,
+      {function, memory, sem::ByteRangeKind::kKnown, std::int64_t{8},
+       std::uint64_t{2048}, sem::EpistemicState::kMust});
+
+  auto mapped =
+      EvidencePredicateMapper().MapFact(fact, table, Handle("F_capacity"));
+
+  ASSERT_TRUE(mapped.ok()) << mapped.status().message();
+  const Expression& predicate = mapped.value().predicate;
+  ASSERT_EQ(predicate.kind, Expression::Kind::kCall);
+  EXPECT_EQ(predicate.text, "capacity");
+  ASSERT_EQ(predicate.operands.size(), 2u);
+  EXPECT_EQ(predicate.operands[1].integer, 2048);
+}
+
 }  // namespace
 }  // namespace veritas::evidence

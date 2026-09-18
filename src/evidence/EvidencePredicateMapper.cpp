@@ -42,11 +42,86 @@ const sem::EpistemicState* AsEpistemic(const facts::SemanticCellValue& cell) {
   return std::get_if<sem::EpistemicState>(&cell);
 }
 
+const sem::ByteRangeKind* AsByteRangeKind(
+    const facts::SemanticCellValue& cell) {
+  return std::get_if<sem::ByteRangeKind>(&cell);
+}
+
+// The byte window a bounded `DirectRead`/`DirectWrite` row establishes:
+// `size` bytes starting at `offset`, i.e. the half-open interval
+// `[offset, offset + size)`.
+struct ByteWindow {
+  std::int64_t offset;
+  std::uint64_t size;
+
+  // The window's exclusive upper bound. Unsigned throughout, because the cell
+  // that carries `size` is unsigned and a window is never negative; the cast
+  // back is the EIR `Integer` operand's own domain.
+  std::int64_t end() const {
+    return static_cast<std::int64_t>(static_cast<std::uint64_t>(offset) + size);
+  }
+};
+
 std::string CellMismatch(facts::RelationId relation, std::size_t index,
                          std::string_view expected) {
   return "fact row for relation '" +
          facts::RelationsV2().Get(relation).name + "' cell " +
          std::to_string(index) + " is not a " + std::string(expected);
+}
+
+// The access window a `DirectRead`/`DirectWrite` row carries.
+//
+// M10B's `WpaInputMaterializer` writes `range.offset_known() &&
+// range.size_known()` as ONE decision: a row whose window the analysis declined
+// to bound arrives as
+//
+//     {range_kind = kUnknown, offset = 0, size = 0, epistemic = <whatever>}
+//
+// The offset and size cells are *sentinels*, not measurements — the analysis
+// refused to establish the window, so it has no bounds to report. A lowering
+// that read those cells without reading `range_kind` would state
+// `range(@mem, 0, 0)` — a precise, zero-length, provably-safe interval — for a
+// window the analysis explicitly left unbounded. That is exactly the epistemic
+// strengthening this milestone exists to prevent — "M10C copies authoritative
+// M9/M10A epistemic values and never strengthens them during assembly" (§4 of
+// the M10C design spec) — and it points the unsafe way: an unbounded copy would
+// read as a bounded one.
+//
+// So the mapper refuses the row instead. `range(value, min, max)` has no
+// spelling for an unbounded window, the mapper owns no channel for an `Unknown`
+// member, and `Fact` carries no "no window" form, so the two alternatives are
+// both worse than refusal: emitting the sentinel interval asserts a falsehood,
+// and dropping the fact would silently leave the case claiming a completeness
+// it does not have. Refusing is also what this file's contract already says an
+// unmappable row is — a typed failure the caller must resolve — so the caller,
+// which sees the whole handoff, is the layer that can decide between an
+// analysis re-run and an explicit unknown member.
+StatusOr<ByteWindow> ReadByteWindow(const facts::AnalysisFact& fact) {
+  const auto& cells = fact.row.cells;
+  const sem::ByteRangeKind* kind = AsByteRangeKind(cells[2]);
+  if (kind == nullptr) {
+    return Status::InvalidArgument(
+        CellMismatch(fact.row.relation, 2, "byte range kind"));
+  }
+  const std::int64_t* offset = AsInt64(cells[3]);
+  if (offset == nullptr) {
+    return Status::InvalidArgument(
+        CellMismatch(fact.row.relation, 3, "signed offset"));
+  }
+  const std::uint64_t* size = AsUint64(cells[4]);
+  if (size == nullptr) {
+    return Status::InvalidArgument(CellMismatch(fact.row.relation, 4, "size"));
+  }
+  if (*kind == sem::ByteRangeKind::kUnknown) {
+    return Status::InvalidArgument(
+        "the range row for '" +
+        facts::RelationsV2().Get(fact.row.relation).name +
+        "' carries range_kind 'unknown': the analysis declined to bound this "
+        "access, so its offset and size cells are sentinels and the row "
+        "supports no bounded interval. Refused rather than lowered to a "
+        "zero-length window");
+  }
+  return ByteWindow{*offset, *size};
 }
 
 // The EIR reference to a case-local handle. `text` carries the handle with no
@@ -224,43 +299,55 @@ StatusOr<Fact> EvidencePredicateMapper::MapFact(
 StatusOr<Fact> EvidencePredicateMapper::MapRange(
     const facts::AnalysisFact& fact, const StableIdResolver& resolver,
     const FactMappingHandle& handle) const {
-  const auto& cells = fact.row.cells;
-  const std::int64_t* offset = AsInt64(cells[3]);
-  const std::uint64_t* size = AsUint64(cells[4]);
-  if (offset == nullptr) {
-    return Status::InvalidArgument(
-        CellMismatch(fact.row.relation, 3, "signed offset"));
-  }
-  if (size == nullptr) {
-    return Status::InvalidArgument(CellMismatch(fact.row.relation, 4, "size"));
+  auto window = ReadByteWindow(fact);
+  if (!window.ok()) {
+    return window.status();
   }
   auto value = ResolveCell(fact, 1, resolver);
   if (!value.ok()) {
     return value.status();
   }
-  // `range(@value, min, max)`: the read's byte window is the closed interval
-  // the analysis established, stated over the memory the read names.
+  // `range(@value, min, max)`: operands 2 and 3 are the *bounds of the window
+  // the analysis established*, never the window's `(offset, size)` pair. The
+  // registry's cells are `(range_kind, offset, size)` — a start and a length —
+  // so lowering the length into the `max` operand would understate every
+  // non-zero-offset window: for `offset = 8, size = 16` the row establishes
+  // `[8, 24)`, and passing `size` through unchanged would state `[8, 16]`,
+  // narrowing the access by eight bytes and making the case look safer than the
+  // analysis found it. The plan's mapping table (`range(@value, min, max)`) and
+  // the architecture's `range(value) -> interval` both name bounds, so the
+  // upper operand is the window's end, not its length.
   return Assemble(fact, handle,
-                  Call("range", {Reference(value.value()), Integer(*offset),
-                                 Integer(static_cast<std::int64_t>(*size))}));
+                  Call("range", {Reference(value.value()),
+                                 Integer(window.value().offset),
+                                 Integer(window.value().end())}));
 }
 
 StatusOr<Fact> EvidencePredicateMapper::MapCapacity(
     const facts::AnalysisFact& fact, const StableIdResolver& resolver,
     const FactMappingHandle& handle) const {
-  const auto& cells = fact.row.cells;
-  const std::uint64_t* size = AsUint64(cells[4]);
-  if (size == nullptr) {
-    return Status::InvalidArgument(CellMismatch(fact.row.relation, 4, "size"));
+  // The write's window is read through the same gate as the read's: a
+  // `DirectWrite` row whose `range_kind` is `kUnknown` carries the same `0/0`
+  // sentinels, and lowering them would state `capacity(@memory, 0)` — an object
+  // with no room in it — for a write the analysis declined to bound. See
+  // `ReadByteWindow` for why the mapper refuses instead.
+  auto window = ReadByteWindow(fact);
+  if (!window.ok()) {
+    return window.status();
   }
   auto memory = ResolveCell(fact, 1, resolver);
   if (!memory.ok()) {
     return memory.status();
   }
-  // `capacity(@memory, bytes)`: the size of the object the write targets.
+  // `capacity(@memory, bytes)`: the size of the object the write targets. The
+  // extent is the row's `size` cell — the object's length, not a window bound —
+  // so unlike `range` this predicate takes the cell unchanged. F2's min/max
+  // correction is the `range` mapping's, and applying it here would report
+  // `offset + length` bytes for an object that owns only `length`.
   return Assemble(fact, handle,
                   Call("capacity", {Reference(memory.value()),
-                                    Integer(static_cast<std::int64_t>(*size))}));
+                                    Integer(static_cast<std::int64_t>(
+                                        window.value().size))}));
 }
 
 StatusOr<Fact> EvidencePredicateMapper::MapReachability(

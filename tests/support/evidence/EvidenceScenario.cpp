@@ -1011,7 +1011,9 @@ struct DemoInput {
 
 DemoInput MakeDemoInput(const EvidenceScenarioBuilder& builder,
                         bool truncated_dominating_checks,
-                        ev::TruncationReason dominating_checks_reason) {
+                        ev::TruncationReason dominating_checks_reason,
+                        std::vector<core::StableId> dominating_check_scope,
+                        bool dominating_check_found) {
   const DemoProgram program = MakeDemoProgram(builder);
 
   DemoInput demo;
@@ -1077,9 +1079,26 @@ DemoInput MakeDemoInput(const EvidenceScenarioBuilder& builder,
       truncated_dominating_checks
           ? std::vector<ev::TruncationReason>{dominating_checks_reason}
           : std::vector<ev::TruncationReason>{};
+  // The dominating-check query is scoped to the sink unless the caller overrides
+  // it, which is what the M10B producer records. A caller that overrides it
+  // supplies an ordered scope list whose *leading* member is an enclosing
+  // entity, so the `dominates_bounds_check(scope, sink)` the builder emits names
+  // two distinct handles rather than the sink twice — the convention the
+  // hand-authored DEM-001 fixture uses.
+  if (dominating_check_scope.empty()) {
+    dominating_check_scope.push_back(input.claim_seed.sink_ref);
+  }
+  // A check that *was* found turns the same query into BLD-002 counterevidence:
+  // the result is non-empty, so the builder records the check and concludes
+  // nothing rather than deriving the closed-world absence.
+  std::vector<facts::AnalysisFact> check_facts;
+  if (dominating_check_found) {
+    check_facts.push_back(builder.MakeCheckFact("dominating_check_found"));
+  }
   QueryFixture check_fixture = MakeFactQueryFixture(
       builder, "dominating_check", program.run_id,
-      {input.claim_seed.sink_ref}, {}, check_completeness, check_reasons, 0);
+      std::move(dominating_check_scope), std::move(check_facts),
+      check_completeness, check_reasons, dominating_check_found ? 1 : 0);
   demo.check_completion_fact_id = check_fixture.completion_fact.fact_id;
 
   input.ranges = range_fixture.set;
@@ -1153,10 +1172,23 @@ EvidenceScenarioBuilder& EvidenceScenarioBuilder::WithTruncatedDominatingChecks(
   return *this;
 }
 
+EvidenceScenarioBuilder& EvidenceScenarioBuilder::WithDominatingCheckScope(
+    std::vector<core::StableId> refs) {
+  dominating_check_scope_ = std::move(refs);
+  return *this;
+}
+
+EvidenceScenarioBuilder& EvidenceScenarioBuilder::WithDominatingCheckFound() {
+  dominating_check_found_ = true;
+  return *this;
+}
+
 evidence::EvidenceBuildRequest EvidenceScenarioBuilder::BuildRequestFor(
     evidence::EvidenceLevel level, bool truncated_dominating_checks,
     evidence::TruncationReason reason) const {
-  DemoInput demo = MakeDemoInput(*this, truncated_dominating_checks, reason);
+  DemoInput demo = MakeDemoInput(*this, truncated_dominating_checks, reason,
+                                 dominating_check_scope_,
+                                 dominating_check_found_);
   evidence::EvidenceBuildRequest request;
   request.context = MakeProgramContext();
   request.input = std::move(demo.input);
@@ -1190,7 +1222,9 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeValidMinimalEvidenceCase()
     const {
   const core::StableId run_id = Id(core::IdKind::kAnalysisRun, kRunName);
   DemoInput demo = MakeDemoInput(*this, /*truncated_dominating_checks=*/false,
-                                 evidence::TruncationReason::kUnspecified);
+                                 evidence::TruncationReason::kUnspecified,
+                                 dominating_check_scope_,
+                                 dominating_check_found_);
 
   // Only the claim's own subject and the primary path survive the L0
   // projection; the rest of the causal slice stays an expandable omission.
@@ -1257,7 +1291,8 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
           ? evidence::TruncationReason::kMaxPaths
           : dominating_checks_reason_;
   DemoInput demo = MakeDemoInput(*this, /*truncated_dominating_checks=*/true,
-                                 reason);
+                                 reason, dominating_check_scope_,
+                                 dominating_check_found_);
 
   const core::StableId summary_id =
       Id(core::IdKind::kFunctionSummary, kVendorValidateLabel);

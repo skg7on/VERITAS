@@ -166,8 +166,15 @@ enum class DependencyKind {
   kSpecification,
 };
 
-// Path feasibility. M10C copies what the analysis established; it never
-// upgrades `kMaybe` to `kSat`. Textual spellings are UPPERCASE.
+// Path feasibility. M10C never *strengthens* it: it never upgrades a `kMaybe`
+// to a `kSat`, and it never invents a `kSat` where the analysis established
+// nothing. Textual spellings are UPPERCASE.
+//
+// M10C also never copies it: the M10B handoff carries no feasibility field, so
+// a path the builder assembles states `kUnknown` — the analysis established the
+// flow and never established a feasibility for it. `kUnspecified` is the
+// model's "no value" sentinel and `EvidenceValidator` rejects a path that
+// carries it, so `kUnknown` is the honest value rather than an escape hatch.
 enum class Feasibility {
   kUnspecified,
   kProvedFeasible,

@@ -125,6 +125,23 @@ class EvidenceScenarioBuilder {
   EvidenceScenarioBuilder& WithTruncatedDominatingChecks(
       evidence::TruncationReason reason);
 
+  // Overrides the ordered scope-ref list the dominating-check query is issued
+  // over. The default is the claim's sink alone, which is what the M10B producer
+  // records; a caller supplies a list whose leading member is an enclosing
+  // entity when it needs the derived `dominates_bounds_check(scope, sink)` to
+  // name two distinct handles. The sink must still be among the refs, or the
+  // builder's BLD-003 scope check refuses to derive an absence over it.
+  EvidenceScenarioBuilder& WithDominatingCheckScope(
+      std::vector<core::StableId> refs);
+
+  // Makes the dominating-check query return a check rather than an empty
+  // result. The demo's question is open — the query finds nothing — which is
+  // what puts BLD-007's closed-world derivation in reach. A caller that needs
+  // BLD-002's counterevidence path (a check *was* found, so the case records it
+  // and concludes nothing) asks for this instead; the returned fact is a
+  // `kSoundnessCoverage` row, the relation the builder reads as coverage.
+  EvidenceScenarioBuilder& WithDominatingCheckFound();
+
   // The complete typed M10C assembly request at `level`: one M10B
   // `EvidenceBuildInput` whose six query results each carry a validating
   // completion certificate and run binding, plus the program context the input
@@ -154,8 +171,10 @@ class EvidenceScenarioBuilder {
       evidence::TruncationReason reason) const;
 
   bool truncated_dominating_checks_ = false;
+  bool dominating_check_found_ = false;
   evidence::TruncationReason dominating_checks_reason_ =
       evidence::TruncationReason::kUnspecified;
+  std::vector<core::StableId> dominating_check_scope_;
 };
 
 // The shared M10C case fixtures, so later M10C tests can call them unqualified.
