@@ -19,10 +19,20 @@
 # LibTooling compilation-database code path.
 
 add_executable(ProjectManifestLoaderTest ProjectManifestLoaderTest.cpp)
+# `LLVMTargetParser` is named directly because `veritas_build` links LLVM
+# PRIVATE, so nothing propagates it: the suite asserts that a project naming no
+# target records the analysis host's default triple, and the only honest oracle
+# for that is `llvm::sys::getDefaultTargetTriple()` itself. The include tree is
+# SYSTEM for the same reason it is in src/build — upstream headers are not held
+# to this project's warning contract.
+target_include_directories(ProjectManifestLoaderTest SYSTEM PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+)
 target_link_libraries(ProjectManifestLoaderTest PRIVATE
   veritas_build
   veritas_test_support
   GTest::gtest_main
+  LLVMTargetParser
 )
 veritas_add_warnings(ProjectManifestLoaderTest)
 gtest_discover_tests(ProjectManifestLoaderTest DISCOVERY_TIMEOUT 60)

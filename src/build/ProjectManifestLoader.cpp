@@ -31,7 +31,11 @@
 #include "clang/Tooling/JSONCompilationDatabase.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringExtras.h"
+// `getDefaultTargetTriple` moved out of `llvm/Support/Host.h` into
+// `llvm/TargetParser/Host.h`; VERITAS links the aggregate `LLVM` component
+// library, so the symbol is already available.
 #include "llvm/Support/SHA256.h"
+#include "llvm/TargetParser/Host.h"
 
 namespace veritas::build {
 
@@ -293,6 +297,57 @@ std::string DetectCompilerId(
   return SortedUniqueJoined(std::move(compilers), ',');
 }
 
+// -- target identity ---------------------------------------------------------
+//
+// Every flag spelling that names a compilation target. Both the joined
+// (`-target=arm64-…`) and the separated (`-target arm64-…`) form of each is
+// accepted: a command that names a target in a spelling the loader did not
+// recognize would silently fall back to the host triple and bind the build to
+// a target it does not actually compile for.
+//
+// `--target` is listed before `-target` so the longer prefix matches first.
+constexpr std::string_view kTargetFlags[] = {"--target", "-target", "-triple"};
+
+// The target named by one normalized command, or "" when it names none.
+// Searches from index 1: index 0 is the compiler basename, never a flag.
+std::string DetectCommandTarget(const std::vector<std::string>& arguments) {
+  for (std::size_t i = 1; i < arguments.size(); ++i) {
+    const std::string_view argument = arguments[i];
+    for (const std::string_view flag : kTargetFlags) {
+      if (argument == flag) {
+        return i + 1 < arguments.size() ? arguments[i + 1] : std::string();
+      }
+      if (argument.size() > flag.size() &&
+          argument.compare(0, flag.size(), flag) == 0 &&
+          argument[flag.size()] == '=') {
+        return std::string(argument.substr(flag.size() + 1));
+      }
+    }
+  }
+  return std::string();
+}
+
+// The target triple the manifest records for the build variant.
+//
+// A target named on any command line wins, and the set is sorted-unique joined
+// exactly like `compiler_id`, so reordering database entries cannot flip the
+// value. A project that names no target anywhere is compiled for the analysis
+// host — that is genuinely what the compilation targets — so the host's
+// default triple is the honest answer rather than "". This is consequently
+// host-derived, and deliberately so: a cross-host-stable value here would
+// describe a target the build does not have.
+std::string DetectTargetTriple(
+    const std::vector<NormalizedCommand>& normalized) {
+  std::vector<std::string> targets;
+  targets.reserve(normalized.size());
+  for (const auto& command : normalized) {
+    std::string target = DetectCommandTarget(command.arguments);
+    if (!target.empty()) targets.push_back(std::move(target));
+  }
+  if (targets.empty()) return llvm::sys::getDefaultTargetTriple();
+  return SortedUniqueJoined(std::move(targets), ',');
+}
+
 }  // namespace
 
 StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
@@ -343,6 +398,17 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
   const auto compile_options_hash = ComputeCompileOptionsHash(normalized);
   const auto compiler_id = DetectCompilerId(normalized);
 
+  // M1's half of the program identity. The M1 design spec assigns the initial
+  // derivation here: `target_triple` comes from an explicit `--target` on the
+  // command line when there is one and from the analysis host's default triple
+  // otherwise, and `type_layout_hash` is a content address over the target and
+  // compiler configuration the layout depends on. Neither enters
+  // `build_variant_id` — adding them there would re-identify every stored row
+  // in the tree.
+  const auto target_triple = DetectTargetTriple(normalized);
+  const auto type_layout_hash = TaggedIdentifier(
+      "layout", "veritas.type_layout.v1", JoinNul({target_triple, compiler_id}));
+
   // The compilation-database hash summarizes the canonical set of entries,
   // not the raw JSON bytes on disk. Raw bytes would leak the checkout path
   // through the `directory` fields and produce different digests for the same
@@ -377,9 +443,21 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
   ctx.compilation_database_hash = compilation_database_hash;
   ctx.compiler_id = compiler_id;
   ctx.compile_options_hash = compile_options_hash;
-  // vcs_revision, target_triple, compiler_version, macro_set_hash,
-  // include_closure_hash, type_layout_hash, and TU preprocessor_hash all
-  // default to "" on the struct — M4 populates them from frontend data.
+  ctx.target_triple = target_triple;
+  ctx.type_layout_hash = type_layout_hash;
+  // `type_layout_hash` above is M1's provisional derivation: a content address
+  // over the target and compiler configuration, which is what the M1 design
+  // spec sanctions ("M1 may initially derive type_layout_hash from the target
+  // and compiler configuration"). It is not frontend-derived layout data. M4
+  // replaces it with that before publishing analysis results, and until it
+  // does, no consumer should read it as an ABI-layout digest.
+  //
+  // vcs_revision, compiler_version, macro_set_hash, include_closure_hash, and
+  // each TU's preprocessor_hash still default to "" on the struct: M4 has not
+  // populated them. (This comment previously asserted the opposite — that M4
+  // "populates them from frontend data" — which no code implemented, and that
+  // false premise is why target_triple and type_layout_hash stayed empty for
+  // ten milestones.)
 
   // Sort TU indices by source path so the manifest itself is deterministic.
   // The canonical serializer re-sorts by the same key, but keeping the

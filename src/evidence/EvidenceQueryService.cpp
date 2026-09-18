@@ -878,48 +878,70 @@ StatusOr<EvidenceBuildInput> EvidenceQueryService::BuildEvidenceInput(
   input.flow_slice = std::move(flow->result);
   certificates.push_back(std::move(flow->certificate));
 
+  // The unknowns query is scoped to the function containing the sink. When no
+  // containing function resolves, the query carries NO scope ref — it does not
+  // invent one.
+  //
+  // This used to fall back to `core::StableId{kFunctionVariant, {}}`, whose
+  // canonical spelling is the malformed `funcvar:sha256:`. That sentinel
+  // reached the store as the unknowns query's scope and refused every
+  // downstream consumer that parses a published ref as a `StableId`
+  // (`EvidenceCaseBuilder::ReadCompletionDescriptor` does exactly that). An
+  // absent scope is recorded as an absent scope: `EncodeScopeRefs` renders it
+  // as the empty string, which round-trips to an empty ref list.
+  //
+  // The underlying gap is upstream: `FindContainingFunction` needs a
+  // `kContains` CPG edge, `kContains` is defined and consumed but never
+  // emitted, so this lookup currently fails for every sink. Making the M6
+  // projection emit containment edges is M6's fix, not this one's.
   const std::optional<core::StableId> function_scope =
       FindContainingFunction(*cpg_, claim_seed.sink_ref);
-  const core::StableId unknown_scope =
-      function_scope.value_or(core::StableId{core::IdKind::kFunctionVariant, {}});
 
   // Run each fact query against the same snapshot. Results and certificates
   // are validated together before the handoff is returned.
-  auto run_fact_query = [&](EvidenceFactSet* slot, core::StableId ref,
+  //
+  // `ref` is optional so a query with no scope is expressible: it then matches
+  // no fact by scope and publishes an empty scope-ref list.
+  auto run_fact_query = [&](EvidenceFactSet* slot,
+                            const std::optional<core::StableId>& ref,
                             std::string_view kind) -> Status {
     auto facts = (*snapshot)->GetCurrentFacts();
     if (!facts.ok()) {
       return facts.status();
     }
     std::vector<facts::AnalysisFact> matches;
-    for (const auto& fact : *facts) {
-      if (kind == kKindRange) {
-        if (fact.row.relation != facts::RelationId::kDirectRead) continue;
-        const core::StableId* cell = StableIdCell(fact.row, 1);
-        if (cell != nullptr && *cell == ref) matches.push_back(fact);
-      } else if (kind == kKindCapacity) {
-        if (fact.row.relation != facts::RelationId::kDirectWrite) continue;
-        const core::StableId* cell = StableIdCell(fact.row, 1);
-        if (cell != nullptr && *cell == ref) matches.push_back(fact);
-      } else if (kind == kKindAlias) {
-        if (fact.row.relation != facts::RelationId::kAlias) continue;
-        const core::StableId* left = StableIdCell(fact.row, 0);
-        const core::StableId* right = StableIdCell(fact.row, 1);
-        if ((left != nullptr && *left == ref) ||
-            (right != nullptr && *right == ref)) {
-          matches.push_back(fact);
+    if (ref.has_value()) {
+      for (const auto& fact : *facts) {
+        if (kind == kKindRange) {
+          if (fact.row.relation != facts::RelationId::kDirectRead) continue;
+          const core::StableId* cell = StableIdCell(fact.row, 1);
+          if (cell != nullptr && *cell == *ref) matches.push_back(fact);
+        } else if (kind == kKindCapacity) {
+          if (fact.row.relation != facts::RelationId::kDirectWrite) continue;
+          const core::StableId* cell = StableIdCell(fact.row, 1);
+          if (cell != nullptr && *cell == *ref) matches.push_back(fact);
+        } else if (kind == kKindAlias) {
+          if (fact.row.relation != facts::RelationId::kAlias) continue;
+          const core::StableId* left = StableIdCell(fact.row, 0);
+          const core::StableId* right = StableIdCell(fact.row, 1);
+          if ((left != nullptr && *left == *ref) ||
+              (right != nullptr && *right == *ref)) {
+            matches.push_back(fact);
+          }
+        } else if (kind == kKindUnknown) {
+          if (fact.row.relation != facts::RelationId::kUnknownEffect &&
+              fact.row.relation != facts::RelationId::kSupportUnknownEffect) {
+            continue;
+          }
+          const core::StableId* cell = StableIdCell(fact.row, 0);
+          if (cell != nullptr && *cell == *ref) matches.push_back(fact);
         }
-      } else if (kind == kKindUnknown) {
-        if (fact.row.relation != facts::RelationId::kUnknownEffect &&
-            fact.row.relation != facts::RelationId::kSupportUnknownEffect) {
-          continue;
-        }
-        const core::StableId* cell = StableIdCell(fact.row, 0);
-        if (cell != nullptr && *cell == ref) matches.push_back(fact);
       }
     }
-    auto outcome = RunFactQuery(std::move(matches), budget,
-                                fingerprint, kind, {ref}, run_id_);
+    std::vector<core::StableId> scope_refs;
+    if (ref.has_value()) scope_refs.push_back(*ref);
+    auto outcome = RunFactQuery(std::move(matches), budget, fingerprint, kind,
+                                std::move(scope_refs), run_id_);
     if (!outcome.ok()) {
       return outcome.status();
     }
@@ -944,7 +966,7 @@ StatusOr<EvidenceBuildInput> EvidenceQueryService::BuildEvidenceInput(
     return s;
   }
   if (Status s =
-          run_fact_query(&input.unknowns, unknown_scope, kKindUnknown);
+          run_fact_query(&input.unknowns, function_scope, kKindUnknown);
       !s.ok()) {
     return s;
   }
