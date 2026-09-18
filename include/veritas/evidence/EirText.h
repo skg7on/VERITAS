@@ -80,6 +80,9 @@ struct EirParseError {
 // The parser rejects everything the grammar does not admit, and — because the
 // EIR-T 1.0 language surface is deliberately wider than the V0.1 model it is
 // parsed into — everything the grammar admits but the model cannot carry. The
+// four value shapes it admits beyond the letter of §5.1 and §4.1 are listed in
+// that section's prose; each exists because the model can carry the value and
+// the writer must reproduce it. The
 // second class is refused with a typed `"unsupported in EIR V0.1"` diagnostic,
 // never dropped and never lowered onto a neighbouring field: silently accepting
 // one would change `EvidenceID` for that input. `ProvenanceDecl`'s `location`

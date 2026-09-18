@@ -336,6 +336,41 @@ Domain ::=
     ;
 ```
 
+`PrimaryExpr` as written above is `AtomicPredicate | "(" Predicate ")"`, and
+three value shapes a parser must accept are in neither that production nor
+`PropertyValue` (§4.1). Each is admitted here, and each is admitted because
+refusing it would make a value the `eir.v1` model already carries
+unrepresentable — a writer that emitted one could not read its own output back,
+so `REP-001` would fail for any case holding it. This is the same trade §4.1
+records for the entity property bag, and it is a widening of the language, not a
+relaxation of the model.
+
+- **A bare identifier, in both the predicate and the property-value positions.**
+  `Expression::Kind::kSymbol` is "a bare name such as a domain value or a
+  constant symbol", and a bare identifier is its only spelling. §15's normative
+  example already depends on the predicate half — it writes
+  `@packet.type == EXTENSION`, comparing a reference against a bare identifier.
+  The property-value half is not shown by that example, which puts `EXTENSION`
+  in a predicate; it is admitted because `Entity::properties` (§4.1) is an open
+  bag of `Expression` and the bag's values are not a narrower type. Any
+  identifier that is neither a lexical keyword of the document nor followed by
+  `"("` lowers to `kSymbol`; `true` and `false` lower to `BooleanLiteral` as
+  before, and an identifier followed by `"("` is a `FunctionCall`.
+- **`StringLiteral` and `IntegerLiteral` at the primary level.**
+  `PredicateArgument` lists `StringLiteral` and `IntegerLiteral`, and every
+  argument of a `FunctionCall` is parsed as a full `Predicate`, so the only path
+  by which `f("text")` and `f(1)` reach the argument grammar is through
+  `PrimaryExpr`. Without these two the second and third alternatives of
+  `PredicateArgument` would be unreachable and `f("text")` would have no
+  spelling at all.
+
+`QualifiedId` is deliberately **not** widened, and neither is `Scope`
+(`"global" | "function" | "path" | "basic_block" | "callsite" | "entity" |
+FunctionCall`) or `Producer` (§4.1): those are closed enumerations of their own,
+and admitting an arbitrary identifier into one would admit documents the
+declaration does not define. A parser that did so would be accepting a language
+the specification does not describe.
+
 ### 5.2 Precedence and Associativity
 
 Binding tightest first:
@@ -1077,7 +1112,7 @@ Well-formedness checking requires:
 | Version | Date | Changes |
 |---------|------|---------|
 | 0.1 | 2026-08-16 | Initial formal specification consolidating architecture document grammar |
-| 1.0 | 2026-09-11 … 2026-09-17 | Stabilized EIR-T 1.0. Added the mandatory top-level `SchemaDecl`, `LevelDecl`, and `StateDecl` (with `EvidenceLevel` and `EvidenceState`); added the `DependencyDecl`/`DependencyKind` and `OmissionDecl` evidence members and the `dependency`/`omission` reserved keywords; replaced the left-recursive predicate production with the precedence-factored `ImplicationExpr`/`OrExpr`/`AndExpr`/`ComparisonExpr`/`UnaryExpr`/`PrimaryExpr` chain and documented precedence, associativity, and quantifier scope in §5.2; updated the concrete syntax example. The grammar is frozen as the M10C implementation contract. Made the case-level `Identifier` optional and non-semantic: `REP-001` names "parser depends on original display label/whitespace" as a failure mode, and the `eir.v1` model carries no case name member, so the label is a display label only and the canonical writer emits none. The superseded production `"evidence" Identifier "{"` now reads `"evidence" [ Identifier ] "{"`; still within the EIR-T 1.0 stabilization window, so the version does not change. Narrowed the losslessness gap the semantic model exposed and the stabilization had left open, without closing it: §4.1 records the values that stay unwritable — the property-bag entry named `stable_id` on an entity that declares no identity, and the producer strings the identifier alphabet cannot spell. The context gained the type-layout and analysis-run properties and a repeatable analyzer property with its own `AnalyzerVersion` production, and `EntityDecl`, `FactDecl`, `UnknownDecl`, `ProvenanceDecl`, and `VerificationDecl` each gained the optional attributes their `eir.v1` records already carry — the entity and fact stable IDs, the fact derived marker, the free-text detail carried beside the unknown's closed reason code, the provenance source anchor and its explicit analysis run, and the obligation's verification producer. The provenance run is written explicitly rather than derived from the case binding. **Additive only: no production was removed, narrowed, or reordered**, every existing declaration keeps parsing, and the version stays 1.0 — the amendment is recorded here rather than as 1.1 so that no consumer of the frozen contract sees a version change for syntax that only widens what was already legal. |
+| 1.0 | 2026-09-11 … 2026-09-17 | Stabilized EIR-T 1.0. Added the mandatory top-level `SchemaDecl`, `LevelDecl`, and `StateDecl` (with `EvidenceLevel` and `EvidenceState`); added the `DependencyDecl`/`DependencyKind` and `OmissionDecl` evidence members and the `dependency`/`omission` reserved keywords; replaced the left-recursive predicate production with the precedence-factored `ImplicationExpr`/`OrExpr`/`AndExpr`/`ComparisonExpr`/`UnaryExpr`/`PrimaryExpr` chain and documented precedence, associativity, and quantifier scope in §5.2; updated the concrete syntax example. The grammar is frozen as the M10C implementation contract. Made the case-level `Identifier` optional and non-semantic: `REP-001` names "parser depends on original display label/whitespace" as a failure mode, and the `eir.v1` model carries no case name member, so the label is a display label only and the canonical writer emits none. The superseded production `"evidence" Identifier "{"` now reads `"evidence" [ Identifier ] "{"`; still within the EIR-T 1.0 stabilization window, so the version does not change. Narrowed the losslessness gap the semantic model exposed and the stabilization had left open, without closing it: §4.1 records the values that stay unwritable — the property-bag entry named `stable_id` on an entity that declares no identity, and the producer strings the identifier alphabet cannot spell. The context gained the type-layout and analysis-run properties and a repeatable analyzer property with its own `AnalyzerVersion` production, and `EntityDecl`, `FactDecl`, `UnknownDecl`, `ProvenanceDecl`, and `VerificationDecl` each gained the optional attributes their `eir.v1` records already carry — the entity and fact stable IDs, the fact derived marker, the free-text detail carried beside the unknown's closed reason code, the provenance source anchor and its explicit analysis run, and the obligation's verification producer. The provenance run is written explicitly rather than derived from the case binding. **Additive only: no production was removed, narrowed, or reordered**, every existing declaration keeps parsing, and the version stays 1.0 — the amendment is recorded here rather than as 1.1 so that no consumer of the frozen contract sees a version change for syntax that only widens what was already legal. §5.1 then recorded four widenings the `eir.v1` model forces and the EBNF does not write: a bare identifier as a `Symbol` in both the predicate and the property-value positions, and a `StringLiteral` or an `IntegerLiteral` at the primary level — the last two being the only path by which `PredicateArgument`'s second and third alternatives are reachable. The productions themselves are unchanged; the paragraph after the §5.1 block states what a parser admits and why, and records that `QualifiedId`, `Scope`, and `Producer` are deliberately not widened the same way. |
 
 ---
 

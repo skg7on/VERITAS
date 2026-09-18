@@ -51,19 +51,34 @@
 // case-local reference: the `$` and the `@` belong to EIR-T syntax, and the
 // model never stores them.
 //
-// ONE DELIBERATE WIDENING
+// FOUR DELIBERATE WIDENINGS
 //
-// `AtomicPredicate` has no bare-identifier alternative, and `PropertyValue` has
-// none either, yet the model's `Expression` declares `kSymbol` ("a bare name
-// such as a domain value or a constant symbol"), and the specification's own §15
-// example compares a reference against one (`@packet.type == EXTENSION`).
-// Refusing the spelling would make that model value unrepresentable, and a
-// writer that emitted it could not read its own output back. A bare identifier
-// is therefore accepted in both positions and lowered to `kSymbol`. Accepting it
-// cannot over-reject a document the grammar admits; rejecting it would break
-// REP-001 for any case that carries a symbol. The inconsistency between §5.1's
-// closed `AtomicPredicate` and §15's example is reported rather than resolved
-// here.
+// §5.1's `PrimaryExpr` is `AtomicPredicate | "(" Predicate ")"`, and
+// `AtomicPredicate` is `Identifier "(" … ")" | Reference | BooleanLiteral`.
+// `PropertyValue` is `StringLiteral | IntegerLiteral | BooleanLiteral |
+// Reference | FunctionCall`. Four value shapes the parser admits are in neither
+// list. All four are recorded in §5.1 of the frozen specification; each is here
+// because refusing it would make a model value unrepresentable, and a writer
+// that emitted one could not read its own output back.
+//
+//   * A bare identifier at the primary level, lowered to `kSymbol` ("a bare
+//     name such as a domain value or a constant symbol"). §15's own example
+//     compares a reference against one: `@packet.type == EXTENSION`.
+//   * A bare identifier as a `PropertyValue`, lowered to `kSymbol`. Not shown
+//     by §15, which puts `EXTENSION` in a predicate; admitted because
+//     `Entity::properties` is an open bag of `Expression` and the writer must
+//     be able to emit every value the bag can hold.
+//   * A `StringLiteral` at the primary level, and
+//   * an `IntegerLiteral` at the primary level. `PredicateArgument ::=
+//     Reference | IntegerLiteral | StringLiteral | Identifier | Predicate`,
+//     and every argument is parsed through the predicate chain, so these two
+//     are what make that production's second and third alternatives reachable
+//     — `f("text")` and `f(1)` have no other path.
+//
+// Accepting these cannot over-reject a document the grammar admits; refusing
+// them would break REP-001 for any case that carries such a value. The
+// inconsistency between §5.1's closed `PrimaryExpr` and §15's example is
+// reported in the specification rather than resolved away here.
 
 #include "evidence/EirSyntax.h"
 
@@ -103,6 +118,14 @@ std::string Quoted(std::string_view text) {
   out.append(text);
   out += '\'';
   return out;
+}
+
+// `Scope ::= "global" | "function" | "path" | "basic_block" | "callsite" |
+// "entity" | FunctionCall`. The six keywords are the whole identifier-shaped
+// half of the production, so any other identifier is outside it.
+bool IsScopeKeyword(std::string_view text) {
+  return text == "global" || text == "function" || text == "path" ||
+         text == "basic_block" || text == "callsite" || text == "entity";
 }
 
 // The refused-attribute diagnostic: the attribute is named, the reason is
@@ -928,6 +951,13 @@ Status EirParser::ParseEntity(EvidenceCase* out) {
   // than by name. Every later `stable_id` is an ordinary entry of the open
   // property bag, which is what lets an entity that declares an identity also
   // carry a property named `stable_id` (§4.1).
+  //
+  // The identity and the bag are therefore separate namespaces, and the
+  // identity is bound in neither: the body's repeat rule tracks bag keys, so
+  // recording the identity under `stable_id` would refuse the very bag entry
+  // §4.1 says is legal. A second `stable_id` after the first is that bag entry
+  // and is admitted; a third is a repeated bag key and is refused, because the
+  // model holds the bag as a map.
   bool at_first_attribute = true;
   for (;;) {
     StatusOr<Token> attribute = body.Next();
@@ -940,9 +970,11 @@ Status EirParser::ParseEntity(EvidenceCase* out) {
     }
     const bool is_identity = at_first_attribute && key.text == "stable_id";
     at_first_attribute = false;
-    status = body.Bind(key);
-    if (!status.ok()) {
-      return status;
+    if (!is_identity) {
+      status = body.Bind(key);
+      if (!status.ok()) {
+        return status;
+      }
     }
     status = body.ExpectEqual(key);
     if (!status.ok()) {
@@ -1132,7 +1164,7 @@ Status EirParser::ParseAssumption(EvidenceCase* out) {
       assumption.source = std::move(source).value();
       have_source = true;
     } else if (key.text == "scope") {
-      StatusOr<std::string> scope = ParseCallOrQualifiedId(key, "scope");
+      StatusOr<std::string> scope = ParseScope(key, "scope");
       if (!scope.ok()) {
         return scope.status();
       }
@@ -1605,7 +1637,7 @@ Status EirParser::ParseConstraint(EvidenceCase* out) {
       constraint.expression = std::move(expression).value();
       have_expression = true;
     } else if (key.text == "scope") {
-      StatusOr<std::string> scope = ParseCallOrQualifiedId(key, "scope");
+      StatusOr<std::string> scope = ParseScope(key, "scope");
       if (!scope.ok()) {
         return scope.status();
       }
@@ -1785,15 +1817,19 @@ Status EirParser::ParseVerification(EvidenceCase* out) {
     if (!status.ok()) {
       return status;
     }
-    if (key.text == "prove" || key.text == "refute" || key.text == "check") {
+    // The goal attribute is the one attribute whose *name* is its value, so its
+    // spelling is not enumerated here: the branch condition is the parse
+    // `ParseProofGoalKind` performs. Which spellings are admitted is therefore
+    // decided in exactly one place, and `.value()` below cannot be reached
+    // carrying a failure — the two sides cannot drift apart into an unchecked
+    // `StatusOr::value()`.
+    StatusOr<ProofGoalKind> goal = ParseProofGoalKind(key.text);
+    if (goal.ok()) {
       if (have_goal) {
         return FailAt(key, "the proof obligation declares more than one goal");
       }
       have_goal = true;
-      // The three spellings the branch above admits are exactly the three
-      // `ParseProofGoalKind` recognises, so the mapping cannot fail; a fourth
-      // goal spelling is an unknown attribute and is refused by `body.Unknown`.
-      obligation.goal_kind = ParseProofGoalKind(key.text).value();
+      obligation.goal_kind = std::move(goal).value();
       StatusOr<Expression> predicate = ParsePredicate();
       if (!predicate.ok()) {
         return predicate.status();
@@ -2353,8 +2389,8 @@ StatusOr<Expression> EirParser::ParsePropertyValue() {
   }
   if (token.kind == TokenKind::kIdentifier) {
     // `PropertyValue ::= StringLiteral | IntegerLiteral | BooleanLiteral |
-    // Reference | FunctionCall`. The bare-identifier widening is the same one
-    // `ParsePrimary` documents and is made for the same reason.
+    // Reference | FunctionCall`, plus the bare-identifier widening the file
+    // comment lists: the bag holds an `Expression`, and `kSymbol` is one.
     if (Peek(1).kind == TokenKind::kLeftParen) {
       Advance();
       Advance();
@@ -2380,10 +2416,10 @@ StatusOr<Expression> EirParser::ParsePropertyValue() {
 
 StatusOr<std::string> EirParser::ParseCallOrQualifiedId(const Token& attribute,
                                                         std::string_view what) {
-  // `AssumptionSource ::= FunctionCall | QualifiedId`, and the two
-  // identifier-shaped alternatives of `Scope` share that pair. Both lower to a
-  // string: the call to its canonical EIR-T spelling, which is a fixpoint of
-  // this lowering, and the identifier to its own spelling.
+  // `AssumptionSource ::= FunctionCall | QualifiedId`. It lowers to a string:
+  // the call to its canonical EIR-T spelling, which is a fixpoint of this
+  // lowering, and the identifier to its own spelling. `Scope` is a narrower
+  // pair and has its own entry point.
   StatusOr<Expression> value = ParsePropertyValue();
   if (!value.ok()) {
     return value.status();
@@ -2398,6 +2434,26 @@ StatusOr<std::string> EirParser::ParseCallOrQualifiedId(const Token& attribute,
                 Joined("the ", what) +
                     " attribute takes a qualified identifier or a function "
                     "call");
+}
+
+StatusOr<std::string> EirParser::ParseScope(const Token& attribute,
+                                           std::string_view what) {
+  // `Scope` is `FunctionCall` plus a closed set of six keywords, not the open
+  // `QualifiedId` that `AssumptionSource` admits. The model carries the scope
+  // as a plain string either way, so accepting any identifier here would admit
+  // documents §10.1 does not define and would leave the grammar's only closed
+  // enumeration of scopes unenforced.
+  const Token& token = Peek();
+  if (token.kind == TokenKind::kIdentifier &&
+      Peek(1).kind != TokenKind::kLeftParen && !IsScopeKeyword(token.text)) {
+    return FailAt(token,
+                  Joined("the ", what) +
+                      " attribute takes one of the six scope keywords "
+                      "(global, function, path, basic_block, callsite, "
+                      "entity) or a function call, found " +
+                      Quoted(token.text));
+  }
+  return ParseCallOrQualifiedId(attribute, what);
 }
 
 StatusOr<std::vector<Expression>> EirParser::ParsePropertyValueList() {

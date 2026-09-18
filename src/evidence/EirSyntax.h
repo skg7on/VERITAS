@@ -388,13 +388,17 @@ class EirParser {
   // and it lowers to the same bare handle.
   StatusOr<std::vector<std::string>> ParseFactReferenceList();
 
-  // `FunctionCall | QualifiedId`, the shape `AssumptionSource` is and the two
-  // identifier-shaped alternatives of `Scope` share. Both lower into a
-  // `std::string` carrier — the call as its canonical EIR-T spelling, the
-  // identifier as itself — and `attribute` is the attribute being read, for the
-  // diagnostic.
+  // `FunctionCall | QualifiedId`, the shape `AssumptionSource` is. Both lower
+  // into a `std::string` carrier — the call as its canonical EIR-T spelling,
+  // the identifier as itself — and `attribute` is the attribute being read, for
+  // the diagnostic.
   StatusOr<std::string> ParseCallOrQualifiedId(const Token& attribute,
                                                std::string_view what);
+
+  // `Scope ::= "global" | "function" | "path" | "basic_block" | "callsite" |
+  // "entity" | FunctionCall`. It lowers like `ParseCallOrQualifiedId`, but its
+  // identifier-shaped half is that closed set rather than every `QualifiedId`.
+  StatusOr<std::string> ParseScope(const Token& attribute, std::string_view what);
 
   // Reads one `{ attribute = value ";" ... }` body, refusing an attribute named
   // twice and one the production does not list. It owns the attribute names and

@@ -354,6 +354,61 @@ TEST(EirParserTest, ParsesEntityWithoutStableId) {
   }
 }
 
+// §4.1: "the leading attribute binds the identity, and every `stable_id` after
+// it is an ordinary entry of the open property bag". The identity occupies a
+// position, not a bag key, so a second `stable_id` is legal and lands in the
+// bag — the same document carries both, and the model holds both.
+TEST(EirParserTest, ParsesAnEntityWithBothAnIdentityAndAStableIdProperty) {
+  StatusOr<EvidenceCase> value = Accept(
+      Case(std::string(kBaseEntities) +
+           "    entity E_ident : value {\n"
+           "        stable_id = "
+           "\"valref:sha256:1111111111111111111111111111111111111111111111111111"
+           "111111111111\";\n"
+           "        stable_id = \"the bag entry, which is not the identity\";\n"
+           "    }\n" +
+           std::string(kPrimaryClaim)),
+      "an entity carrying an identity and a same-named property");
+  ASSERT_TRUE(value.ok());
+
+  const Entity* named = nullptr;
+  for (const Entity& entity : value->entities) {
+    if (entity.id == "E_ident") {
+      named = &entity;
+    }
+  }
+  ASSERT_NE(named, nullptr);
+  // The leading attribute bound the identity.
+  ASSERT_TRUE(named->stable_id.has_value());
+  EXPECT_EQ(named->stable_id->kind, core::IdKind::kValueRef);
+  // The second is an ordinary bag entry, with its own value and its own type.
+  ASSERT_EQ(named->properties.count("stable_id"), 1U);
+  EXPECT_EQ(named->properties.at("stable_id").kind,
+            Expression::Kind::kString);
+  EXPECT_EQ(named->properties.at("stable_id").text,
+            "the bag entry, which is not the identity");
+}
+
+// The bag is a map, so it holds that name once. A third `stable_id` is a
+// repeated bag key rather than a second identity, and is refused as one.
+TEST(EirParserTest, RejectsAThirdStableIdOnAnEntity) {
+  const Rejection rejected = Reject(Case(
+      std::string(kBaseEntities) +
+      "    entity E_ident : value {\n"
+      "        stable_id = "
+      "\"valref:sha256:1111111111111111111111111111111111111111111111111111"
+      "111111111111\";\n"
+      "        stable_id = \"first bag entry\";\n"
+      "        stable_id = \"second bag entry\";\n"
+      "    }\n" +
+      std::string(kPrimaryClaim)));
+  ASSERT_TRUE(rejected.rejected);
+  EXPECT_NE(rejected.error.message.find("the entity attribute 'stable_id' "
+                                        "appears more than once"),
+            std::string::npos)
+      << rejected.error.message;
+}
+
 TEST(EirParserTest, ParsesAmendedFactAttributes) {
   StatusOr<EvidenceCase> value =
       Accept(testing::kOverflowEirText, "the overflow fixture");
@@ -496,6 +551,37 @@ TEST(EirParserTest, LowersCallShapedCarriersToCanonicalEirText) {
   ASSERT_EQ(value->constraints.size(), 1U);
   EXPECT_EQ(value->constraints[0].scope, "global");
   EXPECT_EQ(value->constraints[0].provenance_id, "PR_check");
+}
+
+// The rendered carrier is a *fixpoint* of the lowering, not merely a string the
+// `@`-argument spelling happens to produce: reading the rendered text back
+// yields a carrier that renders to the same text. The test above covers the
+// `@`-argument direction; this one feeds the output back in as source, which is
+// the half a writer's round trip actually depends on. The multi-argument form
+// pins the `", "` separator and the quoted string argument too.
+TEST(EirParserTest, CanonicalCallSpellingIsAFixpoint) {
+  constexpr std::string_view kSingle = "infer_contract(E_vendor_validate)";
+  StatusOr<EvidenceCase> single = Accept(CasePlus(
+      "    assumption A1 {\n"
+      "        predicate = reachable(@E_sink);\n"
+      "        source = " + std::string(kSingle) + ";\n"
+      "    }\n"),
+      "the rendered single-argument spelling, fed back in");
+  ASSERT_TRUE(single.ok());
+  ASSERT_EQ(single->assumptions.size(), 1U);
+  EXPECT_EQ(single->assumptions[0].source, kSingle);
+
+  constexpr std::string_view kMany =
+      "infer_contract(E_vendor_validate, \"packet\", 1)";
+  StatusOr<EvidenceCase> many = Accept(CasePlus(
+      "    assumption A1 {\n"
+      "        predicate = reachable(@E_sink);\n"
+      "        source = " + std::string(kMany) + ";\n"
+      "    }\n"),
+      "the rendered multi-argument spelling, fed back in");
+  ASSERT_TRUE(many.ok());
+  ASSERT_EQ(many->assumptions.size(), 1U);
+  EXPECT_EQ(many->assumptions[0].source, kMany);
 }
 
 // --- Positive: precedence and associativity ---------------------------------
@@ -1494,6 +1580,103 @@ TEST(EirParserTest, RejectsNonCallWhereAnAssumptionSourceIsExpected) {
                                         "identifier or a function call"),
             std::string::npos)
       << rejected.error.message;
+}
+
+// The goal attribute is the one attribute whose name is its value, so the set
+// of spellings admitted is `ParseProofGoalKind`'s own set rather than a second
+// literal list in the parser. Both halves of that coupling are pinned: every
+// spelling the helper recognises lowers to its enumerator, and a spelling it
+// does not is refused as an unknown attribute instead of reaching an unchecked
+// `StatusOr::value()`.
+TEST(EirParserTest, MapsEveryProofGoalSpellingAndRefusesTheRest) {
+  const std::pair<std::string_view, ProofGoalKind> kGoals[] = {
+      {"prove", ProofGoalKind::kProve},
+      {"refute", ProofGoalKind::kRefute},
+      {"check", ProofGoalKind::kCheck},
+  };
+  for (const auto& [spelling, kind] : kGoals) {
+    StatusOr<EvidenceCase> value = Accept(
+        CasePlus("    verify V1 {\n"
+                 "        " + std::string(spelling) +
+                 " = reachable(@E_len);\n"
+                 "        status = PENDING;\n"
+                 "    }\n"),
+        std::string("the goal spelling ") + std::string(spelling));
+    ASSERT_TRUE(value.ok());
+    ASSERT_EQ(value->proof_obligations.size(), 1U);
+    EXPECT_EQ(value->proof_obligations[0].goal_kind, kind);
+  }
+  // `witness` is not a `ProofGoalKind`, so the branch does not take it and the
+  // body reports it as an attribute the declaration does not list. A reader
+  // that widened the branch without widening the helper would fail here.
+  const Rejection rejected = Reject(CasePlus(
+      "    verify V1 {\n"
+      "        witness = reachable(@E_len);\n"
+      "        status = PENDING;\n"
+      "    }\n"));
+  ASSERT_TRUE(rejected.rejected);
+  EXPECT_NE(rejected.error.message.find("unknown verify attribute 'witness'"),
+            std::string::npos)
+      << rejected.error.message;
+}
+
+// `Scope ::= "global" | "function" | "path" | "basic_block" | "callsite" |
+// "entity" | FunctionCall`. The model carries a scope as a plain string, so the
+// production is the only place the enumeration is enforced: every keyword must
+// be admitted, the call form must be admitted, and nothing else may be.
+TEST(EirParserTest, AcceptsEveryScopeKeywordAndTheCallForm) {
+  constexpr std::string_view kKeywords[] = {"global",      "function", "path",
+                                            "basic_block", "callsite", "entity"};
+  for (const std::string_view keyword : kKeywords) {
+    StatusOr<EvidenceCase> value = Accept(
+        CasePlus("    constraint K1 {\n"
+                 "        expr = reachable(@E_len);\n"
+                 "        scope = " + std::string(keyword) + ";\n"
+                 "        epistemic = must;\n"
+                 "    }\n"),
+        std::string("the scope keyword ") + std::string(keyword));
+    ASSERT_TRUE(value.ok());
+    ASSERT_EQ(value->constraints.size(), 1U);
+    EXPECT_EQ(value->constraints[0].scope, keyword);
+  }
+
+  StatusOr<EvidenceCase> call = Accept(
+      CasePlus("    constraint K1 {\n"
+               "        expr = reachable(@E_len);\n"
+               "        scope = decode_frame(@E_sink);\n"
+               "        epistemic = must;\n"
+               "    }\n"),
+      "a call-shaped scope");
+  ASSERT_TRUE(call.ok());
+  ASSERT_EQ(call->constraints.size(), 1U);
+  EXPECT_EQ(call->constraints[0].scope, "decode_frame(E_sink)");
+}
+
+TEST(EirParserTest, RejectsAnIdentifierOutsideTheScopeKeywords) {
+  const Rejection constraint = Reject(CasePlus(
+      "    constraint K1 {\n"
+      "        expr = reachable(@E_len);\n"
+      "        scope = everywhere;\n"
+      "        epistemic = must;\n"
+      "    }\n"));
+  ASSERT_TRUE(constraint.rejected);
+  EXPECT_NE(constraint.error.message.find("one of the six scope keywords"),
+            std::string::npos)
+      << constraint.error.message;
+
+  // The same attribute name on `assumption`, whose `source` is the open
+  // `AssumptionSource` and whose `scope` is the closed `Scope`. The two must
+  // not share the looser rule.
+  const Rejection assumption = Reject(CasePlus(
+      "    assumption A1 {\n"
+      "        predicate = reachable(@E_sink);\n"
+      "        source = veritas.eval;\n"
+      "        scope = everywhere;\n"
+      "    }\n"));
+  ASSERT_TRUE(assumption.rejected);
+  EXPECT_NE(assumption.error.message.find("one of the six scope keywords"),
+            std::string::npos)
+      << assumption.error.message;
 }
 
 TEST(EirParserTest, RejectsSecondVerificationGoal) {
