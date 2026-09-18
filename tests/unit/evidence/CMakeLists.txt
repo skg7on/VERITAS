@@ -136,3 +136,25 @@ veritas_add_warnings(EirWriterTest)
 gtest_discover_tests(EirWriterTest DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
   PROPERTIES LABELS "evidence-unit\;evidence-eir-text")
+
+add_executable(EvidencePredicateMapperTest EvidencePredicateMapperTest.cpp)
+target_link_libraries(EvidencePredicateMapperTest PRIVATE
+  veritas::evidence
+  veritas::test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(EvidencePredicateMapperTest)
+gtest_discover_tests(EvidencePredicateMapperTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-unit\;evidence-contract")
+
+add_executable(EvidenceCaseBuilderTest EvidenceCaseBuilderTest.cpp)
+target_link_libraries(EvidenceCaseBuilderTest PRIVATE
+  veritas::evidence
+  veritas::test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(EvidenceCaseBuilderTest)
+gtest_discover_tests(EvidenceCaseBuilderTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-unit\;evidence-contract")

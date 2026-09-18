@@ -57,6 +57,8 @@ add_library(veritas_evidence
   QueryCompletion.cpp
   EvidenceQueryService.cpp
   EvidenceCase.cpp
+  EvidencePredicateMapper.cpp
+  EvidenceCaseBuilder.cpp
   EvidenceValidator.cpp
   EvidenceCanonicalizer.cpp
   EvidenceProto.cpp

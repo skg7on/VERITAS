@@ -587,6 +587,25 @@ struct EvidenceBuildRequest {
   EvidenceBuildInput input;
   EvidenceLevel level = EvidenceLevel::kUnspecified;
 
+  // The two program-identity fields `build::ProgramContext` cannot carry
+  // (ruling L51). `ProgramBinding` requires a non-empty
+  // `analysis_configuration_id`, and `build::ProgramContext` carries
+  // `type_layout_hash` — a different field — and no configuration at all; its
+  // `compiler_id`/`compiler_version` are toolchain identity, not the analysis
+  // configuration the case is bound to. The M10B producer already knows both
+  // values: `SnapshotDescriptor::analysis_config` is the configuration, and it
+  // is one of the seven bindings `SnapshotDescriptor`/`ProjectionMetadata`
+  // hashes into the snapshot fingerprint. The handoff is where they were
+  // missing, so they travel here, supplied by the caller that opened the
+  // snapshot — never invented by the builder and never hardcoded, because a
+  // builder cannot know what configuration produced an input it was handed.
+  //
+  // `analyzer_versions` may legitimately be empty: M10C reports the analyzers
+  // it was told about and does not synthesize a set. These are appended
+  // trailing fields so the record stays purely additive over its Task 2 shape.
+  std::string analysis_configuration_id;
+  std::vector<AnalyzerVersion> analyzer_versions;
+
   // Deliberately no comparison operator: the request is a handoff, not a
   // canonical artifact. Neither `build::ProgramContext` (a checkout path) nor
   // the M10B `EvidenceBuildInput` declares ordering, and the case built from the

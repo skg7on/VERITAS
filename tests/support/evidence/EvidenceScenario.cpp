@@ -1161,6 +1161,18 @@ evidence::EvidenceBuildRequest EvidenceScenarioBuilder::BuildRequestFor(
   request.context = MakeProgramContext();
   request.input = std::move(demo.input);
   request.level = level;
+  // The two program-identity fields `build::ProgramContext` cannot carry
+  // (ruling L51). The fixture supplies them from the same constants
+  // `BindProgram` maps, so a request and the case hand-built from it agree on
+  // the whole program binding — the difference between them is then the
+  // producer translation and nothing else.
+  request.analysis_configuration_id = std::string(kAnalysisConfigurationId);
+  request.analyzer_versions = {
+      ev::AnalyzerVersion{std::string(kLocalAnalyzerProducer), "0.1",
+                          std::string(kAnalysisConfigurationId)},
+      ev::AnalyzerVersion{std::string(kWpaAnalyzerProducer), "2.5",
+                          "souffle@pinned"},
+  };
   return request;
 }
 
