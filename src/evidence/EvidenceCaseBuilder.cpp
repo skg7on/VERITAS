@@ -1076,22 +1076,35 @@ class Builder {
     path.kind = PathKind::kValueFlow;
     path.entity_ids = chain;
     // The M10B handoff carries no feasibility for a path: `EvidenceBuildInput`
-    // is a claim seed, a flow slice, six fact sets, completion certificates,
-    // bindings, witnesses and a program context, and none of them says whether
-    // any path is realizable. So there is nothing to copy, and `kSat` would be
-    // an assertion rather than a transcription — §22 of the EIR architecture
-    // ("Path feasibility") says `SAT` "typically means an SMT/symbolic model was
-    // found", and no model was found here. `kUnspecified` is not available as
-    // the "nothing established"
+    // is a claim seed, a flow slice, five fact sets (`ranges`, `capacities`,
+    // `aliases`, `dominating_checks`, `unknowns`), the query-completion
+    // certificates, the run bindings that select their witnesses, and the
+    // provenance graph — and none of them says whether any path is realizable.
+    // (The program context is on the *request*, not on the handoff.) So there is
+    // nothing to copy, and `kSat` would be an assertion rather than a
+    // transcription — §22 of the EIR architecture ("Path feasibility") says
+    // `SAT` "typically means an SMT/symbolic model was found", and no model was
+    // found here. `kUnspecified` is not available as the "nothing established"
     // value: `EvidenceValidator` rejects a path that declares no feasibility
     // (`kMissingEpistemic`, validator rule for `paths`). `kUnknown` is both
     // permitted and true — the analysis established the flow, and never
     // established feasibility — so it is what the case states. `kUntested` is
     // the near neighbour and is wrong: it would say the question was posed and
-    // skipped, when it was never posed at all. The obligation below is
-    // unaffected: it asks the verifier to *prove* a bound over every path
-    // reaching the sink, and a PENDING proof over an unknown-feasibility path is
-    // exactly the honest statement of that question.
+    // skipped, when it was never posed at all.
+    //
+    // What this choice does not settle, recorded so the claim is not read as
+    // wider than it is: the obligation below quantifies over
+    // `feasible_paths(...)`, and no artefact in this repository defines that
+    // domain. It appears only in examples (architecture §12 and §32, formal
+    // specification §11) and the `Domain` production attaches no membership rule
+    // to it. Under a reading where membership demands a feasibility stronger
+    // than `UNKNOWN`, that `forall` would range over an empty set and hold
+    // vacuously. Settling it is a model-level decision this layer has no
+    // authority to make, and it is *not* symmetrical: `SAT` would guarantee
+    // membership under the strictest plausible reading, so the honest value and
+    // the non-vacuous value may differ here. That tension is real and is
+    // carried forward rather than resolved by asserting a feasibility nothing
+    // established.
     path.feasibility = Feasibility::kUnknown;
     const std::string* flow_provenance =
         ProvenanceForFact(input.flow_slice.metadata.query_provenance_id);

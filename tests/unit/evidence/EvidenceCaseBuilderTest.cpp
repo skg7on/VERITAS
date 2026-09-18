@@ -1044,7 +1044,9 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
   //     over `dominates(@E_vendor_validate, @E_memcpy)` and the
   //     vendor-validate postcondition unknown. The builder states three: the
   //     two function-effect unknowns the handoff's unknown slot carries, plus
-  //     the truncated dominating-check unknown over the sink.
+  //     the truncated dominating-check unknown over the sink. The content of
+  //     those three is pinned by
+  //     `UnknownsFamilyPinsItsPropertyHandles`, not by this list.
   //   * omissions — both state three, and they are different three: the fixture
   //     carries a `summary_expansion` (recoverable, its summary reference) that
   //     the builder cannot emit for want of a summary identity, and its
@@ -1256,6 +1258,76 @@ TEST(EvidenceCaseBuilderTest, Bld007ScopeIsTheQuerysHeadAndTheSinkIsItsSubject) 
         << "the two operands are the same handle, so the fact still states the "
            "sink twice";
   }
+}
+
+// --- The unknowns family -----------------------------------------------------
+
+// F8, generalized past the one family the first round pinned.
+//
+// `DifferingFamilies` compares family *equality*: it can see that `unknowns`
+// differs, never what a member of it says. The first round added content pins
+// for `facts` and left `unknowns` on the set-only assertion, so the reviewer
+// could change the truncated branch's unknown property to a different predicate
+// and the whole suite stayed green. The surface that slipped through is exactly
+// the one F3 decided — which handles the `dominates_bounds_check` property names
+// — so the pin below states every member's content, not the family's presence.
+//
+// The truncated branch keeps the sink-scoped `(sink, sink)` spelling: the query
+// it reports on was issued over the sink alone, so naming the sink twice is what
+// that result covered. The pin makes that a decision on the record rather than
+// an accident — a later move to `(scope, sink)` here is a behaviour change and
+// has to be argued for, not absorbed.
+TEST(EvidenceCaseBuilderTest, UnknownsFamilyPinsItsPropertyHandles) {
+  const EvidenceCase value = BuildOrFail(TruncatedRequest(EvidenceLevel::kL1));
+  ASSERT_TRUE(RequireValidEvidenceCase(value).ok());
+
+  // Every member, in declaration order: its handle, the property it states with
+  // its operand handles spelled out, and the reason code that justifies it. The
+  // order is part of the pin, so a reordering within the family is visible too.
+  std::vector<std::string> stated;
+  for (const Unknown& unknown : value.unknowns) {
+    stated.push_back(unknown.id + " = " + ExpressionText(unknown.property) +
+                     " (" + std::string(ToString(unknown.reason_code)) + ")");
+  }
+  EXPECT_EQ(stated,
+            (std::vector<std::string>{
+                "U_decode_EXTERNAL_FUNCTION = effect_of(@E_decode) "
+                "(EXTERNAL_FUNCTION)",
+                "U_decode_UNRESOLVED_CALL = effect_of(@E_decode) "
+                "(UNRESOLVED_CALL)",
+                "U_memcpy_missing_specification = dominates_bounds_check("
+                "@E_memcpy, @E_memcpy) (MISSING_SPECIFICATION)"}));
+
+  // The dominating-check unknown is the one whose operands F3 turned into a
+  // decision, so its two handles are named individually as well: the rendered
+  // string above would still read as a two-operand predicate if either operand
+  // were swapped for its sibling.
+  //
+  // The limit of those two assertions, stated so a later reader does not
+  // overread them: in this fixture the query's scope *is* the sink, so both
+  // operands resolve to the same handle and a change that swaps one for the
+  // other is value-preserving here and stays green. That is not a gap in the pin
+  // — the pin fixes the value, and a change to any other handle reddens it — but
+  // it does mean this fixture cannot pose the question of whether the truncated
+  // branch should name an enclosing scope when there is one. That question is
+  // open and is not settled here.
+  const Unknown* check_unknown = nullptr;
+  for (const Unknown& unknown : value.unknowns) {
+    if (unknown.reason_code == UnknownReasonCode::kMissingSpecification) {
+      check_unknown = &unknown;
+    }
+  }
+  ASSERT_NE(check_unknown, nullptr)
+      << "the truncated request no longer states a missing-specification "
+         "unknown, so this test no longer covers the F3 surface";
+  EXPECT_EQ(check_unknown->property.text, std::string(kAbsencePredicate));
+  ASSERT_EQ(check_unknown->property.operands.size(), 2u);
+  EXPECT_EQ(check_unknown->property.operands[0].text, "E_memcpy");
+  EXPECT_EQ(check_unknown->property.operands[1].text, "E_memcpy");
+  // The recovery target is the query's own scope, as a bare handle: the `@` is
+  // EIR-T spelling and does not live in the model's text.
+  EXPECT_EQ(check_unknown->suggested_resolution,
+            "expand_dominating_check_query(E_memcpy)");
 }
 
 // --- The path's feasibility --------------------------------------------------
