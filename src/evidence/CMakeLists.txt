@@ -65,6 +65,7 @@ add_library(veritas_evidence
   EirLexer.cpp
   EirParser.cpp
   EirWriter.cpp
+  EvidenceJson.cpp
 )
 
 target_include_directories(veritas_evidence
@@ -76,12 +77,24 @@ target_include_directories(veritas_evidence
     "${PROJECT_SOURCE_DIR}/src"
 )
 
+# The full-EIR JSON writer is the one member of this library that uses an LLVM
+# header: `llvm::json::OStream`, which lives in LLVMSupport. The component is
+# named rather than the umbrella `LLVM` target that src/build links, because
+# nothing here needs Clang and nothing here needs the rest of LLVM either.
+# The include tree is SYSTEM so the strict warning contract does not flag
+# upstream headers.
+target_include_directories(veritas_evidence SYSTEM PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+)
+
 target_link_libraries(veritas_evidence
   PUBLIC
     veritas::core
     veritas::facts
     veritas::cpg
     veritas_evidence_proto
+  PRIVATE
+    LLVMSupport
 )
 
 target_compile_features(veritas_evidence PUBLIC cxx_std_20)

@@ -158,3 +158,24 @@ veritas_add_warnings(EvidenceCaseBuilderTest)
 gtest_discover_tests(EvidenceCaseBuilderTest DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
   PROPERTIES LABELS "evidence-unit\;evidence-contract")
+
+add_executable(EvidenceJsonTest EvidenceJsonTest.cpp)
+# `LLVMSupport` is named directly because `veritas_evidence` links it PRIVATE,
+# so nothing propagates it: this suite calls `llvm::json::parse` to read the
+# document back, which is the only way to assert that an escaped string survives
+# to the original bytes rather than merely appearing escaped. The include tree
+# is SYSTEM for the same reason it is in src/evidence — upstream headers are not
+# held to this project's warning contract.
+target_include_directories(EvidenceJsonTest SYSTEM PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+)
+target_link_libraries(EvidenceJsonTest PRIVATE
+  veritas::evidence
+  veritas::test_support
+  GTest::gtest_main
+  LLVMSupport
+)
+veritas_add_warnings(EvidenceJsonTest)
+gtest_discover_tests(EvidenceJsonTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "evidence-unit\;evidence-json")
