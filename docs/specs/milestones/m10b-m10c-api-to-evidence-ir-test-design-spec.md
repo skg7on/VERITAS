@@ -686,7 +686,7 @@ so two clauses of the descriptive sentence above are not true of it as written:
 "explicit unknown external semantics" and "summaries". The remaining four hold
 — the flow reaching the sink, the scoped check outcome complete and empty with
 its negative `dominating_check_absence` certificate, provenance, and the
-pending proof obligation — and the prohibition above stands unchanged: the case
+pending proof obligation — and the assurance above stands unchanged: the case
 carries `state = POSSIBLE_DEFECT` and claims no verified defect. The
 `DEFERRED (§2.3)` tag above does not cure the two clauses that fail, and the
 tag's presence must not be read as covering them. It names the `[0,65535]`
