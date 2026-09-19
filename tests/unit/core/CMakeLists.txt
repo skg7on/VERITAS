@@ -57,3 +57,11 @@ target_link_libraries(CanonicalValueTest PRIVATE
 )
 veritas_add_warnings(CanonicalValueTest)
 gtest_discover_tests(CanonicalValueTest DISCOVERY_TIMEOUT 60)
+
+add_executable(AtomicFileTest AtomicFileTest.cpp)
+target_link_libraries(AtomicFileTest PRIVATE
+  veritas_core
+  GTest::gtest_main
+)
+veritas_add_warnings(AtomicFileTest)
+gtest_discover_tests(AtomicFileTest DISCOVERY_TIMEOUT 60)

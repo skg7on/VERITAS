@@ -34,9 +34,9 @@
 //     presence because the domain distinguishes an unspecified confidence from
 //     an absent one; the model's own `kUnspecified` is carried as absence.
 //   * Rejection. A zero-valued enum in a position the domain requires is
-//     `InvalidArgument`, named by the field path that carried it. Protobuf's
-//     unknown-field set is not consulted: an enum value the schema does not
-//     declare arrives as the zero default and is rejected here.
+//     `InvalidArgument`, named by the field path that carried it. An open-enum
+//     number the schema does not declare is rejected too rather than coerced to
+//     the domain model's `kUnspecified` absence.
 //   * Stable IDs. Every canonical stable-ID string is re-parsed with
 //     `core::ParseStableId`, so a wire value that is not a canonical ID never
 //     reaches the model.
@@ -328,27 +328,29 @@ StatusOr<std::optional<core::StableId>> OptionalStableId(
 // The model's only recursive record. Wire nesting is bounded by the parser's
 // recursion limit, and a domain expression is bounded by the validator's depth
 // limit, which every encode path runs before this one.
-Expression DecodeExpression(const v1::Expression& value) {
-  Expression out;
-  // The zero value and any value the schema does not declare both arrive as
-  // `EXPRESSION_KIND_UNSPECIFIED`: a proto3 enum is open, so an unrecognized
-  // number is kept in the unknown-field set and the field reads back as its
-  // default. An absent expression is therefore "unspecified" here, and the
-  // validator decides whether the position that carried it required one.
-  out.kind = Expression::Kind::kUnspecified;
-  for (const auto& entry : kExpressionKinds) {
-    if (entry.proto == value.kind()) {
-      out.kind = entry.domain;
-      break;
+Status DecodeExpression(const v1::Expression& value, const std::string& field,
+                        Expression* out) {
+  auto kind = DecodeEnum(value.kind(), kExpressionKinds, At(field, "kind"));
+  if (!kind.ok()) {
+    return kind.status();
+  }
+  *out = Expression{};
+  out->kind = *kind;
+  out->text = value.text();
+  out->integer = value.integer();
+  out->boolean = value.boolean();
+  for (int index = 0; index < value.operands_size(); ++index) {
+    Expression operand;
+    const std::string position =
+        "operands[" + std::to_string(index) + "]";
+    if (Status status = DecodeExpression(value.operands(index),
+                                         At(field, position), &operand);
+        !status.ok()) {
+      return status;
     }
+    out->operands.push_back(std::move(operand));
   }
-  out.text = value.text();
-  out.integer = value.integer();
-  out.boolean = value.boolean();
-  for (const v1::Expression& operand : value.operands()) {
-    out.operands.push_back(DecodeExpression(operand));
-  }
-  return out;
+  return Status::Ok();
 }
 
 v1::Expression EncodeExpression(const Expression& value) {
@@ -441,7 +443,15 @@ StatusOr<Entity> DecodeEntity(const v1::Entity& value,
   }
   out.stable_id = std::move(*stable_id);
   for (const auto& property : value.properties()) {
-    out.properties.emplace(property.first, DecodeExpression(property.second));
+    Expression decoded;
+    if (Status status =
+            DecodeExpression(property.second,
+                             At(At(owner, "properties"), property.first),
+                             &decoded);
+        !status.ok()) {
+      return status;
+    }
+    out.properties.emplace(property.first, std::move(decoded));
   }
   return out;
 }
@@ -524,8 +534,16 @@ StatusOr<Path> DecodePath(const v1::Path& value, const std::string& owner) {
   for (const std::string& segment : value.entity_ids()) {
     out.entity_ids.push_back(segment);
   }
-  for (const v1::Expression& condition : value.conditions()) {
-    out.conditions.push_back(DecodeExpression(condition));
+  for (int index = 0; index < value.conditions_size(); ++index) {
+    Expression condition;
+    const std::string position =
+        "conditions[" + std::to_string(index) + "]";
+    if (Status status = DecodeExpression(value.conditions(index),
+                                         At(owner, position), &condition);
+        !status.ok()) {
+      return status;
+    }
+    out.conditions.push_back(std::move(condition));
   }
   out.provenance_id = value.provenance_id();
   return out;
@@ -572,7 +590,14 @@ StatusOr<Claim> DecodeClaim(const v1::Claim& value, const std::string& owner) {
   out.severity = *severity;
   out.subject = value.subject();
   out.description = value.description();
-  out.predicate = DecodeExpression(value.predicate());
+  if (value.has_predicate()) {
+    if (Status status = DecodeExpression(value.predicate(),
+                                         At(owner, "predicate"),
+                                         &out.predicate);
+        !status.ok()) {
+      return status;
+    }
+  }
   return out;
 }
 
@@ -618,7 +643,12 @@ StatusOr<Fact> DecodeFact(const v1::Fact& value, const std::string& owner) {
     return confidence.status();
   }
   out.confidence = *confidence;
-  out.predicate = DecodeExpression(value.predicate());
+  if (Status status = DecodeExpression(value.predicate(),
+                                       At(owner, "predicate"),
+                                       &out.predicate);
+      !status.ok()) {
+    return status;
+  }
   out.producer = value.producer();
   out.provenance_id = value.provenance_id();
   out.derived = value.derived();
@@ -653,7 +683,12 @@ Status EncodeFact(const Fact& value, v1::Fact* out) {
 StatusOr<Assumption> DecodeAssumption(const v1::Assumption& value) {
   Assumption out;
   out.id = value.id();
-  out.predicate = DecodeExpression(value.predicate());
+  if (Status status = DecodeExpression(
+          value.predicate(), At(Owned("assumption", out.id), "predicate"),
+          &out.predicate);
+      !status.ok()) {
+    return status;
+  }
   out.source = value.source();
   out.scope = value.scope();
   return out;
@@ -671,7 +706,12 @@ StatusOr<Hypothesis> DecodeHypothesis(const v1::Hypothesis& value,
                                       const std::string& owner) {
   Hypothesis out;
   out.id = value.id();
-  out.predicate = DecodeExpression(value.predicate());
+  if (Status status = DecodeExpression(value.predicate(),
+                                       At(owner, "predicate"),
+                                       &out.predicate);
+      !status.ok()) {
+    return status;
+  }
   out.producer = value.producer();
   out.reason = value.reason();
   // Explicit presence: an absent confidence is the model's `kUnspecified`, and
@@ -708,7 +748,11 @@ StatusOr<Unknown> DecodeUnknown(const v1::Unknown& value,
                                 const std::string& owner) {
   Unknown out;
   out.id = value.id();
-  out.property = DecodeExpression(value.property());
+  if (Status status = DecodeExpression(value.property(),
+                                       At(owner, "property"), &out.property);
+      !status.ok()) {
+    return status;
+  }
   auto reason_code = DecodeEnum(value.reason_code(), kUnknownReasonCodes,
                                 At(owner, "reason_code"));
   if (!reason_code.ok()) {
@@ -745,7 +789,12 @@ StatusOr<Constraint> DecodeConstraint(const v1::Constraint& value,
                                       const std::string& owner) {
   Constraint out;
   out.id = value.id();
-  out.expression = DecodeExpression(value.expression());
+  if (Status status = DecodeExpression(value.expression(),
+                                       At(owner, "expression"),
+                                       &out.expression);
+      !status.ok()) {
+    return status;
+  }
   out.scope = value.scope();
   auto epistemic =
       DecodeEnum(value.epistemic(), kEpistemicStates, At(owner, "epistemic"));
@@ -819,12 +868,23 @@ StatusOr<ProofObligation> DecodeProofObligation(const v1::ProofObligation& value
     return goal_kind.status();
   }
   out.goal_kind = *goal_kind;
-  out.predicate = DecodeExpression(value.predicate());
+  if (Status expression_status = DecodeExpression(
+          value.predicate(), At(owner, "predicate"), &out.predicate);
+      !expression_status.ok()) {
+    return expression_status;
+  }
   for (const std::string& verifier : value.verifier_kinds()) {
     out.verifier_kinds.push_back(verifier);
   }
-  // An absent budget decodes to the model's absent-budget expression.
-  out.budget = DecodeExpression(value.budget());
+  // An absent budget decodes to the model's absent-budget expression. A
+  // present budget must carry a recognized non-zero expression kind.
+  if (value.has_budget()) {
+    if (Status expression_status = DecodeExpression(
+            value.budget(), At(owner, "budget"), &out.budget);
+        !expression_status.ok()) {
+      return expression_status;
+    }
+  }
   auto status =
       DecodeEnum(value.status(), kProofStatuses, At(owner, "status"));
   if (!status.ok()) {

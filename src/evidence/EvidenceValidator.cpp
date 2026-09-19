@@ -573,7 +573,7 @@ class CaseValidator {
   }
 
   void CheckProofAuthority() {
-    std::size_t decided_results = 0;
+    std::size_t conclusive_results = 0;
     for (const ProofObligation& obligation : value_.proof_obligations) {
       const bool carries_result = !obligation.result_id.empty() ||
                                   !obligation.verification_producer.empty();
@@ -594,6 +594,16 @@ class CaseValidator {
           break;
         case ProofStatus::kProved:
         case ProofStatus::kRefuted:
+          if (obligation.result_id.empty() ||
+              obligation.verification_producer.empty()) {
+            Add(EvidenceValidationCode::kVerificationProducer, obligation.id,
+                Joined("obligation ", Quoted(obligation.id)) +
+                    " carries a decided result without both a result ID and a "
+                    "verification producer");
+          } else {
+            ++conclusive_results;
+          }
+          break;
         case ProofStatus::kTimeout:
         case ProofStatus::kUnsupported:
           if (obligation.result_id.empty() ||
@@ -602,14 +612,12 @@ class CaseValidator {
                 Joined("obligation ", Quoted(obligation.id)) +
                     " carries a decided result without both a result ID and a "
                     "verification producer");
-          } else {
-            ++decided_results;
           }
           break;
       }
     }
     // Only deterministic verification may claim a verified case state.
-    if (IsVerifiedState(value_.verification_state) && decided_results == 0) {
+    if (IsVerifiedState(value_.verification_state) && conclusive_results == 0) {
       Add(EvidenceValidationCode::kVerificationProducer, "",
           Joined("the case claims verification state ",
                  ToString(value_.verification_state)) +
@@ -697,6 +705,7 @@ class CaseValidator {
     // The claim is about an entity, and the entity must exist.
     ResolveEntity(value_.primary_claim.subject, value_.primary_claim.id,
                   "the primary claim's subject");
+    ResolveExpression(value_.primary_claim.predicate, value_.primary_claim.id);
 
     for (const Entity& entity : value_.entities) {
       for (const auto& property : entity.properties) {
@@ -805,7 +814,36 @@ class CaseValidator {
           Joined(position, ": nests deeper than validation walks"));
       return;
     }
+    const bool text_is_active =
+        expression.kind == Expression::Kind::kString ||
+        expression.kind == Expression::Kind::kSymbol ||
+        expression.kind == Expression::Kind::kReference ||
+        expression.kind == Expression::Kind::kCall ||
+        expression.kind == Expression::Kind::kCompare ||
+        expression.kind == Expression::Kind::kForAll ||
+        expression.kind == Expression::Kind::kExists;
+    if (expression.kind != Expression::Kind::kBool && expression.boolean) {
+      Add(EvidenceValidationCode::kExpressionType, owner,
+          Joined(position, ": carries a boolean payload that is inactive for ") +
+              std::string(ExpressionKindName(expression.kind)));
+    }
+    if (expression.kind != Expression::Kind::kInteger &&
+        expression.integer != 0) {
+      Add(EvidenceValidationCode::kExpressionType, owner,
+          Joined(position, ": carries an integer payload that is inactive for ") +
+              std::string(ExpressionKindName(expression.kind)));
+    }
+    if (!text_is_active && !expression.text.empty()) {
+      Add(EvidenceValidationCode::kExpressionType, owner,
+          Joined(position, ": carries a text payload that is inactive for ") +
+              std::string(ExpressionKindName(expression.kind)));
+    }
     if (expression.kind == Expression::Kind::kUnspecified) {
+      if (!expression.operands.empty()) {
+        Add(EvidenceValidationCode::kExpressionType, owner,
+            Joined(position,
+                   ": an absent expression carries inactive operands"));
+      }
       if (!optional) {
         Add(EvidenceValidationCode::kExpressionType, owner,
             Joined(position, ": declares no expression"));

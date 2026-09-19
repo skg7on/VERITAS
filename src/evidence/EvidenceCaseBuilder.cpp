@@ -1030,37 +1030,75 @@ class Builder {
   // reorders `entity_ids`.
   Status BuildPaths() {
     const EvidenceBuildInput& input = request_.input;
-    std::map<std::string, std::string> successor;
+    std::map<std::string, std::set<std::string>> successors;
     std::map<std::string, std::size_t> indegree;
     for (const Edge& edge : edges_) {
       if (edge.kind != RelationKind::kFlowsTo) {
         continue;
       }
-      successor.emplace(edge.from, edge.to);
+      successors[edge.from].insert(edge.to);
       indegree.emplace(edge.from, 0);
-      indegree[edge.to] += 1;
+      indegree.emplace(edge.to, 0);
     }
-    if (successor.empty()) {
+    if (successors.empty()) {
       return Status::Ok();
+    }
+    for (const auto& [from, targets] : successors) {
+      (void)from;
+      for (const std::string& target : targets) {
+        ++indegree[target];
+      }
+    }
+
+    // Validate the entire flow subgraph before selecting one representative
+    // chain. Kahn's traversal is bounded by the number of declared nodes, so a
+    // malformed cyclic slice is refused rather than followed forever. It also
+    // visits branches the representative chain will not take.
+    std::vector<std::string> roots;
+    for (const auto& [node, degree] : indegree) {
+      if (degree == 0) {
+        roots.push_back(node);
+      }
+    }
+    std::map<std::string, std::size_t> remaining = indegree;
+    std::vector<std::string> ready = roots;
+    std::size_t next_ready = 0;
+    std::size_t visited = 0;
+    while (next_ready < ready.size()) {
+      const std::string node = ready[next_ready++];
+      ++visited;
+      auto outgoing = successors.find(node);
+      if (outgoing == successors.end()) {
+        continue;
+      }
+      for (const std::string& target : outgoing->second) {
+        if (--remaining[target] == 0) {
+          ready.push_back(target);
+        }
+      }
+    }
+    if (visited != indegree.size()) {
+      return Status::InvalidArgument(
+          "the value-flow slice contains a cycle and cannot be represented as "
+          "an EIR path");
     }
 
     std::vector<std::string> chain;
-    std::size_t starts = 0;
-    for (const auto& [node, degree] : indegree) {
-      if (degree != 0) {
-        continue;
+    bool has_branch = false;
+    for (const auto& [from, targets] : successors) {
+      (void)from;
+      if (targets.size() > 1) {
+        has_branch = true;
       }
-      ++starts;
-      if (!chain.empty()) {
-        continue;
-      }
-      for (std::string cursor = node;;) {
+    }
+    if (!roots.empty()) {
+      for (std::string cursor = roots.front();;) {
         chain.push_back(cursor);
-        auto next = successor.find(cursor);
-        if (next == successor.end()) {
+        auto next = successors.find(cursor);
+        if (next == successors.end() || next->second.empty()) {
           break;
         }
-        cursor = next->second;
+        cursor = *next->second.begin();
       }
     }
     // A path is a connected chain: the validator requires every consecutive
@@ -1125,7 +1163,7 @@ class Builder {
     path_first_ = chain.front();
     paths_.push_back(std::move(path));
 
-    if (starts > 1) {
+    if (roots.size() > 1 || has_branch) {
       // More than one chain reached the slice. The case states the one it
       // followed and marks the rest, so a sibling path never becomes a
       // universal claim.
@@ -1180,6 +1218,18 @@ class Builder {
     // method relies on that rather than repeating it.
     auto descriptor = ReadCompletionDescriptor(*fact);
     if (!descriptor.ok()) return descriptor.status();
+
+    // A certificate is authority only for the exact query result it describes.
+    // Scope overlap alone is insufficient: the value-flow query also includes
+    // the sink, but its completion says nothing about dominating checks.
+    if (descriptor.value().query_kind != "dominating_check" ||
+        descriptor.value().returned_member_digest !=
+            ReturnedMemberDigest(input.dominating_checks.facts)) {
+      return OpenCheck(
+          "the named completion certificate belongs to another query result",
+          UnknownReasonCode::kMissingSpecification, sink_local.value(),
+          "OM_dominating_check_certificate_binding");
+    }
 
     // The query's own scope must pin the sink the absence is claimed about. A
     // result returned for a sibling scope says nothing about this sink, so it

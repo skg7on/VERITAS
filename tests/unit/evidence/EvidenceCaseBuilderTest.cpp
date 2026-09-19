@@ -360,9 +360,9 @@ TEST(EvidenceCaseBuilderTest, Bld001UnsafeCompleteInputBuildsAValidL1Case) {
 // stops: no verdict follows from presence alone, so nothing concludes the sink
 // is safe and nothing concludes the check dominates.
 TEST(EvidenceCaseBuilderTest, Bld002SafeDominatingCheckStaysCounterevidence) {
-  EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
-  request.input.dominating_checks.facts.push_back(
-      EvidenceScenarioBuilder().MakeCheckFact("dominating_check:memcpy_site"));
+  EvidenceScenarioBuilder scenario;
+  scenario.WithDominatingCheckFound();
+  EvidenceBuildRequest request = scenario.BuildRequest(EvidenceLevel::kL1);
 
   const EvidenceCase value = BuildOrFail(request);
   EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
@@ -394,10 +394,12 @@ TEST(EvidenceCaseBuilderTest, Bld002SafeDominatingCheckStaysCounterevidence) {
 // builder re-scopes the question rather than promoting the sibling's answer to
 // a universal check over the claim.
 TEST(EvidenceCaseBuilderTest, Bld003SiblingCheckScopeNeverBecomesUniversal) {
-  EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
-  // The alias query is scoped to the claim's subject, not to the sink.
-  request.input.dominating_checks.metadata.query_provenance_id =
-      request.input.aliases.metadata.query_provenance_id;
+  EvidenceScenarioBuilder scenario;
+  const EvidenceBuildRequest baseline = scenario.BuildRequest(EvidenceLevel::kL1);
+  // Issue the dominating-check query coherently, but scope it to the claim's
+  // subject rather than the sink.
+  scenario.WithDominatingCheckScope({baseline.input.claim_seed.subject_ref});
+  EvidenceBuildRequest request = scenario.BuildRequest(EvidenceLevel::kL1);
 
   const EvidenceCase value = BuildOrFail(request);
   EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
@@ -441,6 +443,55 @@ TEST(EvidenceCaseBuilderTest, Bld003MixedPathsNeverBecomeAUniversalCheck) {
   // The omission's subject is the path the case did follow.
   ASSERT_EQ(value.paths.size(), 1u);
   EXPECT_EQ(mixed.front()->subject, value.paths.front().id);
+}
+
+// A branch from the same source is just as incomplete as two independent
+// roots. The builder may state one deterministic chain, but it must declare
+// that the sibling branch was withheld instead of silently dropping it.
+TEST(EvidenceCaseBuilderTest, Bld003BranchedFlowDeclaresAnOmission) {
+  EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
+  const cpg::CpgNode* source = nullptr;
+  const cpg::CpgNode* vendor = nullptr;
+  for (const cpg::CpgNode& node : request.input.flow_slice.nodes) {
+    if (node.label == "srcbuf") source = &node;
+    if (node.label == "vendor_validate") vendor = &node;
+  }
+  ASSERT_NE(source, nullptr);
+  ASSERT_NE(vendor, nullptr);
+  request.input.flow_slice.edges.push_back(
+      EvidenceScenarioBuilder().MakeEdge("flows:srcbuf:vendor_validate",
+                                         cpg::EdgeKind::kFlowsTo,
+                                         source->node_id, vendor->node_id));
+
+  const EvidenceCase value = BuildOrFail(request);
+  EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
+  const std::vector<const Omission*> mixed = FindOmissions(value, "mixed_paths");
+  ASSERT_EQ(mixed.size(), 1u);
+  EXPECT_TRUE(mixed.front()->expandable);
+}
+
+// A malformed slice can contain a reachable cycle. Path construction must
+// terminate and refuse that graph rather than following successors forever.
+TEST(EvidenceCaseBuilderTest, Bld003CyclicFlowIsRefused) {
+  EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
+  const cpg::CpgNode* copy_length = nullptr;
+  const cpg::CpgNode* sink = nullptr;
+  for (const cpg::CpgNode& node : request.input.flow_slice.nodes) {
+    if (node.label == "copy_length") copy_length = &node;
+    if (node.label == "memcpy") sink = &node;
+  }
+  ASSERT_NE(copy_length, nullptr);
+  ASSERT_NE(sink, nullptr);
+  request.input.flow_slice.edges.push_back(
+      EvidenceScenarioBuilder().MakeEdge("flows:memcpy:copy_length",
+                                         cpg::EdgeKind::kFlowsTo,
+                                         sink->node_id,
+                                         copy_length->node_id));
+
+  const Status status = BuildStatus(request);
+  EXPECT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), StatusCode::kInvalidArgument);
+  EXPECT_NE(status.message().find("cycle"), std::string::npos);
 }
 
 // --- BLD-004 -----------------------------------------------------------------
@@ -608,9 +659,34 @@ TEST(EvidenceCaseBuilderTest, Bld007UnrederivableCertificateIsRefused) {
 }
 
 TEST(EvidenceCaseBuilderTest, Bld007MismatchedScopeStaysOpen) {
+  EvidenceScenarioBuilder scenario;
+  const EvidenceBuildRequest baseline = scenario.BuildRequest(EvidenceLevel::kL1);
+  scenario.WithDominatingCheckScope({baseline.input.claim_seed.subject_ref});
+  EvidenceBuildRequest request = scenario.BuildRequest(EvidenceLevel::kL1);
+
+  ExpectOpenCheck(BuildOrFail(request));
+}
+
+// Scope overlap is not enough to bind a completion certificate to a query.
+// The value-flow certificate also names the sink, but it cannot certify an
+// empty dominating-check result.
+TEST(EvidenceCaseBuilderTest, Bld007CertificateForAnotherQueryStaysOpen) {
   EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
   request.input.dominating_checks.metadata.query_provenance_id =
-      request.input.capacities.metadata.query_provenance_id;
+      request.input.flow_slice.metadata.query_provenance_id;
+
+  ExpectOpenCheck(BuildOrFail(request));
+}
+
+TEST(EvidenceCaseBuilderTest, Bld007CertificateDigestMustMatchResult) {
+  EvidenceScenarioBuilder scenario;
+  scenario.WithDominatingCheckFound();
+  EvidenceBuildRequest request = scenario.BuildRequest(EvidenceLevel::kL1);
+  ASSERT_FALSE(request.input.dominating_checks.facts.empty());
+  // Keep the coherent certificate for the non-empty result, but remove its
+  // returned member. Treating that certificate as proof of an empty result
+  // would invert positive counterevidence into a closed-world absence.
+  request.input.dominating_checks.facts.clear();
 
   ExpectOpenCheck(BuildOrFail(request));
 }
