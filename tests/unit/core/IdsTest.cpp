@@ -17,7 +17,6 @@
 #include <array>
 #include <string>
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using namespace veritas::core;
@@ -107,8 +106,10 @@ TEST(IdsTest, AnalysisRunAndAbstractObjectIdsRoundTrip) {
 TEST(IdsTest, EvidenceIdRoundTrips) {
   const std::array<std::byte, 3> bytes{std::byte{1}, std::byte{2}, std::byte{3}};
   const auto id = MakeStableId(IdKind::kEvidence, bytes);
-  EXPECT_THAT(ToString(id), testing::StartsWith("evidence:sha256:"));
-  auto parsed = ParseStableId(ToString(id));
+  const std::string text = ToString(id);
+
+  EXPECT_EQ(text.rfind("evidence:sha256:", 0), 0u);
+  auto parsed = ParseStableId(text);
   ASSERT_TRUE(parsed.ok()) << parsed.status().message();
   EXPECT_EQ(*parsed, id);
 }
