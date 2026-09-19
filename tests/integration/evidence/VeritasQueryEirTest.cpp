@@ -51,6 +51,22 @@
 //     directly: two stores materialized from the same fixture in two different
 //     checkout roots are byte-identical, and two hosts are not.
 //
+//     `StableSignature` quotients identity out, so the golden comparison is
+//     already identity-blind. It must also be STRUCTURE-blind, and that is a
+//     separate property with a separate cause. A case's value entities and its
+//     `reachable` facts are enumerated from the flow slice, and the slice is
+//     derived from the IR the HOST COMPILER emitted — not from the fixture
+//     text. CI pins its host compiler to the clang it just built, a developer
+//     machine pins its own, and two clang majors emit different IR for the same
+//     `-O0` source. Measured on `evidence_overflow_safe`, with every other
+//     structural class identical: the clang-24 Linux run carries 7 value
+//     entities and 9 `reachable` facts where the clang-17 macOS golden carries
+//     18 and 20, at the same number of distinct incidence shapes. The counts of
+//     those two classes are therefore not comparable across hosts, and DEM-005
+//     compares them by member-kind presence instead of by count — a strictly
+//     weaker check than the one it replaces, taken deliberately. See
+//     `IsIrDerivedMember` and `ExpectHostStableMatch`.
+//
 //     The masking helper the M10B test (`VeritasQueryEvidenceTest.cpp`) uses,
 //     `StabilizeDigests`, is NOT structurally reusable here, and this is worth
 //     recording because the plan expected it might be. `StabilizeDigests`
@@ -872,6 +888,102 @@ std::string SignatureText(const std::vector<std::string>& signature) {
   return out;
 }
 
+// A signature line is `category::label::colour`. The colour is a structural
+// hash, and the label carries no identity — `IdentityKind` keeps only the id's
+// kind prefix and `MaskDigests` masks everything after it — so the label is
+// what a comparison across toolchains can rest on.
+std::string SignatureLabel(const std::string& line) {
+  const std::size_t last = line.rfind("::");
+  return last == std::string::npos ? line : line.substr(0, last);
+}
+
+// True for the members whose MULTIPLICITY the analysis HOST determines rather
+// than the query contract.
+//
+// A case's value entities and its `reachable` facts are enumerated from the
+// flow slice, and the slice is derived from the IR the host compiler emitted.
+// CI pins that compiler (`ci.yml` passes `CMAKE_CXX_COMPILER` the clang it just
+// built) and a developer machine pins its own, and two clang majors emit
+// different IR for the same `-O0` source. Measured on the
+// `evidence_overflow_safe` fixture, with every other structural class equal:
+// the clang-24 Linux run carries 7 value entities and 9 `reachable` facts where
+// the clang-17 macOS golden carries 18 and 20, at the same number of distinct
+// incidence shapes. The counts are therefore not comparable across hosts.
+//
+// They are not ignored, but neither are they pinned. `ExpectHostStableMatch`
+// requires the tool to produce at least one, and forbids it from producing a
+// member KIND the golden lacks. What it cannot see is a wrong count, or a new
+// incidence shape inside a class the golden already has: every value entity
+// carries the same label, so those are exactly the axes the host is allowed to
+// move. The cost is real and is accepted deliberately — a check that cannot be
+// satisfied by a correct toolchain is worth less than a weaker one that is.
+bool IsIrDerivedMember(const std::string& label) {
+  if (label.rfind("entity::kind=value;stable=valref", 0) == 0) {
+    return true;
+  }
+  return label.rfind("fact::stable=fact;", 0) == 0 &&
+         label.find("predicate=call(reachable,") != std::string::npos;
+}
+
+// A case's signature split by what determines each member, keeping labels only.
+struct HostStableProjection {
+  std::multiset<std::string> contract;
+  std::multiset<std::string> ir_derived;
+};
+
+HostStableProjection SplitHostStable(const ev::EvidenceCase& value) {
+  HostStableProjection projection;
+  for (const std::string& line : StableSignature(value)) {
+    const std::string label = SignatureLabel(line);
+    if (IsIrDerivedMember(label)) {
+      projection.ir_derived.insert(label);
+    } else {
+      projection.contract.insert(label);
+    }
+  }
+  return projection;
+}
+
+std::string JoinLines(const std::multiset<std::string>& values) {
+  std::string out;
+  for (const std::string& value : values) {
+    out.append(value);
+    out.push_back('\n');
+  }
+  return out;
+}
+
+// Compares a live case against a checked-in golden at the strength a
+// cross-toolchain comparison can actually support: every member the query
+// contract determines must agree exactly, down to its count, and the
+// host-determined members must be present and free of a member kind the golden
+// does not carry. Their counts are deliberately not compared — see
+// `IsIrDerivedMember` for what that gives up.
+void ExpectHostStableMatch(const ev::EvidenceCase& live,
+                           const ev::EvidenceCase& golden,
+                           const std::string& name) {
+  const HostStableProjection tool = SplitHostStable(live);
+  const HostStableProjection frozen = SplitHostStable(golden);
+
+  EXPECT_EQ(JoinLines(tool.contract), JoinLines(frozen.contract))
+      << name
+      << " no longer matches the CLI on the members the query contract "
+         "determines\n--- tool projection ---\n"
+      << JoinLines(tool.contract)
+      << "--- golden projection ---\n"
+      << JoinLines(frozen.contract);
+
+  EXPECT_FALSE(tool.ir_derived.empty())
+      << name << " produced no host-determined member at all";
+  for (const std::string& label : tool.ir_derived) {
+    EXPECT_GT(frozen.ir_derived.count(label), 0u)
+        << name
+        << " produced a host-determined member kind the golden does not "
+           "carry: "
+        << label;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Shared fixture helpers
 // ---------------------------------------------------------------------------
@@ -1381,15 +1493,11 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
     const CaseGraph cli_graph = BuildGraph(*from_cli);
     EXPECT_TRUE(ReferencesResolve(cli_graph)) << golden.name;
 
-    // The CLI's output and the checked-in golden carry the same semantics.
-    EXPECT_EQ(SignatureText(StableSignature(*from_cli)),
-              SignatureText(StableSignature(cases.at(golden.name))))
-        << golden.name
-        << " no longer matches the CLI: the toolchain-stable projection "
-           "differs\n--- tool projection ---\n"
-        << SignatureText(StableSignature(*from_cli))
-        << "--- golden projection ---\n"
-        << SignatureText(StableSignature(cases.at(golden.name)));
+    // The CLI's output and the checked-in golden carry the same semantics, at
+    // the strength a comparison across host toolchains can support. See
+    // `IsIrDerivedMember`: the members whose COUNT the host compiler's IR
+    // determines are compared by member-kind presence instead.
+    ExpectHostStableMatch(*from_cli, cases.at(golden.name), golden.name);
   }
 
   const ev::EvidenceCase& unsafe_case = cases.at("overflow_unsafe.l1.eir");
