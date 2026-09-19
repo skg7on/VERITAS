@@ -680,6 +680,33 @@ obligation. It does not claim a verified defect.
 `DEFERRED (§2.3)`: the `[0,65535]` range and the 2048-byte capacity are not
 yet produced by the pipeline and appear as complete-empty fact sets.
 
+**Deviation, reconciled here rather than left to the code.** The shipped
+artefact, `overflow_unsafe.l1.eir`, declares no `unknown` and names no summary,
+so two clauses of the descriptive sentence above are not true of it as written:
+"explicit unknown external semantics" and "summaries". The remaining four hold
+— the flow reaching the sink, the scoped check outcome complete and empty with
+its negative `dominating_check_absence` certificate, provenance, and the
+pending proof obligation — and the prohibition above stands unchanged: the case
+carries `state = POSSIBLE_DEFECT` and claims no verified defect. The
+`DEFERRED (§2.3)` tag above does not cure the two clauses that fail, and the
+tag's presence must not be read as covering them. It names the `[0,65535]`
+range and the 2048-byte capacity, and §2.3 defers exactly four oracles: value
+range, capacity, alias states, and the positive dominating check. Neither an
+unknown nor a summary reference is among them, so the tag is narrower than the
+sentence it sits under and cannot discharge clauses it does not reach. The
+cause is structural rather than incidental: both members belong to fixtures
+this command does not run. The unmodeled external validator is the
+`evidence_overflow_opaque_validator` fixture's (`QRY-009`; `BLD-004` carries a
+blocking unknown into a built case), and summary references are exercised by the
+`evidence_overflow_summary` fixture (`HND-006`). This command runs
+`evidence_overflow_unsafe`, whose `main.cpp` holds no unmodeled external call,
+and the case it emits declares only `configuration`, `fact`, and `type_layout`
+dependencies. §2.3 is the cross-reference for what is deferred and how the
+deferrals are owned; the measurement is against the checked-in golden, which is
+a reviewed artefact, and is not repeated here. This paragraph exists because a
+normative contract cannot carry an unremarked exception — that, and not the
+code, is what the deviation cost.
+
 ## 14.2 Safe counterevidence without premature verdict
 
 ```bash
