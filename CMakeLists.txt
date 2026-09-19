@@ -66,6 +66,62 @@ project(VERITAS
   LANGUAGES C CXX
 )
 
+# Let CMake's sysroot resolution and the compiler's implicit search path agree.
+#
+# Clang derives its sysroot from its own resource directory, while xcrun — and
+# with it every find_path/find_library CMake runs on macOS — reports the newest
+# installed SDK. On the supported toolchain the two differ: the llvm@17 host
+# compiler searches MacOSX26.sdk while xcrun reports MacOSX.sdk. The mismatch
+# surfaces as soon as a dependency's header is resolved inside the SDK — CMake's
+# FindSQLite3 and the vendored Souffle's own ncurses/zlib/sqlite3/libffi finds
+# all land there — because the imported targets they build then republish
+# <SDK>/usr/include as an include directory.
+#
+# CMake omits interface include directories that appear in the compiler's
+# implicit list, but it compares them literally, so the newer SDK's usr/include
+# survives as an explicit -isystem entry on every consumer. Two failures follow.
+# The explicit entry sorts ahead of the C++ standard library, which defeats
+# libc++'s own header shims:
+#
+#   <cstddef> tried including <stddef.h> but didn't find libc++'s <stddef.h> header
+#
+# and the two SDK generations then meet on one command line, each redefining the
+# other's typedefs:
+#
+#   <SDK>/usr/include/_types.h:46:9: error: unknown type name '__uint32_t'
+#
+# This build passes no -isysroot, so the compiler's own SDK generation is what
+# actually supplies the system headers, and the entry is redundant: the headers
+# the finders resolve there (sqlite3.h, zlib.h, curses.h) ship with every macOS
+# SDK, while the C library headers are the ones libc++ must win against anyway.
+# Listing the resolved SDK's usr/include as implicitly searched therefore records
+# what the compiler already achieves through its own sysroot, and lets CMake's
+# existing omission rule apply everywhere — including inside the vendored
+# third-party subprojects, whose finders publish the directory onto imported
+# targets too narrowly scoped for anything outside them to trim.
+#
+# Only the sysroot's own usr/include is involved. Include directories that are
+# genuinely not searched implicitly — libffi's <SDK>/usr/include/ffi, a Homebrew
+# prefix — keep their explicit entries.
+#
+# This must follow project(): compiler detection populates the implicit lists.
+# Point -DCMAKE_OSX_SYSROOT at another SDK to change which one is aligned.
+if(APPLE)
+  set(VERITAS_MACOS_SYSROOT "${CMAKE_OSX_SYSROOT}")
+  if(NOT IS_ABSOLUTE "${VERITAS_MACOS_SYSROOT}")
+    execute_process(
+      COMMAND xcrun --show-sdk-path
+      OUTPUT_VARIABLE VERITAS_MACOS_SYSROOT
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
+    )
+  endif()
+  if(EXISTS "${VERITAS_MACOS_SYSROOT}/usr/include")
+    list(APPEND CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "${VERITAS_MACOS_SYSROOT}/usr/include")
+    list(APPEND CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "${VERITAS_MACOS_SYSROOT}/usr/include")
+  endif()
+endif()
+
 # -----------------------------------------------------------------------------
 # Global toolchain settings
 # -----------------------------------------------------------------------------

@@ -142,6 +142,34 @@ undefined reference to `typeinfo for llvm::Value`
 **Solution:**
 This indicates an ABI mismatch. VERITAS, SVF, and LLVM must all use the same RTTI/EH settings. Check the CMake configure output for the reported LLVM settings, then ensure your LLVM build matches.
 
+### macOS SDK headers shadow libc++ after a Command Line Tools update
+
+**Symptom:**
+```
+<path>/c++/v1/cstddef:46:5: error: <cstddef> tried including <stddef.h> but didn't find libc++'s <stddef.h> header
+```
+or, with the SDK generation mismatched, hundreds of the form:
+```
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_types.h:46:9: error: unknown type name '__uint32_t'
+```
+
+**Cause:**
+Clang derives its sysroot from its own resource directory, while `xcrun` — and with it every
+`find_path`/`find_library` CMake runs on macOS — reports the newest installed SDK. Updating the
+Command Line Tools moves the second path forward, so the compiler searches one SDK generation
+while CMake's dependency finders resolve headers in another. The finders then republish the SDK's
+`usr/include` on the imported targets they create (SQLite3, and ncurses/zlib/libffi inside the
+vendored Soufflé). CMake omits include directories the compiler already searches, but only on an
+exact path match, so the entry survives as an explicit `-isystem`, sorts ahead of libc++, and puts
+both SDK generations on one command line.
+
+**Solution:**
+The top-level `CMakeLists.txt` aligns the implicit include list with the SDK CMake resolves, so the
+directory is omitted rather than passed. Only the sysroot's own `usr/include` is affected — a
+directory that is not searched implicitly, such as libffi's `<SDK>/usr/include/ffi`, keeps its
+explicit entry. If the symptom persists, reinstall matching Command Line Tools or align the SDK
+explicitly with `-DCMAKE_OSX_SYSROOT=<path-to-sdk>`.
+
 ## SVF Integration
 
 The pinned SVF submodule at `third_party/SVF` also depends on LLVM 22+. When you configure VERITAS with `LLVM_PROJECT_BUILD_DIR`, both VERITAS and SVF will use the same LLVM installation, ensuring ABI compatibility.
