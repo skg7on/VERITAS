@@ -337,6 +337,21 @@ TEST(EvidenceCaseBuilderTest, Bld001UnsafeCompleteInputBuildsAValidL1Case) {
   ASSERT_EQ(value.paths.size(), 1u);
   EXPECT_EQ(value.paths.front().kind, PathKind::kValueFlow);
   EXPECT_GE(value.paths.front().entity_ids.size(), 2u);
+
+  // The handoff's open questions survive into the case rather than being
+  // resolved on the builder's own authority. The pristine L1 handoff carries
+  // two — the external validator's effects and the sink's — and it is their
+  // presence, not their count, that the oracle requires.
+  EXPECT_FALSE(value.unknowns.empty())
+      << "the open questions the handoff carried are not visible on the case";
+
+  // The oracle's other unasserted element is `summaries`, and it is left
+  // unasserted rather than asserted-empty: the built case carries none
+  // (measured 0), because the M10B handoff carries no summary identity and the
+  // builder invents none. That is pinned builder-against-fixture at
+  // `L52ReproducesTheProgramBindingAndNamesItsOnePoint` ("one each in the
+  // fixture, none in the builder"), so recording it here would pin the
+  // implementation rather than the contract. Finding, not assertion.
 }
 
 // --- BLD-002 -----------------------------------------------------------------
