@@ -372,6 +372,32 @@ TEST(EvidenceProtoTest, RejectsUnspecifiedEnums) {
   }
 }
 
+// Absence is represented by an absent message. A present optional expression
+// must therefore carry a recognized non-zero kind; coercing an unknown kind to
+// the model's absence would accept wire data no encoder can produce.
+TEST(EvidenceProtoTest, RejectsInvalidKindInPresentOptionalExpression) {
+  EvidenceCase input = MakeValidMinimalEvidenceCase();
+  input.primary_claim.predicate = Expression{};
+  ASSERT_TRUE(FinalizeEvidenceIdentity(&input).ok());
+  auto proto = ToEvidenceProto(input);
+  ASSERT_TRUE(proto.ok()) << proto.status().message();
+
+  {
+    v1::EvidenceCase mutated = *proto;
+    mutated.mutable_primary_claim()->clear_predicate();
+    mutated.mutable_primary_claim()->mutable_predicate()->set_kind(
+        v1::EXPRESSION_KIND_UNSPECIFIED);
+    ExpectInvalidArgument(DecodeEvidenceProto(Serialize(mutated)));
+  }
+  {
+    v1::EvidenceCase mutated = *proto;
+    mutated.mutable_primary_claim()->clear_predicate();
+    mutated.mutable_primary_claim()->mutable_predicate()->set_kind(
+        static_cast<v1::ExpressionKind>(999));
+    ExpectInvalidArgument(DecodeEvidenceProto(Serialize(mutated)));
+  }
+}
+
 // REP-008's malformed input: a decoder that returned a partially initialized
 // case, or that accepted a truncated buffer, would be able to publish a case
 // no encoder produced.

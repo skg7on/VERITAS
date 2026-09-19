@@ -197,6 +197,16 @@ TEST(EvidenceValidatorTest, VID002RejectsDanglingExpressionReference) {
   EXPECT_EQ(report.issues.front().member_id, value.facts.front().id);
 }
 
+TEST(EvidenceValidatorTest, VID002RejectsDanglingClaimPredicateReference) {
+  auto value = MakeValidMinimalEvidenceCase();
+  value.primary_claim.predicate.kind = Expression::Kind::kReference;
+  value.primary_claim.predicate.text = "missing";
+  const auto report = ValidateEvidenceCase(value);
+  ASSERT_FALSE(report.ok());
+  EXPECT_TRUE(HasCode(report, EvidenceValidationCode::kDanglingReference));
+  EXPECT_EQ(report.issues.front().member_id, value.primary_claim.id);
+}
+
 TEST(EvidenceValidatorTest, VID002RejectsBareAnalysisLabelAsReference) {
   auto value = MakeValidMinimalEvidenceCase();
   ASSERT_FALSE(value.entities.empty());
@@ -285,6 +295,35 @@ TEST(EvidenceValidatorTest, VID004RejectsInvalidExpressionType) {
   const auto report = ValidateEvidenceCase(value);
   EXPECT_TRUE(HasCode(report, EvidenceValidationCode::kExpressionType));
   EXPECT_EQ(report.issues.front().member_id, value.constraints.front().id);
+}
+
+// Inactive scalar fields are still canonicalized, so accepting them would let
+// a text writer silently erase identity-bearing data it has no syntax for.
+TEST(EvidenceValidatorTest, VID004RejectsInactiveExpressionPayload) {
+  auto boolean_payload = MakeValidMinimalEvidenceCase();
+  boolean_payload.facts.front().predicate.boolean = true;
+  EXPECT_TRUE(HasCode(ValidateEvidenceCase(boolean_payload),
+                      EvidenceValidationCode::kExpressionType));
+
+  auto integer_payload = MakeValidMinimalEvidenceCase();
+  integer_payload.facts.front().predicate.integer = 7;
+  EXPECT_TRUE(HasCode(ValidateEvidenceCase(integer_payload),
+                      EvidenceValidationCode::kExpressionType));
+
+  auto text_payload = MakeOverflowEvidenceCase();
+  const Expression formula = text_payload.constraints.front().expression;
+  text_payload.constraints.front().expression =
+      Connective(Expression::Kind::kNot, {formula});
+  text_payload.constraints.front().expression.text = "hidden";
+  EXPECT_TRUE(HasCode(ValidateEvidenceCase(text_payload),
+                      EvidenceValidationCode::kExpressionType));
+
+  auto absent_payload = MakeValidMinimalEvidenceCase();
+  absent_payload.primary_claim.predicate = Expression{};
+  absent_payload.primary_claim.predicate.operands.push_back(
+      absent_payload.facts.front().predicate);
+  EXPECT_TRUE(HasCode(ValidateEvidenceCase(absent_payload),
+                      EvidenceValidationCode::kExpressionType));
 }
 
 // `EvidenceCase.h` declares `kAnd`/`kOr` "two or more operands, flattened",
@@ -395,6 +434,23 @@ TEST(EvidenceValidatorTest, VID005AcceptsDecidedResultWithProducer) {
   value.verification_state = VerificationState::kVerifiedDefect;
   const auto report = ValidateEvidenceCase(value);
   EXPECT_TRUE(report.ok()) << FirstIssue(report);
+}
+
+TEST(EvidenceValidatorTest, VID005InterruptedResultsCannotVerifyACase) {
+  for (const ProofStatus status :
+       {ProofStatus::kTimeout, ProofStatus::kUnsupported}) {
+    auto value = MakeOverflowEvidenceCase();
+    ProofObligation& obligation = value.proof_obligations.front();
+    obligation.status = status;
+    obligation.result_id = "R_interrupted_1";
+    obligation.verification_producer = "verifier.smt";
+    value.verification_state = VerificationState::kVerifiedDefect;
+
+    const auto report = ValidateEvidenceCase(value);
+    EXPECT_TRUE(HasCode(report, EvidenceValidationCode::kVerificationProducer))
+        << "status " << static_cast<int>(status)
+        << " incorrectly authorized a verified case";
+  }
 }
 
 // --- VID-006: visible omissions ---------------------------------------------

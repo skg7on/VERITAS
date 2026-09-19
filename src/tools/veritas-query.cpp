@@ -17,18 +17,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <set>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <vector>
 
-#include <unistd.h>
-
 #include "veritas/build/AnalysisManifest.h"
+#include "veritas/core/AtomicFile.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Version.h"
 #include "veritas/cpg/CpgQuery.h"
@@ -284,63 +280,6 @@ StatusOr<veritas::build::ProgramContext> BuildProgramContext(
   return context;
 }
 
-// ---------------------------------------------------------------------------
-// Failure-atomic binary output (DEM-004)
-// ---------------------------------------------------------------------------
-//
-// The destination is never opened for writing. The bytes go to a uniquely
-// named sibling temporary first and reach the destination only through one
-// `rename`, which is atomic within a filesystem — so a reader sees either the
-// previous destination or the complete new one, and never a truncated file.
-//
-// The temporary is the only path any failure removes. Removing the destination
-// instead would delete the prior artifact a failed run was supposed to leave
-// intact, which is the outcome DEM-004 forbids.
-Status WriteProtobufAtomically(const std::string& destination,
-                               const std::string& bytes) {
-  namespace fs = std::filesystem;
-  static std::size_t counter = 0;
-  std::error_code ignored;
-
-  fs::path temporary(destination);
-  temporary += ".tmp.";
-  temporary += std::to_string(static_cast<long long>(::getpid()));
-  temporary += ".";
-  temporary += std::to_string(++counter);
-
-  {
-    std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
-    if (!out.is_open()) {
-      return Status::Internal("cannot create the temporary file beside '" +
-                              destination + "'");
-    }
-    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    out.flush();
-    if (!out.good()) {
-      out.close();
-      fs::remove(temporary, ignored);
-      return Status::Internal("cannot write the temporary file beside '" +
-                              destination + "'");
-    }
-    out.close();
-    if (out.fail()) {
-      fs::remove(temporary, ignored);
-      return Status::Internal("cannot close the temporary file beside '" +
-                              destination + "'");
-    }
-  }
-
-  fs::rename(temporary, fs::path(destination), ignored);
-  if (ignored) {
-    // Only the temporary this call created is removed. The destination is left
-    // exactly as the caller found it.
-    fs::remove(temporary, ignored);
-    return Status::Internal("cannot replace '" + destination +
-                            "': " + ignored.message());
-  }
-  return Status::Ok();
-}
-
 int RunEvidenceOverflow(const std::vector<std::string>& args) {
   if (args.size() < 2 || args[1] != "overflow") {
     std::cerr << kUsage;
@@ -454,7 +393,7 @@ int RunEvidenceOverflow(const std::vector<std::string>& args) {
   if (options.format == "protobuf") {
     auto bytes = veritas::evidence::EncodeEvidenceProto(value);
     if (!bytes.ok()) return ReportError(bytes.status().message());
-    if (Status status = WriteProtobufAtomically(options.output, *bytes);
+    if (Status status = veritas::core::WriteFileAtomically(options.output, *bytes);
         !status.ok()) {
       return ReportError(status.message());
     }
