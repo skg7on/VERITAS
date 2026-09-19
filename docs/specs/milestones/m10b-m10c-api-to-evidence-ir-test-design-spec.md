@@ -705,6 +705,21 @@ veritas-query evidence overflow \
 Demonstrates partial evidence, a stable path-budget reason, and an explicit
 unknown/omission. No universal check or `MUST_NOT` fact may be emitted.
 
+**Deviation, reconciled here rather than left to the code.** The shipped
+artefact, `overflow_truncated.l1.eir`, carries exactly one
+`epistemic = must_not` fact, so the prohibition above is not true of it as
+written. The cause is structural: the unsafe fixture's flow slice holds exactly
+one value-flow path, so `--max-paths 1` cannot bind, and the golden is generated
+with `--max-nodes 1` — the only CLI-reachable input that genuinely truncates a
+query. The `MUST_NOT` is not a truncated query becoming negative proof; it
+arises from a *different* query, the dominating-check query, which genuinely
+reported complete. The prohibition itself stands: no truncated query may become
+a `MUST_NOT` fact. The measurement and the full reasoning are recorded beside
+the code that takes them, at
+`tests/integration/evidence/VeritasQueryEirTest.cpp:83`; they are not repeated
+here. This paragraph exists because a normative contract cannot carry an
+unremarked exception — that, and not the code, is what the deviation cost.
+
 ## 14.4 Cross-format semantic equivalence
 
 ```bash
