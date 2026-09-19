@@ -1,0 +1,46 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// REP-005: the schema declaration binds the semantic schema version, and the
+// string literal must equal `eir.v1`. Any other value is a well-formedness
+// error rather than an extension point.
+//
+// Everything else in this document is a complete, valid case, so the only
+// reason it can be refused is the version it declares.
+evidence UnsupportedSchema {
+    schema = "eir.v2";
+    level = l1;
+    state = POSSIBLE_DEFECT;
+
+    context {
+        repository = "radio-stack";
+        revision = "a87f03e";
+        build_variant = "ARM64_RELEASE";
+        target = "aarch64-unknown-linux-gnu";
+        analyzer_configuration = "veritas.default";
+        type_layout = "layout:aapcs64";
+        analysis_run = "run:sha256:0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5";
+    }
+
+    entity E_sink : callsite {
+        function = "memcpy";
+    }
+
+    claim C1 {
+        kind = buffer_overflow;
+        subject = @E_sink;
+        predicate = reachable(@E_sink);
+        severity = high;
+    }
+}

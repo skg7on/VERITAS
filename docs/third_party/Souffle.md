@@ -22,8 +22,8 @@ See `third_party/Souffle/LICENSE` for the full upstream license text.
 
 **Build Configuration:**
 - `cmake/VeritasSouffle.cmake` adds Soufflé via `add_subdirectory` with `EXCLUDE_FROM_ALL`, routing artifacts under `${CMAKE_BINARY_DIR}/souffle-build/`.
-- The `souffle` executable and `libsouffle` build on demand (`cmake --build --target souffle`); they do not join the default `all` target.
-- Gated behind `VERITAS_BUILD_SOUFFLE` (default `OFF`) until M8R.4 makes Soufflé the mandatory production engine.
+- `EXCLUDE_FROM_ALL` excludes only Soufflé's own subdirectory targets from `all`. The parent-project targets VERITAS defines alongside it — `veritas_souffle_functors`, `veritas_souffle_runner`, `veritas_souffle_worker`, and the `veritas_souffle_provenance` `ALL` target — are ordinary `all` members, and the runner links `libsouffle`, so a plain `cmake --build --preset default` builds Soufflé from source anyway. `cmake --build --target souffle` builds just the compiler.
+- Gated behind `VERITAS_WPA_ENGINE` (`CMakeLists.txt`, a cache variable defaulting to `souffle`); `cpp-emergency` is the explicit degraded Soufflé-less configuration. Soufflé is the mandatory production WPA engine.
 - `SOUFFLE_GIT` is disabled so its `git describe --tags` does not run against the parent VERITAS repository. OpenMP, SWIG, and Doxygen are disabled.
 - VERITAS applies `-fno-rtti -fno-exceptions` globally; `VeritasSouffle.cmake` re-enables both (`-frtti -fexceptions`) for Soufflé's own targets only, since Soufflé uses C++ exceptions and RTTI.
 

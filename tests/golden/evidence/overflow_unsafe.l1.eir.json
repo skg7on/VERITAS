@@ -1,0 +1,1021 @@
+{
+  "assumptions": [],
+  "constraints": [
+    {
+      "epistemic": "may",
+      "expression": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "compare",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "call",
+            "operands": [
+              {
+                "boolean": false,
+                "integer": 0,
+                "kind": "reference",
+                "operands": [],
+                "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+              }
+            ],
+            "text": "value"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "call",
+            "operands": [
+              {
+                "boolean": false,
+                "integer": 0,
+                "kind": "reference",
+                "operands": [],
+                "text": "E_memory_object_03eb30ce"
+              }
+            ],
+            "text": "capacity"
+          }
+        ],
+        "text": "<="
+      },
+      "id": "K_path_safety",
+      "provenance_id": "PR_value_flow",
+      "scope": "path"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "DEP_configuration",
+      "kind": "configuration",
+      "stable_id": "model:sha256:46d04d2fdecc435cd46f38357e057797fbad305bf6b10bf89b5ca983c47d0b6e"
+    },
+    {
+      "id": "DEP_fact",
+      "kind": "fact",
+      "stable_id": "fact:sha256:e5acd76c97d4ec91fcbd224597dd0ba0a53069bc81c037b870aa8990b36c71ce"
+    },
+    {
+      "id": "DEP_type_layout",
+      "kind": "type_layout",
+      "stable_id": "model:sha256:7033fccd9631c54232d30d719a9012664953a9e1c0adc32b07e666421407e393"
+    }
+  ],
+  "edges": [
+    {
+      "epistemic": "must",
+      "expandable": false,
+      "from": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0",
+      "id": "ED_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7",
+      "kind": "FLOWS_TO",
+      "provenance_id": "PR_value_flow",
+      "summarized_by": "",
+      "to": "E_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7"
+    },
+    {
+      "epistemic": "must",
+      "expandable": false,
+      "from": "E_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9",
+      "id": "ED_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8",
+      "kind": "FLOWS_TO",
+      "provenance_id": "PR_value_flow",
+      "summarized_by": "",
+      "to": "E_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8"
+    },
+    {
+      "epistemic": "must",
+      "expandable": false,
+      "from": "E_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7",
+      "id": "ED_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9",
+      "kind": "FLOWS_TO",
+      "provenance_id": "PR_value_flow",
+      "summarized_by": "",
+      "to": "E_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9"
+    },
+    {
+      "epistemic": "must",
+      "expandable": false,
+      "from": "E_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8",
+      "id": "ED_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2",
+      "kind": "FLOWS_TO",
+      "provenance_id": "PR_value_flow",
+      "summarized_by": "",
+      "to": "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+    }
+  ],
+  "entities": [
+    {
+      "id": "E_memory_object_03eb30ce",
+      "kind": "memory_object",
+      "properties": {},
+      "stable_id": "memref:sha256:03eb30cecb21eff8932c39cdfa71f1b7e77ea048395ef14515ee516e1ceee12f"
+    },
+    {
+      "id": "E_value_0b9bfd06",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:0b9bfd060a2ee570202d518371a8158be82c28cb8b2e112e85fa621e18bc9bc7"
+    },
+    {
+      "id": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+    },
+    {
+      "id": "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+    },
+    {
+      "id": "E_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9"
+    },
+    {
+      "id": "E_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7"
+    },
+    {
+      "id": "E_value_3cdbc934",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:3cdbc93445406123f068401abbf472066161222a054da94c5d6c0ae685d64507"
+    },
+    {
+      "id": "E_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8"
+    },
+    {
+      "id": "E_value_6e1eb820",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:6e1eb820267119a7ed4e0b4d200f28e6bf95ea26b3a3931c4d334f5115ccaa52"
+    },
+    {
+      "id": "E_value_7324fb4f",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:7324fb4f8b1e7b3d340bb3ab9cdc70987f20b7ff7761d16f5d40355e4ee80e52"
+    },
+    {
+      "id": "E_value_8ede4cb4",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:8ede4cb4667772a0b061fe1272588e6a497deee9c2365a035b31161f130353b6"
+    },
+    {
+      "id": "E_value_a33ebc5b",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:a33ebc5b352f3750a8484b9a2d98bced50937742dfda9d4388cd5e195bed58d8"
+    },
+    {
+      "id": "E_value_e59ed23e",
+      "kind": "value",
+      "properties": {},
+      "stable_id": "valref:sha256:e59ed23ed92885bed31ae0fe957ba5ef1f5c48dd62b185115dce1b9641adaae6"
+    }
+  ],
+  "evidence_id": "evidence:sha256:b89c4301ecca3edc39c1f2389ec418bbb581d9c5dd44064a24a83ea31610ffcc",
+  "facts": [
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_value_e59ed23e"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:2ae9b11de265facf30eec3abb37e2be0b58ebe0d7fa6e94e701dcbcb5fc6ffae"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_2",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:3f90480b47b17c210fc008d7973b1f3b0a65177bb25374746673ec0221fa865f"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_3",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:53cc9f0c98047a579175029041352dfa10c2007f9c55f1ad344ea29f9bfec3a7"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_4",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:609427a194cb896415b3759494f73094fe57f2020a02434b6d12069195357c86"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_5",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_value_8ede4cb4"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:86ad8a9e4490767e78722845aa39ffe8bc389501a02c336a10e6611322cdb102"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_6",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_value_a33ebc5b"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:8a0dcc61edc9eee6c3a6c141246a879979f3744f012d354adc7f3ae9280c741f"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_7",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:9012c48e33c5b628313b693c2d7956a81d6075810ebea50470cf19d0fb8706aa"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_8",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:995e48b624b508d27c0abd62efeec46c77f641b44885dc30636a5e994925086b"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_9",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:a4d3c7427c5d6ab165556dd5214bcae9cfdb91bfe79a4b70a6e4c24da4d4c08f"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_10",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:a799a09a0e6cf9eee3d07305ef54b2fe5aa74d2f066656a293ee99235b62bb00"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_11",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:aa1c3ac0485f6ab71224689c612a79d16d3458924d3e94a6a66e10fc7dd5075e"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_12",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_value_7324fb4f"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:b12ec0fb9e72f562a50a663e7bd8482ed02437eea5765bbc1c5ceb1e2e6f3bcb"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_13",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:b378a82c67f659a4f4ef9eeff540f788f76bec91c8922e420223e705095e42eb"
+    },
+    {
+      "confidence": "exact",
+      "derived": true,
+      "epistemic": "must_not",
+      "id": "F_dominates_bounds_check",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+          }
+        ],
+        "text": "dominates_bounds_check"
+      },
+      "producer": "evidence.closed_world",
+      "provenance_id": "PR_closed_world_absence",
+      "stable_id": "fact:sha256:e5acd76c97d4ec91fcbd224597dd0ba0a53069bc81c037b870aa8990b36c71ce"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_query_completion",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "string",
+            "operands": [],
+            "text": "dominating_check"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "string",
+            "operands": [],
+            "text": "complete"
+          }
+        ],
+        "text": "query_completion"
+      },
+      "producer": "evidence.query",
+      "provenance_id": "PR_dominating_check",
+      "stable_id": "fact:sha256:e5acd76c97d4ec91fcbd224597dd0ba0a53069bc81c037b870aa8990b36c71ce"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_14",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_value_3cdbc934"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:e5b58e4e42e0e2f3e4f64cc2ca1058ede85834b129b4cda2f499e509fbe23005"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_15",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:f30bbe6c67a86dc6537ae0e21664650ba1d8db59ac811b49c90f6f5971f11e0b"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_16",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_value_0b9bfd06"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:f62aac8584c9d0a95560e0c8dd2a42425d6466a84a27f76f229a64c32377c101"
+    },
+    {
+      "confidence": "exact",
+      "derived": false,
+      "epistemic": "must",
+      "id": "F_reachable_17",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "call",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "reference",
+            "operands": [],
+            "text": "E_value_6e1eb820"
+          }
+        ],
+        "text": "reachable"
+      },
+      "producer": "analysis.value_flow",
+      "provenance_id": "PR_value_flow",
+      "stable_id": "fact:sha256:fe956f279dcb4ab6bfba4f094170bb625c06b710cf552eaac1fa73ce1c0770d0"
+    }
+  ],
+  "hypotheses": [],
+  "level": "l1",
+  "omissions": [],
+  "paths": [
+    {
+      "conditions": [],
+      "entity_ids": [
+        "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0",
+        "E_valref_sha256_35e72f65c9116b95eea77ab8894c70df43231901a9449a756192b37700dce6a7",
+        "E_valref_sha256_2a35ef9294da98f20cb492ecfe3928844d23c586dc10267ee1ee0c36b276b6b9",
+        "E_valref_sha256_5ab6dbedf6c89c7547a0ef1dd7bbc3e66bde9a725202596fcae4538741883bb8",
+        "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+      ],
+      "feasibility": "UNKNOWN",
+      "id": "P_value_flow",
+      "kind": "value_flow",
+      "provenance_id": "PR_value_flow"
+    }
+  ],
+  "primary_claim": {
+    "description": "the copied length is not bounded by the destination capacity at the sink call",
+    "id": "C1",
+    "kind": "buffer_overflow",
+    "predicate": {
+      "boolean": false,
+      "integer": 0,
+      "kind": "compare",
+      "operands": [
+        {
+          "boolean": false,
+          "integer": 0,
+          "kind": "call",
+          "operands": [
+            {
+              "boolean": false,
+              "integer": 0,
+              "kind": "reference",
+              "operands": [],
+              "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+            }
+          ],
+          "text": "value"
+        },
+        {
+          "boolean": false,
+          "integer": 0,
+          "kind": "call",
+          "operands": [
+            {
+              "boolean": false,
+              "integer": 0,
+              "kind": "reference",
+              "operands": [],
+              "text": "E_memory_object_03eb30ce"
+            }
+          ],
+          "text": "capacity"
+        }
+      ],
+      "text": ">"
+    },
+    "severity": "high",
+    "subject": "E_memory_object_03eb30ce"
+  },
+  "program": {
+    "analysis_configuration_id": "veritas-analysis-config.v1",
+    "analysis_run_id": "run:sha256:ad26abf1941419e69df2e0694f98f1c8d69bfc0808975c123feca9bb1a47cfbb",
+    "analyzer_versions": [],
+    "build_variant_id": "bv:sha256:f7fb9303c6fde0a180628eafe74e9ed71b1e801915eaac70dd3460cd28c3bf71",
+    "repository_id": "repo:sha256:af681934102f60cfb72e7d169b8c9fc30bc41f1d08af240cdcf971861e50b649",
+    "revision_id": "rev:sha256:84f3bda564256f40cf84d1cb034817cce7a1fcfbeec6be4dab550c8793dd16f2",
+    "target_triple": "arm64-apple-darwin27.0.0",
+    "type_layout_id": "layout:sha256:14e6f30051511f358aab870986b698c5a29498151c463d0833e51493639c58ad"
+  },
+  "proof_obligations": [
+    {
+      "budget": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "unspecified",
+        "operands": [],
+        "text": ""
+      },
+      "goal_kind": "prove",
+      "id": "O1",
+      "predicate": {
+        "boolean": false,
+        "integer": 0,
+        "kind": "forall",
+        "operands": [
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "call",
+            "operands": [
+              {
+                "boolean": false,
+                "integer": 0,
+                "kind": "reference",
+                "operands": [],
+                "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+              },
+              {
+                "boolean": false,
+                "integer": 0,
+                "kind": "reference",
+                "operands": [],
+                "text": "E_valref_sha256_2858865de347fca3f430035dec773508d2fd0e17e8853d38e627ad5892ec58a2"
+              }
+            ],
+            "text": "feasible_paths"
+          },
+          {
+            "boolean": false,
+            "integer": 0,
+            "kind": "compare",
+            "operands": [
+              {
+                "boolean": false,
+                "integer": 0,
+                "kind": "call",
+                "operands": [
+                  {
+                    "boolean": false,
+                    "integer": 0,
+                    "kind": "reference",
+                    "operands": [],
+                    "text": "E_valref_sha256_21c1797bd5b43833feff67d3b04125f3b9f01cf1dfebcd7035128f0f35720fa0"
+                  }
+                ],
+                "text": "value"
+              },
+              {
+                "boolean": false,
+                "integer": 0,
+                "kind": "call",
+                "operands": [
+                  {
+                    "boolean": false,
+                    "integer": 0,
+                    "kind": "reference",
+                    "operands": [],
+                    "text": "E_memory_object_03eb30ce"
+                  }
+                ],
+                "text": "capacity"
+              }
+            ],
+            "text": "<="
+          }
+        ],
+        "text": "path"
+      },
+      "result_id": "",
+      "status": "PENDING",
+      "verification_producer": "",
+      "verifier_kinds": [
+        "range_analysis",
+        "smt",
+        "symbolic_execution"
+      ]
+    }
+  ],
+  "provenance": [
+    {
+      "analysis_run_id": "run:sha256:ad26abf1941419e69df2e0694f98f1c8d69bfc0808975c123feca9bb1a47cfbb",
+      "configuration": "veritas-analysis-config.v1",
+      "id": "PR_alias",
+      "input_fact_ids": [],
+      "producer": "evidence.query",
+      "rule": "evidence.query_completion.v1",
+      "source_anchor_id": "",
+      "version": "v1"
+    },
+    {
+      "analysis_run_id": "run:sha256:ad26abf1941419e69df2e0694f98f1c8d69bfc0808975c123feca9bb1a47cfbb",
+      "configuration": "veritas-analysis-config.v1",
+      "id": "PR_capacity",
+      "input_fact_ids": [],
+      "producer": "evidence.query",
+      "rule": "evidence.query_completion.v1",
+      "source_anchor_id": "",
+      "version": "v1"
+    },
+    {
+      "analysis_run_id": "run:sha256:ad26abf1941419e69df2e0694f98f1c8d69bfc0808975c123feca9bb1a47cfbb",
+      "configuration": "veritas-analysis-config.v1",
+      "id": "PR_closed_world_absence",
+      "input_fact_ids": [
+        "F_query_completion"
+      ],
+      "producer": "evidence.closed_world",
+      "rule": "evidence.closed_world.dominating_check_absence.v1",
+      "source_anchor_id": "",
+      "version": "veritas-evidence-query.v1"
+    },
+    {
+      "analysis_run_id": "run:sha256:ad26abf1941419e69df2e0694f98f1c8d69bfc0808975c123feca9bb1a47cfbb",
+      "configuration": "veritas-analysis-config.v1",
+      "id": "PR_dominating_check",
+      "input_fact_ids": [],
+      "producer": "evidence.query",
+      "rule": "evidence.query_completion.v1",
+      "source_anchor_id": "",
+      "version": "v1"
+    },
+    {
+      "analysis_run_id": "run:sha256:ad26abf1941419e69df2e0694f98f1c8d69bfc0808975c123feca9bb1a47cfbb",
+      "configuration": "veritas-analysis-config.v1",
+      "id": "PR_range",
+      "input_fact_ids": [],
+      "producer": "evidence.query",
+      "rule": "evidence.query_completion.v1",
+      "source_anchor_id": "",
+      "version": "v1"
+    },
+    {
+      "analysis_run_id": "run:sha256:ad26abf1941419e69df2e0694f98f1c8d69bfc0808975c123feca9bb1a47cfbb",
+      "configuration": "veritas-analysis-config.v1",
+      "id": "PR_unknown",
+      "input_fact_ids": [],
+      "producer": "evidence.query",
+      "rule": "evidence.query_completion.v1",
+      "source_anchor_id": "",
+      "version": "v1"
+    },
+    {
+      "analysis_run_id": "run:sha256:ad26abf1941419e69df2e0694f98f1c8d69bfc0808975c123feca9bb1a47cfbb",
+      "configuration": "veritas-analysis-config.v1",
+      "id": "PR_value_flow",
+      "input_fact_ids": [],
+      "producer": "evidence.query",
+      "rule": "evidence.query_completion.v1",
+      "source_anchor_id": "",
+      "version": "v1"
+    }
+  ],
+  "schema_version": "eir.v1",
+  "summaries": [],
+  "unknowns": [],
+  "verification_state": "POSSIBLE_DEFECT"
+}

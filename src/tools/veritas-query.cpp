@@ -12,27 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <algorithm>
 #include <charconv>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <set>
 #include <string>
 #include <string_view>
-#include <variant>
+#include <system_error>
 #include <vector>
 
+#include <unistd.h>
+
+#include "veritas/build/AnalysisManifest.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Version.h"
 #include "veritas/cpg/CpgQuery.h"
 #include "veritas/cpg/CpgRepository.h"
+#include "veritas/evidence/EirText.h"
+#include "veritas/evidence/EvidenceCase.h"
+#include "veritas/evidence/EvidenceCaseBuilder.h"
+#include "veritas/evidence/EvidenceJson.h"
+#include "veritas/evidence/EvidenceProto.h"
 #include "veritas/evidence/EvidenceQueryService.h"
 #include "veritas/evidence/OverflowClaimSeed.h"
 #include "veritas/evidence/FactStoreEvidenceBackend.h"
 #include "veritas/evidence/SliceTypes.h"
-#include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/FactStore.h"
 #include "veritas/summarydb/MetadataStore.h"
 
@@ -49,9 +58,15 @@ constexpr std::string_view kUsage =
     "  veritas-query callees <function-id> --revision <id> --build <id> --db <dir>\n"
     "  veritas-query flow <src-id> <dst-id> --projection <id> --db <dir> "
     "[--max-depth N --max-nodes N --max-paths N]\n"
-    "  veritas-query evidence overflow --sink <value> --format json --db <dir> "
-    "[--max-depth N --max-nodes N --max-paths N --max-facts N "
-    "--max-provenance-depth N]\n";
+    "  veritas-query evidence overflow --sink <value> --format <fmt> --db <dir> "
+    "[--level l0|l1|l2 --output <path> --max-depth N --max-nodes N "
+    "--max-paths N --max-facts N --max-provenance-depth N]\n"
+    "\n"
+    "  --format json     the M10B diagnostic slice JSON (default level: none)\n"
+    "  --format eir-t    canonical EIR-T text at --level (default l1)\n"
+    "  --format eir-json full-fidelity EIR JSON at --level (default l1)\n"
+    "  --format protobuf EIR Protobuf at --level (default l1); --output is "
+    "required\n";
 
 std::string TakeValue(const std::vector<std::string>& args, std::size_t* i,
                       std::string_view flag) {
@@ -81,11 +96,20 @@ bool ParseSize(std::string_view text, std::size_t* out) {
 // The evidence command's supported option surface. Any other `--flag` is
 // rejected as unsupported rather than silently ignored.
 constexpr std::string_view kEvidenceSinks[] = {"memcpy"};
-constexpr std::string_view kEvidenceFormats[] = {"json"};
+// `json` is M10B's diagnostic slice, and it is NOT an EIR representation: it
+// carries no level, no identity, and no omissions list. It stays in this
+// array, and keeps its meaning exactly, so DEM-001's failure mode ("`json`
+// silently changes to full EIR") cannot happen by extending the list.
+constexpr std::string_view kEvidenceFormats[] = {"json", "eir-t", "eir-json",
+                                                 "protobuf"};
 
 struct EvidenceOptions {
   std::string db_path;
   std::string sink;
+  std::string format;
+  std::string output;
+  veritas::evidence::EvidenceLevel level = veritas::evidence::EvidenceLevel::kL1;
+  bool level_given = false;
   veritas::evidence::EvidenceQueryBudget budget{/*max_depth=*/8,
                                                 /*max_nodes=*/256,
                                                 /*max_paths=*/5,
@@ -108,7 +132,6 @@ bool IsSupported(std::string_view value,
 // budgets, and overflowing integers are rejected with a stable message.
 Status ParseEvidenceOptions(const std::vector<std::string>& args,
                             const std::size_t first, EvidenceOptions* out) {
-  std::string format;
   std::set<std::string> seen;
   for (std::size_t i = first; i < args.size(); ++i) {
     const std::string flag = args[i];
@@ -143,9 +166,23 @@ Status ParseEvidenceOptions(const std::vector<std::string>& args,
                                        "'");
       }
     } else if (flag == "--format") {
-      format = TakeValue(args, &i, flag);
-      if (!IsSupported(format, kEvidenceFormats)) {
-        return Status::InvalidArgument("unsupported --format '" + format + "'");
+      out->format = TakeValue(args, &i, flag);
+      if (!IsSupported(out->format, kEvidenceFormats)) {
+        return Status::InvalidArgument("unsupported --format '" + out->format +
+                                       "'");
+      }
+    } else if (flag == "--level") {
+      const std::string value = TakeValue(args, &i, flag);
+      auto level = veritas::evidence::ParseEvidenceLevel(value);
+      if (!level.ok()) {
+        return Status::InvalidArgument("unsupported --level '" + value + "'");
+      }
+      out->level = *level;
+      out->level_given = true;
+    } else if (flag == "--output") {
+      out->output = TakeValue(args, &i, flag);
+      if (out->output.empty()) {
+        return Status::InvalidArgument("--output requires a value");
       }
     } else if (flag == "--max-depth") {
       if (Status s = assign_size(&out->budget.max_depth); !s.ok()) return s;
@@ -168,11 +205,29 @@ Status ParseEvidenceOptions(const std::vector<std::string>& args,
   if (out->sink.empty()) {
     return Status::InvalidArgument("--sink <value> is required");
   }
-  if (format.empty()) {
+  if (out->format.empty()) {
     return Status::InvalidArgument("--format <value> is required");
   }
   if (out->db_path.empty()) {
     return Status::InvalidArgument("--db <dir> is required");
+  }
+  // The binary representation is the one format whose payload is not text, so
+  // it is the one format that must be told where to put it. Writing raw
+  // Protobuf to stdout would corrupt a terminal or a pipe, and DEM-004 names
+  // "binary stdout" as the forbidden outcome.
+  if (out->format == "protobuf" && out->output.empty()) {
+    return Status::InvalidArgument("--format protobuf requires --output <path>");
+  }
+  if (out->format != "protobuf" && !out->output.empty()) {
+    return Status::InvalidArgument("--output is only supported with "
+                                   "--format protobuf");
+  }
+  // `json` is the level-less M10B slice; a level would have nothing to select
+  // and accepting one silently would be the first step toward DEM-001's
+  // failure mode.
+  if (out->format == "json" && out->level_given) {
+    return Status::InvalidArgument("--level is not supported with --format "
+                                   "json: the M10B slice carries no EIR level");
   }
   return Status::Ok();
 }
@@ -192,6 +247,98 @@ StatusOr<StableId> SingleRunId(veritas::summarydb::MetadataStore& metadata) {
         "expected exactly one analysis run in the fact store");
   }
   return ParseStableId((*rows)[0][0]);
+}
+
+// The M10C program identity, read back from the store the analysis published
+// into rather than reconstructed from the checkout path.
+//
+// `repository_id`, `revision_id`, and `build_variant_id` come from the same
+// rows the M10B slice already resolves, so the case cannot disagree with the
+// projection it was built from. `target_triple` and `type_layout_hash` are the
+// two `ProgramContext` members no other read surface carries; they are stored
+// on the `build_variants` row the projection's `build_variant_id` names, which
+// is where M2 published them. Nothing here is invented: a store missing that
+// row is reported rather than defaulted, because a case bound to a fabricated
+// toolchain would be unverifiable.
+StatusOr<veritas::build::ProgramContext> BuildProgramContext(
+    veritas::summarydb::MetadataStore& metadata, const std::string& repository,
+    const std::string& revision, const std::string& build_variant) {
+  auto rows = metadata.Query(
+      "SELECT target_triple, type_layout_hash FROM build_variants "
+      "WHERE build_variant_id = ?",
+      {build_variant});
+  if (!rows.ok()) {
+    return rows.status();
+  }
+  if (rows->size() != 1 || (*rows)[0].size() != 2) {
+    return Status::NotFound(
+        "the store holds no build-variant row for '" + build_variant +
+        "', so the evidence case cannot be bound to a target triple");
+  }
+  veritas::build::ProgramContext context;
+  context.repository_id = repository;
+  context.revision_id = revision;
+  context.build_variant_id = build_variant;
+  context.target_triple = (*rows)[0][0];
+  context.type_layout_hash = (*rows)[0][1];
+  return context;
+}
+
+// ---------------------------------------------------------------------------
+// Failure-atomic binary output (DEM-004)
+// ---------------------------------------------------------------------------
+//
+// The destination is never opened for writing. The bytes go to a uniquely
+// named sibling temporary first and reach the destination only through one
+// `rename`, which is atomic within a filesystem — so a reader sees either the
+// previous destination or the complete new one, and never a truncated file.
+//
+// The temporary is the only path any failure removes. Removing the destination
+// instead would delete the prior artifact a failed run was supposed to leave
+// intact, which is the outcome DEM-004 forbids.
+Status WriteProtobufAtomically(const std::string& destination,
+                               const std::string& bytes) {
+  namespace fs = std::filesystem;
+  static std::size_t counter = 0;
+  std::error_code ignored;
+
+  fs::path temporary(destination);
+  temporary += ".tmp.";
+  temporary += std::to_string(static_cast<long long>(::getpid()));
+  temporary += ".";
+  temporary += std::to_string(++counter);
+
+  {
+    std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+      return Status::Internal("cannot create the temporary file beside '" +
+                              destination + "'");
+    }
+    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    out.flush();
+    if (!out.good()) {
+      out.close();
+      fs::remove(temporary, ignored);
+      return Status::Internal("cannot write the temporary file beside '" +
+                              destination + "'");
+    }
+    out.close();
+    if (out.fail()) {
+      fs::remove(temporary, ignored);
+      return Status::Internal("cannot close the temporary file beside '" +
+                              destination + "'");
+    }
+  }
+
+  fs::rename(temporary, fs::path(destination), ignored);
+  if (ignored) {
+    // Only the temporary this call created is removed. The destination is left
+    // exactly as the caller found it.
+    fs::remove(temporary, ignored);
+    return Status::Internal("cannot replace '" + destination +
+                            "': " + ignored.message());
+  }
+  return Status::Ok();
 }
 
 int RunEvidenceOverflow(const std::vector<std::string>& args) {
@@ -250,8 +397,6 @@ int RunEvidenceOverflow(const std::vector<std::string>& args) {
   const veritas::evidence::SnapshotDescriptor descriptor =
       veritas::evidence::DeriveSnapshotDescriptor(*cpg, (*repository)[0][0],
                                                   *run_id, *current_facts);
-  (void)revision;
-  (void)build_variant;
 
   auto seed = veritas::evidence::ResolveOverflowClaimSeed(
       *cpg, *current_facts, options.sink);
@@ -262,8 +407,61 @@ int RunEvidenceOverflow(const std::vector<std::string>& args) {
   auto input = service.BuildEvidenceInput(*seed, options.budget);
   if (!input.ok()) return ReportError(input.status().message());
 
-  std::cout << veritas::evidence::ToDiagnosticJson(*input);
-  return 0;
+  // M10B's slice JSON is emitted here, before any M10C step, so extending the
+  // format list cannot change it: this branch is the same code path, over the
+  // same `EvidenceBuildInput`, that DEM-001 pins.
+  if (options.format == "json") {
+    std::cout << veritas::evidence::ToDiagnosticJson(*input);
+    return 0;
+  }
+
+  // The M10C boundary. The request carries the two program-identity values
+  // `build::ProgramContext` cannot: the configuration the snapshot ran under,
+  // and (deliberately) no analyzer versions, because M10C reports the analyzers
+  // it was told about rather than synthesizing a set.
+  auto context = BuildProgramContext(metadata, (*repository)[0][0], revision,
+                                     build_variant);
+  if (!context.ok()) return ReportError(context.status().message());
+
+  veritas::evidence::EvidenceBuildRequest request;
+  request.context = std::move(*context);
+  request.input = std::move(*input);
+  request.level = options.level;
+  request.analysis_configuration_id = descriptor.analysis_config;
+
+  auto built = veritas::evidence::EvidenceCaseBuilder().Build(request);
+  if (!built.ok()) return ReportError(built.status().message());
+  const veritas::evidence::EvidenceCase& value = *built;
+
+  // One dispatch, three writers. The CLI never assembles EIR itself: each
+  // representation is the model's own serializer, so the text, the JSON, and
+  // the wire bytes are three views of one case that a single builder produced
+  // once. `Build` finalizes, so every writer's finalized-case precondition
+  // holds here rather than being restored by a second `FinalizeEvidenceIdentity`.
+  if (options.format == "eir-t") {
+    auto text = veritas::evidence::WriteEirText(
+        value, veritas::evidence::EirTextStyle::kCanonical);
+    if (!text.ok()) return ReportError(text.status().message());
+    std::cout << *text;
+    return 0;
+  }
+  if (options.format == "eir-json") {
+    auto json = veritas::evidence::ToEvidenceJson(value);
+    if (!json.ok()) return ReportError(json.status().message());
+    std::cout << *json;
+    return 0;
+  }
+  if (options.format == "protobuf") {
+    auto bytes = veritas::evidence::EncodeEvidenceProto(value);
+    if (!bytes.ok()) return ReportError(bytes.status().message());
+    if (Status status = WriteProtobufAtomically(options.output, *bytes);
+        !status.ok()) {
+      return ReportError(status.message());
+    }
+    return 0;
+  }
+
+  return ReportError("unsupported --format '" + options.format + "'");
 }
 
 }  // namespace

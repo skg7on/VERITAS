@@ -680,6 +680,33 @@ obligation. It does not claim a verified defect.
 `DEFERRED (§2.3)`: the `[0,65535]` range and the 2048-byte capacity are not
 yet produced by the pipeline and appear as complete-empty fact sets.
 
+**Deviation, reconciled here rather than left to the code.** The shipped
+artefact, `overflow_unsafe.l1.eir`, declares no `unknown` and names no summary,
+so two clauses of the descriptive sentence above are not true of it as written:
+"explicit unknown external semantics" and "summaries". The remaining four hold
+— the flow reaching the sink, the scoped check outcome complete and empty with
+its negative `dominating_check_absence` certificate, provenance, and the
+pending proof obligation — and the assurance above stands unchanged: the case
+carries `state = POSSIBLE_DEFECT` and claims no verified defect. The
+`DEFERRED (§2.3)` tag above does not cure the two clauses that fail, and the
+tag's presence must not be read as covering them. It names the `[0,65535]`
+range and the 2048-byte capacity, and §2.3 defers exactly four oracles: value
+range, capacity, alias states, and the positive dominating check. Neither an
+unknown nor a summary reference is among them, so the tag is narrower than the
+sentence it sits under and cannot discharge clauses it does not reach. The
+cause is structural rather than incidental: both members belong to fixtures
+this command does not run. The unmodeled external validator is the
+`evidence_overflow_opaque_validator` fixture's (`QRY-009`; `BLD-004` carries a
+blocking unknown into a built case), and summary references are exercised by the
+`evidence_overflow_summary` fixture (`HND-006`). This command runs
+`evidence_overflow_unsafe`, whose `main.cpp` holds no unmodeled external call,
+and the case it emits declares only `configuration`, `fact`, and `type_layout`
+dependencies. §2.3 is the cross-reference for what is deferred and how the
+deferrals are owned; the measurement is against the checked-in golden, which is
+a reviewed artefact, and is not repeated here. This paragraph exists because a
+normative contract cannot carry an unremarked exception — that, and not the
+code, is what the deviation cost.
+
 ## 14.2 Safe counterevidence without premature verdict
 
 ```bash
@@ -704,6 +731,27 @@ veritas-query evidence overflow \
 
 Demonstrates partial evidence, a stable path-budget reason, and an explicit
 unknown/omission. No universal check or `MUST_NOT` fact may be emitted.
+
+**Deviation, reconciled here rather than left to the code.** The shipped
+artefact, `overflow_truncated.l1.eir`, carries exactly one
+`epistemic = must_not` fact, so the `MUST_NOT` half of the prohibition above is
+not true of it as written. The other half is: the artefact emits no check that
+claims to hold on every path. Both halves of the prohibition, and every claim in
+the descriptive sentence above it, were checked against the artefact. The
+no-universal-check half holds and the `MUST_NOT` half does not; of the
+descriptive claims only the partial-evidence one is true of the artefact, which
+carries no path-budget reason and no unknown or omission at all. The cause is
+structural: the unsafe fixture's flow slice holds exactly one value-flow path,
+so `--max-paths 1` cannot bind, and the golden is generated with `--max-nodes 1`
+— the only CLI-reachable input that genuinely truncates a query. The `MUST_NOT`
+is not a truncated query becoming negative proof; it arises from a *different*
+query, the dominating-check query, which genuinely reported complete. The
+prohibition itself stands, in both halves: no truncated query may become a
+`MUST_NOT` fact, and no truncated query may become a universal check. The
+measurement and the full reasoning are recorded beside the code that takes them,
+at `tests/integration/evidence/VeritasQueryEirTest.cpp:83`; they are not
+repeated here. This paragraph exists because a normative contract cannot carry
+an unremarked exception — that, and not the code, is what the deviation cost.
 
 ## 14.4 Cross-format semantic equivalence
 

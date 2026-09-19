@@ -22,6 +22,7 @@
 #include <system_error>
 
 #include "ProjectFixture.h"
+#include "llvm/TargetParser/Host.h"
 #include "veritas/analysis/ProjectAnalysisRequest.h"
 #include "veritas/build/AnalysisManifest.h"
 #include "veritas/build/ProjectInput.h"
@@ -59,6 +60,57 @@ TEST(ProjectManifestLoaderTest, LoadsSmokeProject) {
   EXPECT_FALSE(manifest->context.source_tree_hash.empty());
   EXPECT_FALSE(manifest->context.compilation_database_hash.empty());
   EXPECT_EQ(manifest->context.compiler_id, "clang++");
+}
+
+// M10C Task 11a. `target_triple` and `type_layout_hash` gate the Evidence case
+// builder (`EvidenceCaseBuilder::CheckRequest`) and the case validator
+// (`EvidenceValidator::CheckProgramBinding`) — both refuse a case whose program
+// identity is empty, so an empty value here makes the whole M10C path
+// unreachable. Nothing else in the suite asserts them, which is how they stayed
+// empty for ten milestones.
+TEST(ProjectManifestLoaderTest, PopulatesTargetTripleAndProvisionalLayoutHash) {
+  auto first = LoadProjectManifest(*ResolveFixture("smoke"));
+  ASSERT_TRUE(first.ok()) << first.status().message();
+  auto second = LoadProjectManifest(*ResolveFixture("smoke"));
+  ASSERT_TRUE(second.ok()) << second.status().message();
+
+  // No M1 fixture names a target, so the analysis host's default triple is the
+  // honest answer: that is genuinely what the compilation targets.
+  EXPECT_EQ(first->context.target_triple, llvm::sys::getDefaultTargetTriple());
+  EXPECT_FALSE(first->context.target_triple.empty());
+
+  // The layout hash is M1's *provisional* derivation — a content address over
+  // the target and compiler configuration, not frontend-derived layout data.
+  // Only its shape and stability are contractual here.
+  EXPECT_TRUE(first->context.type_layout_hash.starts_with("layout:sha256:"));
+
+  // Both are host-derived, but that is not the same as non-deterministic: two
+  // loads of the same project on the same host must agree.
+  EXPECT_EQ(first->context.target_triple, second->context.target_triple);
+  EXPECT_EQ(first->context.type_layout_hash, second->context.type_layout_hash);
+
+  // The triple is a triple, not a mis-captured argument: no whitespace, and no
+  // checkout path leaked in through argument normalization.
+  EXPECT_EQ(first->context.target_triple.find(' '), std::string::npos);
+  EXPECT_EQ(first->context.target_triple.find('/'), std::string::npos);
+}
+
+// Every accepted spelling of an explicit target overrides the host triple, and
+// three TUs naming the same target collapse to that one value (the same
+// sorted-unique rule `compiler_id` uses, so reordering entries cannot flip it).
+TEST(ProjectManifestLoaderTest, ExplicitTargetFlagOverridesTheHostTriple) {
+  auto manifest = LoadProjectManifest(*ResolveFixture("target_flags"));
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+  ASSERT_EQ(manifest->translation_units.size(), 3u);
+
+  EXPECT_EQ(manifest->context.target_triple, "aarch64-unknown-linux-gnu");
+
+  // The layout hash is derived *from* the target, so a project built for
+  // another target cannot share the host's provisional layout identity.
+  auto host = LoadProjectManifest(*ResolveFixture("smoke"));
+  ASSERT_TRUE(host.ok()) << host.status().message();
+  EXPECT_NE(manifest->context.type_layout_hash,
+            host->context.type_layout_hash);
 }
 
 TEST(ProjectManifestLoaderTest, LoadsEveryTranslationUnitDeterministically) {

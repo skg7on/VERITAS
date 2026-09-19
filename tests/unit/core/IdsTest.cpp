@@ -15,6 +15,7 @@
 #include "veritas/core/Ids.h"
 
 #include <array>
+#include <string>
 
 #include <gtest/gtest.h>
 
@@ -98,4 +99,17 @@ TEST(IdsTest, AnalysisRunAndAbstractObjectIdsRoundTrip) {
     ASSERT_TRUE(ParseStableId(ToString(id)).ok());
     EXPECT_EQ(*ParseStableId(ToString(id)), id);
   }
+}
+
+// M10C: the Evidence ID kind is serialized as the stable spelling `evidence`,
+// and the shared parser (no second Evidence-ID parser) round-trips it.
+TEST(IdsTest, EvidenceIdRoundTrips) {
+  const std::array<std::byte, 3> bytes{std::byte{1}, std::byte{2}, std::byte{3}};
+  const auto id = MakeStableId(IdKind::kEvidence, bytes);
+  const std::string text = ToString(id);
+
+  EXPECT_EQ(text.rfind("evidence:sha256:", 0), 0u);
+  auto parsed = ParseStableId(text);
+  ASSERT_TRUE(parsed.ok()) << parsed.status().message();
+  EXPECT_EQ(*parsed, id);
 }

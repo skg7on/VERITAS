@@ -1,0 +1,26 @@
+[
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-c", "joined.cpp",
+      "--target=aarch64-unknown-linux-gnu"
+    ],
+    "file": "joined.cpp"
+  },
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-c", "separated.cpp",
+      "-target", "aarch64-unknown-linux-gnu"
+    ],
+    "file": "separated.cpp"
+  },
+  {
+    "directory": "@PROJECT_ROOT@",
+    "arguments": [
+      "clang++", "-std=c++20", "-c", "triple.cpp",
+      "-triple", "aarch64-unknown-linux-gnu"
+    ],
+    "file": "triple.cpp"
+  }
+]

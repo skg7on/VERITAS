@@ -1,9 +1,16 @@
 # VERITAS Evidence IR — Formal Specification
 
-**Status:** Draft Formal Specification  
-**Version:** 0.1  
-**Project:** VERITAS — Verified Evidence Reasoning IR for Trans-program Analysis and Semantics  
+**Status:** Stabilized Formal Specification (EIR-T 1.0)
+**Version:** 1.0
+**Project:** VERITAS — Verified Evidence Reasoning IR for Trans-program Analysis and Semantics
 **Depends on:** `docs/architecture/04-evidence-ir-architecture.md`
+
+> **Stability:** the grammar in this document is the frozen EIR-T 1.0 contract.
+> The lexer, parser, and writer of M10C implement exactly these productions;
+> they do not add silent syntax extensions. The `veritas_eir_contract_docs`
+> CTest, driven by `tests/ci/ValidateEvidenceIrContract.cmake`, pins the required
+> productions of §3.1 and §5.1 in this file and fails if any of them is removed
+> or rewritten.
 
 ---
 
@@ -80,7 +87,7 @@ Keyword ::=
     | "type" | "origin" | "allocation_site" | "machine" | "effect"
     | "expr" | "must" | "may" | "inferred" | "assumed" | "unknown"
     | "must_not" | "and" | "or" | "not" | "implies" | "forall" 
-    | "exists" | "in" ;
+    | "exists" | "in" | "dependency" | "omission" ;
 ```
 
 ### 2.5 Operators
@@ -95,6 +102,10 @@ LogicalOp ::= "and" | "or" | "not" | "implies" ;
 PathOp ::= "->" ;
 ```
 
+`LogicalOp` names the logical operator terminals as a lexical class. The predicate
+productions of §5.1 spell those terminals directly, so `LogicalOp` is not
+referenced by any production.
+
 ---
 
 ## 3. Top-Level Grammar
@@ -103,10 +114,22 @@ PathOp ::= "->" ;
 
 ```ebnf
 EvidenceCase ::=
-    "evidence" Identifier "{"
-        [ ContextDecl ]
+    "evidence" [ Identifier ] "{"
+        SchemaDecl
+        LevelDecl
+        StateDecl
+        ContextDecl
         { EvidenceMember }
     "}" ;
+
+SchemaDecl ::= "schema" "=" StringLiteral ";" ;
+LevelDecl ::= "level" "=" EvidenceLevel ";" ;
+EvidenceLevel ::= "l0" | "l1" | "l2" ;
+StateDecl ::= "state" "=" EvidenceState ";" ;
+EvidenceState ::=
+      "UNREVIEWED" | "POSSIBLE_DEFECT" | "LIKELY_DEFECT"
+    | "VERIFIED_DEFECT" | "LIKELY_FALSE_POSITIVE"
+    | "VERIFIED_SAFE" | "INCONCLUSIVE" ;
 
 ContextDecl ::=
     "context" "{"
@@ -119,23 +142,77 @@ ContextProperty ::=
     | "build_variant" "=" StringLiteral ";"
     | "target" "=" StringLiteral ";"
     | "analyzer_configuration" "=" StringLiteral ";"
+    | "type_layout" "=" StringLiteral ";"
+    | "analysis_run" "=" StringLiteral ";"
+    | "analyzer" "=" AnalyzerVersion ";"
     ;
 
+AnalyzerVersion ::= Producer "(" [ StringLiteral [ "," StringLiteral ] ] ")" ;
+
 EvidenceMember ::=
-      Claim
-    | EntityDecl
-    | FactDecl
-    | AssumptionDecl
-    | HypothesisDecl
-    | UnknownDecl
-    | EdgeDecl
-    | PathDecl
-    | ConstraintDecl
-    | ProvenanceDecl
-    | VerificationDecl
-    | SummaryReference
-    ;
+      Claim | EntityDecl | FactDecl | AssumptionDecl | HypothesisDecl
+    | UnknownDecl | EdgeDecl | PathDecl | ConstraintDecl
+    | ProvenanceDecl | VerificationDecl | SummaryReference
+    | DependencyDecl | OmissionDecl ;
+
+DependencyDecl ::=
+    "dependency" Identifier "{"
+        "kind" "=" DependencyKind ";"
+        "stable_id" "=" StringLiteral ";"
+    "}" ;
+DependencyKind ::=
+      "summary" | "fact" | "type_layout"
+    | "configuration" | "specification" ;
+
+OmissionDecl ::=
+    "omission" Identifier "{"
+        "kind" "=" QualifiedId ";"
+        "subject" "=" Reference ";"
+        "reason" "=" StringLiteral ";"
+        "expandable" "=" BooleanLiteral ";"
+    "}" ;
 ```
+
+The case `Identifier` is a display label and carries no semantic content: it is
+not an input to `EvidenceID`, and the semantic model has no member for it. A
+parser must accept any well-formed label, and must not reject a case for
+carrying one, but it preserves no label in the semantic model. The canonical
+writer emits no label, so canonical text is a function of the case's semantics
+alone.
+
+`SchemaDecl`, `LevelDecl`, and `StateDecl` are mandatory and appear once each, in
+that order, before `ContextDecl`. `ContextDecl` is likewise mandatory and
+appears exactly once, before any `EvidenceMember`. `SchemaDecl` binds the
+semantic schema version: the string literal must equal `eir.v1`. Any other value
+is rejected as a well-formedness error; it is not an extension point.
+
+`type_layout`, `analysis_run`, and `analyzer` bind the rest of the program
+identity the `eir.v1` model carries. `type_layout` is the type-layout identity
+of the binding and `analysis_run` is the analysis run the case is bound to,
+written as a stable ID string of the form `<kind>:sha256:<digest>` exactly as
+`DependencyDecl`'s `stable_id` is. `analyzer` names one analyzer that
+contributed to the case: `AnalyzerVersion`'s first argument is that analyzer's
+version and its second is the configuration the analyzer ran under, and both
+arguments are optional. `analyzer` is the only contextual property that may
+appear more than once, once per contributing analyzer; the other seven appear at
+most once each. The order in which `analyzer` properties appear carries no
+meaning, and the canonical form sorts the analyzer versions, so a case whose
+context lists the same analyzers in another order is the same case.
+
+`LevelDecl` selects the abstraction level (`EIR-L0`, `EIR-L1`, or `EIR-L2`).
+`StateDecl` carries the overall case verification state; its alternatives follow
+the verification state transitions of §18. Both enumerations are closed: no other
+alternative is defined in this revision, and unknown alternatives are rejected
+rather than ignored.
+
+`DependencyDecl` records one semantic input the case consumed, identified by a
+`DependencyKind` and a stable ID string of the form
+`<kind>:sha256:<digest>`. `OmissionDecl` records one semantic member that was
+deliberately withheld at the declared level; `kind` is a qualified identifier
+(for example `analyzer_expansion`), `subject` names the referenced member or
+expansion target, and `expandable` states whether a higher level can recover
+it. A withheld member is never represented by its absence alone: an omission that
+cannot be expanded at any higher level must still be declared.
 
 ---
 
@@ -146,6 +223,7 @@ EvidenceMember ::=
 ```ebnf
 EntityDecl ::=
     "entity" Identifier ":" EntityKind "{"
+        [ "stable_id" "=" StringLiteral ";" ]
         { EntityProperty }
     "}" ;
 
@@ -180,21 +258,117 @@ FunctionCall ::= Identifier "(" [ ArgumentList ] ")" ;
 ArgumentList ::= PropertyValue { "," PropertyValue } ;
 ```
 
+`stable_id` is the entity's underlying VERITAS identity when one exists, written
+as a stable ID string; a synthetic entity has none and omits the attribute. The
+identity is declared at a fixed position rather than carried as a reserved
+property key, so an entity that declares one may still carry a property named
+`stable_id`: the leading attribute binds the identity, and every `stable_id`
+after it is an ordinary entry of the open property bag. The single value this
+leaves unwritable is a bag entry named `stable_id` on an entity that declares no
+identity — the attribute is optional, so the first such property in the bag's
+position is read as the identity. An entity declared without `stable_id` has no
+identity beyond its case-local `Identifier`.
+
+A second limit is systematic rather than local. `Producer` is `QualifiedId`,
+which admits letters, digits, underscores, and interior dots and nothing else,
+so a producer value that is empty or that carries a character outside that
+alphabet has no spelling at all — although every field it feeds holds a plain
+string. Such a value is reachable: `AnalyzerVersion`'s producer and
+`ProofObligation`'s verification producer are `std::string` fields the canonical
+form hashes verbatim, and no validator constrains their shape — the analyzer
+list is not examined at all, and a decided result's producer is required only to
+be non-empty. This is a known limitation of EIR-T 1.0's identifier alphabet for
+string-valued fields, not of any one declaration. `Producer` has five carriers —
+`AnalyzerVersion`'s producer and `VerificationDecl`'s, `FactDecl`'s `source`,
+`HypothesisDecl`'s `producer`, and `ProvenanceDecl`'s `producer` — and the limit
+reaches every one of them. `AssumptionDecl`'s `source` is not a `Producer`
+carrier, and the limit reaches it only in part: `AssumptionSource` admits
+`FunctionCall`, so a call-shaped source is spellable, while its other branch is
+the identifier-shaped `QualifiedId`, and a source that is neither — a plain
+`src/main.c` — has no spelling at all. It is deliberately not widened here.
+Relaxing `Producer` would change a production this amendment did not introduce
+and would need a canonical-spelling rule for the one-value-two-spellings case,
+with no writer yet to test that rule against; the repair belongs to a coherent
+change to string-valued fields as a class, not to ad hoc widening of a single
+production.
+
+`Scope` is a third limit, and like `Producer`'s it is an alphabet limit rather
+than a positional one. It is `"global" | "function" | "path" | "basic_block" |
+"callsite" | "entity" | FunctionCall`, and `ConstraintDecl` (§10.1) and
+`AssumptionDecl` both hold it in a plain string the canonical form hashes
+verbatim, so a scope that is neither one of the six keywords nor a call — say
+`everywhere` — has no spelling at all: a writer handed one could not emit text
+its own parser would read back, and `REP-001` would fail for any case holding
+it. The narrow production is kept rather than widened. The six keywords plus
+`FunctionCall` are what the grammar says, §10.1 defines no seventh scope, and
+admitting an arbitrary identifier there would make the written language wider
+than the declaration it lowers into — the same reasoning §5.1 records for
+`QualifiedId`, `Scope`, and `Producer` together. No corpus case exercises the
+gap today, because the scenarios that carry a scope write `global` or `path`;
+it is recorded here so the narrowing is a decision on the record rather than an
+unstated cost.
+
+`PropertyKey` is a fourth limit. The production above fixes
+`PropertyKey ::= Identifier`, but the bag it lowers into is an open
+`std::map<std::string, Expression>` keyed by an arbitrary string, and
+`RequireValidEvidenceCase` does not examine property keys, so the alphabet is
+enforced by nothing upstream of the writer. A key outside it — say
+`not an identifier` — has no spelling: written verbatim it produces text this
+grammar does not derive, so `REP-001` fails outright. A key that happens to
+contain the punctuation of a declaration — say `x = 1; y` — is worse, because
+the text it produces *is* derivable: it reparses cleanly into a different
+entity, one carrying an injected property `x` and an extra `y`, and therefore
+into a case with a different `EvidenceID` and no diagnostic anywhere. Serialization that silently denotes a different artifact is
+the failure mode this section exists to prevent, so the writer refuses the key
+rather than emitting it, and an entity whose bag holds one has no EIR-T
+serialization. Widening `PropertyKey` would not repair this: the alphabet is not
+the problem, the absence of any check is, and a wider alphabet would leave the
+injection case reachable through whatever punctuation the wider production
+admitted. No corpus case exercises the gap today, because the scenarios that
+carry properties write identifier keys; it is recorded here so the refusal is a
+decision on the record rather than an unstated cost. Unlike the two above it,
+this limit is not a choice between a narrow production and a wide one —
+`PropertyKey` is unchanged by this amendment. What the amendment settles is that
+the alphabet is enforced at all, and where.
+
+The alphabet it settles on is the token-level one, and it is wider than the
+production. The writer validates every `Identifier` position through a single
+predicate — the case-local handles, the symbols and callees, the bound
+variables, and the property keys alike — and that predicate is `QualifiedId`'s
+rather than `Identifier`'s: it admits an interior dot joining two segments, so a
+key such as `a.b` is accepted and emitted as `a.b = "v";`, which
+`PropertyKey ::= Identifier` does not derive. Reusing the one predicate was
+directed rather than overlooked, and the over-acceptance round-trips: the lexer
+forms a dotted qualified id as a **single** token and the parser takes the token
+text, so `a.b` is read back unchanged and `REP-001` holds. It is therefore a
+tolerance in what the writer admits rather than a losslessness gap — no case can
+be altered by it — and it belongs to the predicate the writer shares across
+every `Identifier` position in the grammar, not to the key position alone.
+Whether EIR-T should admit dotted keys at all is a language question with blast
+radius beyond this amendment, so the difference is recorded as a tolerated
+widening of the enforced alphabet rather than resolved here.
+
 ---
 
 ## 5. Predicate Language
 
 ### 5.1 Predicate Expression
 
+The predicate grammar is factored into precedence levels. It contains no left
+recursion, so it is directly parsable by a recursive-descent parser or a
+table-driven generator without precedence annotations.
+
 ```ebnf
-Predicate ::=
-      AtomicPredicate
-    | "(" Predicate ")"
-    | "not" Predicate
-    | Predicate LogicalOp Predicate
-    | Predicate ComparisonOp Predicate
-    | QuantifiedPredicate
-    ;
+Predicate ::= QuantifiedPredicate | ImplicationExpr ;
+ImplicationExpr ::= OrExpr [ "implies" ImplicationExpr ] ;
+OrExpr ::= AndExpr { "or" AndExpr } ;
+AndExpr ::= ComparisonExpr { "and" ComparisonExpr } ;
+ComparisonExpr ::= UnaryExpr [ ComparisonOp UnaryExpr ] ;
+UnaryExpr ::= "not" UnaryExpr | PrimaryExpr ;
+PrimaryExpr ::= AtomicPredicate | "(" Predicate ")" ;
+QuantifiedPredicate ::=
+      "forall" Identifier "in" Domain ":" Predicate
+    | "exists" Identifier "in" Domain ":" Predicate ;
 
 AtomicPredicate ::=
       Identifier "(" [ PredicateArgumentList ] ")"
@@ -212,16 +386,87 @@ PredicateArgument ::=
     | Predicate
     ;
 
-QuantifiedPredicate ::=
-      "forall" Identifier "in" Domain ":" Predicate
-    | "exists" Identifier "in" Domain ":" Predicate
-    ;
-
 Domain ::=
       Identifier "(" [ ArgumentList ] ")"
     | Reference
     ;
 ```
+
+`PrimaryExpr` as written above is `AtomicPredicate | "(" Predicate ")"`, and
+four value shapes a parser must accept are in neither that production nor
+`PropertyValue` (§4.1). Each is admitted here, and each is admitted because
+refusing it would make a value the `eir.v1` model already carries
+unrepresentable — a writer that emitted one could not read its own output back,
+so `REP-001` would fail for any case holding it. This is the same trade §4.1
+records for the entity property bag, and it is a widening of the language, not a
+relaxation of the model.
+
+- **A bare identifier, in both the predicate and the property-value positions.**
+  `Expression::Kind::kSymbol` is "a bare name such as a domain value or a
+  constant symbol", and a bare identifier is its only spelling. §15's normative
+  example already depends on the predicate half — it writes
+  `@packet.type == EXTENSION`, comparing a reference against a bare identifier.
+  The property-value half is not shown by that example, which puts `EXTENSION`
+  in a predicate; it is admitted because `Entity::properties` (§4.1) is an open
+  bag of `Expression` and the bag's values are not a narrower type. Any
+  identifier that is neither a lexical keyword of the document nor followed by
+  `"("` lowers to `kSymbol`; `true` and `false` lower to `BooleanLiteral` as
+  before, and an identifier followed by `"("` is a `FunctionCall`.
+- **`StringLiteral` and `IntegerLiteral` at the primary level.**
+  `PredicateArgument` lists `StringLiteral` and `IntegerLiteral`, and every
+  argument of a `FunctionCall` is parsed as a full `Predicate`, so the only path
+  by which `f("text")` and `f(1)` reach the argument grammar is through
+  `PrimaryExpr`. Without these two the second and third alternatives of
+  `PredicateArgument` would be unreachable and `f("text")` would have no
+  spelling at all.
+
+`QualifiedId` is deliberately **not** widened, and neither is `Scope`
+(`"global" | "function" | "path" | "basic_block" | "callsite" | "entity" |
+FunctionCall`) or `Producer` (§4.1): those are closed enumerations of their own,
+and admitting an arbitrary identifier into one would admit documents the
+declaration does not define. A parser that did so would be accepting a language
+the specification does not describe.
+
+### 5.2 Precedence and Associativity
+
+Binding tightest first:
+
+| Level | Production | Associativity |
+| --- | --- | --- |
+| 1 (tightest) | `PrimaryExpr` — atom or `"(" Predicate ")"` | n/a |
+| 2 | `UnaryExpr` — prefix `not` | right (prefix) |
+| 3 | `ComparisonExpr` — `ComparisonOp` | **non-associative** |
+| 4 | `AndExpr` — `and` | left |
+| 5 | `OrExpr` — `or` | left |
+| 6 | `ImplicationExpr` — `implies` | right |
+| 7 (loosest) | `QuantifiedPredicate` — `forall` / `exists` | prefix; owns everything after `:` |
+
+Rules that follow from the factored grammar:
+
+1. **Comparisons are non-associative.** The optional trailing comparison in
+   `ComparisonExpr` is never repeated, so `a < b < c` is not a predicate. A
+   chained comparison must be written as an explicit conjunction:
+   `a < b and b < c`.
+2. **`and` and `or` are left-associative.** `a and b and c` groups as
+   `(a and b) and c` and `a or b or c` groups as `(a or b) or c`. Because the
+   two operators sit at different levels, `and` binds tighter than `or`:
+   `a or b and c` groups as `a or (b and c)`.
+3. **`implies` is right-associative.** `a implies b implies c` groups as
+   `a implies (b implies c)`, and `implies` binds loosest of the logical
+   operators, so `a and b implies c` groups as `(a and b) implies c`.
+4. **A quantifier owns the full predicate after its colon.** The body of
+   `forall x in D: P` and `exists x in D: P` is a complete `Predicate`, so the
+   scope of `x` extends as far right as possible and the body may itself
+   contain `and`, `or`, `implies`, comparisons, and nested quantifiers. To
+   restrict the body, parenthesize it explicitly.
+5. **`not` binds tighter than every binary operator.** `not a == b` groups as
+   `(not a) == b`; write `not (a == b)` to negate a comparison. Consecutive
+   prefixes (`not not a`) are legal.
+
+A writer must emit parentheses whenever the child production's binding level is
+looser than the parent's, whenever a second comparison would otherwise be
+juxtaposed, or whenever right-associative `implies` would regroup. Re-serializing
+a parsed predicate must reproduce the same grouping.
 
 ---
 
@@ -237,6 +482,8 @@ FactDecl ::=
         [ "confidence" "=" Confidence ";" ]
         [ "source" "=" Producer ";" ]
         [ "provenance" "=" Reference ";" ]
+        [ "stable_id" "=" StringLiteral ";" ]
+        [ "derived" "=" BooleanLiteral ";" ]
     "}" ;
 
 EpistemicState ::=
@@ -258,6 +505,12 @@ Confidence ::=
 
 Producer ::= QualifiedId ;
 ```
+
+`stable_id` is the fact's underlying VERITAS identity when one exists, written
+as a stable ID string, and `derived` marks a fact the analysis derived rather
+than observed. A fact declared with `derived = true` must name resolvable
+provenance; an observed fact may omit provenance, and when it names one the
+reference must resolve all the same. Absent `derived` means `false`.
 
 ---
 
@@ -298,6 +551,7 @@ UnknownDecl ::=
     "unknown" Identifier "{"
         "property" "=" Predicate ";"
         "reason" "=" UnknownReason ";"
+        [ "detail" "=" StringLiteral ";" ]
         [ "blocking" "=" ReferenceList ";" ]
         [ "suggested_resolution" "=" ResolutionAction ";" ]
     "}" ;
@@ -319,6 +573,13 @@ ResolutionAction ::= FunctionCall ;
 
 ReferenceList ::= "[" [ Reference { "," Reference } ] "]" ;
 ```
+
+`UnknownReason` is a closed classification and admits no free text, and an
+unknown that recorded what the analysis actually observed must not be rounded to
+the nearest terminal. `detail` therefore carries that observed sentence beside
+the classification: `reason` is the closed code and `detail` is the free text,
+and a case that holds both declares both. `detail` is absent when the case
+recorded no sentence of its own.
 
 ---
 
@@ -483,12 +744,35 @@ ProvenanceDecl ::=
         [ "location" "=" SourceLocation ";" ]
         [ "version" "=" StringLiteral ";" ]
         [ "configuration" "=" StringLiteral ";" ]
+        [ "source_anchor" "=" StringLiteral ";" ]
+        [ "analysis_run" "=" StringLiteral ";" ]
     "}" ;
 
 FactReferenceList ::= "[" [ FactReference { "," FactReference } ] "]" ;
 
 SourceLocation ::= FunctionCall ;
 ```
+
+`source_anchor` is the source anchor the record was derived from, and
+`analysis_run` is the analysis run that produced it, written as a stable ID
+string. A case is bound to exactly one run: every provenance record must declare
+`analysis_run`, and it must equal the case's own `program.analysis_run_id`. No
+other value is legal, and a record that declares another run, or none, is
+rejected as a well-formedness error rather than rebased onto the case binding.
+The attribute is declared explicitly and is not derived from the case binding:
+the run is a semantic field of the record, so it has a textual representation of
+its own, and the equality above is a constraint the document must satisfy — not
+a substitution the parser is free to perform on the reader's behalf.
+
+`location` and `source_anchor` are distinct, and only `source_anchor` has a home
+in the EIR V0.1 model: `ProvenanceDecl`'s `location` is grammar-valid but
+model-unrepresentable, because the `eir.v1` provenance record carries no
+location member and no member that could hold one. A parser must reject a
+declaration that carries `location` with a typed "unsupported in EIR V0.1"
+diagnostic; it must never lower the value onto `source_anchor_id`, and must
+never silently drop it. Either substitution would change `EvidenceID` for such
+an input and break REP-001 losslessness, which is the whole reason the EIR-T
+1.0 language surface is wider than the V0.1 model it is parsed into.
 
 ---
 
@@ -504,6 +788,7 @@ VerificationDecl ::=
         [ "budget" "=" ResourceBudget ";" ]
         [ "status" "=" VerificationStatus ";" ]
         [ "result" "=" Reference ";" ]
+        [ "producer" "=" Producer ";" ]
     "}" ;
 
 VerificationGoal ::=
@@ -528,6 +813,14 @@ VerificationStatus ::=
     | "UNSUPPORTED"
     ;
 ```
+
+`producer` names the verification producer that established the obligation's
+result, and it travels with `result`: an obligation whose `status` is `PROVED`,
+`REFUTED`, `TIMEOUT`, or `UNSUPPORTED` declares both, a `PENDING` obligation
+declares neither, and an `UNKNOWN` obligation may declare either. A decided
+result that names no producer is rejected: a proof result must be attributable
+to the producer that established it, which is well-formedness constraint 10 of
+§16.
 
 ---
 
@@ -590,10 +883,14 @@ Type ::=
 
 ## 15. Concrete Syntax Example
 
-The following complete example demonstrates the formal grammar:
+The following complete example demonstrates the formal grammar, including the
+three mandatory top-level declarations, one dependency, and one omission:
 
 ```eir
 evidence Overflow_001 {
+    schema = "eir.v1";
+    level = l1;
+    state = POSSIBLE_DEFECT;
 
     context {
         repository = "radio-stack";
@@ -680,6 +977,18 @@ evidence Overflow_001 {
         producer = analysis.dominator;
         version = "0.2";
     }
+
+    dependency DEP1 {
+        kind = summary;
+        stable_id = "summary:sha256:62be5c86c9bef6e9230c791dc8fa6cd426a3495aecd14df5a03430b3ba5e7dd7";
+    }
+
+    omission OM1 {
+        kind = analyzer_expansion;
+        subject = @U1;
+        reason = "vendor_validate contract is unavailable for expansion";
+        expandable = true;
+    }
 }
 ```
 
@@ -759,7 +1068,8 @@ For content-addressable identity, Evidence Cases must have a canonical serializa
 
 1. **Sorted Keys**: All property keys in entity, fact, and other declarations must be sorted lexicographically.
 2. **Normalized Whitespace**: Canonical whitespace (single space between tokens, newline after semicolons).
-3. **Sorted Lists**: Reference lists, component lists, and backend lists must be sorted.
+3. **Sorted Lists**: Reference lists, component lists, backend lists, and the
+   context's analyzer-version list must be sorted.
 4. **No Comments**: Comments are removed in canonical form.
 5. **Stable Predicate Representation**: Predicates must be normalized (associative/commutative operators ordered).
 
@@ -774,25 +1084,25 @@ EvidenceID = sha256(CanonicalForm(EvidenceCase))
 ## 20. Grammar Summary Statistics
 
 ### Terminal Symbols
-- Keywords: 67
+- Keywords: 73 entries (72 distinct; `unknown` is listed twice)
 - Operators: 12
 - Delimiters: 8 (`{`, `}`, `[`, `]`, `(`, `)`, `;`, `,`)
 
 ### Non-Terminal Symbols
-- Top-level: 4 (EvidenceCase, ContextDecl, ContextProperty, EvidenceMember)
-- Entities: 5 (EntityDecl, EntityKind, EntityProperty, PropertyKey, PropertyValue)
-- Predicates: 7 (Predicate, AtomicPredicate, QuantifiedPredicate, etc.)
+- Top-level: 13 (EvidenceCase, SchemaDecl, LevelDecl, EvidenceLevel, StateDecl, EvidenceState, ContextDecl, ContextProperty, AnalyzerVersion, EvidenceMember, DependencyDecl, DependencyKind, OmissionDecl)
+- Entities: 7 (EntityDecl, EntityKind, EntityProperty, PropertyKey, PropertyValue, FunctionCall, ArgumentList)
+- Predicates: 12 (Predicate, ImplicationExpr, OrExpr, AndExpr, ComparisonExpr, UnaryExpr, PrimaryExpr, QuantifiedPredicate, AtomicPredicate, PredicateArgumentList, PredicateArgument, Domain)
 - Facts: 4 (FactDecl, EpistemicState, Confidence, Producer)
-- Assumptions/Hypotheses/Unknowns: 6
+- Assumptions/Hypotheses/Unknowns: 7 (AssumptionDecl, AssumptionSource, HypothesisDecl, UnknownDecl, UnknownReason, ResolutionAction, ReferenceList)
 - Claims: 3 (Claim, ClaimKind, Severity)
 - Edges/Paths: 7 (EdgeDecl, PathDecl, RelationKind, PathKind, etc.)
 - Constraints: 2 (ConstraintDecl, Scope)
-- Provenance: 2 (ProvenanceDecl, SourceLocation)
-- Verification: 4 (VerificationDecl, VerificationGoal, VerificationStatus, etc.)
+- Provenance: 3 (ProvenanceDecl, FactReferenceList, SourceLocation)
+- Verification: 5 (VerificationDecl, VerificationGoal, VerificationBackendList, ResourceBudget, VerificationStatus)
 - Summaries: 2 (SummaryReference, SummaryComponentList)
 - Types: 2 (PrimitiveType, Type)
 
-**Total Non-Terminals**: ~50
+**Total productions**: 87 (including the lexical productions of §2)
 
 ---
 
@@ -802,7 +1112,7 @@ EvidenceID = sha256(CanonicalForm(EvidenceCase))
 
 This grammar is suitable for:
 - **ANTLR 4** — direct EBNF translation
-- **Bison/Yacc** — with minor operator precedence annotations
+- **Bison/Yacc** — direct translation; predicate precedence is already factored into the productions (§5.2), so no `%left`/`%right` declarations are required
 - **Hand-written recursive descent** — straightforward due to keyword-driven structure
 
 ### 21.2 Type Checking
@@ -858,6 +1168,7 @@ Well-formedness checking requires:
 | Version | Date | Changes |
 |---------|------|---------|
 | 0.1 | 2026-08-16 | Initial formal specification consolidating architecture document grammar |
+| 1.0 | 2026-09-11 … 2026-09-17 | Stabilized EIR-T 1.0. Added the mandatory top-level `SchemaDecl`, `LevelDecl`, and `StateDecl` (with `EvidenceLevel` and `EvidenceState`); added the `DependencyDecl`/`DependencyKind` and `OmissionDecl` evidence members and the `dependency`/`omission` reserved keywords; replaced the left-recursive predicate production with the precedence-factored `ImplicationExpr`/`OrExpr`/`AndExpr`/`ComparisonExpr`/`UnaryExpr`/`PrimaryExpr` chain and documented precedence, associativity, and quantifier scope in §5.2; updated the concrete syntax example. The grammar is frozen as the M10C implementation contract. Made the case-level `Identifier` optional and non-semantic: `REP-001` names "parser depends on original display label/whitespace" as a failure mode, and the `eir.v1` model carries no case name member, so the label is a display label only and the canonical writer emits none. The superseded production `"evidence" Identifier "{"` now reads `"evidence" [ Identifier ] "{"`; still within the EIR-T 1.0 stabilization window, so the version does not change. Narrowed the losslessness gap the semantic model exposed and the stabilization had left open, without closing it: §4.1 records the values that stay unwritable — the property-bag entry named `stable_id` on an entity that declares no identity, the producer strings the identifier alphabet cannot spell, the scope strings the `Scope` production cannot write, and the property-bag keys the writer cannot spell. The context gained the type-layout and analysis-run properties and a repeatable analyzer property with its own `AnalyzerVersion` production, and `EntityDecl`, `FactDecl`, `UnknownDecl`, `ProvenanceDecl`, and `VerificationDecl` each gained the optional attributes their `eir.v1` records already carry — the entity and fact stable IDs, the fact derived marker, the free-text detail carried beside the unknown's closed reason code, the provenance source anchor and its explicit analysis run, and the obligation's verification producer. The provenance run is written explicitly rather than derived from the case binding. **Additive only: no production was removed, narrowed, or reordered**, every existing declaration keeps parsing, and the version stays 1.0 — the amendment is recorded here rather than as 1.1 so that no consumer of the frozen contract sees a version change for syntax that only widens what was already legal. §5.1 then recorded four widenings the `eir.v1` model forces and the EBNF does not write: a bare identifier as a `Symbol` in both the predicate and the property-value positions, and a `StringLiteral` or an `IntegerLiteral` at the primary level — the last two being the only path by which `PredicateArgument`'s second and third alternatives are reachable. The productions themselves are unchanged; the paragraph after the §5.1 block states what a parser admits and why, and records that `QualifiedId`, `Scope`, and `Producer` are deliberately not widened the same way. |
 
 ---
 
