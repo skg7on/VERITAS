@@ -1322,6 +1322,11 @@ class Builder {
     record.configuration = request_.analysis_configuration_id;
     provenance_.push_back(std::move(record));
 
+    // The absence cites the M9 row it was *derived from* — the same row the
+    // certificate above cites — because `stable_id` is a reference to the M9
+    // fact, not a key of the member's own. That shared reference is intended and
+    // not a collision: the two members are told apart by `id`, and they say
+    // opposite things about one row.
     Fact absence;
     absence.id = fact_ids_.Allocate("F_" + std::string(kAbsencePredicate));
     absence.stable_id = fact->fact_id;

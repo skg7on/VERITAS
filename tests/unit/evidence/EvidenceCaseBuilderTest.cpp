@@ -659,6 +659,20 @@ TEST(EvidenceCaseBuilderTest, Bld007CompleteEmptyQueryDerivesAnAbsence) {
   EXPECT_EQ(record->rule, kClosedWorldAbsenceRuleId);
   EXPECT_EQ(*certificates.front()->stable_id,
             request.input.dominating_checks.metadata.query_provenance_id);
+
+  // Two members, one M9 row. The absence and the certificate that warrants it
+  // are different members — distinct handles, opposite epistemic states — and
+  // both cite the same row, because `stable_id` references the M9 fact the
+  // member was lowered from or derived from rather than keying the member. The
+  // sharing is pinned on purpose: a later reader who assumes `stable_id` is
+  // unique within a case must fail here, not silently rewrite the case's
+  // identity.
+  EXPECT_NE(absence->id, certificates.front()->id);
+  EXPECT_EQ(absence->epistemic, EpistemicState::kMustNot);
+  EXPECT_EQ(certificates.front()->epistemic, EpistemicState::kMust);
+  ASSERT_TRUE(absence->stable_id.has_value());
+  ASSERT_TRUE(certificates.front()->stable_id.has_value());
+  EXPECT_EQ(*absence->stable_id, *certificates.front()->stable_id);
 }
 
 // --- BLD-008 -----------------------------------------------------------------

@@ -418,7 +418,12 @@ struct Claim {
 
 // One evidence fact. `derived` marks a fact the analysis derived rather than
 // observed; every derived fact must carry resolvable provenance. `producer` is
-// the stable producer identity (`analysis.value_range`).
+// the stable producer identity (`analysis.value_range`). `stable_id` is a
+// reference to the M9 row the fact was lowered from or derived from, not a key
+// of the fact's own: it is therefore not unique within a case, two members may
+// cite one row — a derived absence and the completion certificate that warrants
+// it cite the same one — and a row's members are told apart by their case-local
+// `id`.
 struct Fact {
   std::string id;
   std::optional<core::StableId> stable_id;
