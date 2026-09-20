@@ -9,7 +9,9 @@ sample reader focused on the summary/CPG boundary.
 
 The tutorial is intentionally API-first. SQL examples in the generation manual
 are useful for diagnostics, but product tooling should depend on semantic APIs
-so backend layout can change.
+so backend layout can change. The delivered M10B/M10C Evidence boundary follows
+the same rule: consume `EvidenceBuildInput` and `EvidenceCase`, not their
+diagnostic JSON renderings.
 
 ## 1. Generate input data
 
@@ -326,7 +328,45 @@ It should not expose raw RocksDB bytes, accept arbitrary SQL, copy the entire
 CPG into memory without a budget, or turn an empty partial result into a
 negative assertion.
 
-## 9. Test the tool
+## 9. Hand a finding to the delivered Evidence boundary
+
+If the focused analysis becomes a review finding, do not invent a second JSON
+contract or feed raw query rows to an Agent. Register a typed claim seed and
+use the delivered boundary:
+
+```text
+FactStoreEvidenceBackend + native CPG
+  -> EvidenceQueryService::BuildEvidenceInput
+  -> EvidenceBuildRequest
+  -> EvidenceCaseBuilder::Build
+  -> validated, content-addressed EvidenceCase
+```
+
+The public buffer-overflow demonstration exercises that path today:
+
+```bash
+build/bin/veritas-query evidence overflow \
+  --sink memcpy --format json \
+  --db /absolute/path/to/summarydb
+
+build/bin/veritas-query evidence overflow \
+  --sink memcpy --level l1 --format eir-t \
+  --db /absolute/path/to/summarydb
+```
+
+The first command emits the level-less M10B diagnostic slice. The second builds
+one validated `eir.v1` case and emits canonical EIR-T. Full EIR JSON uses
+`--format eir-json`; Protobuf uses `--format protobuf --output <path>`.
+
+The current command supports only the registered `memcpy` overflow claim and a
+store with one current native projection and fact run. Range, capacity,
+queryable alias, and positive dominating-check producers are still deferred,
+so their complete-empty query slots are not permission to manufacture facts.
+A custom analysis should add its typed claim/predicate mapping, bounded query
+contract, absence policy, validation, and representation tests before it is
+exposed as Evidence.
+
+## 10. Test the tool
 
 Use an isolated fixture under `tests/fixtures/projects/` and assert typed
 behavior before golden output. A useful test set includes:
@@ -352,6 +392,7 @@ git diff --check
 
 For current durable-fact inspection, use the
 [`veritas-explain` workflow](summarydb-generation-manual.md#35-inspect-a-generated-database).
-For richer semantic queries and future Evidence generation, continue with the
-[developer guide](summarydb-evidence-ir-developer-guide.md) and the
-[Agent review tutorial](tutorial-agent-code-review.md).
+For richer semantic queries and Evidence extension, continue with the
+[developer guide](summarydb-evidence-ir-developer-guide.md). For the remaining
+Agent and verifier work above the delivered Evidence boundary, continue with
+the [Agent review tutorial](tutorial-agent-code-review.md).

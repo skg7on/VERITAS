@@ -1,10 +1,11 @@
 # Generating and Inspecting a VERITAS SummaryDB
 
 This manual explains how program inputs become Function Summary IR, a native
-thin CPG, whole-program facts, and persistent SummaryDB state. It covers the
-executable source-code workflow first, including durable provenance and
-explanation, then the approved LLVM IR/bitcode and Joern workflows, the future
-PhASAR adapter, and the contract for additional providers.
+thin CPG, whole-program facts, persistent SummaryDB state, and on-demand
+Evidence IR. It covers the executable source-code workflow first, including
+durable provenance, explanation, and the delivered buffer-overflow Evidence
+query, then the approved LLVM IR/bitcode and Joern workflows, the future PhASAR
+adapter, and the contract for additional providers.
 
 ## 1. Know which path exists
 
@@ -47,7 +48,7 @@ The relevant executables are produced under `build/bin/`:
 
 ```text
 veritas-build    ingest and native analysis
-veritas-query    native CPG queries available today
+veritas-query    native CPG queries plus on-demand Evidence slices and EIR
 veritas-diff     summary-component diff and dependency impact
 veritas-explain  bounded fact/provenance explanation in text or JSON
 ```
@@ -165,9 +166,11 @@ project directory
   -> atomically publish facts, current bindings, witnesses, and batch receipt
 ```
 
-`veritas-build analyze` now completes the M8R/M9 handoff. It does **not** build
-M10B evidence inputs or serialize M10C Evidence IR; those stages retain their
-separate milestone gates.
+`veritas-build analyze` publishes the state consumed by the delivered
+M10B/M10C boundary. It does not automatically persist an Evidence case. After
+analysis, `veritas-query evidence overflow` opens the current native projection
+and fact snapshot, builds one typed `EvidenceBuildInput`, and either emits its
+diagnostic slice or assembles and serializes a validated `EvidenceCase`.
 
 The summary/CPG coordinator and the Fact Store are separate atomic visibility
 boundaries. A WPA, conformance, batch-validation, or Fact Store failure
@@ -239,6 +242,11 @@ The current SQLite schema contains these main groups:
 
 Product code must use semantic C++ APIs rather than SQL. Direct SQL is useful
 only for development diagnostics and schema troubleshooting.
+
+Evidence inputs and cases are assembled on demand from this state. They do not
+have a persistent table or object-store namespace in the current tree. The
+Evidence command persists no case back into SummaryDB; an explicitly requested
+Protobuf output is written with failure-atomic replacement.
 
 ### 3.5 Inspect a generated database
 
@@ -364,7 +372,84 @@ its displayed rule must not be used to disambiguate retained alternatives.
 Treat `Truncated: max_depth` or `Truncated: max_nodes` as an incomplete
 explanation, never as absence of additional support.
 
-### 3.6 Rerun and compare
+### 3.6 Build an Evidence slice or Evidence IR case
+
+The delivered public Evidence query recognizes the registered buffer-overflow
+case and the `memcpy` sink. It requires a database with exactly one current CPG
+projection and exactly one current analysis run; ambiguous stores fail instead
+of choosing a binding.
+
+Inspect the typed M10B handoff as deterministic diagnostic JSON:
+
+```bash
+build/bin/veritas-query evidence overflow \
+  --sink memcpy \
+  --format json \
+  --db /absolute/path/to/summarydb
+```
+
+`json` means the level-less `EvidenceBuildInput` diagnostic envelope. It is not
+full Evidence IR, and the CLI rejects `--level` with this format.
+
+Build the same snapshot into validated `eir.v1` at L0, L1, or L2:
+
+```bash
+build/bin/veritas-query evidence overflow \
+  --sink memcpy --level l1 --format eir-t \
+  --db /absolute/path/to/summarydb
+
+build/bin/veritas-query evidence overflow \
+  --sink memcpy --level l1 --format eir-json \
+  --db /absolute/path/to/summarydb
+
+build/bin/veritas-query evidence overflow \
+  --sink memcpy --level l1 --format protobuf \
+  --output /absolute/path/to/overflow.eir.pb \
+  --db /absolute/path/to/summarydb
+```
+
+`eir-t` is canonical text, `eir-json` is deterministic full-case diagnostic
+JSON, and `protobuf` is the lossless binary representation. EIR-T and EIR JSON
+write to standard output. Protobuf requires `--output`, is never written to the
+terminal, and replaces the destination atomically only after encoding succeeds.
+Text formats reject `--output`. The default EIR level is L1 when `--level` is
+omitted.
+
+The Evidence query budgets default to:
+
+```text
+max depth               8
+max nodes             256
+max paths               5
+max facts per query    64
+max provenance depth    8
+```
+
+Override them with `--max-depth`, `--max-nodes`, `--max-paths`, `--max-facts`,
+and `--max-provenance-depth`. Every value must be positive. Completion,
+examined counts, query-completion facts, and stable truncation reasons remain
+part of the handoff and the resulting case.
+
+The current native fact pipeline does not yet materialize value-range,
+destination-capacity, queryable alias, or positive dominating-check facts.
+Their M10B result slots are therefore complete-empty on real fixtures. The
+builder must not fabricate them. A complete, scoped, empty dominating-check
+query may produce the registered negative fact only through its matching
+query-completion fact and witness; a truncated query can never do so. The
+unsafe fixture's reviewed EIR consequently proves the flow and carries the
+scoped no-check certificate, but it does not prove the claim's range/capacity
+comparison or a verified defect.
+
+The command builds and validates one case, computes its content-addressed
+`EvidenceID`, and then dispatches to the selected writer. It does not invoke an
+Agent, proof engine, verifier, or authoritative state-transition service.
+
+The [M10B design](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md),
+[M10C design](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md),
+and [executable test contract](../specs/milestones/m10b-m10c-api-to-evidence-ir-test-design-spec.md)
+define the exact typed, serialization, and deferral rules.
+
+### 3.7 Rerun and compare
 
 Rerunning the same semantic input is safe. Summary objects are written with
 put-if-absent semantics, while one SQLite transaction advances current summary
@@ -399,7 +484,7 @@ a version-neutral `SummaryArtifact` overload for summary diffing; the
 [analysis-tool tutorial](tutorial-build-summarydb-analysis-tool.md) identifies
 that extension boundary.
 
-### 3.7 Troubleshooting the native path
+### 3.8 Troubleshooting the native path
 
 | Symptom | Meaning and next check |
 | --- | --- |
@@ -418,6 +503,10 @@ that extension boundary.
 | Query returns no rows | Confirm revision, build variant, projection, and endpoint ID all belong to the same snapshot. |
 | `veritas-explain` reports `binding not found` | Confirm the fact belongs to the supplied run and still has a current binding; historical rows are not selected implicitly. |
 | Query reports truncation | Increase the relevant budget or surface the result as incomplete; never reinterpret it as absence. |
+| Evidence query reports multiple current projections or runs | Use a SummaryDB containing one current native projection and one current fact run. The current CLI refuses to guess among bindings. |
+| Evidence query cannot resolve `memcpy` or its flow | Confirm the analyzed program contains one supported `memcpy` overflow candidate whose sink operand and destination memory object are present in the native CPG/facts. |
+| `--level` is rejected with `--format json` | `json` is the M10B slice envelope and has no EIR level. Use `eir-t`, `eir-json`, or `protobuf` for a full Evidence case. |
+| Protobuf output is rejected | Supply `--output <path>`. Only Protobuf accepts an output path; text formats write to standard output. |
 
 ## 4. Tier 2: LLVM IR and bitcode
 

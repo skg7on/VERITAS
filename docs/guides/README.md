@@ -21,8 +21,8 @@ the complete target platform.
 | SCC WPA with compiled in-process Soufflé, exact run/cache identities, and persisted incremental state | **Available now** | `veritas-build analyze` uses Soufflé by default; `--wpa-engine cpp-emergency` is an explicit degraded mode |
 | Durable Fact/Provenance Store and bounded explain API | **Available now** | `AnalysisFactBus`, `FactStore`, `ProvenanceStore`, and `veritas-explain` |
 | M8R/M9 qualification and entry gate | **Available now** | `python3 tools/check_m9_entry.py --build-dir build` |
-| Evidence Builder semantic queries and typed handoff | **Approved target (M10B)** | Design and plan only |
-| Validated Evidence IR model and serialization | **Approved target (M10C)** | Design and plan only |
+| Evidence Builder semantic queries and typed handoff | **Available now (M10B)** | `EvidenceQueryService`, `EvidenceBuildInput`, and `veritas-query evidence overflow --format json` |
+| Validated Evidence IR model and serialization | **Available now (M10C)** | `EvidenceCaseBuilder`; EIR-T, EIR JSON, and Protobuf through `veritas-query evidence overflow` |
 | LLVM `.bc` / `.ll` ingestion | **Approved target (M11)** | `--bitcode` is currently rejected |
 | Joern GraphSON/GraphML import | **Approved target (M12A-M12C)** | `veritas-build import` is not implemented |
 | PhASAR result import | **Future design (M12D)** | No detailed schema or CLI contract yet |
@@ -30,6 +30,22 @@ the complete target platform.
 “Available now” means the command or API exists in this repository and is
 covered by the current test suite. “Approved target” means the governing design
 is approved but the public command/API must not be treated as runnable yet.
+
+The delivered M10B/M10C boundary is intentionally narrow. The public CLI
+supports the registered `memcpy` buffer-overflow query against a SummaryDB with
+exactly one current native projection and analysis run. The current analysis
+pipeline does not yet produce value-range, destination-capacity, queryable
+alias, or positive dominating-check facts. Those query slots remain present
+with completeness metadata and must not be filled by inference. Evidence cases
+are assembled on demand; a persistent Evidence cache/store, Review Agent,
+verifier dispatch, and authoritative state-transition service remain future
+work.
+
+The executable M10B–M10C contract contains 54 stable cases across slice
+contracts, semantic queries, typed handoff, case assembly, validation and
+identity, representations, and CLI demonstrations. The real-project cases keep
+the producer deferrals explicit while the synthetic cases continue to exercise
+range/capacity budgets and all alias states.
 
 ## Manuals
 
@@ -47,8 +63,8 @@ is approved but the public command/API must not be treated as runnable yet.
    develops a small version-neutral summary reader, adds graph queries, and
    explains component-level impact analysis using APIs available today.
 2. [Build an Agent-based code-review tool](tutorial-agent-code-review.md)
-   designs the safe post-M10B/M10C integration: bounded semantic tools,
-   Evidence IR, hypotheses, proof obligations, and deterministic verification.
+   starts from the delivered M10B/M10C boundary, then designs the remaining
+   Agent, proof-obligation, and deterministic-verification integration.
 
 ## Normative references
 
@@ -62,6 +78,8 @@ Guides summarize but do not replace the project contracts:
 - [M9 Fact/Provenance Store and explain API](../specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md)
 - [M10B Evidence Builder design](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md)
 - [M10C Evidence IR design](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md)
+- [M10B–M10C executable test contract](../specs/milestones/m10b-m10c-api-to-evidence-ir-test-design-spec.md)
+- [Evidence IR formal specification](../specs/veritas-evidence-ir-formal-specification.md)
 - [M11/M12 adapter boundary](../specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md)
 - [M12 Joern importer design](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md)
 
