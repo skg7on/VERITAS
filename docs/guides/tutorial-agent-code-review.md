@@ -59,6 +59,10 @@ store with exactly one current native projection and fact run. `json` is the
 M10B slice, not EIR, and rejects `--level`. EIR formats default to L1;
 Protobuf requires `--output` and replaces it failure-atomically.
 
+For complete runnable reviews of the unsafe, guarded, opaque-validator,
+budget-truncated, and cross-translation-unit fixtures, use the
+[EIR code-review use cases](tutorial-eir-code-review-use-cases.md).
+
 ## 2. Choose one registered finding type
 
 Start with the M10B buffer-overflow case rather than a generic “review this
@@ -484,3 +488,7 @@ Read the [M9 design](../specs/milestones/m09-provenance-fact-store-explain-api-d
 [M10C design](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md),
 and [Evidence IR architecture](../architecture/04-evidence-ir-architecture.md)
 before implementing this tutorial.
+
+The [EIR code-review use cases](tutorial-eir-code-review-use-cases.md) provide
+the executable source-to-review companion for the currently delivered
+overflow boundary.

@@ -65,6 +65,9 @@ range/capacity budgets and all alias states.
 2. [Build an Agent-based code-review tool](tutorial-agent-code-review.md)
    starts from the delivered M10B/M10C boundary, then designs the remaining
    Agent, proof-obligation, and deterministic-verification integration.
+3. [Translate defect checks into EIR code reviews](tutorial-eir-code-review-use-cases.md)
+   runs five current overflow fixtures from source through SummaryDB, the M10B
+   handoff, validated EIR, and evidence-bounded review decisions.
 
 ## Normative references
 
