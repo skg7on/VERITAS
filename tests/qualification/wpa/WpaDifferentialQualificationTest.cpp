@@ -91,6 +91,15 @@ Program ProgramFor(const QualificationCase& c) {
     AddParameterFlow(&f, "cs:1", "v:2", "v:3");
     return {{f}, "f"};
   }
+  // A value that flows to itself, the shape a loop-carried value or a phi
+  // produces. The local base rule proves GlobalFlow(v,v), and the transitive
+  // rule fires on that one fact with it at both argument positions -- a legal
+  // Datalog self-join, and the shape that binds one input at two ordinals.
+  if (c.name == "flow_self") {
+    auto f = V2Summary("f");
+    AddLocalFlow(&f, "v:0", "v:0");
+    return {{f}, "f"};
+  }
   // An unresolved call yields an unknown effect, and the coverage certificate
   // marks the function incomplete.
   if (c.name == "effects") {
@@ -225,6 +234,7 @@ INSTANTIATE_TEST_SUITE_P(
         QualificationCase{"memory_read", WpaComponentKind::kMemoryEffects,
                           "reader"},
         QualificationCase{"flow", WpaComponentKind::kFlow, "f"},
+        QualificationCase{"flow_self", WpaComponentKind::kFlow, "f"},
         QualificationCase{"effects", WpaComponentKind::kEffects, "f"},
         QualificationCase{"effects_external", WpaComponentKind::kEffects, "f"},
         QualificationCase{"effects_feature", WpaComponentKind::kEffects, "f"},

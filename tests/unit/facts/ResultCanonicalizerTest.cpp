@@ -33,6 +33,8 @@ namespace sem = analysis::semantic;
 
 constexpr std::string_view kDirect = "wpa.reachability.direct.v2";
 constexpr std::string_view kTransitive = "wpa.reachability.transitive.v2";
+constexpr std::string_view kFlowLocal = "wpa.flow.global.local.v2";
+constexpr std::string_view kFlowTransitive = "wpa.flow.global.transitive.v2";
 
 core::StableId FunctionId(std::string_view name) {
   return core::MakeStableId(core::IdKind::kFunctionVariant,
@@ -41,6 +43,11 @@ core::StableId FunctionId(std::string_view name) {
 
 core::StableId CallSiteId(std::string_view name) {
   return core::MakeStableId(core::IdKind::kCallSite,
+                            std::as_bytes(std::span(name.data(), name.size())));
+}
+
+core::StableId ValueId(std::string_view name) {
+  return core::MakeStableId(core::IdKind::kValueRef,
                             std::as_bytes(std::span(name.data(), name.size())));
 }
 
@@ -68,6 +75,33 @@ WitnessEdge Edge(const SemanticRow& result, std::string_view rule,
                      .rule_id = std::string(rule),
                      .input = SemanticKey{input},
                      .input_ordinal = ordinal};
+}
+
+// One edge of a named derivation. Distinct derivation keys model the distinct
+// Datalog firings an engine may report for the same result and rule.
+WitnessEdge Derivation(const SemanticRow& result, std::string_view rule,
+                       std::string_view derivation_key,
+                       const SemanticRow& input, std::uint32_t ordinal) {
+  return WitnessEdge{.result = SemanticKey{result},
+                     .rule_id = std::string(rule),
+                     .derivation_key = std::string(derivation_key),
+                     .input = SemanticKey{input},
+                     .input_ordinal = ordinal};
+}
+
+// A local flow m -> m inside `function`.
+SemanticRow LocalFlow(std::string_view function, std::string_view from,
+                      std::string_view to) {
+  return SemanticRow{
+      RelationId::kLocalFlow,
+      {FunctionId(function), ValueId(from), ValueId(to), std::string("local"),
+       sem::EpistemicState::kMay}};
+}
+
+// A global flow `from` -> `to` at MAY warrant.
+SemanticRow GlobalFlow(std::string_view from, std::string_view to) {
+  return SemanticRow{RelationId::kGlobalFlow,
+                     {ValueId(from), ValueId(to), sem::EpistemicState::kMay}};
 }
 
 CanonicalizationRequest RequestFor(const std::vector<RootedInputFact>& roots,
@@ -210,6 +244,44 @@ TEST(ResultCanonicalizerTest, RejectsConflictingOrdinal) {
 
   auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
   EXPECT_FALSE(result.ok());
+}
+
+// The mirror of RejectsConflictingOrdinal, and the case that is legal: a rule
+// whose two argument positions can be satisfied by one and the same row is an
+// ordinary Datalog self-join. `wpa.flow.global.transitive.v2` joins
+// GlobalFlow(s,m,e1) with GlobalFlow(m,d,e2); a self-flow GlobalFlow(m,m,e)
+// satisfies both, so both ordinals legitimately cite the same input.
+//
+// The self-joining firing proves nothing the base proof does not already
+// prove -- its conclusion is its own premise, so it can never be the cheapest
+// proof -- but the component must still canonicalize. Rejecting the witness
+// set aborts the whole component, which marks the run incomplete and publishes
+// no facts at all.
+TEST(ResultCanonicalizerTest, AcceptsSelfJoiningDerivationSharingOneInput) {
+  const SemanticRow self_flow = GlobalFlow("m", "m");
+  const SemanticRow base = LocalFlow("f", "m", "m");
+  const std::vector<RootedInputFact> roots = {Root(base)};
+
+  RawWpaEvaluation raw;
+  raw.results = {self_flow};
+  raw.witnesses = {
+      // The base proof: a local flow makes the value flow to itself.
+      Derivation(self_flow, kFlowLocal, "base", base, 0),
+      // One firing of the transitive rule whose two positions both match the
+      // self-flow, so one input is bound at two ordinals.
+      Derivation(self_flow, kFlowTransitive, "self", self_flow, 0),
+      Derivation(self_flow, kFlowTransitive, "self", self_flow, 1)};
+
+  auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
+  ASSERT_TRUE(result.ok()) << result.status().message();
+
+  // The base proof is the cheaper one and must be the selected proof.
+  const auto chosen = std::ranges::count_if(
+      result->witnesses, [&](const WitnessEdge& edge) {
+        return edge.result == SemanticKey{self_flow};
+      });
+  EXPECT_EQ(chosen, 1);
+  EXPECT_EQ(result->witnesses[0].rule_id, kFlowLocal);
 }
 
 // A witness-only change alters the selected proof and therefore the fixpoint
