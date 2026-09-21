@@ -27,6 +27,7 @@
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/AnalysisRun.h"
 #include "veritas/facts/Witness.h"
+#include "veritas/wpa/WpaOrchestrator.h"
 #include "veritas/wpa/WpaRunRepository.h"
 
 namespace veritas::facts {
@@ -35,6 +36,7 @@ namespace {
 namespace sem = analysis::semantic;
 
 constexpr std::string_view kDirect = "wpa.reachability.direct.v2";
+constexpr std::string_view kFlowParameter = "wpa.flow.global.parameter.v2";
 
 core::StableId FunctionId(std::string_view name) {
   return core::MakeStableId(core::IdKind::kFunctionVariant,
@@ -43,6 +45,11 @@ core::StableId FunctionId(std::string_view name) {
 
 core::StableId CallSiteId(std::string_view name) {
   return core::MakeStableId(core::IdKind::kCallSite,
+                            std::as_bytes(std::span(name.data(), name.size())));
+}
+
+core::StableId ValueId(std::string_view name) {
+  return core::MakeStableId(core::IdKind::kValueRef,
                             std::as_bytes(std::span(name.data(), name.size())));
 }
 
@@ -64,6 +71,21 @@ WitnessEdge Edge(const SemanticRow& result, std::string_view rule,
                      .rule_id = std::string(rule),
                      .input = SemanticKey{input},
                      .input_ordinal = ordinal};
+}
+
+// A parameter flow binds `actual` to `formal` at one call site.
+SemanticRow ParameterFlow(std::string_view site, std::string_view actual,
+                          std::string_view formal) {
+  return SemanticRow{RelationId::kParameterFlow,
+                     {CallSiteId(site), ValueId(actual), ValueId(formal),
+                      sem::EpistemicState::kMust}};
+}
+
+// The global flow a parameter flow is promoted to. The call site is projected
+// away, so two call sites sharing an actual and a formal promote to one row.
+SemanticRow GlobalFlow(std::string_view from, std::string_view to) {
+  return SemanticRow{RelationId::kGlobalFlow,
+                     {ValueId(from), ValueId(to), sem::EpistemicState::kMust}};
 }
 
 AnalysisRunManifest TestRun() {
@@ -172,6 +194,79 @@ TEST(AnalysisFactBusTest, DeliversOneValidatedImmutableBatch) {
   ASSERT_TRUE(bus.Publish(batch).ok());
   ASSERT_EQ(sink.batches().size(), 1u);
   EXPECT_EQ(sink.batches()[0].run.run_id, batch.run.run_id);
+
+  std::filesystem::remove_all(db);
+}
+
+// Two sibling callers each bind the same callee-owned value to the same formal,
+// at their own call sites. `GlobalFlow` drops the call site, so both components
+// derive the identical fact from their own `ParameterFlow` row and the
+// flattened run carries it twice. A run's provenance records one proof per
+// fact, so the assembled batch keeps one fact and one whole derivation -- not a
+// mixture of the two proofs, which would bind a single-input rule at two
+// ordinals.
+TEST(AnalysisFactBusTest, CoalescesAFactProvenByTwoComponents) {
+  const auto db = TempDbPath();
+  auto repo = wpa::WpaRunRepository::Open(db);
+  ASSERT_TRUE(repo.ok()) << repo.status().message();
+  AnalysisFactBus bus(*repo);
+
+  const SemanticRow shared_flow = GlobalFlow("r", "p");
+  const SemanticRow root_a = ParameterFlow("cs:a", "r", "p");
+  const SemanticRow root_b = ParameterFlow("cs:b", "r", "p");
+  const auto flow_fact = MakeFact(shared_flow).value();
+  const auto root_fact_a = MakeFact(root_a).value();
+  const auto root_fact_b = MakeFact(root_b).value();
+
+  // Component key order decides ownership, so the two need distinct keys;
+  // which of them wins is read back below rather than assumed.
+  auto component = [](std::string_view scc, const SemanticRow& root,
+                      const SemanticRow& flow) {
+    wpa::WpaComponentCompletion completion;
+    completion.key = wpa::WpaComponentKey{
+        FunctionId(scc), wpa::WpaComponentKind::kFlow};
+    completion.result.scc_id = completion.key.scc_id;
+    completion.result.component = completion.key.component;
+    completion.result.facts = {MakeFact(flow).value()};
+    completion.result.witnesses = {Edge(flow, kFlowParameter, root, 0)};
+    return completion;
+  };
+  const auto completion_a = component("scc:a", root_a, shared_flow);
+  const auto completion_b = component("scc:b", root_b, shared_flow);
+
+  wpa::WpaRunResult run;
+  run.run = TestRun();
+  run.expected_components = {completion_a.key, completion_b.key};
+  run.completed_components = {completion_a, completion_b};
+  run.rooted_input_fact_ids = {root_fact_a.fact_id, root_fact_b.fact_id};
+  run.rooted_input_facts = {RootedInputFact{.fact = root_fact_a},
+                            RootedInputFact{.fact = root_fact_b}};
+  run.facts = {flow_fact, flow_fact};
+  run.witnesses = {completion_a.result.witnesses[0],
+                   completion_b.result.witnesses[0]};
+
+  // Ownership goes to the first component in canonical key order, so the
+  // surviving proof is whichever component's key sorts first -- and it must be
+  // that component's whole derivation, root and all.
+  const bool first_is_a = completion_a.key < completion_b.key;
+  const SemanticRow& surviving_root = first_is_a ? root_a : root_b;
+
+  const AnalysisFactBatch batch = MakeAnalysisFactBatch(run);
+  ASSERT_EQ(batch.facts.size(), 1u);
+  ASSERT_EQ(batch.witnesses.size(), 1u);
+  EXPECT_EQ(batch.witnesses[0].input.row, surviving_root);
+  EXPECT_TRUE(bus.Publish(batch).ok());
+
+  // Ownership follows the sorted component keys, not the order the orchestrator
+  // happened to complete them in, so reversing the completion order changes
+  // nothing at all -- not even the batch identity.
+  wpa::WpaRunResult reversed = run;
+  reversed.completed_components = {completion_b, completion_a};
+  const AnalysisFactBatch reversed_batch = MakeAnalysisFactBatch(reversed);
+  ASSERT_EQ(reversed_batch.witnesses.size(), 1u);
+  EXPECT_EQ(reversed_batch.witnesses[0].input.row, surviving_root);
+  EXPECT_EQ(reversed_batch.batch_id, batch.batch_id);
+  EXPECT_TRUE(bus.Publish(reversed_batch).ok());
 
   std::filesystem::remove_all(db);
 }

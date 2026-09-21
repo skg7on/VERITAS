@@ -14,12 +14,16 @@
 
 #include "veritas/facts/AnalysisFactBus.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <variant>
 
 #include "veritas/facts/Witness.h"
 #include "veritas/summarydb/MetadataStore.h"
@@ -33,6 +37,32 @@ void AppendField(std::string* out, std::string_view value) {
   out->append(std::to_string(value.size()));
   out->push_back(':');
   out->append(value);
+}
+
+// Human-readable rendering of a semantic row, for diagnostics only. A rejected
+// batch has to name the row that caused the rejection: an opaque fact id and a
+// bare "duplicate" leaves nothing to act on.
+std::string RenderRow(const SemanticRow& row) {
+  std::string out(RelationsV2().Get(row.relation).name);
+  for (const auto& cell : row.cells) {
+    out.push_back(' ');
+    std::visit(
+        [&out](const auto& value) {
+          using T = std::decay_t<decltype(value)>;
+          if constexpr (std::is_same_v<T, core::StableId>) {
+            out.append(core::ToString(value));
+          } else if constexpr (std::is_same_v<T, std::string>) {
+            out.append(value);
+          } else if constexpr (std::is_same_v<T, std::int64_t> ||
+                               std::is_same_v<T, std::uint64_t>) {
+            out.append(std::to_string(value));
+          } else {
+            out.append(std::to_string(static_cast<int>(value)));
+          }
+        },
+        cell);
+  }
+  return out;
 }
 
 constexpr std::string_view kDeliveryTableSql =
@@ -112,20 +142,61 @@ AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
   batch.completed_components = result.completed_components;
   batch.rooted_input_fact_ids = result.rooted_input_fact_ids;
   batch.rooted_input_facts = result.rooted_input_facts;
-  batch.facts = result.facts;
-  batch.witnesses = result.witnesses;
   batch.diagnostics = result.diagnostics;
 
   std::ranges::sort(batch.expected_components);
+  // Sorted before the ownership pass below, so which component owns a shared
+  // fact depends on the set of completed components rather than on the order
+  // the orchestrator happened to visit them in.
   std::ranges::sort(batch.completed_components,
                     [](const auto& left, const auto& right) {
                       return left.key < right.key;
                     });
   std::ranges::sort(batch.rooted_input_fact_ids);
+
+  // 1. A derived fact can be proven independently by more than one component.
+  // The derived relations project away the identity that separates their
+  // proofs -- `GlobalFlow(s, d) :- ParameterFlow(_, s, d, e)` discards the call
+  // site -- so two callers of one callee materialise the same base row and each
+  // derives and publishes the same fact. A run's provenance records exactly one
+  // proof per fact, so a fact goes to the first component in canonical
+  // completion order and every later component contributes neither the fact nor
+  // its witness edges. Dropping the whole alternative derivation (rather than
+  // the individual edges) keeps each published result backed by one well-formed
+  // proof instead of a mixture of two.
+  std::set<core::StableId> owned;
+  for (const auto& completion : batch.completed_components) {
+    std::set<std::string> overridden;
+    for (const auto& fact : completion.result.facts) {
+      if (owned.insert(fact.fact_id).second) {
+        batch.facts.push_back(fact);
+      } else {
+        overridden.insert(EncodeSemanticKey(fact.row));
+      }
+    }
+    for (const auto& edge : completion.result.witnesses) {
+      if (!overridden.contains(EncodeSemanticKey(edge.result.row))) {
+        batch.witnesses.push_back(edge);
+      }
+    }
+  }
+
+  // 2. Canonical order, and the assembly boundary where uniqueness is
+  // established rather than merely checked: sorting puts equal entries
+  // adjacent, so the set is collapsed here and Validate's identity checks
+  // describe a property this assembler guarantees.
   std::ranges::sort(batch.facts, [](const AnalysisFact& left,
                                     const AnalysisFact& right) {
     return EncodeSemanticKey(left.row) < EncodeSemanticKey(right.row);
   });
+  batch.facts.erase(
+      std::ranges::unique(batch.facts,
+                          [](const AnalysisFact& left,
+                             const AnalysisFact& right) {
+                            return left.fact_id == right.fact_id;
+                          })
+          .begin(),
+      batch.facts.end());
   std::ranges::sort(batch.witnesses, [](const WitnessEdge& left,
                                         const WitnessEdge& right) {
     const auto left_result = EncodeSemanticKey(left.result.row);
@@ -143,6 +214,8 @@ AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
     }
     return left.input_ordinal < right.input_ordinal;
   });
+  batch.witnesses.erase(std::ranges::unique(batch.witnesses).begin(),
+                        batch.witnesses.end());
   std::ranges::sort(batch.diagnostics);
 
   batch.batch_id = DeriveBatchId(batch);
@@ -194,7 +267,9 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
       return Status::FailedPrecondition("fact_id does not match its row");
     }
     if (!fact_ids.insert(fact.fact_id).second) {
-      return Status::FailedPrecondition("duplicate fact_id");
+      return Status::FailedPrecondition("duplicate fact_id " +
+                                        core::ToString(fact.fact_id) +
+                                        " for row " + RenderRow(fact.row));
     }
     published_keys.insert(EncodeSemanticKey(fact.row));
   }
