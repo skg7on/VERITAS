@@ -1,9 +1,11 @@
 # Tutorial: Build an Agent-Based Code-Review Tool
 
-This tutorial shows how a future review tool should consume VERITAS SummaryDB
-and Evidence IR. It builds on delivered M9 facts/provenance and the approved
-M10B, M10C, and M12C contracts; the complete Agent workflow is not runnable in
-the current tree.
+This tutorial shows how a review tool should consume VERITAS SummaryDB and
+Evidence IR. The deterministic M9 → M10B → M10C boundary is runnable in the
+current tree: it can query one snapshot, assemble a validated Evidence case,
+and emit EIR-T, EIR JSON, or Protobuf. The Review Agent, verifier dispatch,
+authoritative state transitions, Evidence persistence, and optional M12C
+provider fusion remain future work.
 
 The key design goal is narrow:
 
@@ -11,7 +13,7 @@ The key design goal is narrow:
 > hypotheses or proof obligations. It cannot convert its own output into an
 > authoritative program fact.
 
-## 1. Use the delivered M9 boundary and wait for the remaining gates
+## 1. Start from the delivered Evidence boundary
 
 Do not build production Agent integration directly on the current SQLite
 schema or native CPG CLI. The safe boundary depends on:
@@ -19,15 +21,47 @@ schema or native CPG CLI. The safe boundary depends on:
 | Gate | Status | Required delivery |
 | --- | --- | --- |
 | M9 | **Delivered** | Durable canonical facts, current/history run bindings, witness-dependent selected proofs, bounded `Explain(run_id, fact_id)`, and atomic batch receipts |
-| M10A | Planned | Recursive domains needed by the first memory-safety demo |
-| M10B | Approved target | Bounded semantic query APIs, query-completion facts, and immutable `EvidenceBuildInput` |
-| M10C | Approved target | Validated `EvidenceCase`, canonical `EvidenceID`, EIR-T, Protobuf, and diagnostic EIR JSON |
+| M10A | **Delivered with documented producer deferrals** | Recursive relations used by the demo; value-range, capacity, queryable alias, and positive dominating-check producers remain deferred |
+| M10B | **Delivered with documented producer deferrals** | Bounded semantic query APIs, query-completion facts, immutable `EvidenceBuildInput`, diagnostic slice JSON, and the overflow CLI |
+| M10C | **Delivered** | Validated `EvidenceCase`, canonical `EvidenceID`, EIR-T, Protobuf, full EIR JSON, L0/L1/L2 projection, and CLI dispatch |
+| Review Agent and verifier transition | Planned | Typed Agent response boundary, verifier registry, proof-result validation, and policy-authorized state changes |
 | M12C, optional | Approved target | Pinned provider selection, fusion/conflict records, provider-aware completion and Evidence dependencies |
 
-The current repository exposes `FactStore`, `ProvenanceStore::Explain`, and the
-bounded `veritas-explain fact` CLI. It does not yet expose
-`EvidenceQueryService` or `EvidenceCaseBuilder`, so an Agent must not replace
-those missing semantic/completeness boundaries with raw SQL or CPG access.
+The current repository exposes `FactStore`, `ProvenanceStore::Explain`,
+`FactStoreEvidenceBackend`, `EvidenceQueryService`, `EvidenceCaseBuilder`, and
+the representation codecs. An Agent adapter should consume those typed APIs;
+it must not replace them with raw SQL, raw RocksDB access, or independent
+“current” reads.
+
+After running `veritas-build analyze`, inspect the handoff or build a case:
+
+```bash
+build/bin/veritas-query evidence overflow \
+  --sink memcpy --format json \
+  --db /absolute/path/to/summarydb
+
+build/bin/veritas-query evidence overflow \
+  --sink memcpy --level l1 --format eir-t \
+  --db /absolute/path/to/summarydb
+
+build/bin/veritas-query evidence overflow \
+  --sink memcpy --level l1 --format eir-json \
+  --db /absolute/path/to/summarydb
+
+build/bin/veritas-query evidence overflow \
+  --sink memcpy --level l1 --format protobuf \
+  --output /absolute/path/to/overflow.eir.pb \
+  --db /absolute/path/to/summarydb
+```
+
+The CLI currently supports only the registered `memcpy` overflow query and a
+store with exactly one current native projection and fact run. `json` is the
+M10B slice, not EIR, and rejects `--level`. EIR formats default to L1;
+Protobuf requires `--output` and replaces it failure-atomically.
+
+For complete runnable reviews of the unsafe, guarded, opaque-validator,
+budget-truncated, and cross-translation-unit fixtures, use the
+[EIR code-review use cases](tutorial-eir-code-review-use-cases.md).
 
 ## 2. Choose one registered finding type
 
@@ -59,6 +93,15 @@ dominating checks: copy callsite
 unknowns: external validators, unresolved aliases, incomplete paths
 provenance: selected witnesses for every derived fact
 ```
+
+The operation set is delivered, but four native producers are not. On current
+real-project stores, range, capacity, alias, and positive dominating-check
+queries remain complete-empty with explicit completion metadata. The flow,
+opaque-validator unknown where present, provenance, summary references in the
+cross-translation-unit fixture, and the complete scoped no-check certificate
+are executable today. A review tool must preserve the empty slots; it must not
+recover the deferred facts from source spelling or ask the Agent to invent
+them.
 
 A new defect type should register its claim seed, predicate mapping, evidence
 queries, negative-evidence policy, and verifier kinds before an Agent can use
@@ -103,8 +146,10 @@ expand_summary(summary_id, component, budget)
 
 The `explain_fact` implementation can delegate to the delivered
 `ProvenanceStore::Explain` boundary (or `veritas-explain` for operator use).
-The other calls remain M10B semantic-query work and must share one pinned
-snapshot before this becomes a production Agent tool surface.
+The remaining calls are delivered by `EvidenceQueryService` and share the
+snapshot opened by its backend. They are building blocks for an Agent tool
+surface, not permission to expose the backend or let the Agent choose a second
+snapshot.
 
 Each response should use the same envelope:
 
@@ -160,9 +205,9 @@ Then `BuildEvidenceInput` gathers the flow, ranges, capacities, aliases,
 dominating checks, unknowns, completion facts, run bindings, and selected
 witnesses under the pinned snapshot.
 
-The result is immutable. M10C must not parse diagnostic JSON or query the
-database again. Otherwise the case could contain a flow from one snapshot and
-a range or witness from another.
+The result is immutable. The delivered M10C builder does not parse diagnostic
+JSON or query the database again. Otherwise a case could contain a flow from
+one snapshot and a range or witness from another.
 
 ## 6. Convert to a validated Evidence case
 
@@ -181,7 +226,7 @@ validate context and completion metadata
   -> validate and compute EvidenceID
 ```
 
-For the first unsafe fixture, a simplified L1 case should communicate:
+For the current unsafe fixture, a simplified L1 case communicates:
 
 ```text
 claim
@@ -189,12 +234,11 @@ claim
 
 support
   value flow from packet.length to copy size
-  range upper bound greater than destination capacity
   complete scoped query proving no admitted dominating check
 
-uncertainty
-  unresolved external validator semantics, if present
-  alias or path truncation, if present
+deferred producer boundary
+  no native range, capacity, queryable alias, or positive-check fact
+  empty slots and their completion metadata must not be promoted to facts
 
 proof obligation
   prove or refute size <= capacity on every feasible admitted path
@@ -203,7 +247,13 @@ state
   POSSIBLE_DEFECT
 ```
 
-The deterministic builder may initialize `POSSIBLE_DEFECT`. It may not emit a
+The opaque-validator fixture separately demonstrates a blocking unknown, and
+the cross-translation-unit fixture demonstrates summary references. Do not
+attribute those members to the plain unsafe fixture. A budget-truncated query
+remains partial, but a `MUST_NOT` fact from a different, genuinely complete
+dominating-check query can still coexist in the same case.
+
+The deterministic builder initializes `POSSIBLE_DEFECT`. It does not emit a
 `LIKELY_*` or `VERIFIED_*` state on its own.
 
 ## 7. Give the Agent a narrow contract
@@ -227,12 +277,12 @@ The response should be typed, for example:
 {
   "evidence_id": "evidence:sha256:<digest>",
   "assessment": "LIKELY_DEFECT",
-  "rationale_refs": ["@flow_1", "@range_1", "@capacity_1"],
+  "rationale_refs": ["@flow_1", "@no_dominating_check"],
   "hypotheses": [
     {
       "predicate": "value(@copy_length) > capacity(@destination)",
       "epistemic": "INFERRED",
-      "support_refs": ["@flow_1", "@range_1", "@capacity_1"]
+      "support_refs": ["@flow_1", "@no_dominating_check"]
     }
   ],
   "requested_expansions": [],
@@ -241,8 +291,10 @@ The response should be typed, for example:
 ```
 
 `assessment` is an Agent recommendation, not the authoritative Evidence-case
-verification state. Store the response separately with model, prompt, policy,
-tool-call, and input Evidence identities.
+verification state. In the current fixture the overflow comparison remains a
+hypothesis because its range and capacity operands are not produced facts.
+Store the response separately with model, prompt, policy, tool-call, and input
+Evidence identities.
 
 ## 8. Dispatch deterministic verification
 
@@ -366,7 +418,8 @@ Assert required and forbidden typed outcomes:
 - unsafe and safe cases remain distinguishable;
 - non-dominating checks do not establish safety;
 - truncated no-check queries never produce negative evidence;
-- opaque validators and uncertain aliases become explicit unknowns;
+- opaque validators and synthetic alias-uncertainty cases remain explicit and
+  unstrengthened while the real queryable alias producer is deferred;
 - every derived fact resolves a finite rooted witness;
 - reordering inputs does not change `EvidenceID`;
 - a semantic change does change `EvidenceID`;
@@ -416,8 +469,8 @@ or a privileged database client.
 
 Before calling an Agent-based reviewer production-ready, confirm:
 
-- the delivered M9 gate continues to pass, and M10B/M10C gates plus their
-  required conformance suites are delivered;
+- the delivered M9 gate and all M10B/M10C contract, integration, and CLI suites
+  continue to pass under the documented producer deferrals;
 - every Agent input has one validated `EvidenceID` and immutable snapshot;
 - every tool response exposes completeness and provenance;
 - Agent output is schema-validated and stored as non-authoritative;
@@ -435,3 +488,7 @@ Read the [M9 design](../specs/milestones/m09-provenance-fact-store-explain-api-d
 [M10C design](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md),
 and [Evidence IR architecture](../architecture/04-evidence-ir-architecture.md)
 before implementing this tutorial.
+
+The [EIR code-review use cases](tutorial-eir-code-review-use-cases.md) provide
+the executable source-to-review companion for the currently delivered
+overflow boundary.

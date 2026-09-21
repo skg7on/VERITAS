@@ -57,7 +57,7 @@ lives in one database engine:
 | Fact Store | Normalized current and historical native/provider relations plus run bindings | Native WPA facts, current/history bindings, witness DAGs, and atomic batch receipts are implemented; provider publication is an M12 target |
 | Graph Index | Native CPG and provider-projection adjacency/query indexes | Native thin CPG is implemented; provider projections are M12 targets |
 | Dependency Index | Reverse component dependencies and bounded impact traversal | Native summary dependencies are implemented |
-| Evidence Cache | Materialized, snapshot-pinned claim slices | M10B/M10C target |
+| Evidence Cache | Materialized, snapshot-pinned claim slices | M10B inputs and M10C cases are assembled on demand; persistent Evidence caching/history is not implemented |
 | History Store | Prior bindings and semantic/component deltas | Summary history/delta schema exists; provider and Evidence history expand later |
 
 WPA executors sit beside these layers: they consume immutable summaries and
@@ -81,9 +81,9 @@ The paths below exist now unless marked as a target.
 | Native CPG | `src/cpg/`, `src/analysis/cpg/`, `include/veritas/cpg/` | Thin projection, canonical identity, persistence, bounded queries |
 | Durable facts and provenance | `src/facts/`, `include/veritas/facts/`, `proto/veritas/fact/` | `relations.v2`, canonical facts, witness v2, Fact Bus validation, schema-v4 publication, and bounded explanation |
 | Whole-program analysis | `src/wpa/`, `include/veritas/wpa/` | Call/SCC graphs, compiled in-process Soufflé execution, C++ conformance/emergency execution, exact result caching, state persistence, and propagation |
-| CLI tools | `src/tools/` | Analyze with WPA, native CPG queries, v1 diff/impact, and bounded fact explanation |
-| Evidence Builder | `include/veritas/evidence/`, `src/evidence/` | **M10B target; not present** |
-| Evidence IR implementation | `proto/veritas/evidence/`, `include/veritas/evidence/`, `src/evidence/` | **M10C target; not present** |
+| CLI tools | `src/tools/` | Analyze with WPA, native CPG queries, v1 diff/impact, bounded fact explanation, and the registered overflow Evidence query |
+| Evidence query and typed handoff | `include/veritas/evidence/`, `src/evidence/` | M10B slice types, query-completion certificates, `FactStoreEvidenceBackend`, `EvidenceQueryService`, and deterministic diagnostic JSON |
+| Evidence IR implementation | `proto/veritas/evidence/`, `include/veritas/evidence/`, `src/evidence/` | M10C semantic model, builder, validator, canonicalizer, EIR-T parser/writer, Protobuf codec, and full-case JSON writer |
 | Provider substrate/importers | planned `include/veritas/provider/`, `src/provider/` families | **M12 target; not present** |
 
 The current source analysis entry point is
@@ -445,14 +445,36 @@ and PhASAR workflows. The
 [M12 design](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md)
 is normative for the common provider substrate and Joern adapter.
 
-## 7. Build Evidence Builder and Evidence IR producers
+## 7. Extend the delivered Evidence query and IR boundary
 
-This section describes the approved M10B/M10C target. No corresponding public
-implementation exists in the current tree.
+M10B and M10C are implemented in the current tree. The delivered path is:
 
-### 7.1 Evidence query services are semantic
+```text
+one native CPG projection + one M9 fact snapshot
+  -> FactStoreEvidenceBackend
+  -> EvidenceQueryService
+  -> immutable EvidenceBuildInput
+  -> EvidenceCaseBuilder
+  -> validated and finalized EvidenceCase
+  -> canonical EIR-T | full EIR JSON | Protobuf
+```
 
-Expose operations such as:
+The public CLI currently exposes one registered claim family:
+
+```bash
+veritas-query evidence overflow --sink memcpy --format json --db <summarydb>
+veritas-query evidence overflow --sink memcpy --level l1 \
+  --format eir-t --db <summarydb>
+```
+
+This is not yet a general finding registry or persistent Evidence service. The
+CLI requires exactly one current native projection and analysis run in the
+store, and only `memcpy` is a supported sink value.
+
+### 7.1 Keep Evidence query services semantic
+
+`EvidenceQueryService` implements these operations over a native CPG and an
+`EvidenceReadBackend`:
 
 ```text
 GetValueFlow
@@ -461,11 +483,13 @@ GetCapacities
 GetAliases
 GetUnknowns
 GetDominatingChecks
-Explain(run_id, fact_id)
+Explain
 BuildEvidenceInput
 ```
 
-Every query must pin one immutable program snapshot before reading:
+`FactStoreEvidenceBackend` is the delivered M9-backed implementation. A service
+instance opens one immutable snapshot before the first subquery and binds every
+result to:
 
 ```text
 repository + revision + build variant + analysis run
@@ -475,15 +499,25 @@ repository + revision + build variant + analysis run
 
 Every result carries members, supporting and contradicting facts, unknowns,
 provenance references, examined counts, completeness, and stable truncation
-reasons. A selected provider's positive contradiction or unresolved in-scope
-candidate prevents an unqualified negative conclusion.
+reasons. Its `query_provenance_id` resolves to an explicit
+`evidence.query_completion.v1` fact, current run binding, and selected witness
+in the handoff. A selected provider's positive contradiction or unresolved
+in-scope candidate must prevent an unqualified negative conclusion when M12C
+extends this boundary.
+
+The current native pipeline does not materialize value-range,
+destination-capacity, queryable alias, or positive dominating-check facts.
+Real-project queries therefore return complete-empty slots for those domains;
+the slots and their completion certificates are implemented even though the
+upstream producers are deferred. Do not populate them from source spelling,
+byte-range facts, or an Agent inference.
 
 ### 7.2 Keep `EvidenceBuildInput` typed and immutable
 
-M10C consumes a typed handoff, not diagnostic JSON and not a second set of
-database queries. It contains the claim seed, semantic slices, query-completion
-facts and run bindings, selected witnesses, provenance graph, and snapshot
-identity.
+`EvidenceCaseBuilder` consumes the typed handoff, not diagnostic JSON and not a
+second set of database queries. `EvidenceBuildInput` contains the claim seed,
+semantic slices, query-completion facts and run bindings, selected witnesses,
+provenance graph, and snapshot identity.
 
 The builder may assemble; it may not re-run reachability, alias, range,
 dominance, or provenance analysis. Mixed runs or revisions are errors.
@@ -505,8 +539,9 @@ paths, visible truncation, immutable summary references, hypothesis isolation,
 and one coherent program context.
 
 Canonical identity is computed from semantic bytes, not EIR-T whitespace,
-Protobuf wire ordering, comments, or diagnostic labels. EIR-T, Protobuf, and
-diagnostic EIR JSON must round-trip to the same `EvidenceID`.
+Protobuf wire ordering, comments, or diagnostic labels. EIR-T and Protobuf
+round-trip to the same canonical bytes and `EvidenceID`; full EIR JSON exposes
+that same semantic case as deterministic diagnostic output.
 
 All three Evidence levels are projections of that one case, not independent
 schemas:
@@ -520,6 +555,73 @@ schemas:
 An L0/L1 reference to omitted detail remains expandable. Requesting L2 means
 “include all available detail”; it does not authorize the builder to run a
 proof engine or claim completeness.
+
+The implemented C++ boundary is:
+
+```cpp
+EvidenceCaseBuilder::Build(request);
+ValidateEvidenceCase(value);
+RequireValidEvidenceCase(value);
+CanonicalEvidenceBytes(value);
+ComputeEvidenceId(value);
+FinalizeEvidenceIdentity(&value);
+```
+
+`Build` validates the request, projects the requested level, validates the
+case, and finalizes its `EvidenceID`. Serializers require a finalized case and
+recompute its identity before writing; they reject a missing or stale ID rather
+than repairing it.
+
+### 7.4 Preserve representation boundaries
+
+The three M10C representations are views of one semantic model:
+
+```cpp
+WriteEirText(value, EirTextStyle::kCanonical);
+ParseEirText(text, &error);
+ToEvidenceJson(value);
+EncodeEvidenceProto(value);
+DecodeEvidenceProto(bytes);
+```
+
+EIR-T and Protobuf are lossless parse/decode boundaries. Full EIR JSON is a
+deterministic diagnostic writer; it is distinct from M10B slice JSON and is not
+the input to `EvidenceCaseBuilder`. Semantic identity comes only from
+`CanonicalEvidenceBytes`, never from text formatting, JSON bytes, or Protobuf
+wire ordering.
+
+The CLI names these formats explicitly:
+
+| Format | Meaning | Output rule |
+| --- | --- | --- |
+| `json` | M10B `EvidenceBuildInput` diagnostic JSON | stdout; rejects `--level` |
+| `eir-t` | Canonical textual `EvidenceCase` | stdout; L1 by default |
+| `eir-json` | Full deterministic `EvidenceCase` JSON | stdout; L1 by default |
+| `protobuf` | Lossless `veritas.evidence.v1.EvidenceCase` | requires `--output`; failure-atomic replacement |
+
+When adding a representation, keep parsing/encoding separate from validation
+and canonical identity. Unknown schema versions, unspecified enums, invalid
+stable IDs, dangling references, and authority violations must fail without a
+partial case.
+
+### 7.5 Extend the registered claim boundary conservatively
+
+The current builder registers the buffer-overflow claim and its predicate
+mapping. A new claim kind needs all of the following in one reviewed change:
+
+1. a typed claim seed and stable predicate mapping;
+2. bounded semantic queries with completion certificates;
+3. an explicit open-world or registered closed-world absence policy;
+4. conservative L0/L1/L2 projection rules;
+5. a pending proof-obligation mapping without state promotion;
+6. validation and canonical-identity coverage;
+7. EIR-T, Protobuf, and JSON round-trip tests; and
+8. a public CLI or API demonstration with required and forbidden outcomes.
+
+Only the scoped dominating-check query currently has a registered closed-world
+absence rule. Complete-empty range, capacity, alias, or external-semantics
+queries remain unknown/omitted; truncated results can never create negative
+evidence.
 
 ## 8. Design an Agent-facing analysis tool
 
