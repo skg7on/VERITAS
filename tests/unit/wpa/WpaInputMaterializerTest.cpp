@@ -108,6 +108,20 @@ const facts::ExecutionRow* FirstRow(std::span<const facts::ExecutionRow> edb,
   return it == edb.end() ? nullptr : &*it;
 }
 
+void ExpectRootedInputsEqual(
+    std::span<const facts::RootedInputFact> actual,
+    std::span<const facts::RootedInputFact> expected) {
+  ASSERT_EQ(actual.size(), expected.size());
+  for (std::size_t i = 0; i < actual.size(); ++i) {
+    EXPECT_EQ(actual[i].fact, expected[i].fact);
+    EXPECT_EQ(actual[i].provenance_ref, expected[i].provenance_ref);
+    EXPECT_EQ(actual[i].producer_id, expected[i].producer_id);
+    EXPECT_EQ(actual[i].source_anchor_id, expected[i].source_anchor_id);
+    EXPECT_EQ(actual[i].summary_id, expected[i].summary_id);
+    EXPECT_EQ(actual[i].description, expected[i].description);
+  }
+}
+
 core::StableId SccIdFor(std::span<const summary::SummaryArtifact> artifacts,
                         std::string_view function) {
   auto graph = CallGraph::FromSummaries(artifacts);
@@ -410,6 +424,49 @@ TEST(WpaInputMaterializerTest, OnlyCurrentSccMembersContributeLocalFacts) {
   // "caller" and "target" are separate SCCs, so only the caller's own write
   // belongs to this component.
   EXPECT_EQ(CountRows(input->edb, facts::RelationId::kDirectWrite), 1u);
+}
+
+TEST(WpaInputMaterializerTest,
+     PrebuiltSummaryIndexMatchesFallbackMaterialization) {
+  const auto artifacts = CallSummaryWithMayTargetAndUnknown();
+  auto index = WpaSummaryIndex::Build(artifacts);
+  ASSERT_TRUE(index.ok()) << index.status().message();
+
+  const auto request =
+      Request(artifacts, WpaComponentKind::kReachability, "caller");
+  auto fallback = WpaInputMaterializer::Build(request);
+  auto indexed = WpaInputMaterializer::Build(request, *index);
+  ASSERT_TRUE(fallback.ok()) << fallback.status().message();
+  ASSERT_TRUE(indexed.ok()) << indexed.status().message();
+  EXPECT_EQ(indexed->edb, fallback->edb);
+  ExpectRootedInputsEqual(indexed->local_roots, fallback->local_roots);
+  ExpectRootedInputsEqual(indexed->successor_roots,
+                          fallback->successor_roots);
+  EXPECT_EQ(indexed->logical_input_hash, fallback->logical_input_hash);
+  EXPECT_TRUE(std::ranges::equal(indexed->mappings.functions.StableIds(),
+                                 fallback->mappings.functions.StableIds()));
+}
+
+TEST(WpaInputMaterializerTest, RejectsSummaryIndexForAnotherSpan) {
+  const auto artifacts = CallSummaryWithMayTargetAndUnknown();
+  auto index = WpaSummaryIndex::Build(artifacts);
+  ASSERT_TRUE(index.ok());
+  const std::vector<summary::SummaryArtifact> copied = artifacts;
+  auto result = WpaInputMaterializer::Build(
+      Request(copied, WpaComponentKind::kReachability, "caller"), *index);
+  ASSERT_FALSE(result.ok());
+  EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
+  EXPECT_EQ(result.status().message(),
+            "summary index does not cover request summaries");
+}
+
+TEST(WpaInputMaterializerTest, RejectsDuplicateSummaryFunctionIdentity) {
+  const auto summary = V2Summary("duplicate");
+  const std::vector<summary::SummaryArtifact> artifacts = {summary, summary};
+  auto index = WpaSummaryIndex::Build(artifacts);
+  ASSERT_FALSE(index.ok());
+  EXPECT_EQ(index.status().code(), StatusCode::kInvalidArgument);
+  EXPECT_EQ(index.status().message(), "duplicate summary function identity");
 }
 
 }  // namespace

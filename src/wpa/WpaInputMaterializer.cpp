@@ -295,8 +295,56 @@ std::vector<ComponentDomain> ComponentDomains(WpaComponentKind component) {
           {facts::RelationId::kMayRead, facts::RelationId::kSupportMayRead}};
 }
 
+StatusOr<WpaSummaryIndex> WpaSummaryIndex::Build(
+    std::span<const summary::SummaryArtifact> summaries) {
+  WpaSummaryIndex index;
+  index.source_data_ = summaries.data();
+  index.source_size_ = summaries.size();
+  for (const auto& artifact : summaries) {
+    auto function_id =
+        core::ParseStableId(summary::Identity(artifact).function_variant_id());
+    if (!function_id.ok() ||
+        function_id->kind != core::IdKind::kFunctionVariant) {
+      return Status::InvalidArgument("invalid summary identity");
+    }
+    if (!index.by_function_.emplace(*function_id, &artifact).second) {
+      return Status::InvalidArgument("duplicate summary function identity");
+    }
+  }
+  return index;
+}
+
+bool WpaSummaryIndex::Covers(
+    std::span<const summary::SummaryArtifact> summaries) const {
+  return source_data_ == summaries.data() && source_size_ == summaries.size();
+}
+
+const summary::SummaryArtifact* WpaSummaryIndex::Lookup(
+    core::StableId function_id) const {
+  const auto it = by_function_.find(function_id);
+  return it == by_function_.end() ? nullptr : it->second;
+}
+
+bool WpaSummaryIndex::Contains(core::StableId function_id) const {
+  return by_function_.contains(function_id);
+}
+
 StatusOr<WpaLogicalComponentInput>
 WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
+  auto summaries = WpaSummaryIndex::Build(request.summaries);
+  if (!summaries.ok())
+    return summaries.status();
+  return Build(request, *summaries);
+}
+
+StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
+    const WpaMaterializationRequest& request,
+    const WpaSummaryIndex& summaries) {
+  if (!summaries.Covers(request.summaries)) {
+    return Status::InvalidArgument(
+        "summary index does not cover request summaries");
+  }
+
   // 1. Recover SCC membership. The orchestrator supplies the pre-built SCC
   // decomposition so it is not rebuilt for every component; standalone callers
   // fall back to deriving it from the summaries.
@@ -317,17 +365,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
     return members.status();
   const std::set<core::StableId> member_set(members->begin(), members->end());
 
-  // 2. Index the supplied summaries by function variant.
-  std::map<core::StableId, const summary::SummaryArtifact *> by_function;
-  for (const auto &artifact : request.summaries) {
-    auto function_id =
-        core::ParseStableId(summary::Identity(artifact).function_variant_id());
-    if (!function_id.ok())
-      return Status::InvalidArgument("invalid summary identity");
-    by_function.emplace(*function_id, &artifact);
-  }
-
-  // 3. Build the semantic EDB for this component from member summaries only.
+  // 2. Build the semantic EDB for this component from member summaries only.
   // A component publishes facts owned by its own SCC, so a non-member's local
   // facts never enter here.
   const bool memory_component =
@@ -351,11 +389,11 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   std::vector<core::StableId> value_ids;
 
   for (const auto &member : *members) {
-    const auto it = by_function.find(member);
-    if (it == by_function.end())
+    const auto* artifact = summaries.Lookup(member);
+    if (artifact == nullptr)
       return Status::NotFound("SCC member has no summary");
 
-    for (const auto &call : CallsOf(*it->second)) {
+    for (const auto &call : CallsOf(*artifact)) {
       auto call_site = core::ParseStableId(call.call_site_id);
       if (!call_site.ok() || call_site->kind != core::IdKind::kCallSite)
         return Status::InvalidArgument("invalid call-site identity");
@@ -390,7 +428,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
       semantic_edb.push_back(std::move(row));
 
       // An unmodeled external: a resolved callee with no summary and no model.
-      if (resolved && !by_function.contains(callee)) {
+      if (resolved && !summaries.Contains(callee)) {
         const bool modeled =
             request.models != nullptr &&
             !ModelsForCallee(*request.models, call.callee_symbol).empty();
@@ -423,7 +461,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
     }
 
     if (memory_component) {
-      for (const auto &effect : MemoryEffectsOf(*it->second)) {
+      for (const auto &effect : MemoryEffectsOf(*artifact)) {
         auto memory = core::ParseStableId(effect.memory_location_id);
         if (!memory.ok() || memory->kind != core::IdKind::kMemoryRef)
           return Status::InvalidArgument("invalid memory-location identity");
@@ -439,7 +477,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
     }
 
     if (flow_component) {
-      const auto *current = std::get_if<v2::FunctionSummary>(it->second);
+      const auto *current = std::get_if<v2::FunctionSummary>(artifact);
       if (current == nullptr)
         continue;  // a tagged V1 projection supplies no flow rows
       for (const auto &flow : current->value_flows()) {
@@ -499,7 +537,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
     }
 
     if (effects_component) {
-      const auto *current = std::get_if<v2::FunctionSummary>(it->second);
+      const auto *current = std::get_if<v2::FunctionSummary>(artifact);
       if (current != nullptr) {
         for (const auto &unknown : current->unknowns()) {
           facts::SemanticRow row;
@@ -512,7 +550,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
     }
   }
 
-  // 4. Successor results enter as explicit support rows carrying stable
+  // 3. Successor results enter as explicit support rows carrying stable
   // support-fact identities. They are inputs, never results of this component.
   std::map<facts::RelationId, facts::RelationId> support_for_derived;
   for (const auto &domain : ComponentDomains(request.component)) {
@@ -553,7 +591,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
         .fact = std::move(*support_fact), .provenance_ref = "wpa:successor"});
   }
 
-  // 5. Build the dense maps. Build() sorts and de-duplicates, so dense numbers
+  // 4. Build the dense maps. Build() sorts and de-duplicates, so dense numbers
   // depend only on the set of stable ids, never on the order they were found.
   auto functions = facts::FunctionDenseMap::Build(std::move(function_ids));
   if (!functions.ok())
@@ -573,7 +611,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   if (!fact_map.ok())
     return fact_map.status();
 
-  // 6. Emit the dual-identity map relations so an evaluator can reconstruct
+  // 5. Emit the dual-identity map relations so an evaluator can reconstruct
   // semantic keys without dense ids ever escaping the run.
   for (const auto &stable : functions->StableIds()) {
     semantic_edb.push_back(facts::SemanticRow{
@@ -596,7 +634,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
                                               {stable, core::ToString(stable)}});
   }
 
-  // 7. Canonically order the semantic EDB. Ordering uses the same encoding as
+  // 6. Canonically order the semantic EDB. Ordering uses the same encoding as
   // the hash, so a reordering can never change one without the other.
   std::vector<std::pair<std::string, const facts::SemanticRow *>> encoded;
   encoded.reserve(semantic_edb.size());
@@ -605,7 +643,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   }
   std::ranges::sort(encoded, {}, &std::pair<std::string, const facts::SemanticRow *>::first);
 
-  // 8. Convert canonical semantic rows to execution rows through the maps.
+  // 7. Convert canonical semantic rows to execution rows through the maps.
   WpaLogicalComponentInput input;
   input.edb.reserve(encoded.size());
   for (const auto &[key, row] : encoded) {
@@ -697,7 +735,7 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
         .description = ""});
   }
 
-  // 9. Derive the logical input hash. It covers the semantic configuration,
+  // 8. Derive the logical input hash. It covers the semantic configuration,
   // the component, the SCC members, the canonical semantic EDB, and the model
   // bundle. It excludes revision, RunId, engine identity, dense-number
   // assignment, and the order rows or summaries were discovered in.

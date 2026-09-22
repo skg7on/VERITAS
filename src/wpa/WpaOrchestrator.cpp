@@ -132,6 +132,11 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
     repository_.MarkIncomplete(request.run);
     return scc_graph.status();
   }
+  auto summary_index = WpaSummaryIndex::Build(request.summaries);
+  if (!summary_index.ok()) {
+    repository_.MarkIncomplete(request.run);
+    return summary_index.status();
+  }
 
   SccContext context;
   context.revision_id = core::ToString(request.run.revision_id);
@@ -176,7 +181,8 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
       materialization.successor_support = successor_support;
       materialization.models = request.models;
 
-      auto logical = WpaInputMaterializer::Build(materialization);
+      auto logical =
+          WpaInputMaterializer::Build(materialization, *summary_index);
       if (!logical.ok()) {
         repository_.RecordComponentFailure(request.run, key,
                                            std::string(logical.status().message()));
