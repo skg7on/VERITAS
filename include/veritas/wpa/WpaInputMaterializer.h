@@ -32,6 +32,10 @@
 
 namespace veritas::wpa {
 
+// Non-owning index over one stable summary span. The source span and its
+// elements must remain alive and unchanged for the index's lifetime. Covers()
+// validates only the span's data pointer and size; it cannot detect in-place
+// mutation.
 class WpaSummaryIndex {
  public:
   static StatusOr<WpaSummaryIndex> Build(
