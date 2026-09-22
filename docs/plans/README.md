@@ -11,6 +11,7 @@ Additional project/tooling plans:
 
 - [Build warning cleanup](build-warning-cleanup-implementation-plan.md)
 - [Claude Code Evidence IR review plugin](veritas-claude-code-evidence-review-plugin-implementation-plan.md)
+- [`veritas-build analyze` performance](veritas-build-analyze-performance-implementation-plan.md)
 - [WPA and SummaryDB qualification corpus](wpa-summarydb-qualification-corpus-implementation-plan.md)
 
 The [WPA and SummaryDB qualification corpus plan](wpa-summarydb-qualification-corpus-implementation-plan.md)
