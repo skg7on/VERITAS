@@ -15,8 +15,36 @@
 #include "veritas/core/Hash.h"
 
 #include <gtest/gtest.h>
+#include <locale>
 
 using namespace veritas::core;
+
+class CorruptingNumPut : public std::num_put<char> {
+ protected:
+  iter_type do_put(iter_type out, std::ios_base&, char_type,
+                   unsigned long) const override {
+    *out++ = 'x';
+    return out;
+  }
+
+  iter_type do_put(iter_type out, std::ios_base&, char_type,
+                   unsigned long long) const override {
+    *out++ = 'x';
+    return out;
+  }
+};
+
+class GlobalLocaleGuard {
+ public:
+  GlobalLocaleGuard()
+      : previous_(std::locale()) {
+    std::locale::global(std::locale(previous_, new CorruptingNumPut));
+  }
+  ~GlobalLocaleGuard() { std::locale::global(previous_); }
+
+ private:
+  std::locale previous_;
+};
 
 TEST(HashTest, ComputesSHA256) {
   std::vector<std::byte> data = {std::byte{0x61}, std::byte{0x62},
@@ -45,6 +73,16 @@ TEST(HashTest, DigestToHexProduces64Characters) {
   auto digest = ComputeSHA256(data);
   auto hex = DigestToHex(digest);
   EXPECT_EQ(hex.size(), 64u);
+}
+
+TEST(HashTest, DigestToHexIsIndependentOfTheGlobalNumericLocale) {
+  SHA256Digest digest{};
+  digest[0] = std::byte{0x01};
+  digest[1] = std::byte{0xaf};
+  digest[31] = std::byte{0xf0};
+  GlobalLocaleGuard locale;
+  EXPECT_EQ(DigestToHex(digest),
+            "01af0000000000000000000000000000000000000000000000000000000000f0");
 }
 
 TEST(HashTest, HexRoundTrip) {

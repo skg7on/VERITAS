@@ -17,8 +17,6 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
-#include <iomanip>
-#include <sstream>
 
 namespace veritas::core {
 
@@ -138,12 +136,14 @@ SHA256Digest ComputeSHA256(std::span<const std::byte> data) {
 }
 
 std::string DigestToHex(const SHA256Digest &digest) {
-  std::ostringstream oss;
-  oss << std::hex << std::setfill('0');
-  for (auto byte : digest) {
-    oss << std::setw(2) << static_cast<unsigned>(static_cast<uint8_t>(byte));
+  static constexpr char kHexDigits[] = "0123456789abcdef";
+  std::string result(kSHA256DigestBytes * 2, '0');
+  for (std::size_t i = 0; i < digest.size(); ++i) {
+    const auto byte = static_cast<std::uint8_t>(digest[i]);
+    result[2 * i] = kHexDigits[byte >> 4];
+    result[2 * i + 1] = kHexDigits[byte & 0x0f];
   }
-  return oss.str();
+  return result;
 }
 
 std::optional<SHA256Digest> HexToDigest(std::string_view hex) {
