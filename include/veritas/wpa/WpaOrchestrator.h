@@ -56,11 +56,6 @@ struct WpaRunResult {
   // ID set so the explanation graph can report source anchors and summaries.
   std::vector<facts::RootedInputFact> rooted_input_facts;
   std::vector<runtime::WorkItem> scheduled_predecessors;
-  // The flattened, canonical handoff across every completed component: the
-  // exact facts, witnesses, and diagnostics the AnalysisFactBus consumes.
-  std::vector<facts::AnalysisFact> facts;
-  std::vector<facts::WitnessEdge> witnesses;
-  std::vector<std::string> diagnostics;
 };
 
 class SccStateRepository;

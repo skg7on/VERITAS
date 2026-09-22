@@ -59,9 +59,11 @@ struct AnalysisFactBatch {
 
 // Reduces a successful WPA run to a canonical batch: flattens the completed
 // components' facts/witnesses/diagnostics, canonicalizes component, rooted
-// input, fact, and witness ordering, and derives the content-addressed
-// batch_id. Mechanical; the bus re-validates on Publish.
-AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result);
+// input, fact, and witness ordering, strips the component payload vectors while
+// retaining their hashes and metadata, and derives the content-addressed
+// batch_id. Lvalues are copied; production passes an rvalue to transfer
+// ownership. Mechanical; the bus re-validates on Publish.
+AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result);
 
 // Recomputes the canonical content-addressed batch id over every immutable
 // field. Exposed so the bus and its callers share one derivation.

@@ -21,6 +21,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -97,6 +98,19 @@ StatusOr<bool> IsDelivered(summarydb::MetadataStore& store,
   return !(*rows).empty() && (*rows)[0][0] != "0";
 }
 
+struct KeyedFact {
+  std::string key;
+  AnalysisFact fact;
+};
+
+struct KeyedWitness {
+  std::string result_key;
+  std::string rule_id;
+  std::string input_key;
+  std::uint32_t input_ordinal = 0;
+  WitnessEdge edge;
+};
+
 }  // namespace
 
 core::StableId DeriveBatchId(const AnalysisFactBatch& batch) {
@@ -135,14 +149,13 @@ core::StableId DeriveBatchId(const AnalysisFactBatch& batch) {
       std::as_bytes(std::span(canonical.data(), canonical.size())));
 }
 
-AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
+AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   AnalysisFactBatch batch;
-  batch.run = result.run;
-  batch.expected_components = result.expected_components;
-  batch.completed_components = result.completed_components;
-  batch.rooted_input_fact_ids = result.rooted_input_fact_ids;
-  batch.rooted_input_facts = result.rooted_input_facts;
-  batch.diagnostics = result.diagnostics;
+  batch.run = std::move(result.run);
+  batch.expected_components = std::move(result.expected_components);
+  batch.completed_components = std::move(result.completed_components);
+  batch.rooted_input_fact_ids = std::move(result.rooted_input_fact_ids);
+  batch.rooted_input_facts = std::move(result.rooted_input_facts);
 
   std::ranges::sort(batch.expected_components);
   // Sorted before the ownership pass below, so which component owns a shared
@@ -165,30 +178,49 @@ AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
   // the individual edges) keeps each published result backed by one well-formed
   // proof instead of a mixture of two.
   std::set<core::StableId> owned;
-  for (const auto& completion : batch.completed_components) {
+  std::vector<KeyedFact> keyed_facts;
+  std::vector<KeyedWitness> keyed_witnesses;
+  for (auto& completion : batch.completed_components) {
     std::set<std::string> overridden;
-    for (const auto& fact : completion.result.facts) {
+    for (auto& fact : completion.result.facts) {
+      std::string key = EncodeSemanticKey(fact.row);
       if (owned.insert(fact.fact_id).second) {
-        batch.facts.push_back(fact);
+        keyed_facts.push_back(
+            KeyedFact{.key = std::move(key), .fact = std::move(fact)});
       } else {
-        overridden.insert(EncodeSemanticKey(fact.row));
+        overridden.insert(std::move(key));
       }
     }
-    for (const auto& edge : completion.result.witnesses) {
-      if (!overridden.contains(EncodeSemanticKey(edge.result.row))) {
-        batch.witnesses.push_back(edge);
+    for (auto& edge : completion.result.witnesses) {
+      std::string result_key = EncodeSemanticKey(edge.result.row);
+      std::string input_key = EncodeSemanticKey(edge.input.row);
+      if (!overridden.contains(result_key)) {
+        keyed_witnesses.push_back(KeyedWitness{
+            .result_key = std::move(result_key),
+            .rule_id = edge.rule_id,
+            .input_key = std::move(input_key),
+            .input_ordinal = edge.input_ordinal,
+            .edge = std::move(edge),
+        });
       }
     }
+    for (auto& diagnostic : completion.result.diagnostics) {
+      batch.diagnostics.push_back(std::move(diagnostic));
+    }
+    completion.result.facts.clear();
+    completion.result.witnesses.clear();
+    completion.result.diagnostics.clear();
   }
 
   // 2. Canonical order, and the assembly boundary where uniqueness is
   // established rather than merely checked: sorting puts equal entries
   // adjacent, so the set is collapsed here and Validate's identity checks
   // describe a property this assembler guarantees.
-  std::ranges::sort(batch.facts, [](const AnalysisFact& left,
-                                    const AnalysisFact& right) {
-    return EncodeSemanticKey(left.row) < EncodeSemanticKey(right.row);
-  });
+  std::ranges::sort(keyed_facts, {}, &KeyedFact::key);
+  batch.facts.reserve(keyed_facts.size());
+  for (auto& keyed : keyed_facts) {
+    batch.facts.push_back(std::move(keyed.fact));
+  }
   batch.facts.erase(
       std::ranges::unique(batch.facts,
                           [](const AnalysisFact& left,
@@ -197,23 +229,17 @@ AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result) {
                           })
           .begin(),
       batch.facts.end());
-  std::ranges::sort(batch.witnesses, [](const WitnessEdge& left,
-                                        const WitnessEdge& right) {
-    const auto left_result = EncodeSemanticKey(left.result.row);
-    const auto right_result = EncodeSemanticKey(right.result.row);
-    if (left_result != right_result) {
-      return left_result < right_result;
-    }
-    if (left.rule_id != right.rule_id) {
-      return left.rule_id < right.rule_id;
-    }
-    const auto left_input = EncodeSemanticKey(left.input.row);
-    const auto right_input = EncodeSemanticKey(right.input.row);
-    if (left_input != right_input) {
-      return left_input < right_input;
-    }
-    return left.input_ordinal < right.input_ordinal;
-  });
+  std::ranges::sort(keyed_witnesses,
+                    [](const KeyedWitness& left, const KeyedWitness& right) {
+                      return std::tie(left.result_key, left.rule_id,
+                                      left.input_key, left.input_ordinal) <
+                             std::tie(right.result_key, right.rule_id,
+                                      right.input_key, right.input_ordinal);
+                    });
+  batch.witnesses.reserve(keyed_witnesses.size());
+  for (auto& keyed : keyed_witnesses) {
+    batch.witnesses.push_back(std::move(keyed.edge));
+  }
   batch.witnesses.erase(std::ranges::unique(batch.witnesses).begin(),
                         batch.witnesses.end());
   std::ranges::sort(batch.diagnostics);

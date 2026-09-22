@@ -19,6 +19,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -141,6 +142,40 @@ AnalysisFactBatch SuccessfulBatch() {
   return batch;
 }
 
+wpa::WpaRunResult DuplicateProofRun() {
+  const SemanticRow shared_flow = GlobalFlow("r", "p");
+  const SemanticRow root_a = ParameterFlow("cs:a", "r", "p");
+  const SemanticRow root_b = ParameterFlow("cs:b", "r", "p");
+  const auto root_fact_a = MakeFact(root_a).value();
+  const auto root_fact_b = MakeFact(root_b).value();
+
+  auto component = [](std::string_view scc, const SemanticRow& root,
+                      const SemanticRow& flow) {
+    wpa::WpaComponentCompletion completion;
+    completion.key = wpa::WpaComponentKey{
+        FunctionId(scc), wpa::WpaComponentKind::kFlow};
+    completion.result.scc_id = completion.key.scc_id;
+    completion.result.component = completion.key.component;
+    completion.result.logical_input_hash = "logical";
+    completion.result.fixpoint_hash = "fixpoint";
+    completion.result.external_hash = "external";
+    completion.result.facts = {MakeFact(flow).value()};
+    completion.result.witnesses = {Edge(flow, kFlowParameter, root, 0)};
+    return completion;
+  };
+  const auto completion_a = component("scc:a", root_a, shared_flow);
+  const auto completion_b = component("scc:b", root_b, shared_flow);
+
+  wpa::WpaRunResult run;
+  run.run = TestRun();
+  run.expected_components = {completion_a.key, completion_b.key};
+  run.completed_components = {completion_a, completion_b};
+  run.rooted_input_fact_ids = {root_fact_a.fact_id, root_fact_b.fact_id};
+  run.rooted_input_facts = {RootedInputFact{.fact = root_fact_a},
+                            RootedInputFact{.fact = root_fact_b}};
+  return run;
+}
+
 class RecordingSink : public AnalysisFactSink {
  public:
   Status Publish(const AnalysisFactBatch& batch) override {
@@ -211,45 +246,17 @@ TEST(AnalysisFactBusTest, CoalescesAFactProvenByTwoComponents) {
   ASSERT_TRUE(repo.ok()) << repo.status().message();
   AnalysisFactBus bus(*repo);
 
-  const SemanticRow shared_flow = GlobalFlow("r", "p");
-  const SemanticRow root_a = ParameterFlow("cs:a", "r", "p");
-  const SemanticRow root_b = ParameterFlow("cs:b", "r", "p");
-  const auto flow_fact = MakeFact(shared_flow).value();
-  const auto root_fact_a = MakeFact(root_a).value();
-  const auto root_fact_b = MakeFact(root_b).value();
-
-  // Component key order decides ownership, so the two need distinct keys;
-  // which of them wins is read back below rather than assumed.
-  auto component = [](std::string_view scc, const SemanticRow& root,
-                      const SemanticRow& flow) {
-    wpa::WpaComponentCompletion completion;
-    completion.key = wpa::WpaComponentKey{
-        FunctionId(scc), wpa::WpaComponentKind::kFlow};
-    completion.result.scc_id = completion.key.scc_id;
-    completion.result.component = completion.key.component;
-    completion.result.facts = {MakeFact(flow).value()};
-    completion.result.witnesses = {Edge(flow, kFlowParameter, root, 0)};
-    return completion;
-  };
-  const auto completion_a = component("scc:a", root_a, shared_flow);
-  const auto completion_b = component("scc:b", root_b, shared_flow);
-
-  wpa::WpaRunResult run;
-  run.run = TestRun();
-  run.expected_components = {completion_a.key, completion_b.key};
-  run.completed_components = {completion_a, completion_b};
-  run.rooted_input_fact_ids = {root_fact_a.fact_id, root_fact_b.fact_id};
-  run.rooted_input_facts = {RootedInputFact{.fact = root_fact_a},
-                            RootedInputFact{.fact = root_fact_b}};
-  run.facts = {flow_fact, flow_fact};
-  run.witnesses = {completion_a.result.witnesses[0],
-                   completion_b.result.witnesses[0]};
+  wpa::WpaRunResult run = DuplicateProofRun();
+  const auto& completion_a = run.completed_components[0];
+  const auto& completion_b = run.completed_components[1];
 
   // Ownership goes to the first component in canonical key order, so the
   // surviving proof is whichever component's key sorts first -- and it must be
   // that component's whole derivation, root and all.
   const bool first_is_a = completion_a.key < completion_b.key;
-  const SemanticRow& surviving_root = first_is_a ? root_a : root_b;
+  const SemanticRow& surviving_root =
+      first_is_a ? completion_a.result.witnesses[0].input.row
+                 : completion_b.result.witnesses[0].input.row;
 
   const AnalysisFactBatch batch = MakeAnalysisFactBatch(run);
   ASSERT_EQ(batch.facts.size(), 1u);
@@ -269,6 +276,26 @@ TEST(AnalysisFactBusTest, CoalescesAFactProvenByTwoComponents) {
   EXPECT_TRUE(bus.Publish(reversed_batch).ok());
 
   std::filesystem::remove_all(db);
+}
+
+TEST(AnalysisFactBusTest,
+     ConsumesComponentPayloadIntoCanonicalBatchVectors) {
+  auto run = DuplicateProofRun();
+  const auto expected = MakeAnalysisFactBatch(run);
+  auto consumed = MakeAnalysisFactBatch(std::move(run));
+
+  EXPECT_EQ(consumed.batch_id, expected.batch_id);
+  EXPECT_EQ(consumed.facts, expected.facts);
+  EXPECT_EQ(consumed.witnesses, expected.witnesses);
+  ASSERT_FALSE(consumed.completed_components.empty());
+  for (const auto& completion : consumed.completed_components) {
+    EXPECT_TRUE(completion.result.facts.empty());
+    EXPECT_TRUE(completion.result.witnesses.empty());
+    EXPECT_TRUE(completion.result.diagnostics.empty());
+    EXPECT_FALSE(completion.result.logical_input_hash.empty());
+    EXPECT_FALSE(completion.result.fixpoint_hash.empty());
+    EXPECT_FALSE(completion.result.external_hash.empty());
+  }
 }
 
 TEST(AnalysisFactBusTest, RejectsIncompleteOrMixedRunBatch) {

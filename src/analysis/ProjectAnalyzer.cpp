@@ -329,7 +329,7 @@ Status RunWpa(const std::filesystem::path &output_root,
   // Build the canonical batch and publish it through the fact bus to a fact
   // store sink on the shared metadata database, so the run's facts become
   // explainable (design §3).
-  auto batch = facts::MakeAnalysisFactBatch(*wpa_result);
+  auto batch = facts::MakeAnalysisFactBatch(std::move(*wpa_result));
   auto fact_store = facts::FactStore::Open(output_root);
   if (!fact_store.ok()) {
     return fact_store.status();
