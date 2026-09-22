@@ -18,6 +18,22 @@
 
 #include <filesystem>
 
+namespace veritas::summarydb {
+
+class MetadataStoreTestPeer {
+ public:
+  static std::size_t CachedStatementCount(const MetadataStore& store) {
+    return store.statement_cache_.size();
+  }
+
+  static std::size_t CachedStatementCountForSql(const MetadataStore& store,
+                                                const std::string& sql) {
+    return store.statement_cache_.count(sql);
+  }
+};
+
+}  // namespace veritas::summarydb
+
 using namespace veritas::summarydb;
 
 namespace {
@@ -202,6 +218,82 @@ TEST_F(MetadataStoreTest, PutAnalyzerRunReturnsId) {
   auto result = store.value().PutAnalyzerRun(row);
   ASSERT_TRUE(result.ok());
   EXPECT_GT(result.value(), 0);
+}
+
+TEST_F(MetadataStoreTest,
+       ExecuteCachesExactSqlAndRecoversAfterConstraintFailure) {
+  auto store = MetadataStore::Open(db_path_);
+  ASSERT_TRUE(store.ok()) << store.status().message();
+
+  const std::string create_sql =
+      "CREATE TABLE cached_values(value TEXT PRIMARY KEY)";
+  const std::string insert_sql =
+      "INSERT INTO cached_values(value) VALUES(?)";
+  const std::string distinct_sql =
+      "DELETE FROM cached_values WHERE value = ?";
+
+  ASSERT_TRUE(store->Execute(create_sql, {}).ok());
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*store), 1u);
+
+  ASSERT_TRUE(store->Execute(insert_sql, {"alpha"}).ok());
+  ASSERT_TRUE(store->Execute(insert_sql, {"beta"}).ok());
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCountForSql(*store,
+                                                              insert_sql),
+            1u);
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*store), 2u);
+
+  EXPECT_FALSE(store->Execute(insert_sql, {"alpha"}).ok());
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*store), 2u);
+  ASSERT_TRUE(store->Execute(insert_sql, {"gamma"}).ok());
+
+  ASSERT_TRUE(store->Execute(distinct_sql, {"missing"}).ok());
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*store), 3u);
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCountForSql(*store,
+                                                              distinct_sql),
+            1u);
+
+  auto rows = store->Query(
+      "SELECT value FROM cached_values ORDER BY value", {});
+  ASSERT_TRUE(rows.ok()) << rows.status().message();
+  EXPECT_EQ(*rows, (std::vector<std::vector<std::string>>{
+                       {"alpha"}, {"beta"}, {"gamma"}}));
+}
+
+TEST_F(MetadataStoreTest, MoveTransfersCachedStatementsAndEmptiesSource) {
+  auto source = MetadataStore::Open(db_path_);
+  ASSERT_TRUE(source.ok()) << source.status().message();
+  const std::string insert_sql =
+      "INSERT INTO cached_values(value) VALUES(?)";
+  ASSERT_TRUE(
+      source->Execute("CREATE TABLE cached_values(value TEXT PRIMARY KEY)", {})
+          .ok());
+  ASSERT_TRUE(source->Execute(insert_sql, {"alpha"}).ok());
+
+  MetadataStore moved(std::move(*source));
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*source), 0u);
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(moved), 2u);
+  ASSERT_TRUE(moved.Execute(insert_sql, {"beta"}).ok());
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(moved), 2u);
+
+  const std::filesystem::path replacement_path =
+      db_path_.string() + ".replacement";
+  std::filesystem::remove(replacement_path);
+  auto replacement = MetadataStore::Open(replacement_path);
+  ASSERT_TRUE(replacement.ok()) << replacement.status().message();
+  ASSERT_TRUE(replacement->Execute("CREATE TABLE discarded(value TEXT)", {})
+                  .ok());
+
+  *replacement = std::move(moved);
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(moved), 0u);
+  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*replacement), 2u);
+  ASSERT_TRUE(replacement->Execute(insert_sql, {"gamma"}).ok());
+  auto rows = replacement->Query(
+      "SELECT value FROM cached_values ORDER BY value", {});
+  ASSERT_TRUE(rows.ok()) << rows.status().message();
+  EXPECT_EQ(*rows, (std::vector<std::vector<std::string>>{
+                       {"alpha"}, {"beta"}, {"gamma"}}));
+
+  std::filesystem::remove(replacement_path);
 }
 
 TEST_F(MetadataStoreTest, FailedCommitKeepsTransactionActiveUntilRollback) {

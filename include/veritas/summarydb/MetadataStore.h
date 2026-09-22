@@ -23,6 +23,7 @@
 #define VERITAS_SUMMARYDB_METADATASTORE_H_
 
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@
 
 // Forward-declare sqlite3 to avoid pulling sqlite3.h into public headers.
 struct sqlite3;
+struct sqlite3_stmt;
 
 namespace veritas::build {
 struct AnalysisManifest;
@@ -140,9 +142,13 @@ class MetadataStore {
 
  private:
   explicit MetadataStore(sqlite3* db);
+  void FinalizeCachedStatements();
 
   sqlite3* db_;
   bool in_transaction_ = false;
+  std::map<std::string, sqlite3_stmt*> statement_cache_;
+
+  friend class MetadataStoreTestPeer;
 
   MetadataStore(const MetadataStore&) = delete;
   MetadataStore& operator=(const MetadataStore&) = delete;

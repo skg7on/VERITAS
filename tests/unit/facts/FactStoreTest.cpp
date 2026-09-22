@@ -14,11 +14,15 @@
 
 #include "veritas/facts/FactStore.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -31,6 +35,7 @@ using namespace veritas::facts;
 namespace {
 
 constexpr std::string_view kDirect = "wpa.reachability.direct.v2";
+constexpr std::string_view kTransitive = "wpa.reachability.transitive.v2";
 
 core::StableId FunctionId(std::string_view name) {
   return core::MakeStableId(core::IdKind::kFunctionVariant,
@@ -106,6 +111,64 @@ AnalysisFactBatch SuccessfulBatch(const AnalysisRunManifest& run) {
   batch.facts = {derived};
   batch.witnesses = {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)};
   return batch;
+}
+
+AnalysisFactBatch PublicationRegressionBatch(const AnalysisRunManifest& run) {
+  const auto root_fg = MakeFact(DirectCall("f", "g")).value();
+  const auto root_gh = MakeFact(DirectCall("g", "h")).value();
+  const auto root_gi = MakeFact(DirectCall("g", "i")).value();
+  const auto reachable_fg = MakeFact(Reachable("f", "g")).value();
+  const auto reachable_fh = MakeFact(Reachable("f", "h")).value();
+  const auto reachable_fi = MakeFact(Reachable("f", "i")).value();
+
+  AnalysisFactBatch batch;
+  batch.run = run;
+  batch.batch_id = BatchId("publication-regression");
+  batch.rooted_input_fact_ids = {root_fg.fact_id, root_gh.fact_id,
+                                 root_gi.fact_id};
+  batch.rooted_input_facts = {
+      RootedInputFact{.fact = root_fg,
+                      .provenance_ref = "root-fg",
+                      .producer_id = "producer-fg",
+                      .source_anchor_id = "anchor-fg",
+                      .summary_id = "summary-fg",
+                      .description = "direct f to g"},
+      RootedInputFact{.fact = root_gh,
+                      .provenance_ref = "root-gh",
+                      .producer_id = "producer-gh",
+                      .source_anchor_id = "anchor-gh",
+                      .summary_id = "summary-gh",
+                      .description = "direct g to h"},
+      RootedInputFact{.fact = root_gi,
+                      .provenance_ref = "root-gi",
+                      .producer_id = "producer-gi",
+                      .source_anchor_id = "anchor-gi",
+                      .summary_id = "summary-gi",
+                      .description = "direct g to i"},
+  };
+  batch.facts = {reachable_fg, reachable_fh, reachable_fi};
+  batch.witnesses = {
+      Edge(Reachable("f", "h"), kTransitive, DirectCall("g", "h"), 1),
+      Edge(Reachable("f", "i"), kTransitive, DirectCall("g", "i"), 1),
+      Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0),
+      Edge(Reachable("f", "h"), kTransitive, Reachable("f", "g"), 0),
+      Edge(Reachable("f", "i"), kTransitive, DirectCall("f", "g"), 0),
+  };
+  return batch;
+}
+
+std::vector<std::vector<std::string>> SortedRows(
+    std::vector<std::vector<std::string>> rows) {
+  std::ranges::sort(rows);
+  return rows;
+}
+
+std::vector<std::vector<std::string>> SortedEdgeRows(
+    std::vector<std::vector<std::string>> rows) {
+  std::ranges::sort(rows, [](const auto& lhs, const auto& rhs) {
+    return std::tie(lhs[0], lhs[4]) < std::tie(rhs[0], rhs[4]);
+  });
+  return rows;
 }
 
 }  // namespace
@@ -205,6 +268,149 @@ TEST(FactStoreTest, SameFactAcrossRunsSharesFactId) {
   ASSERT_TRUE(b2.ok());
   EXPECT_EQ(b1->fact_id, fact.fact_id);
   EXPECT_EQ(b2->fact_id, fact.fact_id);
+
+  std::filesystem::remove_all(db);
+}
+
+TEST(FactStoreTest,
+     PublishPreservesSharedRootsMultiEdgeProofsAndIdempotentRedelivery) {
+  const auto db = TempDbPath();
+  auto store = FactStore::Open(db);
+  ASSERT_TRUE(store.ok()) << store.status().message();
+
+  const auto run = TestRun("publication-regression");
+  const auto batch = PublicationRegressionBatch(run);
+  ASSERT_TRUE(store->Publish(batch).ok());
+
+  const auto root_fg = MakeFact(DirectCall("f", "g")).value();
+  const auto root_gh = MakeFact(DirectCall("g", "h")).value();
+  const auto root_gi = MakeFact(DirectCall("g", "i")).value();
+  const auto reachable_fg = MakeFact(Reachable("f", "g")).value();
+  const auto reachable_fh = MakeFact(Reachable("f", "h")).value();
+  const auto reachable_fi = MakeFact(Reachable("f", "i")).value();
+  for (const AnalysisFact* expected :
+       {&root_fg, &root_gh, &root_gi, &reachable_fg, &reachable_fh,
+        &reachable_fi}) {
+    auto fact = store->GetFact(expected->fact_id);
+    ASSERT_TRUE(fact.ok()) << fact.status().message();
+    EXPECT_EQ(*fact, *expected);
+  }
+
+  const std::string run_id = core::ToString(run.run_id);
+  auto counts = store->metadata_store().Query(
+      "SELECT (SELECT COUNT(*) FROM analysis_facts),"
+      " (SELECT COUNT(*) FROM run_fact_bindings),"
+      " (SELECT COUNT(*) FROM provenance_nodes),"
+      " (SELECT COUNT(*) FROM provenance_edges),"
+      " (SELECT COUNT(*) FROM fact_batch_receipts)",
+      {});
+  ASSERT_TRUE(counts.ok()) << counts.status().message();
+  EXPECT_EQ(*counts, (std::vector<std::vector<std::string>>{
+                         {{"6", "3", "3", "5", "1"}}}));
+
+  auto binding_rows = store->metadata_store().Query(
+      "SELECT fact_id, selected_witness_id FROM run_fact_bindings"
+      " WHERE run_id = ? ORDER BY fact_id",
+      {run_id});
+  ASSERT_TRUE(binding_rows.ok()) << binding_rows.status().message();
+  ASSERT_EQ(binding_rows->size(), 3u);
+  std::map<std::string, std::string> selected_witnesses;
+  for (const auto& row : *binding_rows) {
+    ASSERT_EQ(row.size(), 2u);
+    selected_witnesses.emplace(row[0], row[1]);
+  }
+  ASSERT_EQ(selected_witnesses.size(), 3u);
+  EXPECT_EQ(selected_witnesses[core::ToString(reachable_fg.fact_id)],
+            "2af032a893e0118902869038718fb982e76910343f9fe7bea22e0a19e8309d26");
+  EXPECT_EQ(selected_witnesses[core::ToString(reachable_fh.fact_id)],
+            "ef801f6f0c7aac5385bdcaf76ec3edc90260475871c537a91688faab7ea1ba29");
+  EXPECT_EQ(selected_witnesses[core::ToString(reachable_fi.fact_id)],
+            "a2b60efa2c9496b73eeea39c096c218cb522fdc34f01561ba7df32efacbb75bf");
+
+  auto node_rows = store->metadata_store().Query(
+      "SELECT output_fact_id, witness_id, selected, producer_kind,"
+      " producer_id, rule_id, source_anchor_id, summary_id, description"
+      " FROM provenance_nodes WHERE run_id = ? ORDER BY output_fact_id",
+      {run_id});
+  ASSERT_TRUE(node_rows.ok()) << node_rows.status().message();
+  EXPECT_EQ(
+      *node_rows,
+      SortedRows({
+          {core::ToString(reachable_fg.fact_id),
+           selected_witnesses[core::ToString(reachable_fg.fact_id)], "1", "0",
+           "producer-fg", std::string(kDirect), "anchor-fg", "summary-fg",
+           "direct f to g"},
+          {core::ToString(reachable_fh.fact_id),
+           selected_witnesses[core::ToString(reachable_fh.fact_id)], "1", "0",
+           "producer-gh", std::string(kTransitive), "anchor-gh", "summary-gh",
+           "direct g to h"},
+          {core::ToString(reachable_fi.fact_id),
+           selected_witnesses[core::ToString(reachable_fi.fact_id)], "1", "0",
+           "producer-fg", std::string(kTransitive), "anchor-fg", "summary-fg",
+           "direct f to g"},
+      }));
+
+  auto edge_rows = store->metadata_store().Query(
+      "SELECT output_fact_id, witness_id, input_kind, input_id, input_ordinal"
+      " FROM provenance_edges WHERE run_id = ?"
+      " ORDER BY output_fact_id, input_ordinal",
+      {run_id});
+  ASSERT_TRUE(edge_rows.ok()) << edge_rows.status().message();
+  EXPECT_EQ(
+      *edge_rows,
+      SortedEdgeRows({
+          {core::ToString(reachable_fg.fact_id),
+           selected_witnesses[core::ToString(reachable_fg.fact_id)], "rooted",
+           core::ToString(root_fg.fact_id), "0"},
+          {core::ToString(reachable_fh.fact_id),
+           selected_witnesses[core::ToString(reachable_fh.fact_id)], "derived",
+           core::ToString(reachable_fg.fact_id), "0"},
+          {core::ToString(reachable_fh.fact_id),
+           selected_witnesses[core::ToString(reachable_fh.fact_id)], "rooted",
+           core::ToString(root_gh.fact_id), "1"},
+          {core::ToString(reachable_fi.fact_id),
+           selected_witnesses[core::ToString(reachable_fi.fact_id)], "rooted",
+           core::ToString(root_fg.fact_id), "0"},
+          {core::ToString(reachable_fi.fact_id),
+           selected_witnesses[core::ToString(reachable_fi.fact_id)], "rooted",
+           core::ToString(root_gi.fact_id), "1"},
+      }));
+
+  const auto before_redelivery_counts = *counts;
+  const auto before_redelivery_bindings = *binding_rows;
+  const auto before_redelivery_nodes = *node_rows;
+  const auto before_redelivery_edges = *edge_rows;
+  ASSERT_TRUE(store->Publish(batch).ok());
+
+  counts = store->metadata_store().Query(
+      "SELECT (SELECT COUNT(*) FROM analysis_facts),"
+      " (SELECT COUNT(*) FROM run_fact_bindings),"
+      " (SELECT COUNT(*) FROM provenance_nodes),"
+      " (SELECT COUNT(*) FROM provenance_edges),"
+      " (SELECT COUNT(*) FROM fact_batch_receipts)",
+      {});
+  binding_rows = store->metadata_store().Query(
+      "SELECT fact_id, selected_witness_id FROM run_fact_bindings"
+      " WHERE run_id = ? ORDER BY fact_id",
+      {run_id});
+  node_rows = store->metadata_store().Query(
+      "SELECT output_fact_id, witness_id, selected, producer_kind,"
+      " producer_id, rule_id, source_anchor_id, summary_id, description"
+      " FROM provenance_nodes WHERE run_id = ? ORDER BY output_fact_id",
+      {run_id});
+  edge_rows = store->metadata_store().Query(
+      "SELECT output_fact_id, witness_id, input_kind, input_id, input_ordinal"
+      " FROM provenance_edges WHERE run_id = ?"
+      " ORDER BY output_fact_id, input_ordinal",
+      {run_id});
+  ASSERT_TRUE(counts.ok()) << counts.status().message();
+  ASSERT_TRUE(binding_rows.ok()) << binding_rows.status().message();
+  ASSERT_TRUE(node_rows.ok()) << node_rows.status().message();
+  ASSERT_TRUE(edge_rows.ok()) << edge_rows.status().message();
+  EXPECT_EQ(*counts, before_redelivery_counts);
+  EXPECT_EQ(*binding_rows, before_redelivery_bindings);
+  EXPECT_EQ(*node_rows, before_redelivery_nodes);
+  EXPECT_EQ(*edge_rows, before_redelivery_edges);
 
   std::filesystem::remove_all(db);
 }

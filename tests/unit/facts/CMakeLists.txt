@@ -61,6 +61,7 @@ gtest_discover_tests(FactProtoTest DISCOVERY_TIMEOUT 60)
 add_executable(FactStoreTest FactStoreTest.cpp)
 target_link_libraries(FactStoreTest PRIVATE
   veritas::facts
+  veritas::summarydb
   GTest::gtest_main
 )
 veritas_add_warnings(FactStoreTest)

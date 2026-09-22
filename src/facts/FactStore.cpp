@@ -165,59 +165,63 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   // witness input, which may be a rooted input absent from batch.facts. Any
   // validation failure here happens before a transaction opens, so no rollback
   // is needed.
-  std::vector<AnalysisFact> all_facts = batch.facts;
   std::set<core::StableId> fact_ids;
-  for (const AnalysisFact& fact : all_facts) {
+  for (const AnalysisFact& fact : batch.facts) {
     fact_ids.insert(fact.fact_id);
   }
+  std::vector<AnalysisFact> missing_input_facts;
   std::set<core::StableId> rooted_inputs(batch.rooted_input_fact_ids.begin(),
                                          batch.rooted_input_fact_ids.end());
+
+  struct WitnessEdgeRef {
+    const WitnessEdge* edge;
+    core::StableId input_fact_id;
+  };
+  struct ResultWitness {
+    std::string witness_id;
+    std::vector<WitnessEdgeRef> ordered_edges;
+  };
+  std::map<std::string, ResultWitness> result_witnesses;
   for (const WitnessEdge& edge : batch.witnesses) {
     auto input = MakeFact(edge.input.row);
     if (!input.ok()) {
       return input.status();
     }
+    const core::StableId input_fact_id = input->fact_id;
     if (fact_ids.insert(input->fact_id).second) {
-      all_facts.push_back(*input);
+      missing_input_facts.push_back(std::move(*input));
     }
+    result_witnesses[EncodeSemanticKey(edge.result.row)].ordered_edges.push_back(
+        WitnessEdgeRef{.edge = &edge, .input_fact_id = input_fact_id});
   }
 
   // Group the canonical witnesses by result and derive each result's
   // witness-dependent derivation identity. The selected proof's witness id is
   // distinct from the semantic FactID, so re-deriving a fact by a different
   // proof retains a distinct witness record.
-  struct ResultWitness {
-    std::string witness_id;
-    std::vector<WitnessEdge> ordered_edges;
-  };
-  std::map<std::string, ResultWitness> result_witnesses;
-  for (const WitnessEdge& edge : batch.witnesses) {
-    result_witnesses[EncodeSemanticKey(edge.result.row)].ordered_edges.push_back(
-        edge);
-  }
   std::map<core::StableId, std::string> witness_id_by_fact;
   for (auto& [result_key, entry] : result_witnesses) {
     std::ranges::sort(entry.ordered_edges, [](const auto& a, const auto& b) {
-      return a.input_ordinal < b.input_ordinal;
+      return a.edge->input_ordinal < b.edge->input_ordinal;
     });
     std::vector<SemanticRow> inputs;
     inputs.reserve(entry.ordered_edges.size());
-    for (const auto& edge : entry.ordered_edges) {
-      inputs.push_back(edge.input.row);
+    for (const auto& edge_ref : entry.ordered_edges) {
+      inputs.push_back(edge_ref.edge->input.row);
     }
-    entry.witness_id = DeriveWitnessId(entry.ordered_edges.front().result.row,
-                                       entry.ordered_edges.front().rule_id,
-                                       inputs);
-    auto fact = MakeFact(entry.ordered_edges.front().result.row);
+    entry.witness_id = DeriveWitnessId(
+        entry.ordered_edges.front().edge->result.row,
+        entry.ordered_edges.front().edge->rule_id, inputs);
+    auto fact = MakeFact(entry.ordered_edges.front().edge->result.row);
     if (!fact.ok()) {
       return fact.status();
     }
     witness_id_by_fact[fact->fact_id] = entry.witness_id;
   }
 
-  std::map<core::StableId, RootedInputFact> root_evidence;
+  std::map<core::StableId, const RootedInputFact*> root_evidence;
   for (const auto& root : batch.rooted_input_facts) {
-    root_evidence[root.fact.fact_id] = root;
+    root_evidence[root.fact.fact_id] = &root;
   }
 
   // Idempotent redelivery: a batch already durably published is a successful
@@ -245,7 +249,13 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
 
   // Canonical facts: the run's derived facts plus their rooted inputs, all
   // stored for display. Only the derived facts get an occurrence binding.
-  for (const AnalysisFact& fact : all_facts) {
+  for (const AnalysisFact& fact : batch.facts) {
+    s = PutFact(fact);
+    if (!s.ok()) {
+      return rollback(s);
+    }
+  }
+  for (const AnalysisFact& fact : missing_input_facts) {
     s = PutFact(fact);
     if (!s.ok()) {
       return rollback(s);
@@ -270,7 +280,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   // The witness DAG: one node per selected proof, one edge per derivation step.
   ProvenanceStore provenance(metadata_store_);
   for (const auto& [result_key, entry] : result_witnesses) {
-    auto result_fact = MakeFact(entry.ordered_edges.front().result.row);
+    auto result_fact = MakeFact(entry.ordered_edges.front().edge->result.row);
     if (!result_fact.ok()) {
       return rollback(result_fact.status());
     }
@@ -281,20 +291,16 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     node.witness_id = entry.witness_id;
     node.selected = true;
     node.producer_kind = ProducerKindForEngine(batch.run.engine);
-    node.rule_id = entry.ordered_edges.front().rule_id;
+    node.rule_id = entry.ordered_edges.front().edge->rule_id;
     // Populate provenance metadata from a rooted input's structured evidence,
     // so the explanation graph reports source anchors and summaries.
-    for (const WitnessEdge& edge : entry.ordered_edges) {
-      auto input = MakeFact(edge.input.row);
-      if (!input.ok()) {
-        return rollback(input.status());
-      }
-      const auto root = root_evidence.find(input->fact_id);
+    for (const WitnessEdgeRef& edge_ref : entry.ordered_edges) {
+      const auto root = root_evidence.find(edge_ref.input_fact_id);
       if (root != root_evidence.end()) {
-        node.producer_id = root->second.producer_id;
-        node.source_anchor_id = root->second.source_anchor_id;
-        node.summary_id = root->second.summary_id;
-        node.description = root->second.description;
+        node.producer_id = root->second->producer_id;
+        node.source_anchor_id = root->second->source_anchor_id;
+        node.summary_id = root->second->summary_id;
+        node.description = root->second->description;
         break;
       }
     }
@@ -303,18 +309,15 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
       return rollback(s);
     }
 
-    for (const WitnessEdge& edge : entry.ordered_edges) {
-      auto input_fact = MakeFact(edge.input.row);
-      if (!input_fact.ok()) {
-        return rollback(input_fact.status());
-      }
+    for (const WitnessEdgeRef& edge_ref : entry.ordered_edges) {
+      const WitnessEdge& edge = *edge_ref.edge;
       FactWitnessEdge witness_edge;
       witness_edge.run_id = batch.run.run_id;
       witness_edge.output_fact_id = result_fact->fact_id;
       witness_edge.witness_id = entry.witness_id;
       witness_edge.input_kind =
-          rooted_inputs.count(input_fact->fact_id) ? "rooted" : "derived";
-      witness_edge.input_id = core::ToString(input_fact->fact_id);
+          rooted_inputs.count(edge_ref.input_fact_id) ? "rooted" : "derived";
+      witness_edge.input_id = core::ToString(edge_ref.input_fact_id);
       witness_edge.input_ordinal = edge.input_ordinal;
       s = provenance.PutEdge(witness_edge);
       if (!s.ok()) {

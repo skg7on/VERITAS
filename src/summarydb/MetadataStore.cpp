@@ -16,6 +16,8 @@
 
 #include <sqlite3.h>
 
+#include <utility>
+
 #include "schema_v1.h"
 #include "schema_v2.h"
 #include "schema_v3.h"
@@ -77,24 +79,38 @@ Status StepAndFinalize(sqlite3_stmt *stmt) {
 MetadataStore::MetadataStore(sqlite3 *db) : db_(db) {}
 
 MetadataStore::~MetadataStore() {
+  FinalizeCachedStatements();
   if (db_) {
     sqlite3_close(db_);
   }
 }
 
-MetadataStore::MetadataStore(MetadataStore &&other) noexcept : db_(other.db_) {
-  other.db_ = nullptr;
+MetadataStore::MetadataStore(MetadataStore &&other) noexcept
+    : db_(std::exchange(other.db_, nullptr)),
+      in_transaction_(std::exchange(other.in_transaction_, false)),
+      statement_cache_(std::move(other.statement_cache_)) {
+  other.statement_cache_.clear();
 }
 
 MetadataStore &MetadataStore::operator=(MetadataStore &&other) noexcept {
   if (this != &other) {
+    FinalizeCachedStatements();
     if (db_) {
       sqlite3_close(db_);
     }
-    db_ = other.db_;
-    other.db_ = nullptr;
+    db_ = std::exchange(other.db_, nullptr);
+    in_transaction_ = std::exchange(other.in_transaction_, false);
+    statement_cache_ = std::move(other.statement_cache_);
+    other.statement_cache_.clear();
   }
   return *this;
+}
+
+void MetadataStore::FinalizeCachedStatements() {
+  for (auto &entry : statement_cache_) {
+    sqlite3_finalize(entry.second);
+  }
+  statement_cache_.clear();
 }
 
 StatusOr<MetadataStore>
@@ -449,23 +465,43 @@ Status MetadataStore::PutManifestContext(
 
 Status MetadataStore::Execute(const std::string &sql,
                               const std::vector<std::string> &params) {
-  sqlite3_stmt *stmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
-  if (rc != SQLITE_OK) {
-    std::string error = sqlite3_errmsg(db_);
-    return Status::Internal("SQLite prepare failed: " + error +
-                            " (SQL: " + sql + ")");
+  sqlite3_stmt *stmt;
+  const auto cached = statement_cache_.find(sql);
+  if (cached != statement_cache_.end()) {
+    stmt = cached->second;
+  } else {
+    stmt = nullptr;
+    const int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+      const std::string error = sqlite3_errmsg(db_);
+      sqlite3_finalize(stmt);
+      statement_cache_.erase(sql);
+      return Status::Internal("SQLite prepare failed: " + error +
+                              " (SQL: " + sql + ")");
+    }
+    statement_cache_.emplace(sql, stmt);
   }
 
   for (size_t i = 0; i < params.size(); ++i) {
     auto status = BindText(stmt, static_cast<int>(i + 1), params[i]);
     if (!status.ok()) {
-      sqlite3_finalize(stmt);
+      sqlite3_reset(stmt);
+      sqlite3_clear_bindings(stmt);
       return status;
     }
   }
 
-  return StepAndFinalize(stmt);
+  const int rc = sqlite3_step(stmt);
+  std::string error;
+  if (rc != SQLITE_DONE) {
+    error = sqlite3_errmsg(db_);
+  }
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  if (rc != SQLITE_DONE) {
+    return Status::Internal("SQLite step failed: " + error);
+  }
+  return Status::Ok();
 }
 
 StatusOr<std::vector<std::vector<std::string>>>
