@@ -40,14 +40,16 @@ void AppendField(std::string* out, std::string_view value) {
 }
 
 // One candidate derivation: a single rule applied to an ordered argument list.
-// At most one derivation exists per (result, rule), because a rule cannot bind
-// two different inputs at the same argument position.
+// At most one derivation exists per (result, rule, derivation key), because a
+// rule cannot bind two different inputs at the same argument position.
 struct Derivation {
   std::string rule_id;
   std::uint32_t priority = 0;
-  // Input key -> ordinal, kept ordered so the tie-break on "lexicographic
-  // stable input identity" is well defined.
-  std::map<std::string, std::uint32_t> inputs;
+  // Ordinal -> input key. Keyed by ordinal rather than by input key because one
+  // input may legitimately occupy two ordinals: a self-join -- a single Datalog
+  // row satisfying two argument positions of the same rule -- is a legal
+  // firing, and an input-keyed map cannot represent it.
+  std::map<std::uint32_t, std::string> inputs;
   std::uint64_t cost = kUnproven;
 };
 
@@ -164,27 +166,22 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
         derivations[result_key][edge.rule_id][edge.derivation_key];
     derivation.rule_id = edge.rule_id;
     derivation.priority = rule->priority;
+    // With the derivation key, alternative proof steps land in separate groups,
+    // so two different inputs at one ordinal indicate an engine defect rather
+    // than a legal alternative proof. One input at two ordinals is the legal
+    // self-join and is recorded as such.
     const auto [it, inserted] =
-        derivation.inputs.emplace(input_key, edge.input_ordinal);
-    if (!inserted && it->second != edge.input_ordinal) {
+        derivation.inputs.emplace(edge.input_ordinal, input_key);
+    if (!inserted && it->second != input_key) {
       return Status::InvalidArgument(
-          "witness binds one input at two ordinals");
-    }
-    // With the derivation key, alternative proof steps land in separate groups;
-    // a second input at the same ordinal now indicates an engine defect, not a
-    // legal alternative proof.
-    for (const auto& [existing_key, existing_ordinal] : derivation.inputs) {
-      if (existing_ordinal == edge.input_ordinal && existing_key != input_key) {
-        return Status::InvalidArgument(
-            "witness binds two inputs at one ordinal");
-      }
+          "witness binds two inputs at one ordinal");
     }
   }
 
   // 3a. Validate derivation arity: every derivation's input ordinals must be
-  // exactly {0, ..., rule.arity - 1}. The per-edge checks above already reject
-  // duplicate ordinals, so a derivation of the declared arity with an ordinal
-  // present in range is exactly correct.
+  // exactly {0, ..., rule.arity - 1}. The per-edge checks above already reject a
+  // duplicated ordinal, so a derivation of the declared arity with every
+  // ordinal present is exactly correct.
   for (const auto& [result_key, by_rule] : derivations) {
     for (const auto& [rule_id, by_derivation] : by_rule) {
       const RuleSpec* rule = RulesV2().Find(rule_id);
@@ -194,14 +191,7 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
               "witness derivation has the wrong number of inputs");
         }
         for (std::uint32_t ordinal = 0; ordinal < rule->arity; ++ordinal) {
-          bool found = false;
-          for (const auto& [input_key, input_ordinal] : derivation.inputs) {
-            if (input_ordinal == ordinal) {
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
+          if (!derivation.inputs.contains(ordinal)) {
             return Status::InvalidArgument(
                 "witness derivation is missing an input ordinal");
           }
@@ -225,7 +215,7 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
         for (auto& [derivation_key, derivation] : by_derivation) {
           std::uint64_t total = 0;
           bool provable = true;
-          for (const auto& [input_key, ordinal] : derivation.inputs) {
+          for (const auto& [ordinal, input_key] : derivation.inputs) {
             total += 1;
             if (roots.contains(input_key))
               continue;
@@ -292,7 +282,7 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
       return fact.status();
     canonical.facts.push_back(std::move(*fact));
 
-    for (const auto& [input_key, ordinal] : selected->inputs) {
+    for (const auto& [ordinal, input_key] : selected->inputs) {
       const SemanticRow* input_row = nullptr;
       if (const auto root = roots.find(input_key); root != roots.end()) {
         input_row = &root->second->fact.row;
