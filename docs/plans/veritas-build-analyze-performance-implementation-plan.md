@@ -23,6 +23,16 @@ RocksDB, SQLite, CMake/Ninja, GoogleTest.
 
 **Tracking:** [GitHub issue #133](https://github.com/skg7on/VERITAS/issues/133)
 
+**Current status (2026-09-22):** Tasks 1-3 and the bounded persistence,
+streaming-hash, non-copying handoff, and compact-validation refinements are
+implemented. Functional verification is green, but the latest fresh benchmark
+still takes 519.84 seconds at 8.60 GiB RSS. A receipt-reuse diagnostic after
+the latest memory refinements takes 327.66 seconds at 7.18 GiB RSS, proving
+that keyed witness assembly remains the dominant memory problem while
+first-time persistence contributes roughly 199 seconds. The acceptance task
+therefore remains open; see design specification section 9.4 for measurements
+and the next refinement targets.
+
 ## Global Constraints
 
 - Preserve the production Soufflé engine and all four WPA domains.

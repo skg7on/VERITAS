@@ -14,20 +14,23 @@
 
 #include "veritas/core/Hash.h"
 
+#include <array>
 #include <gtest/gtest.h>
 #include <locale>
+#include <string_view>
+#include <vector>
 
 using namespace veritas::core;
 
 class CorruptingNumPut : public std::num_put<char> {
- protected:
-  iter_type do_put(iter_type out, std::ios_base&, char_type,
+protected:
+  iter_type do_put(iter_type out, std::ios_base &, char_type,
                    unsigned long) const override {
     *out++ = 'x';
     return out;
   }
 
-  iter_type do_put(iter_type out, std::ios_base&, char_type,
+  iter_type do_put(iter_type out, std::ios_base &, char_type,
                    unsigned long long) const override {
     *out++ = 'x';
     return out;
@@ -35,14 +38,13 @@ class CorruptingNumPut : public std::num_put<char> {
 };
 
 class GlobalLocaleGuard {
- public:
-  GlobalLocaleGuard()
-      : previous_(std::locale()) {
+public:
+  GlobalLocaleGuard() : previous_(std::locale()) {
     std::locale::global(std::locale(previous_, new CorruptingNumPut));
   }
   ~GlobalLocaleGuard() { std::locale::global(previous_); }
 
- private:
+private:
   std::locale previous_;
 };
 
@@ -50,7 +52,8 @@ TEST(HashTest, ComputesSHA256) {
   std::vector<std::byte> data = {std::byte{0x61}, std::byte{0x62},
                                  std::byte{0x63}}; // "abc"
   auto digest = ComputeSHA256(data);
-  EXPECT_EQ(digest.size(), kSHA256DigestBytes);
+  EXPECT_EQ(DigestToHex(digest),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 }
 
 TEST(HashTest, SameInputProducesSameDigest) {
@@ -66,6 +69,53 @@ TEST(HashTest, DifferentInputsProduceDifferentDigests) {
   auto digest1 = ComputeSHA256(data1);
   auto digest2 = ComputeSHA256(data2);
   EXPECT_NE(digest1, digest2);
+}
+
+TEST(HashTest, StreamingSHA256MatchesOneShotAcrossBlockBoundaries) {
+  std::vector<std::byte> data(137);
+  for (std::size_t i = 0; i < data.size(); ++i) {
+    data[i] = static_cast<std::byte>(i);
+  }
+
+  SHA256Hasher hasher;
+  hasher.Update(std::span(data).subspan(0, 1));
+  hasher.Update(std::span(data).subspan(1, 62));
+  hasher.Update(std::span(data).subspan(63, 1));
+  hasher.Update(std::span(data).subspan(64, 64));
+  hasher.Update(std::span(data).subspan(128));
+
+  EXPECT_EQ(hasher.Finalize(), ComputeSHA256(data));
+}
+
+TEST(HashTest, StreamingSHA256MatchesKnownAnswersAtPaddingBoundaries) {
+  struct KnownAnswer {
+    std::size_t input_size;
+    std::string_view digest;
+  };
+  constexpr std::array<KnownAnswer, 4> kKnownAnswers = {{
+      {55, "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318"},
+      {56, "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a"},
+      {63, "7d3e74a05d7db15bce4ad9ec0658ea98e3f06eeecf16b4c6fff2da457ddc2f34"},
+      {64, "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb"},
+  }};
+
+  for (const auto &[input_size, digest] : kKnownAnswers) {
+    SCOPED_TRACE(input_size);
+    std::vector<std::byte> data(input_size, static_cast<std::byte>('a'));
+    SHA256Hasher hasher;
+    hasher.Update(std::span(data).first(1));
+    hasher.Update(std::span(data).subspan(1, input_size - 2));
+    hasher.Update(std::span(data).last(1));
+    EXPECT_EQ(DigestToHex(hasher.Finalize()), digest);
+  }
+}
+
+TEST(HashTest, StreamingSHA256HandlesEmptyUpdates) {
+  SHA256Hasher hasher;
+  const std::array prefix = {std::byte{0x61}};
+  hasher.Update(prefix);
+  hasher.Update({});
+  EXPECT_EQ(hasher.Finalize(), ComputeSHA256(prefix));
 }
 
 TEST(HashTest, DigestToHexProduces64Characters) {

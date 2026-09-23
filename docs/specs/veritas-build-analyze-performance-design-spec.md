@@ -331,6 +331,52 @@ run must complete within 375 seconds and peak RSS must not exceed 4 GB. These
 machine-specific thresholds are an acceptance benchmark, not a portable CI
 timing assertion.
 
+### 9.4 Implementation status (2026-09-22)
+
+The bounded implementation is functionally complete, but the LevelDB
+performance acceptance criterion is not yet met. The current branch preserves
+the original CPG projection, WPA run ID, and fact-batch ID while implementing:
+
+- direct digest encoding and incremental SHA-256 hashing;
+- one run-scoped summary index;
+- single ownership and consuming assembly of component results;
+- a non-copying fact-bus handoff and compact ID-indexed witness validation;
+- prepared-statement reuse in `MetadataStore` and copy reduction in
+  `FactStore` publication.
+
+Measured results on the reference machine are:
+
+| Revision state | Output mode | Wall time | Maximum RSS | Result |
+| --- | --- | ---: | ---: | --- |
+| Tasks 1-3 | fresh | 543.47 s | unavailable | misses time limit |
+| + persistence reuse | fresh | 519.84 s | 8.60 GiB | misses both limits |
+| + non-copying bus handoff | receipt reuse | 313.40 s | 7.61 GiB | isolates pre-insert peak |
+| + streaming batch hash and compact validation | receipt reuse | 327.66 s | 7.18 GiB | memory improved; still over limit |
+
+The receipt-reuse measurements intentionally skip the approximately 4.13
+million fact/provenance row writes. They show that the remaining memory peak is
+created before database insertion, primarily by the canonical witness payload
+and keyed batch-assembly intermediates. Comparing the fresh and receipt-reuse
+runs also attributes about 199 seconds to first-time persistence. The existing
+receipt retained the same
+`fact:sha256:ee83dca021fbdc9da471c1d4791c9e2c8cea446913af3dac6e90520299cc9253`
+batch ID after incremental hashing, confirming byte-identical canonical
+identity for this workload.
+
+Further refinement should therefore focus on two independent areas:
+
+1. Replace the per-witness encoded sort-key duplication in
+   `MakeAnalysisFactBatch` with a compact or streaming canonicalization
+   strategy, and release stripped component-vector capacity as soon as it is
+   no longer needed.
+2. Add schema-aware bulk persistence for facts, bindings, provenance nodes,
+   and provenance edges while preserving the single atomic receipt
+   transaction and schema-v4 contents.
+
+A new fresh-output benchmark is required after those refinements. Until both
+the 375-second and 4-GiB limits pass together, issue #133 remains open and this
+work must not be reported as meeting performance acceptance.
+
 ## 10. Risks and Mitigations
 
 | Risk | Mitigation |

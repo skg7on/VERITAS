@@ -19,6 +19,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -35,6 +36,10 @@ namespace veritas::facts {
 namespace {
 
 namespace sem = analysis::semantic;
+
+static_assert(std::is_same_v<
+              decltype(&AnalysisFactBus::Publish),
+              Status (AnalysisFactBus::*)(const AnalysisFactBatch &) const>);
 
 constexpr std::string_view kDirect = "wpa.reachability.direct.v2";
 constexpr std::string_view kFlowParameter = "wpa.flow.global.parameter.v2";
@@ -55,8 +60,9 @@ core::StableId ValueId(std::string_view name) {
 }
 
 SemanticRow Reachable(std::string_view from, std::string_view to) {
-  return SemanticRow{RelationId::kReachableCall,
-                     {FunctionId(from), FunctionId(to), sem::EpistemicState::kMay}};
+  return SemanticRow{
+      RelationId::kReachableCall,
+      {FunctionId(from), FunctionId(to), sem::EpistemicState::kMay}};
 }
 
 SemanticRow DirectCall(std::string_view from, std::string_view to) {
@@ -66,8 +72,8 @@ SemanticRow DirectCall(std::string_view from, std::string_view to) {
                       sem::DispatchKind::kDirect, sem::EpistemicState::kMay}};
 }
 
-WitnessEdge Edge(const SemanticRow& result, std::string_view rule,
-                 const SemanticRow& input, std::uint32_t ordinal) {
+WitnessEdge Edge(const SemanticRow &result, std::string_view rule,
+                 const SemanticRow &input, std::uint32_t ordinal) {
   return WitnessEdge{.result = SemanticKey{result},
                      .rule_id = std::string(rule),
                      .input = SemanticKey{input},
@@ -91,10 +97,10 @@ SemanticRow GlobalFlow(std::string_view from, std::string_view to) {
 
 AnalysisRunManifest TestRun() {
   AnalysisRunDescriptor descriptor;
-  descriptor.revision_id =
-      core::MakeStableId(core::IdKind::kRevision, std::as_bytes(std::span("rev", 3)));
-  descriptor.build_variant_id =
-      core::MakeStableId(core::IdKind::kBuildVariant, std::as_bytes(std::span("bv", 2)));
+  descriptor.revision_id = core::MakeStableId(
+      core::IdKind::kRevision, std::as_bytes(std::span("rev", 3)));
+  descriptor.build_variant_id = core::MakeStableId(
+      core::IdKind::kBuildVariant, std::as_bytes(std::span("bv", 2)));
   descriptor.summary_schema_version = "summary.v2";
   descriptor.relation_schema_version = "relations.v2";
   descriptor.rule_bundle_version = "rules.v2";
@@ -108,8 +114,9 @@ AnalysisRunManifest TestRun() {
 
 std::filesystem::path TempDbPath() {
   std::string tmpl =
-      (std::filesystem::temp_directory_path() / "veritas-factbus-XXXXXX").string();
-  char* made = ::mkdtemp(tmpl.data());
+      (std::filesystem::temp_directory_path() / "veritas-factbus-XXXXXX")
+          .string();
+  char *made = ::mkdtemp(tmpl.data());
   return std::filesystem::path(made);
 }
 
@@ -137,7 +144,8 @@ AnalysisFactBatch SuccessfulBatch() {
   const auto derived = MakeFact(Reachable("f", "g")).value();
   batch.rooted_input_fact_ids = {root.fact_id};
   batch.facts = {derived};
-  batch.witnesses = {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)};
+  batch.witnesses = {
+      Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)};
   batch.batch_id = DeriveBatchId(batch);
   return batch;
 }
@@ -149,11 +157,11 @@ wpa::WpaRunResult DuplicateProofRun() {
   const auto root_fact_a = MakeFact(root_a).value();
   const auto root_fact_b = MakeFact(root_b).value();
 
-  auto component = [](std::string_view scc, const SemanticRow& root,
-                      const SemanticRow& flow) {
+  auto component = [](std::string_view scc, const SemanticRow &root,
+                      const SemanticRow &flow) {
     wpa::WpaComponentCompletion completion;
-    completion.key = wpa::WpaComponentKey{
-        FunctionId(scc), wpa::WpaComponentKind::kFlow};
+    completion.key =
+        wpa::WpaComponentKey{FunctionId(scc), wpa::WpaComponentKind::kFlow};
     completion.result.scc_id = completion.key.scc_id;
     completion.result.component = completion.key.component;
     completion.result.logical_input_hash = "logical";
@@ -177,27 +185,27 @@ wpa::WpaRunResult DuplicateProofRun() {
 }
 
 class RecordingSink : public AnalysisFactSink {
- public:
-  Status Publish(const AnalysisFactBatch& batch) override {
+public:
+  Status Publish(const AnalysisFactBatch &batch) override {
     batches_.push_back(batch);
     ++counts_[core::ToString(batch.batch_id)];
     return Status::Ok();
   }
 
-  const std::vector<AnalysisFactBatch>& batches() const { return batches_; }
-  std::size_t logical_publication_count(const core::StableId& batch_id) const {
+  const std::vector<AnalysisFactBatch> &batches() const { return batches_; }
+  std::size_t logical_publication_count(const core::StableId &batch_id) const {
     const auto it = counts_.find(core::ToString(batch_id));
     return it == counts_.end() ? 0 : it->second;
   }
 
- private:
+private:
   std::vector<AnalysisFactBatch> batches_;
   std::map<std::string, std::size_t> counts_;
 };
 
 class FailOnceSink : public AnalysisFactSink {
- public:
-  Status Publish(const AnalysisFactBatch& batch) override {
+public:
+  Status Publish(const AnalysisFactBatch &batch) override {
     if (!failed_once_) {
       failed_once_ = true;
       return Status::Internal("injected fan-out failure");
@@ -206,12 +214,12 @@ class FailOnceSink : public AnalysisFactSink {
     return Status::Ok();
   }
 
-  std::size_t logical_publication_count(const core::StableId& batch_id) const {
+  std::size_t logical_publication_count(const core::StableId &batch_id) const {
     const auto it = counts_.find(core::ToString(batch_id));
     return it == counts_.end() ? 0 : it->second;
   }
 
- private:
+private:
   bool failed_once_ = false;
   std::map<std::string, std::size_t> counts_;
 };
@@ -247,14 +255,14 @@ TEST(AnalysisFactBusTest, CoalescesAFactProvenByTwoComponents) {
   AnalysisFactBus bus(*repo);
 
   wpa::WpaRunResult run = DuplicateProofRun();
-  const auto& completion_a = run.completed_components[0];
-  const auto& completion_b = run.completed_components[1];
+  const auto &completion_a = run.completed_components[0];
+  const auto &completion_b = run.completed_components[1];
 
   // Ownership goes to the first component in canonical key order, so the
   // surviving proof is whichever component's key sorts first -- and it must be
   // that component's whole derivation, root and all.
   const bool first_is_a = completion_a.key < completion_b.key;
-  const SemanticRow& surviving_root =
+  const SemanticRow &surviving_root =
       first_is_a ? completion_a.result.witnesses[0].input.row
                  : completion_b.result.witnesses[0].input.row;
 
@@ -278,8 +286,7 @@ TEST(AnalysisFactBusTest, CoalescesAFactProvenByTwoComponents) {
   std::filesystem::remove_all(db);
 }
 
-TEST(AnalysisFactBusTest,
-     ConsumesComponentPayloadIntoCanonicalBatchVectors) {
+TEST(AnalysisFactBusTest, ConsumesComponentPayloadIntoCanonicalBatchVectors) {
   auto run = DuplicateProofRun();
   const auto expected = MakeAnalysisFactBatch(run);
   auto consumed = MakeAnalysisFactBatch(std::move(run));
@@ -288,7 +295,7 @@ TEST(AnalysisFactBusTest,
   EXPECT_EQ(consumed.facts, expected.facts);
   EXPECT_EQ(consumed.witnesses, expected.witnesses);
   ASSERT_FALSE(consumed.completed_components.empty());
-  for (const auto& completion : consumed.completed_components) {
+  for (const auto &completion : consumed.completed_components) {
     EXPECT_TRUE(completion.result.facts.empty());
     EXPECT_TRUE(completion.result.witnesses.empty());
     EXPECT_TRUE(completion.result.diagnostics.empty());
@@ -361,6 +368,28 @@ TEST(AnalysisFactBusTest, RejectsWitnessLeafOutsideRootSet) {
   std::filesystem::remove_all(db);
 }
 
+TEST(AnalysisFactBusTest, RejectsCyclicWitnessDag) {
+  const auto db = TempDbPath();
+  auto repo = wpa::WpaRunRepository::Open(db);
+  ASSERT_TRUE(repo.ok()) << repo.status().message();
+  AnalysisFactBus bus(*repo);
+
+  auto cycle = SuccessfulBatch();
+  const SemanticRow forward = Reachable("f", "g");
+  const SemanticRow reverse = Reachable("g", "f");
+  cycle.facts = {MakeFact(forward).value(), MakeFact(reverse).value()};
+  cycle.rooted_input_fact_ids.clear();
+  cycle.witnesses = {Edge(forward, kDirect, reverse, 0),
+                     Edge(reverse, kDirect, forward, 0)};
+  cycle.batch_id = DeriveBatchId(cycle);
+
+  const Status status = bus.Publish(cycle);
+  EXPECT_EQ(status.code(), StatusCode::kFailedPrecondition);
+  EXPECT_EQ(status.message(), "witness DAG contains a cycle");
+
+  std::filesystem::remove_all(db);
+}
+
 TEST(AnalysisFactBusTest, RetryAfterPartialFanoutIsIdempotent) {
   const auto db = TempDbPath();
   auto repo = wpa::WpaRunRepository::Open(db);
@@ -381,5 +410,5 @@ TEST(AnalysisFactBusTest, RetryAfterPartialFanoutIsIdempotent) {
   std::filesystem::remove_all(db);
 }
 
-}  // namespace
-}  // namespace veritas::facts
+} // namespace
+} // namespace veritas::facts

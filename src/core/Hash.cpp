@@ -14,6 +14,7 @@
 
 #include "veritas/core/Hash.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -95,34 +96,59 @@ void ProcessBlock(uint32_t state[8], const uint8_t block[64]) {
 
 } // namespace
 
-SHA256Digest ComputeSHA256(std::span<const std::byte> data) {
-  uint32_t state[8];
-  std::memcpy(state, kSHA256H0, sizeof(kSHA256H0));
+SHA256Hasher::SHA256Hasher() {
+  std::copy_n(kSHA256H0, state_.size(), state_.begin());
+}
 
-  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(data.data());
-  size_t len = data.size();
+void SHA256Hasher::Update(std::span<const std::byte> data) {
+  if (data.empty()) {
+    return;
+  }
+  total_bytes_ += data.size();
+  const auto *bytes = reinterpret_cast<const std::uint8_t *>(data.data());
+  std::size_t remaining = data.size();
 
-  size_t full_blocks = len / 64;
-  for (size_t i = 0; i < full_blocks; ++i) {
-    ProcessBlock(state, bytes + i * 64);
+  if (buffered_ != 0) {
+    const std::size_t copied = std::min(remaining, buffer_.size() - buffered_);
+    std::memcpy(buffer_.data() + buffered_, bytes, copied);
+    buffered_ += copied;
+    bytes += copied;
+    remaining -= copied;
+    if (buffered_ == buffer_.size()) {
+      ProcessBlock(state_.data(),
+                   reinterpret_cast<const std::uint8_t *>(buffer_.data()));
+      buffered_ = 0;
+    }
   }
 
-  uint8_t final_block[128] = {0};
-  size_t remaining = len - full_blocks * 64;
-  if (remaining > 0) {
-    std::memcpy(final_block, bytes + full_blocks * 64, remaining);
+  while (remaining >= buffer_.size()) {
+    ProcessBlock(state_.data(), bytes);
+    bytes += buffer_.size();
+    remaining -= buffer_.size();
   }
-  final_block[remaining] = 0x80;
+  if (remaining != 0) {
+    std::memcpy(buffer_.data(), bytes, remaining);
+    buffered_ = remaining;
+  }
+}
 
-  size_t total_len = remaining < 56 ? 64 : 128;
-  uint64_t bit_len = static_cast<uint64_t>(len) * 8;
+SHA256Digest SHA256Hasher::Finalize() const {
+  auto state = state_;
+  std::uint8_t final_block[128] = {0};
+  if (buffered_ != 0) {
+    std::memcpy(final_block, buffer_.data(), buffered_);
+  }
+  final_block[buffered_] = 0x80;
+
+  const std::size_t total_len = buffered_ < 56 ? 64 : 128;
+  const std::uint64_t bit_len = total_bytes_ * 8;
   for (int i = 0; i < 8; ++i) {
     final_block[total_len - 1 - i] = static_cast<uint8_t>(bit_len >> (i * 8));
   }
 
-  ProcessBlock(state, final_block);
+  ProcessBlock(state.data(), final_block);
   if (total_len == 128) {
-    ProcessBlock(state, final_block + 64);
+    ProcessBlock(state.data(), final_block + 64);
   }
 
   SHA256Digest result{};
@@ -133,6 +159,12 @@ SHA256Digest ComputeSHA256(std::span<const std::byte> data) {
     result[i * 4 + 3] = static_cast<std::byte>(state[i] & 0xFF);
   }
   return result;
+}
+
+SHA256Digest ComputeSHA256(std::span<const std::byte> data) {
+  SHA256Hasher hasher;
+  hasher.Update(data);
+  return hasher.Finalize();
 }
 
 std::string DigestToHex(const SHA256Digest &digest) {

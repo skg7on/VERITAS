@@ -23,6 +23,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
@@ -34,16 +35,32 @@ constexpr size_t kSHA256DigestBytes = 32;
 
 using SHA256Digest = std::array<std::byte, kSHA256DigestBytes>;
 
+// Incremental SHA-256 state for hashing canonical encodings without first
+// materializing them as one contiguous allocation.
+class SHA256Hasher {
+public:
+  SHA256Hasher();
+
+  void Update(std::span<const std::byte> data);
+  SHA256Digest Finalize() const;
+
+private:
+  std::array<std::uint32_t, 8> state_{};
+  std::array<std::byte, 64> buffer_{};
+  std::size_t buffered_ = 0;
+  std::uint64_t total_bytes_ = 0;
+};
+
 // Compute SHA-256 of the input bytes.
 SHA256Digest ComputeSHA256(std::span<const std::byte> data);
 
 // Convert a digest to lowercase hex string (64 characters).
-std::string DigestToHex(const SHA256Digest& digest);
+std::string DigestToHex(const SHA256Digest &digest);
 
 // Parse a hex string (64 characters) into a digest. Returns nullopt if the
 // input is not valid hex or has the wrong length.
 std::optional<SHA256Digest> HexToDigest(std::string_view hex);
 
-}  // namespace veritas::core
+} // namespace veritas::core
 
-#endif  // VERITAS_CORE_HASH_H_
+#endif // VERITAS_CORE_HASH_H_

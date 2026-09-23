@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <set>
 #include <span>
@@ -26,6 +27,7 @@
 #include <utility>
 #include <variant>
 
+#include "veritas/core/Hash.h"
 #include "veritas/facts/Witness.h"
 #include "veritas/summarydb/MetadataStore.h"
 
@@ -34,21 +36,25 @@ namespace {
 
 // Canonical, length-prefixed field encoding; the same self-delimiting scheme
 // the logical input hash and canonicalizer use, so concatenation is injective.
-void AppendField(std::string* out, std::string_view value) {
-  out->append(std::to_string(value.size()));
-  out->push_back(':');
-  out->append(value);
+void UpdateHash(core::SHA256Hasher *hasher, std::string_view value) {
+  hasher->Update(std::as_bytes(std::span(value.data(), value.size())));
+}
+
+void AppendField(core::SHA256Hasher *hasher, std::string_view value) {
+  UpdateHash(hasher, std::to_string(value.size()));
+  UpdateHash(hasher, ":");
+  UpdateHash(hasher, value);
 }
 
 // Human-readable rendering of a semantic row, for diagnostics only. A rejected
 // batch has to name the row that caused the rejection: an opaque fact id and a
 // bare "duplicate" leaves nothing to act on.
-std::string RenderRow(const SemanticRow& row) {
+std::string RenderRow(const SemanticRow &row) {
   std::string out(RelationsV2().Get(row.relation).name);
-  for (const auto& cell : row.cells) {
+  for (const auto &cell : row.cells) {
     out.push_back(' ');
     std::visit(
-        [&out](const auto& value) {
+        [&out](const auto &value) {
           using T = std::decay_t<decltype(value)>;
           if constexpr (std::is_same_v<T, core::StableId>) {
             out.append(core::ToString(value));
@@ -73,11 +79,11 @@ constexpr std::string_view kDeliveryTableSql =
     " sink_id TEXT NOT NULL,"
     " PRIMARY KEY (run_id, batch_id, sink_id))";
 
-Status EnsureDeliveryTable(summarydb::MetadataStore& store) {
+Status EnsureDeliveryTable(summarydb::MetadataStore &store) {
   return store.Execute(std::string(kDeliveryTableSql), {});
 }
 
-Status MarkDelivered(summarydb::MetadataStore& store, std::string_view run_id,
+Status MarkDelivered(summarydb::MetadataStore &store, std::string_view run_id,
                      std::string_view batch_id, std::string_view sink_id) {
   return store.Execute(
       "INSERT OR IGNORE INTO wpa_fact_bus_deliveries "
@@ -85,7 +91,7 @@ Status MarkDelivered(summarydb::MetadataStore& store, std::string_view run_id,
       {std::string(run_id), std::string(batch_id), std::string(sink_id)});
 }
 
-StatusOr<bool> IsDelivered(summarydb::MetadataStore& store,
+StatusOr<bool> IsDelivered(summarydb::MetadataStore &store,
                            std::string_view run_id, std::string_view batch_id,
                            std::string_view sink_id) {
   auto rows = store.Query(
@@ -111,16 +117,18 @@ struct KeyedWitness {
   WitnessEdge edge;
 };
 
-}  // namespace
+} // namespace
 
-core::StableId DeriveBatchId(const AnalysisFactBatch& batch) {
-  std::string canonical = "veritas.analysis-fact-batch.v2";
+core::StableId DeriveBatchId(const AnalysisFactBatch &batch) {
+  core::SHA256Hasher canonical;
+  UpdateHash(&canonical, "veritas.analysis-fact-batch.v2");
   AppendField(&canonical, core::ToString(batch.run.run_id));
-  for (const auto& component : batch.expected_components) {
+  for (const auto &component : batch.expected_components) {
     AppendField(&canonical, core::ToString(component.scc_id));
-    AppendField(&canonical, std::to_string(static_cast<int>(component.component)));
+    AppendField(&canonical,
+                std::to_string(static_cast<int>(component.component)));
   }
-  for (const auto& completion : batch.completed_components) {
+  for (const auto &completion : batch.completed_components) {
     AppendField(&canonical, core::ToString(completion.key.scc_id));
     AppendField(&canonical,
                 std::to_string(static_cast<int>(completion.key.component)));
@@ -129,24 +137,23 @@ core::StableId DeriveBatchId(const AnalysisFactBatch& batch) {
     AppendField(&canonical, completion.result.fixpoint_hash);
     AppendField(&canonical, completion.result.external_hash);
   }
-  for (const auto& id : batch.rooted_input_fact_ids) {
+  for (const auto &id : batch.rooted_input_fact_ids) {
     AppendField(&canonical, core::ToString(id));
   }
-  for (const auto& fact : batch.facts) {
+  for (const auto &fact : batch.facts) {
     AppendField(&canonical, EncodeSemanticKey(fact.row));
   }
-  for (const auto& edge : batch.witnesses) {
+  for (const auto &edge : batch.witnesses) {
     AppendField(&canonical, EncodeSemanticKey(edge.result.row));
     AppendField(&canonical, edge.rule_id);
     AppendField(&canonical, EncodeSemanticKey(edge.input.row));
     AppendField(&canonical, std::to_string(edge.input_ordinal));
   }
-  for (const auto& diagnostic : batch.diagnostics) {
+  for (const auto &diagnostic : batch.diagnostics) {
     AppendField(&canonical, diagnostic);
   }
-  return core::MakeStableId(
-      core::IdKind::kFact,
-      std::as_bytes(std::span(canonical.data(), canonical.size())));
+  return core::StableId{core::IdKind::kFact,
+                        core::DigestToHex(canonical.Finalize())};
 }
 
 AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
@@ -161,10 +168,9 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   // Sorted before the ownership pass below, so which component owns a shared
   // fact depends on the set of completed components rather than on the order
   // the orchestrator happened to visit them in.
-  std::ranges::sort(batch.completed_components,
-                    [](const auto& left, const auto& right) {
-                      return left.key < right.key;
-                    });
+  std::ranges::sort(
+      batch.completed_components,
+      [](const auto &left, const auto &right) { return left.key < right.key; });
   std::ranges::sort(batch.rooted_input_fact_ids);
 
   // 1. A derived fact can be proven independently by more than one component.
@@ -180,9 +186,9 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   std::set<core::StableId> owned;
   std::vector<KeyedFact> keyed_facts;
   std::vector<KeyedWitness> keyed_witnesses;
-  for (auto& completion : batch.completed_components) {
+  for (auto &completion : batch.completed_components) {
     std::set<std::string> overridden;
-    for (auto& fact : completion.result.facts) {
+    for (auto &fact : completion.result.facts) {
       std::string key = EncodeSemanticKey(fact.row);
       if (owned.insert(fact.fact_id).second) {
         keyed_facts.push_back(
@@ -191,7 +197,7 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
         overridden.insert(std::move(key));
       }
     }
-    for (auto& edge : completion.result.witnesses) {
+    for (auto &edge : completion.result.witnesses) {
       std::string result_key = EncodeSemanticKey(edge.result.row);
       std::string input_key = EncodeSemanticKey(edge.input.row);
       if (!overridden.contains(result_key)) {
@@ -204,7 +210,7 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
         });
       }
     }
-    for (auto& diagnostic : completion.result.diagnostics) {
+    for (auto &diagnostic : completion.result.diagnostics) {
       batch.diagnostics.push_back(std::move(diagnostic));
     }
     completion.result.facts.clear();
@@ -218,26 +224,25 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   // describe a property this assembler guarantees.
   std::ranges::sort(keyed_facts, {}, &KeyedFact::key);
   batch.facts.reserve(keyed_facts.size());
-  for (auto& keyed : keyed_facts) {
+  for (auto &keyed : keyed_facts) {
     batch.facts.push_back(std::move(keyed.fact));
   }
-  batch.facts.erase(
-      std::ranges::unique(batch.facts,
-                          [](const AnalysisFact& left,
-                             const AnalysisFact& right) {
-                            return left.fact_id == right.fact_id;
-                          })
-          .begin(),
-      batch.facts.end());
+  batch.facts.erase(std::ranges::unique(batch.facts,
+                                        [](const AnalysisFact &left,
+                                           const AnalysisFact &right) {
+                                          return left.fact_id == right.fact_id;
+                                        })
+                        .begin(),
+                    batch.facts.end());
   std::ranges::sort(keyed_witnesses,
-                    [](const KeyedWitness& left, const KeyedWitness& right) {
+                    [](const KeyedWitness &left, const KeyedWitness &right) {
                       return std::tie(left.result_key, left.rule_id,
                                       left.input_key, left.input_ordinal) <
                              std::tie(right.result_key, right.rule_id,
                                       right.input_key, right.input_ordinal);
                     });
   batch.witnesses.reserve(keyed_witnesses.size());
-  for (auto& keyed : keyed_witnesses) {
+  for (auto &keyed : keyed_witnesses) {
     batch.witnesses.push_back(std::move(keyed.edge));
   }
   batch.witnesses.erase(std::ranges::unique(batch.witnesses).begin(),
@@ -248,14 +253,14 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   return batch;
 }
 
-AnalysisFactBus::AnalysisFactBus(wpa::WpaRunRepository& delivery_state)
+AnalysisFactBus::AnalysisFactBus(wpa::WpaRunRepository &delivery_state)
     : delivery_state_(delivery_state) {}
 
-void AnalysisFactBus::AddSink(std::string sink_id, AnalysisFactSink& sink) {
+void AnalysisFactBus::AddSink(std::string sink_id, AnalysisFactSink &sink) {
   sinks_.emplace_back(std::move(sink_id), &sink);
 }
 
-Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
+Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
   // The supplied batch id must equal the recomputed canonical id, so a tampered
   // or mis-assembled batch is rejected before it reaches any sink.
   if (batch.batch_id != DeriveBatchId(batch)) {
@@ -270,7 +275,7 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
     return Status::FailedPrecondition("duplicate expected component");
   }
   std::set<wpa::WpaComponentKey> completed;
-  for (const auto& completion : batch.completed_components) {
+  for (const auto &completion : batch.completed_components) {
     if (!completed.insert(completion.key).second) {
       return Status::FailedPrecondition("duplicate completed component");
     }
@@ -282,9 +287,9 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
 
   // Stable fact identity: every fact's ID matches its semantic row, and no two
   // facts share an ID.
-  std::set<core::StableId> fact_ids;
-  std::set<std::string> published_keys;
-  for (const auto& fact : batch.facts) {
+  std::map<core::StableId, std::size_t> fact_index;
+  for (std::size_t i = 0; i < batch.facts.size(); ++i) {
+    const auto &fact = batch.facts[i];
     auto derived = MakeFact(fact.row);
     if (!derived.ok()) {
       return derived.status();
@@ -292,75 +297,89 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
     if (derived->fact_id != fact.fact_id) {
       return Status::FailedPrecondition("fact_id does not match its row");
     }
-    if (!fact_ids.insert(fact.fact_id).second) {
+    if (!fact_index.emplace(fact.fact_id, i).second) {
       return Status::FailedPrecondition("duplicate fact_id " +
                                         core::ToString(fact.fact_id) +
                                         " for row " + RenderRow(fact.row));
     }
-    published_keys.insert(EncodeSemanticKey(fact.row));
   }
 
   // Rooted witness closure: every published fact has a derivation, and every
   // witness leaf is either another published fact or a declared rooted input.
-  std::set<std::string> witnessed_keys;
-  for (const auto& edge : batch.witnesses) {
-    witnessed_keys.insert(EncodeSemanticKey(edge.result.row));
+  const std::set<core::StableId> roots(batch.rooted_input_fact_ids.begin(),
+                                       batch.rooted_input_fact_ids.end());
+  constexpr std::size_t kNoFact = std::numeric_limits<std::size_t>::max();
+  struct WitnessEndpoints {
+    std::size_t result = kNoFact;
+    std::size_t input = kNoFact;
+  };
+  std::vector<WitnessEndpoints> endpoints;
+  endpoints.reserve(batch.witnesses.size());
+  std::vector<bool> witnessed(batch.facts.size(), false);
+  bool input_outside_root_set = false;
+  bool result_outside_published_set = false;
+  for (const auto &edge : batch.witnesses) {
+    auto result = MakeFact(edge.result.row);
+    if (!result.ok()) {
+      return result.status();
+    }
+    auto input = MakeFact(edge.input.row);
+    if (!input.ok()) {
+      return input.status();
+    }
+
+    WitnessEndpoints refs;
+    const auto result_it = fact_index.find(result->fact_id);
+    if (result_it == fact_index.end() ||
+        batch.facts[result_it->second].row != edge.result.row) {
+      result_outside_published_set = true;
+    } else {
+      refs.result = result_it->second;
+      witnessed[refs.result] = true;
+    }
+
+    const auto input_it = fact_index.find(input->fact_id);
+    if (input_it != fact_index.end() &&
+        batch.facts[input_it->second].row == edge.input.row) {
+      refs.input = input_it->second;
+    } else if (!roots.contains(input->fact_id)) {
+      input_outside_root_set = true;
+    }
+    endpoints.push_back(refs);
   }
-  for (const auto& fact : batch.facts) {
-    if (!witnessed_keys.contains(EncodeSemanticKey(fact.row))) {
+  for (bool has_witness : witnessed) {
+    if (!has_witness) {
       return Status::FailedPrecondition("fact without a closed witness");
     }
   }
-
-  std::set<core::StableId> roots(batch.rooted_input_fact_ids.begin(),
-                                 batch.rooted_input_fact_ids.end());
-  for (const auto& edge : batch.witnesses) {
-    const std::string input_key = EncodeSemanticKey(edge.input.row);
-    if (published_keys.contains(input_key)) {
-      continue;
-    }
-    auto derived = MakeFact(edge.input.row);
-    if (!derived.ok()) {
-      return derived.status();
-    }
-    if (!roots.contains(derived->fact_id)) {
-      return Status::FailedPrecondition("witness leaf outside the root set");
-    }
+  if (input_outside_root_set) {
+    return Status::FailedPrecondition("witness leaf outside the root set");
   }
-
-  // Every witness result must be a published fact.
-  for (const auto& edge : batch.witnesses) {
-    if (!published_keys.contains(EncodeSemanticKey(edge.result.row))) {
-      return Status::FailedPrecondition(
-          "witness result is not a published fact");
-    }
+  if (result_outside_published_set) {
+    return Status::FailedPrecondition("witness result is not a published fact");
   }
 
   // The witness DAG must be acyclic: every published fact's proof is a finite
   // tree rooted in declared inputs. A cycle would let a fact justify itself.
-  std::map<std::string, std::vector<std::string>> dependencies;
-  std::map<std::string, int> input_count;
-  for (const auto& fact : batch.facts) {
-    input_count[EncodeSemanticKey(fact.row)] = 0;
-  }
-  for (const auto& edge : batch.witnesses) {
-    const std::string result_key = EncodeSemanticKey(edge.result.row);
-    const std::string input_key = EncodeSemanticKey(edge.input.row);
-    if (input_count.contains(input_key)) {
-      dependencies[input_key].push_back(result_key);
-      input_count[result_key] += 1;
+  std::vector<std::vector<std::size_t>> dependencies(batch.facts.size());
+  std::vector<std::size_t> input_count(batch.facts.size(), 0);
+  for (const auto &edge : endpoints) {
+    if (edge.input != kNoFact) {
+      dependencies[edge.input].push_back(edge.result);
+      ++input_count[edge.result];
     }
   }
-  std::vector<std::string> ready;
-  for (const auto& [key, count] : input_count) {
-    if (count == 0) {
-      ready.push_back(key);
+  std::vector<std::size_t> ready;
+  ready.reserve(batch.facts.size());
+  for (std::size_t i = 0; i < input_count.size(); ++i) {
+    if (input_count[i] == 0) {
+      ready.push_back(i);
     }
   }
   std::size_t processed = 0;
   for (std::size_t i = 0; i < ready.size(); ++i) {
     ++processed;
-    for (const auto& dependent : dependencies[ready[i]]) {
+    for (const auto &dependent : dependencies[ready[i]]) {
       if (--input_count[dependent] == 0) {
         ready.push_back(dependent);
       }
@@ -373,13 +392,13 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch& batch) const {
   return Status::Ok();
 }
 
-Status AnalysisFactBus::Publish(AnalysisFactBatch batch) const {
+Status AnalysisFactBus::Publish(const AnalysisFactBatch &batch) const {
   Status valid = Validate(batch);
   if (!valid.ok()) {
     return valid;
   }
 
-  summarydb::MetadataStore& store = delivery_state_.metadata_store();
+  summarydb::MetadataStore &store = delivery_state_.metadata_store();
   Status schema = EnsureDeliveryTable(store);
   if (!schema.ok()) {
     return schema;
@@ -388,7 +407,7 @@ Status AnalysisFactBus::Publish(AnalysisFactBatch batch) const {
   const std::string run_id = core::ToString(batch.run.run_id);
   const std::string batch_id = core::ToString(batch.batch_id);
 
-  for (const auto& [sink_id, sink] : sinks_) {
+  for (const auto &[sink_id, sink] : sinks_) {
     auto delivered = IsDelivered(store, run_id, batch_id, sink_id);
     if (!delivered.ok()) {
       return delivered.status();
@@ -408,4 +427,4 @@ Status AnalysisFactBus::Publish(AnalysisFactBatch batch) const {
   return Status::Ok();
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
