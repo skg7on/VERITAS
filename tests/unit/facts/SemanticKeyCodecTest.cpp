@@ -151,5 +151,38 @@ TEST(SemanticKeyCodecTest, RejectsKeyWithoutVersionPrefix) {
                    .ok());
 }
 
+// The append primitives exist so a hot caller can encode without allocating per
+// row. A caller that appends must never observe different bytes than a caller
+// that takes the returned string, including for empty, signed, and
+// delimiter-like values.
+TEST(SemanticKeyCodecTest, AppendFieldMatchesReturnedEncoding) {
+  const std::vector<std::pair<KeyFieldTag, std::string>> cases = {
+      {KeyFieldTag::kId, "func:sha256:aa"},
+      {KeyFieldTag::kId, ""},
+      {KeyFieldTag::kSymbol, "GlobalFlow"},
+      {KeyFieldTag::kSymbol, ":1:|"},
+      {KeyFieldTag::kNumber, "-5"},
+      {KeyFieldTag::kUnsigned, "18446744073709551615"},
+      {KeyFieldTag::kEnum, "0"},
+  };
+  for (const auto& [tag, value] : cases) {
+    std::string appended;
+    AppendField(&appended, tag, value);
+    EXPECT_EQ(appended, EncodeField(tag, value)) << "value=" << value;
+  }
+}
+
+TEST(SemanticKeyCodecTest, AppendKeyHeaderMatchesReturnedEncoding) {
+  std::string appended;
+  AppendKeyHeader(&appended, "ReachableCall", 3);
+  EXPECT_EQ(appended, EncodeKeyHeader("ReachableCall", 3));
+
+  // Appending onto a non-empty buffer must extend it, not restart it, so one
+  // buffer can carry several concatenated keys.
+  std::string extended = "sentinel";
+  AppendKeyHeader(&extended, "ReachableCall", 3);
+  EXPECT_EQ(extended, "sentinel" + EncodeKeyHeader("ReachableCall", 3));
+}
+
 }  // namespace
 }  // namespace veritas::facts

@@ -82,6 +82,12 @@ Status ValidateSemanticRow(const SemanticRow& row);
 // dense-ID domain, and canonical unknown-range payloads.
 Status ValidateExecutionRow(const ExecutionRow& row);
 
+// Validates a semantic row and derives its witness-independent fact ID without
+// materializing the row. `MakeFact` is this plus a copy of the row, so a caller
+// that only needs the identity -- validation and persistence both do -- does
+// not pay for a row copy per fact.
+StatusOr<core::StableId> DeriveFactId(const SemanticRow& row);
+
 // Validates a semantic row and derives its witness-independent fact ID.
 StatusOr<AnalysisFact> MakeFact(const SemanticRow& row);
 

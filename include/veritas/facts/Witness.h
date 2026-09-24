@@ -93,6 +93,12 @@ struct RawWpaEvaluation {
 // column shape never collide.
 std::string EncodeSemanticKey(const SemanticRow& row);
 
+// Appends the same canonical encoding to `out`. `EncodeSemanticKey` is this
+// function plus a fresh string, so a caller that already owns a scratch buffer
+// can encode a row without allocating one per row. Callers that only feed the
+// bytes to a hash (the batch id derives from every row) should use this.
+void AppendSemanticKey(std::string* out, const SemanticRow& row);
+
 }  // namespace veritas::facts
 
 #endif  // VERITAS_FACTS_WITNESS_H_
