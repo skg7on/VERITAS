@@ -14,6 +14,7 @@
 
 #include "veritas/wpa/WpaOrchestrator.h"
 
+#include <cstddef>
 #include <map>
 #include <set>
 #include <string>
@@ -35,10 +36,15 @@ namespace {
 // Gathers the facts completed for each successor SCC of `scc_id`, restricted to
 // the component's relation domain, which become the successor support the
 // materializer turns into support relations.
+//
+// The facts are read from the completed component results the batch is already
+// keeping, not from a parallel copy. A second copy of every component's facts
+// is a whole payload's worth of resident memory held for the entire run, and
+// the completed results outlive the run's last materialization anyway.
 std::vector<facts::AnalysisFact> SuccessorSupport(
     const SccGraph& scc_graph, core::StableId scc_id, WpaComponentKind component,
-    const std::map<WpaComponentKey, std::vector<facts::AnalysisFact>>&
-        completed_facts) {
+    const std::vector<WpaComponentCompletion>& completed,
+    const std::map<WpaComponentKey, std::size_t>& completed_index) {
   std::set<facts::RelationId> expected;
   for (const auto& domain : ComponentDomains(component)) {
     if (domain.support.has_value()) {
@@ -51,11 +57,11 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
     return support;
   }
   for (const auto& successor : *successors) {
-    auto it = completed_facts.find(WpaComponentKey{successor, component});
-    if (it == completed_facts.end()) {
+    const auto it = completed_index.find(WpaComponentKey{successor, component});
+    if (it == completed_index.end()) {
       continue;
     }
-    for (const auto& fact : it->second) {
+    for (const auto& fact : completed[it->second].result.facts) {
       if (expected.contains(fact.row.relation)) {
         support.push_back(fact);
       }
@@ -159,7 +165,9 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
     }
   }
 
-  std::map<WpaComponentKey, std::vector<facts::AnalysisFact>> completed_facts;
+  // Where each completed component's result lives in `result.completed_components`,
+  // which is the single owner of every component's facts and witnesses.
+  std::map<WpaComponentKey, std::size_t> completed_index;
 
   for (const auto& scc_id : scc_order) {
     for (const auto component : request.components) {
@@ -176,8 +184,9 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
       materialization.scc_graph = &*scc_graph;
       // Keep the successor support alive for the duration of Build: the span
       // stored in the request points into this vector.
-      std::vector<facts::AnalysisFact> successor_support =
-          SuccessorSupport(*scc_graph, scc_id, component, completed_facts);
+      std::vector<facts::AnalysisFact> successor_support = SuccessorSupport(
+          *scc_graph, scc_id, component, result.completed_components,
+          completed_index);
       materialization.successor_support = successor_support;
       materialization.models = request.models;
 
@@ -236,19 +245,20 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
         component_result = MakeResult(envelope.logical, *canonical);
       }
 
+      // The completion takes ownership of the payload, so the local result is
+      // moved rather than copied and read through the completion afterwards.
       auto completion = repository_.StoreSuccessfulComponent(
-          request.run, key, component_result);
+          request.run, key, std::move(component_result));
       if (!completion.ok()) {
         repository_.MarkIncomplete(request.run);
         return completion.status();
       }
-      result.completed_components.push_back(std::move(*completion));
 
       // Incremental propagation: a changed externally visible hash schedules
       // the component's predecessors through the M7 scheduler.
       if (scc_state_ != nullptr) {
         auto change =
-            scc_state_->StoreState(context, ToSccResult(component_result));
+            scc_state_->StoreState(context, ToSccResult(completion->result));
         if (!change.ok()) {
           repository_.MarkIncomplete(request.run);
           return change.status();
@@ -268,7 +278,8 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
         }
       }
 
-      completed_facts[key] = std::move(component_result.facts);
+      completed_index[key] = result.completed_components.size();
+      result.completed_components.push_back(std::move(*completion));
     }
   }
 

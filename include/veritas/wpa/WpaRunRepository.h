@@ -119,10 +119,13 @@ class WpaRunRepository {
       const ResultCacheDescriptor& descriptor);
 
   // Stores a successful component result: the immutable object, the cache row,
-  // and the run's component state, in one transaction.
+  // and the run's component state, in one transaction. The returned completion
+  // owns the payload; a caller that has no further use for its own copy should
+  // pass it by move rather than paying for a second copy of every fact and
+  // witness in the run.
   StatusOr<WpaComponentCompletion> StoreSuccessfulComponent(
       const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
-      const WpaComponentResult& result);
+      WpaComponentResult result);
 
   // Records a failed component with diagnostics; publishes no result.
   Status RecordComponentFailure(const facts::AnalysisRunManifest& run,
