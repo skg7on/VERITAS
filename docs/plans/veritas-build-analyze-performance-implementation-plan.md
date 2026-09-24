@@ -23,15 +23,21 @@ RocksDB, SQLite, CMake/Ninja, GoogleTest.
 
 **Tracking:** [GitHub issue #133](https://github.com/skg7on/VERITAS/issues/133)
 
-**Current status (2026-09-22):** Tasks 1-3 and the bounded persistence,
-streaming-hash, non-copying handoff, and compact-validation refinements are
-implemented. Functional verification is green, but the latest fresh benchmark
-still takes 519.84 seconds at 8.60 GiB RSS. A receipt-reuse diagnostic after
-the latest memory refinements takes 327.66 seconds at 7.18 GiB RSS, proving
-that keyed witness assembly remains the dominant memory problem while
-first-time persistence contributes roughly 199 seconds. The acceptance task
-therefore remains open; see design specification section 9.4 for measurements
-and the next refinement targets.
+**Current status (2026-09-24):** Tasks 1-3 and two rounds of refinement are
+implemented. A second round removed the per-row copies and per-row
+allocations in identity derivation, key encoding, batch-id hashing, and
+witness-id derivation; gave the completion sole ownership of its payload;
+and published facts and provenance through multi-row statements. The fresh
+benchmark improved from 519.84 s at 8.60 GiB to 490.42 s at 6.14 GiB, and
+every published table hashes byte for byte identically to the pre-change run
+(design specification section 9.5 lists the digests).
+
+Both acceptance limits are still missed. Sampling the resident set during a
+fresh run shows the peak occurs at about 60% of wall time, while WPA results
+accumulate and before any row is written: the run retains every component's
+facts and witnesses until the whole batch is assembled. Reaching 4 GiB means
+not retaining all payloads at once, which design section 5 and rejected
+alternative 11.3 leave outside this change. Task 4 remains open.
 
 ## Global Constraints
 

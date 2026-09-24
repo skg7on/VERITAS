@@ -334,8 +334,7 @@ timing assertion.
 ### 9.4 Implementation status (2026-09-22)
 
 The bounded implementation is functionally complete, but the LevelDB
-performance acceptance criterion is not yet met. The current branch preserves
-the original CPG projection, WPA run ID, and fact-batch ID while implementing:
+performance acceptance criterion is not met. The branch implements:
 
 - direct digest encoding and incremental SHA-256 hashing;
 - one run-scoped summary index;
@@ -353,29 +352,95 @@ Measured results on the reference machine are:
 | + non-copying bus handoff | receipt reuse | 313.40 s | 7.61 GiB | isolates pre-insert peak |
 | + streaming batch hash and compact validation | receipt reuse | 327.66 s | 7.18 GiB | memory improved; still over limit |
 
-The receipt-reuse measurements intentionally skip the approximately 4.13
-million fact/provenance row writes. They show that the remaining memory peak is
-created before database insertion, primarily by the canonical witness payload
-and keyed batch-assembly intermediates. Comparing the fresh and receipt-reuse
-runs also attributes about 199 seconds to first-time persistence. The existing
-receipt retained the same
-`fact:sha256:ee83dca021fbdc9da471c1d4791c9e2c8cea446913af3dac6e90520299cc9253`
-batch ID after incremental hashing, confirming byte-identical canonical
-identity for this workload.
+### 9.5 Refinement round 2 (2026-09-24)
 
-Further refinement should therefore focus on two independent areas:
+Five further refinements were implemented and measured against the state above:
 
-1. Replace the per-witness encoded sort-key duplication in
-   `MakeAnalysisFactBatch` with a compact or streaming canonicalization
-   strategy, and release stripped component-vector capacity as soon as it is
-   no longer needed.
-2. Add schema-aware bulk persistence for facts, bindings, provenance nodes,
-   and provenance edges while preserving the single atomic receipt
-   transaction and schema-v4 contents.
+- identity is derived without copying the row (`DeriveFactId`), and semantic
+  keys are appended into one reusable buffer (`AppendSemanticKey`) rather than
+  returned as a fresh string per row, so validation and hashing stop
+  materializing a row copy per fact and per witness endpoint;
+- per-witness ordering keys live in one packed arena instead of a `std::string`
+  per endpoint, stripped component payload vectors release their capacity
+  instead of only their elements, and the batch-id hash streams every row
+  through one scratch buffer;
+- a successful component is stored by move, and successor support reads the
+  completed results instead of a second copy of every component's facts;
+- witness ids stream their fields into the hash instead of first copying every
+  input row into a temporary vector;
+- facts, bindings, and provenance nodes and edges are published through
+  `BulkInsertBatcher`, which emits multi-row statements sized from the
+  connection's own bind-parameter limit and preserves the ordering that
+  AUTOINCREMENT identities depend on. The receipt still commits with the rows
+  it accounts for, and facts are still flushed before any binding that a
+  foreign key depends on.
 
-A new fresh-output benchmark is required after those refinements. Until both
-the 375-second and 4-GiB limits pass together, issue #133 remains open and this
-work must not be reported as meeting performance acceptance.
+| Revision state | Output mode | Wall time | Peak resident memory | Result |
+| --- | --- | ---: | ---: | --- |
+| round 1 head | fresh | 519.84 s | 8.60 GiB | misses both limits |
+| + round 2 refinements | fresh | 490.42 s | 6.14 GiB | misses both limits |
+| + round 2 refinements (repeat) | fresh | 486 s | 7.38 GiB sampled | misses both limits |
+
+Peak memory is reported by `/usr/bin/time -lp` as "maximum resident set size";
+the repeat run was sampled every five seconds instead, and the two metrics
+disagree, so the range is quoted rather than a single value.
+
+**Published content is unchanged.** Ordered dumps of the four published tables
+hash identically before and after this round, byte for byte:
+
+| Table | Rows | SHA-256 of the ordered dump |
+| --- | ---: | --- |
+| `analysis_facts` | 1,249,792 | `452a850ec90ab192a2e5cde28269067f06f4618338675c26c870cac466e41cda` |
+| `run_fact_bindings` | 752,076 | `bab0a696647ffb25c6c6a5fb04b086ae3b9cf1af20a15ecd8929457ef71c8282` |
+| `provenance_nodes` | 752,076 | `387d299985baf5e8c3467efdc2edc84976ea4fce6ae767a6d7036dbfe63277ba` |
+| `provenance_edges` | 1,375,911 | `da4829f280ade0b82da2e1a537896c6c796a932cbfd6c8f439e5b09a05121f0a` |
+
+**Run and batch identity moved, and not because of a semantic change.**
+`engine_toolchain_identity` incorporates the SHA-256 of the compiled Souffle
+functor library, and this round edits `SemanticKeyCodec.cpp`, which is compiled
+into that library. A byte-for-byte equivalent refactor of that source therefore
+changes the functor library's hash, the engine toolchain identity
+(`souffle-628f2b13...` to `souffle-ae3b37bf...`), the analysis run id
+(`run:sha256:be1ef973...` to `run:sha256:ce2bddbe...`), and, because the batch
+id covers the run id, the batch id
+(`fact:sha256:ee83dca0...` to `fact:sha256:76dcc885...`). The new identity equals
+the build's own `canonical_provenance_sha256`. Any edit to the functor library
+has this effect; it is a property of the identity scheme, not of these changes.
+
+**The peak is the retained component payload, not publication.** Sampling the
+resident set every five seconds during a fresh run gives:
+
+| Elapsed | Resident set | Phase |
+| ---: | ---: | --- |
+| 60 s | 1.24 GiB | ingestion and local summaries |
+| 75 s | 3.42 GiB | SVF construction |
+| 296 s | 7.38 GiB | peak, during WPA while component results accumulate |
+| 486 s | 6.53 GiB | end of run, after assembly released its ordering keys |
+
+Memory climbs monotonically with completed components and peaks well before any
+row is written. The run holds every component's canonical facts and witnesses
+from the moment the component completes until the batch is assembled, because
+successor support may need any of them until the last predecessor has run. At
+1,249,792 facts and 1,375,911 witness edges that retention, plus SVF's
+high-water mark, is the floor. Nothing that reduces assembly intermediates,
+duplication, or statement overhead can move it.
+
+Reaching 4 GiB therefore requires not retaining all component payloads at once:
+each component would have to fold into the batch as it completes, or the batch
+would have to be assembled by reloading component payloads from the
+content-addressed component store. Both change execution order, failure
+isolation, component caching, and result ownership, which design section 5 and
+rejected alternative 11.3 place outside this change. Of the two, reloading for
+assembly is the smaller step: it preserves execution order and adds one read per
+component, at the cost of re-reading roughly the payload's worth of bytes.
+
+The measured 490.42 s is 115 s over the time limit. Bulk persistence removed the
+per-statement overhead of about 4.9 million statements, but the remaining time
+is dominated by the 13,716 component executions and by SVF construction, which
+this change does not touch.
+
+Until both the 375-second and 4-GiB limits pass together, issue #133 remains
+open and this work must not be reported as meeting performance acceptance.
 
 ## 10. Risks and Mitigations
 
