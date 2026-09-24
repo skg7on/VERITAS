@@ -554,10 +554,14 @@ crashes, timeouts, failures, or skips.
 
 ```bash
 python3 tests/qualification/M9EntryGateTest.py
+# --test-dir makes ctest resolve --output-junit relative to the test
+# directory, so the report lands at build/wpa-qualification.xml.
 ctest --test-dir build -L wpa-qualification --no-tests=error \
-  --output-on-failure --output-junit build/wpa-qualification.xml
+  --output-on-failure --output-junit wpa-qualification.xml
+# --expect takes the exact label membership, comma-separated.
 python3 tests/qualification/check_no_skips.py \
-  build/wpa-qualification.xml --label wpa-qualification
+  build/wpa-qualification.xml \
+  --expect WpaDifferentialQualificationTest,WpaDeterminismQualificationTest,WpaFailureQualificationTest,WpaMigrationQualificationTest,WpaPerformanceQualificationTest
 python3 tools/check_m9_entry.py --build-dir build
 ```
 
