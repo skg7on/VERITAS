@@ -388,9 +388,13 @@ inherited from the previous session had been configured with `/usr/bin/c++`
 change under test between those two compilers, so only same-configuration pairs
 are comparable.
 
-The controlled pair rebuilds the immediately preceding commit (`1ba7d2b`) and
-the current head on the documented clean Debug configuration, and runs each
-against a fresh output directory with `/usr/bin/time -lp`:
+The controlled pair measures the immediately preceding commit (`1ba7d2b`) and
+the current head in one build tree configured with the documented toolchain,
+rebuilt between revisions, and runs each against a fresh output directory with
+`/usr/bin/time -lp`. Both members were taken under the same conditions, so the
+difference between them is the change; the absolute values also carry the
+machine load of a development host whose Spotlight and XProtect daemons run
+while the measurement does:
 
 | Revision | Host compiler | Wall time | Peak resident memory |
 | --- | --- | ---: | ---: |
@@ -478,3 +482,19 @@ buffer, and the released component capacity all remain.
 
 Until both the 375-second and 4-GiB limits pass together, issue #133 remains
 open and this work must not be reported as meeting performance acceptance.
+
+#### 9.5.6 Verification on the final revision
+
+A clean rebuild of this revision succeeds, `ninja` reports no remaining work,
+and the full CTest suite passes 789 of 789 with no failures, skips, or
+not-run tests. The M9 entry gate reports all ten criteria passing, the
+qualification label passes its five aggregates with exact membership, and
+`git diff --check` and the license-header check are clean.
+
+One caution for whoever runs the gates next: on this machine the heaviest
+integration tests carry a 120-second CTest timeout that macOS background
+daemons can exceed. `ProjectAnalyzerWpaTest` and `CpgEndToEndTest` both
+timed out in gate runs while the machine was indexing the freshly built tree,
+and both pass in isolation and in a subsequent full-suite run in 17 and 10
+seconds respectively. A timeout in those two is worth re-running before it is
+treated as a regression.
