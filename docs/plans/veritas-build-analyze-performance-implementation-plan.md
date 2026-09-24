@@ -24,13 +24,19 @@ RocksDB, SQLite, CMake/Ninja, GoogleTest.
 **Tracking:** [GitHub issue #133](https://github.com/skg7on/VERITAS/issues/133)
 
 **Current status (2026-09-24):** Tasks 1-3 and two rounds of refinement are
-implemented. A second round removed the per-row copies and per-row
+implemented. The second round removed the per-row copies and per-row
 allocations in identity derivation, key encoding, batch-id hashing, and
 witness-id derivation; gave the completion sole ownership of its payload;
-and published facts and provenance through multi-row statements. The fresh
-benchmark improved from 519.84 s at 8.60 GiB to 490.42 s at 6.14 GiB, and
-every published table hashes byte for byte identically to the pre-change run
-(design specification section 9.5 lists the digests).
+released the stripped component capacity; and published facts and provenance
+through multi-row statements.
+
+Measured as a controlled pair on the documented clean Debug configuration
+(clang 17.0.6, the host compiler CLAUDE.md fixes for this machine), this round
+takes peak resident memory from 7.22 GiB to 6.85 GiB and leaves wall time
+unchanged at about 600 s. Every published table hashes byte for byte
+identically to the pre-change run; design specification section 9.5 lists the
+digests, the compilers, an ordering-key experiment that was measured and
+reverted, and the identity movement the functor library's hash causes.
 
 Both acceptance limits are still missed. Sampling the resident set during a
 fresh run shows the peak occurs at about 60% of wall time, while WPA results

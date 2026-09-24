@@ -354,39 +354,67 @@ Measured results on the reference machine are:
 
 ### 9.5 Refinement round 2 (2026-09-24)
 
-Five further refinements were implemented and measured against the state above:
+A second refinement round is implemented. It removes work that the previous
+round left in the hot path:
 
 - identity is derived without copying the row (`DeriveFactId`), and semantic
-  keys are appended into one reusable buffer (`AppendSemanticKey`) rather than
+  keys are appended into a caller-owned buffer (`AppendSemanticKey`) rather than
   returned as a fresh string per row, so validation and hashing stop
   materializing a row copy per fact and per witness endpoint;
-- per-witness ordering keys live in one packed arena instead of a `std::string`
-  per endpoint, stripped component payload vectors release their capacity
-  instead of only their elements, and the batch-id hash streams every row
-  through one scratch buffer;
-- a successful component is stored by move, and successor support reads the
-  completed results instead of a second copy of every component's facts;
+- the batch-id hash streams every row through one scratch buffer instead of
+  building a key string per row twice over;
+- a successful component is stored by move, so the completion owns the one copy
+  of its facts and witnesses, and successor support reads the completed results
+  instead of a second copy of every component's facts;
 - witness ids stream their fields into the hash instead of first copying every
-  input row into a temporary vector;
+  input row into a temporary vector, and each witness edge's input identity is
+  read from the ref that already carries it rather than re-derived per use;
+- stripped component payload vectors release their capacity, not only their
+  elements;
 - facts, bindings, and provenance nodes and edges are published through
   `BulkInsertBatcher`, which emits multi-row statements sized from the
   connection's own bind-parameter limit and preserves the ordering that
-  AUTOINCREMENT identities depend on. The receipt still commits with the rows
-  it accounts for, and facts are still flushed before any binding that a
-  foreign key depends on.
+  AUTOINCREMENT identities depend on. The receipt still commits with the rows it
+  accounts for, and facts are still flushed before any binding that a foreign
+  key depends on.
 
-| Revision state | Output mode | Wall time | Peak resident memory | Result |
-| --- | --- | ---: | ---: | --- |
-| round 1 head | fresh | 519.84 s | 8.60 GiB | misses both limits |
-| + round 2 refinements | fresh | 490.42 s | 6.14 GiB | misses both limits |
-| + round 2 refinements (repeat) | fresh | 486 s | 7.38 GiB sampled | misses both limits |
+#### 9.5.1 Measurements
 
-Peak memory is reported by `/usr/bin/time -lp` as "maximum resident set size";
-the repeat run was sampled every five seconds instead, and the two metrics
-disagree, so the range is quoted rather than a single value.
+The build configuration materially changes both numbers, and the earlier
+round's numbers were not taken under the documented one. `CLAUDE.md` fixes the
+host compiler for this machine as llvm@17 (clang 17.0.6); the build directory
+inherited from the previous session had been configured with `/usr/bin/c++`
+(AppleClang 21) instead. Peak memory and wall time both differ by more than the
+change under test between those two compilers, so only same-configuration pairs
+are comparable.
 
-**Published content is unchanged.** Ordered dumps of the four published tables
-hash identically before and after this round, byte for byte:
+The controlled pair rebuilds the immediately preceding commit (`1ba7d2b`) and
+the current head on the documented clean Debug configuration, and runs each
+against a fresh output directory with `/usr/bin/time -lp`:
+
+| Revision | Host compiler | Wall time | Peak resident memory |
+| --- | --- | ---: | ---: |
+| `1ba7d2b` (before this round) | clang 17.0.6 | 595.65 s | 7.22 GiB |
+| head (after this round) | clang 17.0.6 | 600.88 s | 6.85 GiB |
+
+For continuity with section 9.4, the same pair was also measured on the
+inherited AppleClang 21 build directory, which is **not** comparable to a clean
+acceptance run:
+
+| Revision | Host compiler | Wall time | Peak resident memory |
+| --- | --- | ---: | ---: |
+| before this round | AppleClang 21 | 519.84 s | 8.60 GiB |
+| after this round | AppleClang 21 | 490.42 s | 6.14 GiB |
+
+So under the documented configuration this round reduces peak resident memory by
+about 0.37 GiB and leaves wall time unchanged within measurement noise. Both
+acceptance limits are missed by a wide margin: 600.88 s against 375 s, and
+6.85 GiB against 4 GiB.
+
+#### 9.5.2 Published content is unchanged
+
+Ordered dumps of the four published tables hash identically before and after
+this round, byte for byte, and identically under both host compilers:
 
 | Table | Rows | SHA-256 of the ordered dump |
 | --- | ---: | --- |
@@ -395,20 +423,23 @@ hash identically before and after this round, byte for byte:
 | `provenance_nodes` | 752,076 | `387d299985baf5e8c3467efdc2edc84976ea4fce6ae767a6d7036dbfe63277ba` |
 | `provenance_edges` | 1,375,911 | `da4829f280ade0b82da2e1a537896c6c796a932cbfd6c8f439e5b09a05121f0a` |
 
-**Run and batch identity moved, and not because of a semantic change.**
+#### 9.5.3 Run and batch identity moved, and not because of a semantic change
+
 `engine_toolchain_identity` incorporates the SHA-256 of the compiled Souffle
 functor library, and this round edits `SemanticKeyCodec.cpp`, which is compiled
 into that library. A byte-for-byte equivalent refactor of that source therefore
 changes the functor library's hash, the engine toolchain identity
 (`souffle-628f2b13...` to `souffle-ae3b37bf...`), the analysis run id
 (`run:sha256:be1ef973...` to `run:sha256:ce2bddbe...`), and, because the batch
-id covers the run id, the batch id
-(`fact:sha256:ee83dca0...` to `fact:sha256:76dcc885...`). The new identity equals
-the build's own `canonical_provenance_sha256`. Any edit to the functor library
-has this effect; it is a property of the identity scheme, not of these changes.
+id covers the run id, the batch id (`fact:sha256:ee83dca0...` to
+`fact:sha256:76dcc885...`). The new identity equals the build's own
+`canonical_provenance_sha256`. Any edit to the functor library has this effect;
+it is a property of the identity scheme, not of these changes. The four digests
+in section 9.5.2 are the evidence that no semantic output moved with it.
 
-**The peak is the retained component payload, not publication.** Sampling the
-resident set every five seconds during a fresh run gives:
+#### 9.5.4 The peak is the retained component payload
+
+Sampling the resident set every five seconds during a fresh run gives:
 
 | Elapsed | Resident set | Phase |
 | ---: | ---: | --- |
@@ -429,65 +460,21 @@ Reaching 4 GiB therefore requires not retaining all component payloads at once:
 each component would have to fold into the batch as it completes, or the batch
 would have to be assembled by reloading component payloads from the
 content-addressed component store. Both change execution order, failure
-isolation, component caching, and result ownership, which design section 5 and
-rejected alternative 11.3 place outside this change. Of the two, reloading for
-assembly is the smaller step: it preserves execution order and adds one read per
+isolation, component caching, and result ownership, which section 5 and rejected
+alternative 11.3 place outside this change. Of the two, reloading for assembly
+is the smaller step: it preserves execution order and adds one read per
 component, at the cost of re-reading roughly the payload's worth of bytes.
 
-The measured 490.42 s is 115 s over the time limit. Bulk persistence removed the
-per-statement overhead of about 4.9 million statements, but the remaining time
-is dominated by the 13,716 component executions and by SVF construction, which
-this change does not touch.
+#### 9.5.5 A rejected refinement
+
+Packing every ordering key into one `std::string` was implemented, measured, and
+reverted. It saves the header and allocation each `std::string` spends, but a
+single 878 MB string doubles as it grows, so its capacity overshoots the bytes
+it holds and its last reallocation briefly holds one and a half copies.
+Measured against the same preceding commit on the same toolchain it raised peak
+resident memory from 7.22 GiB to 7.46-7.52 GiB, so on a workload whose binding
+limit is memory it was the wrong trade. Per-item keys, the encoding scratch
+buffer, and the released component capacity all remain.
 
 Until both the 375-second and 4-GiB limits pass together, issue #133 remains
 open and this work must not be reported as meeting performance acceptance.
-
-## 10. Risks and Mitigations
-
-| Risk | Mitigation |
-| --- | --- |
-| Index outlives or mismatches its summary storage | Non-owning index records source data pointer and size; indexed build validates `Covers` on every call. |
-| Moving facts changes canonical ownership | Component completions are sorted before moving; existing ownership tests run in both original and reversed input order. |
-| Stripped completion payload breaks M9 | M9's documented completion contract is key + object/hash metadata; canonical payloads remain in batch facts/witnesses/diagnostics. |
-| Cached sort keys change ordering | Keys use the same `EncodeSemanticKey`, rule, input, and ordinal sequence as the current comparator. |
-| Faster hex encoding changes IDs | Exact known-output and round-trip tests prove byte-for-byte equivalence. |
-| Optimization hides a larger Soufflé-process cost | SCC batching remains out of scope and is evaluated only if the bounded changes miss the acceptance target. |
-
-## 11. Rejected Alternatives
-
-### 11.1 Select the C++ emergency engine by default
-
-Rejected because Soufflé is the mandatory production WPA engine. Changing the
-engine would alter provenance and evade rather than fix shared orchestration
-costs.
-
-### 11.2 Cache summary indices globally
-
-Rejected because process-global pointers would complicate lifetime, revision,
-and concurrency safety. One run-scoped index removes the repeated work without
-new shared state.
-
-### 11.3 Batch all SCCs into one Soufflé invocation
-
-Potentially valuable, but architectural. It changes failure isolation,
-component caching, limits, result ownership, and incremental scheduling. It
-must be proposed separately if the bounded work misses the target.
-
-### 11.4 Add wall-clock assertions to CTest
-
-Rejected because timing thresholds are machine-dependent and flaky. CI proves
-semantic equivalence; the pinned LevelDB benchmark proves performance on the
-reference machine.
-
-## 12. Completion Criteria
-
-The work is complete only when:
-
-1. All goals and preserved contracts above are implemented.
-2. Targeted tests demonstrate red/green behavior for the new index and
-   consuming batch contract.
-3. The full clean build and full test suite pass with no failures or skips.
-4. `git diff --check` and the repository license-header check pass.
-5. The LevelDB benchmark meets both the wall-time and peak-RSS thresholds.
-6. The branch diff contains only this performance improvement and its tests and
-   documentation.
