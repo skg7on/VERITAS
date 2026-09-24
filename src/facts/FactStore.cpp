@@ -156,7 +156,23 @@ Status FactStore::PutFact(const AnalysisFact& fact) {
             RelationsV2().Get(fact.row.relation).name, HexEncode(serialized)});
 }
 
-Status FactStore::PutBinding(const RunFactBinding& binding) {
+Status FactStore::AppendFact(summarydb::BulkInsertBatcher& facts,
+                             const AnalysisFact& fact) {
+  auto proto = ToProtoFact(fact);
+  if (!proto.ok()) {
+    return proto.status();
+  }
+  std::string serialized;
+  if (!proto->SerializeToString(&serialized)) {
+    return Status::Internal("failed to serialize fact");
+  }
+  return facts.Add({core::ToString(fact.fact_id),
+                    RelationsV2().Get(fact.row.relation).name,
+                    HexEncode(serialized)});
+}
+
+Status FactStore::AppendBinding(summarydb::BulkInsertBatcher& bindings,
+                                const RunFactBinding& binding) {
   Status s = metadata_store_.Execute(
       "UPDATE run_fact_bindings SET is_current = 0"
       " WHERE run_id = ? AND fact_id = ? AND is_current = 1",
@@ -164,19 +180,13 @@ Status FactStore::PutBinding(const RunFactBinding& binding) {
   if (!s.ok()) {
     return s;
   }
-
-  const char* sql =
-      "INSERT INTO run_fact_bindings (run_id, fact_id, confidence,"
-      " producer_kind, analyzer_run_id, scope_kind, scope_id,"
-      " selected_witness_id, is_current) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)";
   const std::string confidence =
       binding.confidence.has_value() ? std::to_string(*binding.confidence) : "";
-  return metadata_store_.Execute(
-      sql,
-      {core::ToString(binding.run_id), core::ToString(binding.fact_id),
-       confidence, IntToString(static_cast<int>(binding.producer_kind)),
-       binding.analyzer_run_id, binding.scope_kind, binding.scope_id,
-       binding.selected_witness_id});
+  return bindings.Add({core::ToString(binding.run_id),
+                       core::ToString(binding.fact_id), confidence,
+                       IntToString(static_cast<int>(binding.producer_kind)),
+                       binding.analyzer_run_id, binding.scope_kind,
+                       binding.scope_id, binding.selected_witness_id, "1"});
 }
 
 Status FactStore::Publish(const AnalysisFactBatch& batch) {
@@ -259,17 +269,38 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
 
   // Canonical facts: the run's derived facts plus their rooted inputs, all
   // stored for display. Only the derived facts get an occurrence binding.
+  //
+  // Both loops write through bulk writers: a run publishes well over a million
+  // facts and bindings, and one statement per row is dominated by the
+  // per-statement step rather than by the row.
+  summarydb::BulkInsertBatcher facts(
+      metadata_store_,
+      "INSERT OR IGNORE INTO analysis_facts (fact_id, relation_name, cells_hex)"
+      " VALUES",
+      3);
+  summarydb::BulkInsertBatcher bindings(
+      metadata_store_,
+      "INSERT INTO run_fact_bindings (run_id, fact_id, confidence,"
+      " producer_kind, analyzer_run_id, scope_kind, scope_id,"
+      " selected_witness_id, is_current) VALUES",
+      9);
   for (const AnalysisFact& fact : batch.facts) {
-    s = PutFact(fact);
+    s = AppendFact(facts, fact);
     if (!s.ok()) {
       return rollback(s);
     }
   }
   for (const AnalysisFact& fact : missing_input_facts) {
-    s = PutFact(fact);
+    s = AppendFact(facts, fact);
     if (!s.ok()) {
       return rollback(s);
     }
+  }
+  // Flushed before any binding is written: run_fact_bindings carries a foreign
+  // key onto analysis_facts, which this store enforces.
+  s = facts.Flush();
+  if (!s.ok()) {
+    return rollback(s);
   }
   for (const AnalysisFact& fact : batch.facts) {
     RunFactBinding binding;
@@ -281,7 +312,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     binding.selected_witness_id =
         witness != witness_id_by_fact.end() ? witness->second
                                             : core::ToString(fact.fact_id);
-    s = PutBinding(binding);
+    s = AppendBinding(bindings, binding);
     if (!s.ok()) {
       return rollback(s);
     }
@@ -315,7 +346,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
         break;
       }
     }
-    s = provenance.PutNode(node);
+    s = provenance.AddNode(node);
     if (!s.ok()) {
       return rollback(s);
     }
@@ -330,11 +361,19 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
           rooted_inputs.count(edge_ref.input_fact_id) ? "rooted" : "derived";
       witness_edge.input_id = core::ToString(edge_ref.input_fact_id);
       witness_edge.input_ordinal = edge.input_ordinal;
-      s = provenance.PutEdge(witness_edge);
+      s = provenance.AddEdge(witness_edge);
       if (!s.ok()) {
         return rollback(s);
       }
     }
+  }
+  s = bindings.Flush();
+  if (!s.ok()) {
+    return rollback(s);
+  }
+  s = provenance.Flush();
+  if (!s.ok()) {
+    return rollback(s);
   }
 
   // Commit the receipt with the facts, bindings, and witnesses in one

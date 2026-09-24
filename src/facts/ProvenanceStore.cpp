@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -73,6 +74,51 @@ Status ProvenanceStore::PutEdge(const FactWitnessEdge& edge) {
       {core::ToString(edge.run_id), core::ToString(edge.output_fact_id),
        edge.witness_id, edge.input_kind, edge.input_id,
        std::to_string(edge.input_ordinal)});
+}
+
+Status ProvenanceStore::AddNode(const FactWitness& node) {
+  if (node_batcher_ == nullptr) {
+    node_batcher_ = std::make_unique<summarydb::BulkInsertBatcher>(
+        store_,
+        "INSERT OR IGNORE INTO provenance_nodes (run_id, output_fact_id,"
+        " witness_id, selected, producer_kind, producer_id, rule_id,"
+        " rule_version, analyzer_run_id, source_anchor_id, summary_id,"
+        " description) VALUES",
+        12);
+  }
+  return node_batcher_->Add(
+      {core::ToString(node.run_id), core::ToString(node.output_fact_id),
+       node.witness_id, node.selected ? "1" : "0",
+       std::to_string(static_cast<int>(node.producer_kind)), node.producer_id,
+       node.rule_id, node.rule_version, node.analyzer_run_id,
+       node.source_anchor_id, node.summary_id, node.description});
+}
+
+Status ProvenanceStore::AddEdge(const FactWitnessEdge& edge) {
+  if (edge_batcher_ == nullptr) {
+    edge_batcher_ = std::make_unique<summarydb::BulkInsertBatcher>(
+        store_,
+        "INSERT OR IGNORE INTO provenance_edges (run_id, output_fact_id,"
+        " witness_id, input_kind, input_id, input_ordinal) VALUES",
+        6);
+  }
+  return edge_batcher_->Add(
+      {core::ToString(edge.run_id), core::ToString(edge.output_fact_id),
+       edge.witness_id, edge.input_kind, edge.input_id,
+       std::to_string(edge.input_ordinal)});
+}
+
+Status ProvenanceStore::Flush() {
+  if (node_batcher_ != nullptr) {
+    Status s = node_batcher_->Flush();
+    if (!s.ok()) {
+      return s;
+    }
+  }
+  if (edge_batcher_ != nullptr) {
+    return edge_batcher_->Flush();
+  }
+  return Status::Ok();
 }
 
 StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(

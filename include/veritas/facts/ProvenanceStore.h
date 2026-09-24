@@ -24,6 +24,7 @@
 #define VERITAS_FACTS_PROVENANCE_STORE_H_
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include "veritas/core/Ids.h"
@@ -77,6 +78,15 @@ class ProvenanceStore {
   Status PutNode(const FactWitness& node);
   Status PutEdge(const FactWitnessEdge& edge);
 
+  // Batch-inserting forms of the above. A run publishes more than two million
+  // provenance rows, so publication queues them and writes each collection in
+  // multi-row statements; Flush writes whatever is still pending. The rows are
+  // inserted in the order they were queued, and the primary keys are
+  // unchanged, so a caller may mix queued writes with PutNode/PutEdge.
+  Status AddNode(const FactWitness& node);
+  Status AddEdge(const FactWitnessEdge& edge);
+  Status Flush();
+
   // Bounded explanation. Returns NotFound if the fact or its current binding
   // is absent. The returned graph carries truncated=true and a reason when the
   // traversal hit max_depth or max_nodes.
@@ -86,6 +96,10 @@ class ProvenanceStore {
 
  private:
   summarydb::MetadataStore& store_;
+  // Constructed on first queued write, so a store used only for single-row
+  // inserts or for Explain never builds the batched statement text.
+  std::unique_ptr<summarydb::BulkInsertBatcher> node_batcher_;
+  std::unique_ptr<summarydb::BulkInsertBatcher> edge_batcher_;
 };
 
 }  // namespace veritas::facts
