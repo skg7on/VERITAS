@@ -22,6 +22,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -103,48 +104,15 @@ StatusOr<bool> IsDelivered(summarydb::MetadataStore &store,
   return !(*rows).empty() && (*rows)[0][0] != "0";
 }
 
-// The location of one encoded key inside the shared arena below.
-struct KeyRef {
-  std::size_t offset = 0;
-  std::size_t length = 0;
-};
-
-// Encoded keys for the rows currently being ordered, packed end to end.
-//
-// Ordering a million witness edges needs a key for each of its two endpoints,
-// and one std::string per key spends a header and a separate allocation on each
-// of the millions of keys. A slice carries the same bytes for a fraction of
-// that. The slices compare exactly as the strings they were cut from -- both
-// use char_traits<char>::compare -- so the resulting order is identical.
-class KeyArena {
-public:
-  KeyRef Add(std::string_view key) {
-    const std::size_t offset = bytes_.size();
-    bytes_.append(key);
-    return KeyRef{offset, key.size()};
-  }
-
-  std::string_view View(KeyRef ref) const {
-    return std::string_view(bytes_).substr(ref.offset, ref.length);
-  }
-
-  // Returns the key storage to the allocator. Keys are needed only until the
-  // payloads are ordered; the canonical output carries rows, not keys.
-  void Release() { std::string().swap(bytes_); }
-
-private:
-  std::string bytes_;
-};
-
 struct KeyedFact {
-  KeyRef key;
+  std::string key;
   AnalysisFact fact;
 };
 
 struct KeyedWitness {
-  KeyRef result_key;
+  std::string result_key;
   std::string rule_id;
-  KeyRef input_key;
+  std::string input_key;
   std::uint32_t input_ordinal = 0;
   WitnessEdge edge;
 };
@@ -227,40 +195,37 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   // the individual edges) keeps each published result backed by one well-formed
   // proof instead of a mixture of two.
   std::set<core::StableId> owned;
-  KeyArena keys;
   std::vector<KeyedFact> keyed_facts;
   std::vector<KeyedWitness> keyed_witnesses;
-  // One reusable encoding buffer and one reusable per-component key set: the
-  // loop runs once per component, so neither belongs inside it.
-  std::string scratch;
+  // One reusable per-component key set: the loop runs once per component, so it
+  // does not belong inside it.
   std::set<std::string, std::less<>> overridden;
   for (auto &completion : batch.completed_components) {
     overridden.clear();
     for (auto &fact : completion.result.facts) {
-      scratch.clear();
-      AppendSemanticKey(&scratch, fact.row);
+      std::string key;
+      AppendSemanticKey(&key, fact.row);
       if (owned.insert(fact.fact_id).second) {
         keyed_facts.push_back(
-            KeyedFact{.key = keys.Add(scratch), .fact = std::move(fact)});
+            KeyedFact{.key = std::move(key), .fact = std::move(fact)});
       } else {
-        overridden.emplace(scratch);
+        overridden.insert(std::move(key));
       }
     }
     for (auto &edge : completion.result.witnesses) {
-      scratch.clear();
-      AppendSemanticKey(&scratch, edge.result.row);
-      if (overridden.contains(std::string_view(scratch))) {
+      std::string result_key;
+      AppendSemanticKey(&result_key, edge.result.row);
+      if (overridden.contains(std::string_view(result_key))) {
         continue;
       }
-      const KeyRef result_key = keys.Add(scratch);
-      scratch.clear();
-      AppendSemanticKey(&scratch, edge.input.row);
+      std::string input_key;
+      AppendSemanticKey(&input_key, edge.input.row);
       // The rule id is copied, not moved: the edge keeps its own, and the
       // published batch is hashed over it.
       keyed_witnesses.push_back(KeyedWitness{
-          .result_key = result_key,
+          .result_key = std::move(result_key),
           .rule_id = edge.rule_id,
-          .input_key = keys.Add(scratch),
+          .input_key = std::move(input_key),
           .input_ordinal = edge.input_ordinal,
           .edge = std::move(edge),
       });
@@ -281,10 +246,7 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   // established rather than merely checked: sorting puts equal entries
   // adjacent, so the set is collapsed here and Validate's identity checks
   // describe a property this assembler guarantees.
-  std::ranges::sort(keyed_facts,
-                    [&keys](const KeyedFact &left, const KeyedFact &right) {
-                      return keys.View(left.key) < keys.View(right.key);
-                    });
+  std::ranges::sort(keyed_facts, {}, &KeyedFact::key);
   batch.facts.reserve(keyed_facts.size());
   for (auto &keyed : keyed_facts) {
     batch.facts.push_back(std::move(keyed.fact));
@@ -297,23 +259,13 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
                                         })
                         .begin(),
                     batch.facts.end());
-  std::ranges::sort(keyed_witnesses, [&keys](const KeyedWitness &left,
-                                             const KeyedWitness &right) {
-    const std::string_view left_result = keys.View(left.result_key);
-    const std::string_view right_result = keys.View(right.result_key);
-    if (left_result != right_result) {
-      return left_result < right_result;
-    }
-    if (left.rule_id != right.rule_id) {
-      return left.rule_id < right.rule_id;
-    }
-    const std::string_view left_input = keys.View(left.input_key);
-    const std::string_view right_input = keys.View(right.input_key);
-    if (left_input != right_input) {
-      return left_input < right_input;
-    }
-    return left.input_ordinal < right.input_ordinal;
-  });
+  std::ranges::sort(keyed_witnesses,
+                    [](const KeyedWitness &left, const KeyedWitness &right) {
+                      return std::tie(left.result_key, left.rule_id,
+                                      left.input_key, left.input_ordinal) <
+                             std::tie(right.result_key, right.rule_id,
+                                      right.input_key, right.input_ordinal);
+                    });
   batch.witnesses.reserve(keyed_witnesses.size());
   for (auto &keyed : keyed_witnesses) {
     batch.witnesses.push_back(std::move(keyed.edge));
@@ -322,7 +274,6 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   batch.witnesses.erase(std::ranges::unique(batch.witnesses).begin(),
                         batch.witnesses.end());
   std::ranges::sort(batch.diagnostics);
-  keys.Release();
 
   batch.batch_id = DeriveBatchId(batch);
   return batch;
