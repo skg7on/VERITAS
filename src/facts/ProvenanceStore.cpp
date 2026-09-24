@@ -49,33 +49,6 @@ fp::ProducerKind ToProtoProducer(ProducerKind kind) {
 ProvenanceStore::ProvenanceStore(summarydb::MetadataStore& store)
     : store_(store) {}
 
-Status ProvenanceStore::PutNode(const FactWitness& node) {
-  const char* sql =
-      "INSERT OR IGNORE INTO provenance_nodes (run_id, output_fact_id,"
-      " witness_id, selected, producer_kind, producer_id, rule_id, rule_version,"
-      " analyzer_run_id, source_anchor_id, summary_id, description)"
-      " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-  return store_.Execute(
-      sql,
-      {core::ToString(node.run_id), core::ToString(node.output_fact_id),
-       node.witness_id, node.selected ? "1" : "0",
-       std::to_string(static_cast<int>(node.producer_kind)), node.producer_id,
-       node.rule_id, node.rule_version, node.analyzer_run_id,
-       node.source_anchor_id, node.summary_id, node.description});
-}
-
-Status ProvenanceStore::PutEdge(const FactWitnessEdge& edge) {
-  const char* sql =
-      "INSERT OR IGNORE INTO provenance_edges (run_id, output_fact_id,"
-      " witness_id, input_kind, input_id, input_ordinal)"
-      " VALUES (?, ?, ?, ?, ?, ?)";
-  return store_.Execute(
-      sql,
-      {core::ToString(edge.run_id), core::ToString(edge.output_fact_id),
-       edge.witness_id, edge.input_kind, edge.input_id,
-       std::to_string(edge.input_ordinal)});
-}
-
 Status ProvenanceStore::AddNode(const FactWitness& node) {
   if (node_batcher_ == nullptr) {
     node_batcher_ = std::make_unique<summarydb::BulkInsertBatcher>(

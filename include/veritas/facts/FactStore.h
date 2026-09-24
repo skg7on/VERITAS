@@ -99,7 +99,6 @@ class FactStore : public AnalysisFactSink {
  private:
   explicit FactStore(summarydb::MetadataStore store);
 
-  Status PutFact(const AnalysisFact& fact);
   // Queues one fact on a bulk writer instead of writing a statement per fact.
   Status AppendFact(summarydb::BulkInsertBatcher& facts,
                     const AnalysisFact& fact);

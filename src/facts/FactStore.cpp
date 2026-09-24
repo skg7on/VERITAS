@@ -139,23 +139,6 @@ FactStore::FactStore(FactStore&&) noexcept = default;
 FactStore& FactStore::operator=(FactStore&&) noexcept = default;
 FactStore::~FactStore() = default;
 
-Status FactStore::PutFact(const AnalysisFact& fact) {
-  auto proto = ToProtoFact(fact);
-  if (!proto.ok()) {
-    return proto.status();
-  }
-  std::string serialized;
-  if (!proto->SerializeToString(&serialized)) {
-    return Status::Internal("failed to serialize fact");
-  }
-  const char* sql =
-      "INSERT OR IGNORE INTO analysis_facts (fact_id, relation_name, cells_hex)"
-      " VALUES (?, ?, ?)";
-  return metadata_store_.Execute(
-      sql, {core::ToString(fact.fact_id),
-            RelationsV2().Get(fact.row.relation).name, HexEncode(serialized)});
-}
-
 Status FactStore::AppendFact(summarydb::BulkInsertBatcher& facts,
                              const AnalysisFact& fact) {
   auto proto = ToProtoFact(fact);
