@@ -143,33 +143,28 @@ The published tables were counted and dumped directly from the run-4 store, so
 these figures are this round's own measurement rather than inherited from
 round 2:
 
-| Table | Rows | SHA-256 of the ordered dump |
-| --- | ---: | --- |
-| `analysis_facts` | 1,249,792 | `6b0aea6381242e301ddfb993c7048b213037f9aafc18c7acd3e23ac894ab8ed1` |
-| `run_fact_bindings` | 752,076 | `f297dcf25ac551dc14c6ca6fcff6a3ef8a8505e91cda55a73ced88909ad62699` |
-| `provenance_nodes` | 752,076 | `0d45fac14e7cd59d280aa36163c164c1471947403a3aa0e52c8d9f12d5bc1b29` |
-| `provenance_edges` | 1,375,911 | `2b69dbfbf9e4db4b51c4a70f968e350783b1eda3949d9a11c372b7a3e1d0f0e2` |
+| Table | Rows |
+| --- | ---: |
+| `analysis_facts` | 1,249,792 |
+| `run_fact_bindings` | 752,076 |
+| `provenance_nodes` | 752,076 |
+| `provenance_edges` | 1,375,911 |
 
 `wpa_component_states_v2` holds exactly 13,716 rows, confirming the component
-count independently of the tool's own summary output. The dumps were produced
-with a single command, which is the reproducible form of the instrument:
+count independently of the tool's own summary output.
 
-```
-sqlite3 metadata.db "SELECT * FROM <table> ORDER BY rowid;" | shasum -a 256
-```
+The row counts equal those round-2 section 9.5.2 recorded. Stronger evidence is
+available for one table: `analysis_facts` carries no run-scoped identity, and
+dumped in `fact_id` order from this round's run it hashes to
+`452a850ec90ab192…`, **byte-identical to round 2's published digest** for the same
+table at the same row count. The published fact set has therefore not changed
+between round 2's build and this one.
 
-The row counts equal those round-2 section 9.5.2 recorded; the digests do not.
-That is the expected consequence of the identity scheme round-2 section 9.5.3
-documents — `engine_toolchain_identity` incorporates the compiled Soufflé functor
-library's hash, the run and batch ids incorporate the toolchain identity, and the
-binding and provenance tables carry those ids, so a separately built binary moves
-the dumps even when semantic content is identical. The matching row counts are
-the corroboration that content did not change.
-
-The consequence for section 9.1 is concrete: the A/B pair must share one
-**toolchain identity**, not merely one revision. Building both revisions in a
-single build tree and rebuilding between them is the arrangement round 2 used and
-the one this round should reuse.
+The remaining three tables carry the run id and its dependents, which move with
+the toolchain identity, so their digests cannot be compared across builds of the
+Soufflé functor library. Section 9.1 defines the instrument that handles both
+cases and records one unconfirmed assumption in it that the acceptance task must
+close.
 
 ## 3. Root causes
 
@@ -490,21 +485,61 @@ measurement decision, not a contract change.
 
 ### 9.1 The equivalence instrument
 
-Published content is compared the way round 2 compared it: ordered dumps of the
-four published tables, hashed. For the pre-change binary and the post-change
-binary on the same fixture and store, these must match byte for byte:
+Published content is compared through ordered dumps of the four published tables,
+hashed with `sqlite3 … "SELECT * FROM <table> ORDER BY …" | shasum -a 256`. The
+ordering was determined by measurement, not assumed: `ORDER BY rowid` is
+insertion order and does not reproduce round 2's published digests; ordering by
+the primary key does.
 
-- `analysis_facts`, `run_fact_bindings`, `provenance_nodes`, `provenance_edges`.
+| Table | Ordering | This round | Round-2 section 9.5.2 |
+| --- | --- | --- | --- |
+| `analysis_facts` | `fact_id` | `452a850ec90ab192…` | `452a850ec90ab192…` — **equal** |
+| `analysis_facts` | `rowid` | `6b0aea6381242e30…` | — |
+| `run_fact_bindings` | all columns | `f297dcf25ac551dc…` | `bab0a696647ffb25…` |
+| `provenance_nodes` | all columns | `a3b8b0f71efcf07e…` | `387d299985baf5e8…` |
+| `provenance_edges` | all columns | `3b38fc4b7e5a1712…` | `da4829f280ade0b8…` |
 
-The round-2 spec section 9.5.2 records the pre-change digests for its revision.
-Those exact digests are not expected to reproduce here, because the engine
-toolchain identity covers the compiled Soufflé functor library and any edit to
-it moves the run and batch ids (round-2 section 9.5.3). The instrument is
-therefore a **same-session A/B pair**: dump and hash the tables from a run of the
-pre-change revision, then from a run of the post-change revision, on the same
-machine and fixture, and require equality. `BatchId`, `FixpointHash`,
-`ExternalHash`, and `LogicalInputHash` are compared directly as well, since
-section 7.1, 7.2, and 7.5 all claim they cannot move.
+The first row is a real result: `analysis_facts` is the only one of the four
+carrying no run-scoped identity — its columns are `fact_id`, `relation_name`,
+`cells_hex` — and under the correct ordering it reproduces round 2's published
+digest **exactly**, at the same 1,249,792 rows. The published fact set has
+therefore not changed between round 2's build and this one.
+
+The other three tables carry `run_id`; `run_fact_bindings` also carries
+`analyzer_run_id` and `selected_witness_id`, and the provenance tables carry
+`witness_id`. The run id incorporates the toolchain identity, which incorporates
+the compiled Soufflé functor library's hash (round-2 section 9.5.3), so those
+columns move between any two builds of that library and no projection of them
+matches across such a pair.
+
+**A caveat the acceptance task must close.** The exclusion list below is a
+hypothesis, not a verified result. Projections of `run_fact_bindings` that
+exclude `run_id` and `analyzer_run_id` alone, and that exclude `binding_id`
+separately, were tried against round 2's digest and **none reproduced it**. The
+identity-column attribution is therefore unconfirmed, and the acceptance task
+must determine the actual exclusion set rather than trusting this list.
+
+The comparison proceeds in two steps.
+
+**Step 1 — did the toolchain identity move?** Compare the published
+`engine_toolchain_identity` before and after. Every edit in this design except
+the encoding change of section 7.3 should leave it untouched, since only files
+compiled into the functor library feed it.
+
+**Step 2a — identity unchanged (expected).** Require all four digests equal under
+the orderings above, and require `BatchId`, `FixpointHash`, `ExternalHash`, and
+`LogicalInputHash` equal directly.
+
+**Step 2b — identity moved.** Require `analysis_facts` equality, equal row counts
+for all four tables, and equality of the identity-bearing tables under a
+projection excluding the run-scoped columns, with that exclusion set
+**determined by the task**, per the caveat above. Sections 7.1, 7.2, and 7.5
+claim no *row* can change; this form tests exactly that while conceding that
+identity columns legitimately move.
+
+The pre-change member of the pair is produced by building the pre-change revision
+in the same build tree, as round 2 did, so the comparison is not confounded by
+the compiler.
 
 ### 9.2 Unit and integration tests
 
