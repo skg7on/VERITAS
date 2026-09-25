@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace veritas::wpa {
 namespace {
@@ -59,6 +60,21 @@ bool IsLowercaseSha256Hex(std::string_view value) {
   }
   return true;
 }
+
+// The statement one stored state row is written with: the same columns, the
+// same conflict rule, and the same `updated_at` refresh an unbatched commit
+// issued, so the rows a flush commits are the rows a per-component commit
+// committed. Only the transaction boundary moved.
+constexpr const char *kComponentStateUpsert =
+    "INSERT INTO wpa_component_states(scc_id, revision_id, build_variant_id, "
+    "component_kind, input_hash, fixpoint_hash, externally_visible_hash, "
+    "iteration_count, status) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) "
+    "ON CONFLICT(scc_id, revision_id, build_variant_id, component_kind) DO "
+    "UPDATE SET input_hash=excluded.input_hash, "
+    "fixpoint_hash=excluded.fixpoint_hash, "
+    "externally_visible_hash=excluded.externally_visible_hash, "
+    "iteration_count=excluded.iteration_count, status=excluded.status, "
+    "updated_at=strftime('%s', 'now')";
 
 Status ValidateResult(const SccResult &result) {
   if (result.scc_id.kind != core::IdKind::kScc) {
@@ -222,51 +238,99 @@ SccStateRepository::StoreState(const SccContext &context,
   auto valid = ValidateResult(result);
   if (!valid.ok())
     return valid;
-  auto begun = metadata_store_.BeginTransaction();
-  if (!begun.ok())
-    return begun;
   auto topology = metadata_store_.Query(
       "SELECT 1 FROM wpa_sccs WHERE scc_id = ? AND revision_id = ? AND "
       "build_variant_id = ?",
       {core::ToString(result.scc_id), context.revision_id,
        context.build_variant_id});
-  if (!topology.ok()) {
-    return RollbackWith(metadata_store_, topology.status());
-  }
+  if (!topology.ok())
+    return topology.status();
   if (topology->size() != 1u) {
-    return RollbackWith(
-        metadata_store_,
-        Status::NotFound("SCC is not present in the published topology"));
+    return Status::NotFound("SCC is not present in the published topology");
   }
+  // The classification is read from the committed row, exactly as it was when
+  // this store committed per component. A stored row that no flush has covered
+  // yet is invisible here, which is safe for this repository's only caller: a
+  // run visits each `(scc, component kind)` key once, so no call reads back a
+  // row an open batch is holding. See the load-bearing note on `QueueStateRows`.
   auto previous = LoadState(context, result.scc_id, result.component_kind);
-  if (!previous.ok()) {
-    return RollbackWith(metadata_store_, previous.status());
+  if (!previous.ok())
+    return previous.status();
+
+  QueueStateRows(context, result);
+  if (pending_state_rows_.size() >= kStateBatchSize) {
+    // The batch is full, so this call pays the commit for the rows the batch
+    // already holds rather than one commit per component.
+    Status flushed = FlushStateCache();
+    if (!flushed.ok())
+      return flushed;
   }
-  auto stored = metadata_store_.Execute(
-      "INSERT INTO wpa_component_states(scc_id, revision_id, build_variant_id, "
-      "component_kind, input_hash, fixpoint_hash, externally_visible_hash, "
-      "iteration_count, status) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) "
-      "ON CONFLICT(scc_id, revision_id, build_variant_id, component_kind) DO "
-      "UPDATE SET input_hash=excluded.input_hash, "
-      "fixpoint_hash=excluded.fixpoint_hash, "
-      "externally_visible_hash=excluded.externally_visible_hash, "
-      "iteration_count=excluded.iteration_count, status=excluded.status, "
-      "updated_at=strftime('%s', 'now')",
+  return !previous->has_value() || (*previous)->externally_visible_hash !=
+                                       result.externally_visible_hash
+             ? ExternalChange::kChanged
+             : ExternalChange::kUnchanged;
+}
+
+// The one place a stored convergence row's key could collide with an open
+// batch. `WpaOrchestrator::Run` visits each `(scc_id, component)` key exactly
+// once per run: `SccGraph::ReverseTopologicalOrder` yields each SCC once (Kahn
+// over the condensation DAG, where a node is enqueued only on the decrement
+// that reaches zero, and the size check rejects any duplicate), and the run's
+// component list is a set of distinct kinds. A caller that stored the same key
+// twice inside one batch would have its second call read the row from the
+// previous run rather than the row the batch holds, and would classify the
+// component against it; flush between such stores.
+void SccStateRepository::QueueStateRows(const SccContext &context,
+                                        const SccResult &result) {
+  pending_state_rows_.push_back(
       {core::ToString(result.scc_id), context.revision_id,
        context.build_variant_id,
        std::to_string(static_cast<int>(result.component_kind)),
        result.input_hash, result.fixpoint_hash, result.externally_visible_hash,
        std::to_string(result.iteration_count),
        std::to_string(static_cast<int>(result.status))});
-  if (!stored.ok())
-    return RollbackWith(metadata_store_, stored);
-  auto committed = metadata_store_.CommitTransaction();
+}
+
+Status SccStateRepository::FlushStateCache() {
+  if (pending_state_rows_.empty())
+    return Status::Ok();
+
+  Status begun = metadata_store_.BeginTransaction();
+  if (!begun.ok()) {
+    // No transaction was opened, so there is nothing to roll back — but the
+    // batch is abandoned here exactly as it is below, because leaving it queued
+    // would let a later flush commit rows for a run that has already failed.
+    pending_state_rows_.clear();
+    return begun;
+  }
+  // A failed flush abandons the batch: the rows queued with it are rolled back
+  // with the transaction, so nothing half-written survives and nothing stays
+  // queued for a later flush, and the caller's failure path fails the run. What
+  // is lost is one batch of convergence state for components the next run
+  // re-executes.
+  auto abandon = [&](Status status) {
+    metadata_store_.RollbackTransaction();
+    pending_state_rows_.clear();
+    return status;
+  };
+
+  // The statement text, the columns, and the conflict rule are unchanged from
+  // the per-component commit — only the transaction boundary moved. A
+  // `BulkInsertBatcher` is not used here: its statement is a prefix plus value
+  // tuples, so it cannot carry this row's `ON CONFLICT ... DO UPDATE` suffix,
+  // and a batch of `kStateBatchSize` rows is far below the bind-parameter budget
+  // at which its multi-row path engages, so it would issue one statement per row
+  // inside this transaction anyway.
+  for (std::vector<std::string> &row : pending_state_rows_) {
+    Status stored = metadata_store_.Execute(kComponentStateUpsert, row);
+    if (!stored.ok())
+      return abandon(stored);
+  }
+  Status committed = metadata_store_.CommitTransaction();
   if (!committed.ok())
-    return RollbackWith(metadata_store_, committed);
-  return !previous->has_value() || (*previous)->externally_visible_hash !=
-                                       result.externally_visible_hash
-             ? ExternalChange::kChanged
-             : ExternalChange::kUnchanged;
+    return abandon(committed);
+  pending_state_rows_.clear();
+  return Status::Ok();
 }
 
 } // namespace veritas::wpa

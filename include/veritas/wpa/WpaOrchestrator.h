@@ -64,7 +64,9 @@ class WpaOrchestrator {
  public:
   // The optional scc_state enables incremental predecessor scheduling: when a
   // component's externally visible hash changes, its predecessors are enqueued
-  // through the M7 scheduler and surfaced in scheduled_predecessors.
+  // through the M7 scheduler and surfaced in scheduled_predecessors. `Run`
+  // flushes `scc_state`'s last batch of convergence rows before it returns, so
+  // a later run reads this run's state and not a stale row.
   WpaOrchestrator(WpaExecutor& executor, WpaRunRepository& repository,
                   SccStateRepository* scc_state = nullptr);
 
