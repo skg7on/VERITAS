@@ -40,8 +40,10 @@ Copied from the spec. Every task's requirements implicitly include this section.
 - **No new CLI flag, no process-global cache.**
 - Every expected `(SccId, WpaComponentKind)` remains independently materialized,
   cached, executed, canonicalized, and published, in reverse-topological order.
-- `LogicalInputHash`, `FixpointHash`, `ExternalHash`, and `BatchId` are
-  byte-identical for unchanged input.
+- `LogicalInputHash`, `FixpointHash`, and `ExternalHash` are byte-identical for
+  unchanged input. `BatchId` is byte-identical for unchanged input **for a pair
+  built in one tree** — it hashes `run_id`, which binds the toolchain identity,
+  so it moves between revisions by construction.
 - **No RTTI, no exceptions.** Use `veritas::Status` and `StatusOr<T>`; never
   `dynamic_cast`, `typeid`, `throw`, `try`, or `catch` in VERITAS code. The one
   exception is `src/wpa/SouffleRunner.cpp`, which is already the sanctioned

@@ -866,14 +866,50 @@ provenance structure are confirmed stable across the round. `binding_id` is
 stable too, which is why the abbreviated set is harmless for this verdict even
 though it does not reproduce the recorded hash.
 
+The instrument above sees only published content, and Tasks 5/5b changed durability
+tables it cannot observe — so the same pair of stores was swept whole. Against the
+baseline store `/tmp/veritas-prof/run4/store/metadata.db` and the fresh
+`/tmp/t9a/run1/store/metadata.db`, every table the four published ones do not cover
+was compared directly, and the round's store shape reproduces:
+
+- `wpa_component_states` excluding the wall-clock `updated_at`, `ORDER BY rowid`,
+  **13,716 rows** — identical, `bc3a24c414998411…`;
+- `wpa_component_states_v2` (Task 5b's table) excluding `run_id`,
+  `result_cache_key`, and `result_object_key` — identical, `93c3aef64efecb3a…`;
+- `wpa_component_result_cache_v2` (Task 5's table) excluding
+  `engine_toolchain_identity` and those same two keys — identical,
+  `bf38b36262c8c809…`;
+- a **completeness sweep**: all **39** tables have equal row counts, and
+  `cpg_nodes` (**100,859** rows, all columns) is byte-identical,
+  `e98d16b3cc6fb642…`. Only `wpa_sccs` and `summary_objects` differ, and only in
+  `created_at`.
+
+`BatchId` is the one published-adjacent value that **moves by construction**, and it
+is worth stating here because the plan's global constraint reads otherwise and
+because Step 2a consumes it directly: `DeriveBatchId` hashes `run_id` along with each
+completion's `result_object_key` (`src/facts/AnalysisFactBus.cpp:223-237`), and
+`run_id` binds the toolchain identity — which is why Step 2a's direct equalities are
+"not achievable across revisions". The constraint that `BatchId` is "byte-identical
+for unchanged input" therefore holds for a pair **built in one tree**, the same-tree
+case section 7.7's pair qualified under, and not across revisions.
+
 The comparison proceeds in two steps.
 
 **Step 1 — did the toolchain identity move?** Compare the published
-`engine_toolchain_identity` before and after. Every edit in this design except
-the encoding change of section 7.3 should leave it untouched, since only files
-compiled into the functor library feed it. **In this round it moved**:
+`engine_toolchain_identity` before and after. An edit moves it only if it changes
+one of the inputs `cmake/WriteSouffleProvenance.cmake` hashes: the pinned
+**Soufflé** revision (`:64`, not VERITAS's HEAD), the Soufflé executable, the four
+generated bundles, and **two** VERITAS libraries — `runner_library_sha256`
+(`:66`) and `functor_library_sha256` (`:67`). `veritas_souffle_runner` is
+`src/wpa/SouffleRunner.cpp` alone (`cmake/VeritasSouffle.cmake:231-232`);
+`veritas_souffle_functors` is `SouffleSemanticKeyFunctor.cpp` and
+`SemanticKeyCodec.cpp` (`:152-154`). **In this round it moved**:
 `souffle-e4135d90a5f5d329…` → `souffle-0ef51c2207f7a5aa…`, which is why the
-acceptance comparison is Step 2b and not Step 2a.
+acceptance comparison is Step 2b and not Step 2a. The mover is **Task 1's
+`SouffleRunner.cpp` — the only file this round touched in either hashed library**.
+Section 7.3's files (`AnalysisFact.cpp`, `AnalysisFactBus.cpp`, `FactStore.cpp`)
+are compiled into neither library and cannot move it; neither can any other edit
+here.
 
 **Step 2a — identity unchanged.** Require all four digests equal under the
 orderings above, and require `BatchId`, `FixpointHash`, `ExternalHash`, and
@@ -1094,9 +1130,17 @@ wall), and batching it is **1.1 % of wall time** — smaller than this machine's
 spread, so no wall-time movement is claimed for section 7.4 in either direction; the isolated
 measurement of exactly the removed work is the load-bearing evidence, not the end-to-end
 total. `SccStateRepository::StoreState` commits per component in the same window at a
-comparable measured cost and is deliberately **not** batched here: section 7.4's design is
-scoped to the component result cache, and that repository's rows are the incremental
-scheduler's convergence state, which it reads back inside its own transaction.
+comparable measured cost, and **Task 5b batched those commits in the same way** (`9d4ad4b`),
+so the two are no longer distinguished here. The read `StoreState` performs to classify a
+component now happens **outside any transaction**, and that is exactly what makes a
+misclassification possible: the batched rows live in an in-memory queue, and a queued row is
+**not yet visible to any of the three readers that matter** — `LoadState`, which is that read;
+`PublishGraph`'s `DELETE FROM wpa_component_states` (`src/wpa/SccStateRepository.cpp:177-183`);
+and a re-store of the same `(scc, component kind)` key inside the same open batch. The header
+documents only the first. The invariant the design relies on is therefore **per-open-batch
+plus a flush at each `Run`'s tail**: a batch must not span two stores of the same key, and
+`WpaOrchestrator::Run` flushes its last batch before it marks the run complete
+(`src/wpa/WpaOrchestrator.cpp:291-297`).
 
 **4. Section 7.6 (memory relief at phase boundaries) — dropped, ratified on
 measurement. Built, measured, reverted in `8227176`. Not in the tree.**
@@ -1279,3 +1323,16 @@ are hypotheses until a task measures them, not findings.**
 4. **The 0.72 GiB run-to-run spread** means acceptance needs three runs and the
    machine must be quiet during them; macOS background daemons were previously
    observed to stretch this project's heaviest integration tests.
+5. **The `SemanticCellValue` unrecognised-alternative hole is closed, and the reason
+   it was parked was wrong — recorded here because the wrong reason is the reusable
+   part.** `AppendSemanticKey` (`src/facts/Witness.cpp`) encoded any unrecognised
+   alternative as an enum ordinal, so two rows differing only in a future alternative
+   would have derived one semantic key and, through `DeriveWitnessId`
+   (`src/facts/FactStore.cpp:91-96`), one witness id — silently merging provenance.
+   It was parked on "a change there risks moving the toolchain identity". **That
+   rationale is void**: `src/facts/Witness.cpp` is compiled into neither hashed
+   library (`veritas_souffle_runner`, `veritas_souffle_functors`), so the
+   dependent-false `static_assert` guard costs nothing at build-identity level, and
+   the A/B was at Step 2b regardless. The risk closes rather than opens, and it stays
+   on the record because "this edit might move an identity" is a claim to check
+   against `cmake/WriteSouffleProvenance.cmake`, never one to inherit.
