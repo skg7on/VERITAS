@@ -285,6 +285,10 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
 
   Status complete = repository_.CompleteRun(request.run);
   if (!complete.ok()) {
+    // `CompleteRun` can now fail on its final batch flush as well as on the
+    // status update, so it gets the same failure path as every other store
+    // error in this run rather than returning with the row left `kInProgress`.
+    repository_.MarkIncomplete(request.run);
     return complete;
   }
   return result;

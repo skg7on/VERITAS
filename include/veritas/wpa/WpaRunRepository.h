@@ -142,9 +142,17 @@ class WpaRunRepository {
   // the state row of a cache row, so the loss costs recomputation on the next
   // run and nothing else — no published fact, no provenance edge, and not the
   // run receipt are affected, and a run that completes publishes exactly what
-  // it published before. A failed flush rolls its whole batch back and is
-  // reported to the caller, which fails the run as it does for any other store
-  // error.
+  // it published before.
+  //
+  // A failed flush abandons its whole batch — the transaction is rolled back
+  // where one was opened — and reports the failure to the caller. That leaves
+  // the batch neither half-written nor queued for a later flush, and the
+  // caller fails the run as it does for any other store error. From
+  // `CompleteRun` the caller is the orchestrator, which marks the run
+  // incomplete on this error exactly as it does on the per-batch flush
+  // failure; without that the run row would stay `kInProgress`, because
+  // `BeginRun` inserts it with `INSERT OR IGNORE` and a later run of the same
+  // id does not reset it.
   Status FlushComponentCache();
 
   // How many components one commit covers: the number of components whose

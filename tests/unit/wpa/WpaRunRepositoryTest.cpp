@@ -323,6 +323,23 @@ TEST(WpaRunRepositoryTest, AnIncompleteRunCommitsNoHalfWrittenBatch) {
                       {core::ToString(run.run_id)}),
             0u);
 
+  // "Abandoned" means discarded, not merely left uncommitted. The flush below
+  // is a no-op only because `MarkIncomplete` cleared the queue; were the rows
+  // retained, this flush would commit them — cache rows for components the
+  // run never finished, and state rows claiming `kSucceeded` for a run that
+  // is marked incomplete.
+  ASSERT_TRUE(repo->FlushComponentCache().ok());
+  for (const std::string& name : names) {
+    EXPECT_FALSE(IsComponentReusable(*repo, run, name));
+    EXPECT_FALSE(HasComponentState(*repo, run, name));
+  }
+  EXPECT_EQ(VisibleCacheRowCount(*repo), 0u);
+  EXPECT_EQ(CountRows(*repo,
+                      "SELECT COUNT(*) FROM wpa_component_states_v2 "
+                      "WHERE run_id = ?",
+                      {core::ToString(run.run_id)}),
+            0u);
+
   std::filesystem::remove_all(db);
 }
 

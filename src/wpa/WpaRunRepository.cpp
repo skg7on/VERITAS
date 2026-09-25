@@ -640,12 +640,19 @@ Status WpaRunRepository::FlushComponentCache() {
 
   Status begin = metadata_store_.BeginTransaction();
   if (!begin.ok()) {
+    // No transaction was opened, so there is nothing to roll back — but the
+    // batch is abandoned here exactly as it is below. Clearing both queues is
+    // what makes that true: leaving them would let a later flush commit rows
+    // for a run that has already failed.
+    pending_cache_rows_.clear();
+    pending_state_rows_.clear();
     return begin;
   }
   // A failed flush abandons the batch: the rows queued with it are rolled back
-  // with the transaction, so nothing half-written survives, and the caller's
-  // failure path fails the run. What is lost is one batch of cache rows for
-  // components the next run recomputes.
+  // with the transaction, so nothing half-written survives and nothing stays
+  // queued for a later flush, and the caller's failure path fails the run.
+  // What is lost is one batch of cache rows for components the next run
+  // recomputes.
   auto abandon = [&](Status status) {
     metadata_store_.RollbackTransaction();
     pending_cache_rows_.clear();
@@ -653,13 +660,17 @@ Status WpaRunRepository::FlushComponentCache() {
     return status;
   };
 
-  // The statement text up to its VALUES keyword; the batcher appends one value
-  // tuple per queued row. These are the statements an unbatched commit issued,
-  // so the rows — and their conflict rules — are unchanged by the batching.
-  // The transaction is already open, so a batcher that empties itself mid-loop
-  // — it does so once a batch reaches SQLite's bind-parameter limit, which the
-  // batch size is far below — still writes inside this transaction rather
-  // than committing ahead of it.
+  // The statement text up to its VALUES keyword. These are the statements an
+  // unbatched commit issued — same columns, same conflict rule — so the rows
+  // are unchanged by the batching. The shape of the emitted statement is not:
+  // `BulkInsertBatcher` takes its multi-row branch only when a batch exactly
+  // fills SQLite's bind-parameter budget (32,766 parameters, so 3,640 rows for
+  // this table's 9 columns and 3,276 for the state table's 10), and a batch of
+  // `kComponentCacheBatchSize` is far below that. Every flush therefore issues
+  // one single-row statement per queued row inside this one transaction. The
+  // win is the commit count — 13,716 commits to about 54 — not the statement
+  // count. The transaction is already open, so even a batch that did fill the
+  // budget would write inside it rather than committing ahead of it.
   summarydb::BulkInsertBatcher cache_rows(metadata_store_,
                                           kComponentCacheInsertPrefix,
                                           kComponentCacheColumns);
@@ -728,9 +739,13 @@ Status WpaRunRepository::CompleteRun(const facts::AnalysisRunManifest& run) {
 }
 
 Status WpaRunRepository::MarkIncomplete(const facts::AnalysisRunManifest& run) {
-  // Whatever the failed run had queued is abandoned rather than flushed: it is
+  // Whatever the failed run had queued is discarded rather than flushed: it is
   // cache and run state only, so the next run recomputes those components and
-  // loses nothing else.
+  // loses nothing else. Clearing both queues is what makes that true — leaving
+  // them queued would let a later flush commit rows for a run that is marked
+  // incomplete, including state rows claiming `kSucceeded`.
+  pending_cache_rows_.clear();
+  pending_state_rows_.clear();
   return metadata_store_.Execute(
       "UPDATE wpa_analysis_runs SET status = ? WHERE run_id = ?",
       {std::to_string(static_cast<int>(WpaRunStatus::kIncomplete)),
