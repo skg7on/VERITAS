@@ -227,11 +227,22 @@ TEST(WpaFactBusHandoffTest, OrchestrationProducesValidFactBusBatch) {
   auto result = orchestrator.Run(request);
   ASSERT_TRUE(result.ok()) << result.status().message();
 
-  facts::AnalysisFactBatch batch =
-      facts::MakeAnalysisFactBatch(std::move(*result));
-  EXPECT_FALSE(batch.facts.empty());
-  EXPECT_FALSE(batch.witnesses.empty());
-  EXPECT_EQ(batch.expected_components.size(), batch.completed_components.size());
+  // The run released every component's payload once it stored it, so the batch
+  // is assembled through the loader: the same store writes the run just made,
+  // read back through `LoadReusableComponent`'s deserialization and
+  // revalidation.
+  ASSERT_TRUE(result->component_payloads_released);
+  const facts::AnalysisRunManifest manifest = result->run;
+  auto batch = facts::MakeAnalysisFactBatch(
+      std::move(*result),
+      facts::ComponentReloader([&repo, manifest](const WpaComponentKey& key) {
+        return repo->ReloadStoredComponent(manifest, key);
+      }));
+  ASSERT_TRUE(batch.ok()) << batch.status().message();
+  EXPECT_FALSE(batch->facts.empty());
+  EXPECT_FALSE(batch->witnesses.empty());
+  EXPECT_EQ(batch->expected_components.size(),
+            batch->completed_components.size());
 
   struct RecordingSink : facts::AnalysisFactSink {
     Status Publish(const facts::AnalysisFactBatch&) override {
@@ -243,7 +254,7 @@ TEST(WpaFactBusHandoffTest, OrchestrationProducesValidFactBusBatch) {
 
   facts::AnalysisFactBus bus(*repo);
   bus.AddSink("recording", sink);
-  ASSERT_TRUE(bus.Publish(std::move(batch)).ok());
+  ASSERT_TRUE(bus.Publish(*batch).ok());
   EXPECT_EQ(sink.count, 1);
 
   std::filesystem::remove_all(db);

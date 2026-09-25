@@ -140,8 +140,16 @@ std::string CppToolchainIdentity(const AnalysisConfig &config) {
 
 // Compares two runs' completed components: every component key, canonical
 // facts, ExternalHash, and FixpointHash must agree (design §4.3).
+//
+// The keys and the hashes are read from the runs themselves; the fact rows are
+// reloaded from the content-addressed store, because the orchestrator releases
+// each component's payload once it has stored it. One component per side is
+// resident at a time, so this comparison does not need either run to retain its
+// payloads and does not add two runs' worth of duplicate rows to the peak.
 Status CompareCanonicalResults(const wpa::WpaRunResult &primary,
-                               const wpa::WpaRunResult &conformance) {
+                               const wpa::WpaRunResult &conformance,
+                               const facts::ComponentReloader &primary_reload,
+                               const facts::ComponentReloader &conformance_reload) {
   std::map<wpa::WpaComponentKey, const wpa::WpaComponentCompletion *>
       primary_map;
   for (const auto &completion : primary.completed_components) {
@@ -168,11 +176,31 @@ Status CompareCanonicalResults(const wpa::WpaRunResult &primary,
           "conformance result hashes differ for component " +
           std::to_string(static_cast<int>(key.component)));
     }
-    if (p.facts != c.facts) {
+    auto primary_facts = primary_reload(key);
+    if (!primary_facts.ok()) {
+      return primary_facts.status();
+    }
+    auto conformance_facts = conformance_reload(key);
+    if (!conformance_facts.ok()) {
+      return conformance_facts.status();
+    }
+    if (primary_facts->facts != conformance_facts->facts) {
       return Status::FailedPrecondition("conformance canonical facts differ");
     }
   }
   return Status::Ok();
+}
+
+// A reloader for one run's components, for assembly and for the conformance
+// comparison above. The manifest is held by value: the caller moves the run
+// result into the assembler, so a captured reference would read moved-from
+// fields.
+facts::ComponentReloader MakeReloader(wpa::WpaRunRepository &repository,
+                                      const facts::AnalysisRunManifest &run) {
+  return facts::ComponentReloader([&repository, run](
+                                      const wpa::WpaComponentKey &key) {
+    return repository.ReloadStoredComponent(run, key);
+  });
 }
 
 // Runs the WPA orchestrator over the just-published summaries and records the
@@ -283,6 +311,14 @@ Status RunWpa(const std::filesystem::path &output_root,
   }
   result->wpa_run_id = core::ToString(wpa_result->run.run_id);
 
+  // Assembly reloads each component from the content-addressed store, because
+  // the orchestrator releases the in-memory payloads once it has stored them.
+  // The loader is built from the completed run, so the reload reads exactly what
+  // this run wrote, and the batch that reaches the bus is the batch those bytes
+  // describe.
+  const facts::ComponentReloader primary_reload =
+      MakeReloader(*repo, wpa_result->run);
+
   // Optional C++ conformance oracle: run a second, separately identified
   // kCppConformance execution over the same logical inputs and require the
   // canonical results to agree before any publication (design §4.3).
@@ -317,7 +353,9 @@ Status RunWpa(const std::filesystem::path &output_root,
       return conformance_result.status();
     }
     if (Status mismatch =
-            CompareCanonicalResults(*wpa_result, *conformance_result);
+            CompareCanonicalResults(*wpa_result, *conformance_result,
+                                    primary_reload,
+                                    MakeReloader(*repo, conformance_result->run));
         !mismatch.ok()) {
       repo->MarkIncomplete(wpa_result->run);
       repo->MarkIncomplete(conformance_result->run);
@@ -328,15 +366,21 @@ Status RunWpa(const std::filesystem::path &output_root,
 
   // Build the canonical batch and publish it through the fact bus to a fact
   // store sink on the shared metadata database, so the run's facts become
-  // explainable (design §3).
-  auto batch = facts::MakeAnalysisFactBatch(std::move(*wpa_result));
+  // explainable (design §3). The run's payloads were released as it stored them,
+  // so assembly reloads every component through `primary_reload`; a reload that
+  // fails leaves the batch unbuildable and is reported rather than papered over.
+  auto batch = facts::MakeAnalysisFactBatch(std::move(*wpa_result), primary_reload);
+  if (!batch.ok()) {
+    result->wpa_diagnostics = std::string(batch.status().message());
+    return batch.status();
+  }
   auto fact_store = facts::FactStore::Open(output_root);
   if (!fact_store.ok()) {
     return fact_store.status();
   }
   facts::AnalysisFactBus bus(*repo);
   bus.AddSink("fact-store", *fact_store);
-  if (Status published = bus.Publish(batch); !published.ok()) {
+  if (Status published = bus.Publish(*batch); !published.ok()) {
     result->wpa_diagnostics = std::string(published.message());
     return published;
   }

@@ -56,6 +56,14 @@ struct WpaRunResult {
   // ID set so the explanation graph can report source anchors and summaries.
   std::vector<facts::RootedInputFact> rooted_input_facts;
   std::vector<runtime::WorkItem> scheduled_predecessors;
+  // Set when this run released every completed component's payload after storing
+  // it, which is what `Run` always does. Assembly of such a run must go through
+  // `MakeAnalysisFactBatch`'s loader overload, which reloads each component from
+  // the content-addressed store; the one-argument overload has no rows to
+  // assemble and would silently produce an empty batch. A caller that puts the
+  // payloads back -- a test, or a comparison that materializes them -- must
+  // clear this.
+  bool component_payloads_released = false;
 };
 
 class SccStateRepository;

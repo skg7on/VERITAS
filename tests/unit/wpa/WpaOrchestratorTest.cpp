@@ -25,6 +25,7 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include "veritas/facts/AnalysisFactBus.h"
 #include "veritas/facts/AnalysisRun.h"
 #include "veritas/facts/Witness.h"
 #include "veritas/summary/SummaryArtifact.h"
@@ -399,6 +400,136 @@ TEST(WpaOrchestratorTest, TwoComponentsPreserveReachabilitySupport) {
   }
   EXPECT_TRUE(saw_reachable_bc)
       << "a's reachability successor support lost b's reachable call";
+
+  std::filesystem::remove_all(db);
+}
+
+// A stable text rendering of everything the batch publishes, so two assemblies
+// can be compared as one string rather than field by field.
+std::string ComponentText(const WpaComponentKey& key) {
+  return core::ToString(key.scc_id) + "/" +
+         std::to_string(static_cast<int>(key.component));
+}
+
+std::string RenderBatch(const facts::AnalysisFactBatch& batch) {
+  std::string out = "batch=" + core::ToString(batch.batch_id);
+  out += "\nrun=" + core::ToString(batch.run.run_id);
+  out += "\nexpected=";
+  for (const auto& key : batch.expected_components) {
+    out += ComponentText(key) + ";";
+  }
+  out += "\ncompleted=";
+  for (const auto& completion : batch.completed_components) {
+    out += ComponentText(completion.key) + "|" + completion.result_object_key +
+           "|" + completion.result.logical_input_hash + "|" +
+           completion.result.fixpoint_hash + "|" +
+           completion.result.external_hash + ";";
+  }
+  out += "\nroot_ids=";
+  for (const auto& id : batch.rooted_input_fact_ids) {
+    out += core::ToString(id) + ";";
+  }
+  out += "\nroot_facts=";
+  for (const auto& root : batch.rooted_input_facts) {
+    out += facts::EncodeSemanticKey(root.fact.row) + ";";
+  }
+  out += "\nfacts=";
+  for (const auto& fact : batch.facts) {
+    out += facts::EncodeSemanticKey(fact.row) + ";";
+  }
+  out += "\nwitnesses=";
+  for (const auto& edge : batch.witnesses) {
+    out += facts::EncodeSemanticKey(edge.result.row) + "," + edge.rule_id + "," +
+           facts::EncodeSemanticKey(edge.input.row) + "," +
+           std::to_string(edge.input_ordinal) + ";";
+  }
+  out += "\ndiagnostics=";
+  for (const auto& diagnostic : batch.diagnostics) {
+    out += diagnostic + ";";
+  }
+  return out;
+}
+
+// A run releases every component's payload once the result has been stored, so
+// assembly reloads it from the content-addressed object. Two things have to hold
+// for that to be sound, and this test asserts both: the release is real, and the
+// batch assembled through the reload is byte-identical to the one assembled from
+// the retained payloads -- same rows, same order, same batch id.
+TEST(WpaOrchestratorTest, ReloadedAssemblyMatchesRetainedAssembly) {
+  auto a = V2Summary("a");
+  AddCall(&a, "a", "b");
+  AddWrite(&a, "ma");
+  auto b = V2Summary("b");
+  AddCall(&b, "b", "c");
+  AddWrite(&b, "mb");
+  auto c = V2Summary("c");
+  AddWrite(&c, "mc");
+  const std::vector<summary::SummaryArtifact> program = {a, b, c};
+
+  const auto db = TempDbPath();
+  auto repo = WpaRunRepository::Open(db);
+  ASSERT_TRUE(repo.ok());
+
+  FactEmittingExecutor executor;
+  WpaOrchestrator orchestrator(executor, *repo);
+
+  const std::array<WpaComponentKind, 2> components = {
+      WpaComponentKind::kReachability, WpaComponentKind::kMemoryEffects};
+  WpaRunRequest request;
+  request.run = MakeManifest(facts::EngineIdentity::kSouffle);
+  request.summaries = program;
+  request.components = components;
+
+  auto result = orchestrator.Run(request);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+  ASSERT_FALSE(result->completed_components.empty());
+
+  // The release: no payload survives, and the identity that assembly and the
+  // batch id both read does.
+  for (const auto& completion : result->completed_components) {
+    EXPECT_TRUE(completion.result.facts.empty());
+    EXPECT_TRUE(completion.result.witnesses.empty());
+    EXPECT_TRUE(completion.result.diagnostics.empty());
+    EXPECT_FALSE(completion.result_object_key.empty());
+    EXPECT_FALSE(completion.result.logical_input_hash.empty());
+    EXPECT_FALSE(completion.result.fixpoint_hash.empty());
+    EXPECT_FALSE(completion.result.external_hash.empty());
+  }
+
+  // The retained side: the same components with their payloads refilled from the
+  // store and assembled by the unchanged one-argument overload.
+  wpa::WpaRunResult retained = *result;
+  // The payloads are about to be put back, so this copy is no longer the
+  // released run the flag describes.
+  retained.component_payloads_released = false;
+  for (auto& completion : retained.completed_components) {
+    const auto descriptor = MakeResultCacheDescriptor(
+        retained.run, completion.key, completion.result.logical_input_hash);
+    auto loaded = repo->LoadReusableComponent(descriptor);
+    ASSERT_TRUE(loaded.ok()) << loaded.status().message();
+    ASSERT_TRUE(loaded->has_value());
+    completion.result.facts = std::move((*loaded)->facts);
+    completion.result.witnesses = std::move((*loaded)->witnesses);
+    completion.result.diagnostics = std::move((*loaded)->diagnostics);
+  }
+  const facts::AnalysisFactBatch retained_batch =
+      facts::MakeAnalysisFactBatch(std::move(retained));
+  ASSERT_FALSE(retained_batch.facts.empty());
+  ASSERT_FALSE(retained_batch.witnesses.empty());
+
+  // The reloaded side: the released run, assembled through the loader.
+  const facts::AnalysisRunManifest manifest = result->run;
+  const facts::ComponentReloader reload =
+      [&repo, manifest](const WpaComponentKey& key) {
+        return repo->ReloadStoredComponent(manifest, key);
+      };
+  auto reloaded = facts::MakeAnalysisFactBatch(std::move(*result), reload);
+  ASSERT_TRUE(reloaded.ok()) << reloaded.status().message();
+
+  EXPECT_EQ(RenderBatch(*reloaded), RenderBatch(retained_batch));
+  EXPECT_EQ(reloaded->batch_id, retained_batch.batch_id);
+  EXPECT_EQ(reloaded->facts, retained_batch.facts);
+  EXPECT_EQ(reloaded->witnesses, retained_batch.witnesses);
 
   std::filesystem::remove_all(db);
 }

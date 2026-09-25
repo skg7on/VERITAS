@@ -37,13 +37,17 @@ namespace {
 // the component's relation domain, which become the successor support the
 // materializer turns into support relations.
 //
-// The facts are read from the completed component results the batch is already
-// keeping, not from a parallel copy. A second copy of every component's facts
-// is a whole payload's worth of resident memory held for the entire run, and
-// the completed results outlive the run's last materialization anyway.
+// The facts are read from the support-only projection the orchestrator retains
+// for each completed component, not from the completed results themselves:
+// those have been stored and released by the time a predecessor materializes.
+// `successor_support` holds the rows whose relation is a `derived` relation of a
+// domain carrying `support.has_value()`, unioned over the component kinds the
+// run requested, which is exactly the set this filter can select from. Every
+// other row a component produces is unreachable from here and is released with
+// the payload.
 std::vector<facts::AnalysisFact> SuccessorSupport(
     const SccGraph& scc_graph, core::StableId scc_id, WpaComponentKind component,
-    const std::vector<WpaComponentCompletion>& completed,
+    const std::vector<std::vector<facts::AnalysisFact>>& successor_support,
     const std::map<WpaComponentKey, std::size_t>& completed_index) {
   std::set<facts::RelationId> expected;
   for (const auto& domain : ComponentDomains(component)) {
@@ -61,7 +65,7 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
     if (it == completed_index.end()) {
       continue;
     }
-    for (const auto& fact : completed[it->second].result.facts) {
+    for (const auto& fact : successor_support[it->second]) {
       if (expected.contains(fact.row.relation)) {
         support.push_back(fact);
       }
@@ -165,9 +169,24 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
     }
   }
 
-  // Where each completed component's result lives in `result.completed_components`,
-  // which is the single owner of every component's facts and witnesses.
+  // Where each completed component's retained support rows live. A component's
+  // full result is written to the content-addressed store and released, so this
+  // projection -- not `result.completed_components` -- is what `SuccessorSupport`
+  // reads while the run is still materializing predecessors. Derived from
+  // `ComponentDomains` rather than restated, so a domain whose support relation
+  // changes cannot silently stop being retained. A component is only ever asked
+  // for support under its own kind's domains, so the union over the requested
+  // kinds is exactly what every call can select from.
+  std::set<facts::RelationId> support_relations;
+  for (const auto component : request.components) {
+    for (const auto& domain : ComponentDomains(component)) {
+      if (domain.support.has_value()) {
+        support_relations.insert(domain.derived);
+      }
+    }
+  }
   std::map<WpaComponentKey, std::size_t> completed_index;
+  std::vector<std::vector<facts::AnalysisFact>> retained_support;
 
   for (const auto& scc_id : scc_order) {
     for (const auto component : request.components) {
@@ -185,8 +204,7 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
       // Keep the successor support alive for the duration of Build: the span
       // stored in the request points into this vector.
       std::vector<facts::AnalysisFact> successor_support = SuccessorSupport(
-          *scc_graph, scc_id, component, result.completed_components,
-          completed_index);
+          *scc_graph, scc_id, component, retained_support, completed_index);
       materialization.successor_support = successor_support;
       materialization.models = request.models;
 
@@ -278,10 +296,37 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
         }
       }
 
-      completed_index[key] = result.completed_components.size();
+      // Release the payload here rather than retaining it until assembly. The
+      // object written by the store above is what assembly reads back through
+      // `MakeAnalysisFactBatch`'s loader overload, so keeping a second resident
+      // copy of every fact and witness for the rest of the run would buy nothing
+      // and cost the whole payload -- the reason this round's peak is where it
+      // is. What survives is the support subset, moved out rather than copied,
+      // plus the hashes and object key the batch id and the cache are keyed on.
+      //
+      // `ToSccResult` above has already read everything but the payload, so
+      // nothing between here and assembly needs the released vectors.
+      std::vector<facts::AnalysisFact> support_rows;
+      for (auto& fact : completion->result.facts) {
+        if (support_relations.contains(fact.row.relation)) {
+          support_rows.push_back(std::move(fact));
+        }
+      }
+      std::vector<facts::AnalysisFact>().swap(completion->result.facts);
+      std::vector<facts::WitnessEdge>().swap(completion->result.witnesses);
+      std::vector<std::string>().swap(completion->result.diagnostics);
+
+      completed_index[key] = retained_support.size();
+      retained_support.push_back(std::move(support_rows));
       result.completed_components.push_back(std::move(*completion));
     }
   }
+
+  // Every component's payload has been released above, so assembly of this run
+  // reads the store rather than memory. Say so on the result, so a caller that
+  // reaches for the payload-carrying assembler is told it has no rows to
+  // assemble instead of quietly publishing an empty fact set for the run.
+  result.component_payloads_released = true;
 
   // The run's last batch of convergence state is committed here, before the run
   // is marked complete and before `Run` returns. A later run reads these rows to
