@@ -20,6 +20,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -564,7 +565,7 @@ StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableCompon
 
 StatusOr<WpaComponentCompletion> WpaRunRepository::StoreSuccessfulComponent(
     const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
-    const WpaComponentResult& result) {
+    WpaComponentResult result) {
   const std::string cache_key =
       MakeResultCacheDescriptor(run, key, result.logical_input_hash).Key();
   const std::string serialized = SerializeResult(result);
@@ -620,7 +621,7 @@ StatusOr<WpaComponentCompletion> WpaRunRepository::StoreSuccessfulComponent(
   WpaComponentCompletion completion;
   completion.key = key;
   completion.result_object_key = cache_key;
-  completion.result = result;
+  completion.result = std::move(result);
   return completion;
 }
 

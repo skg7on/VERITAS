@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace veritas::facts {
@@ -270,7 +271,7 @@ Status ValidateExecutionRow(const ExecutionRow& row) {
   return ValidateExecutionRangePayload(row);
 }
 
-StatusOr<AnalysisFact> MakeFact(const SemanticRow& row) {
+StatusOr<core::StableId> DeriveFactId(const SemanticRow& row) {
   if (Status s = ValidateSemanticRow(row); !s.ok()) {
     return s;
   }
@@ -280,8 +281,16 @@ StatusOr<AnalysisFact> MakeFact(const SemanticRow& row) {
   for (const auto& cell : row.cells) {
     AppendCell(bytes, cell);
   }
+  return core::MakeStableId(core::IdKind::kFact, bytes);
+}
+
+StatusOr<AnalysisFact> MakeFact(const SemanticRow& row) {
+  auto fact_id = DeriveFactId(row);
+  if (!fact_id.ok()) {
+    return fact_id.status();
+  }
   AnalysisFact fact;
-  fact.fact_id = core::MakeStableId(core::IdKind::kFact, bytes);
+  fact.fact_id = std::move(*fact_id);
   fact.row = row;
   return fact;
 }

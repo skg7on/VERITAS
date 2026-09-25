@@ -23,6 +23,28 @@ RocksDB, SQLite, CMake/Ninja, GoogleTest.
 
 **Tracking:** [GitHub issue #133](https://github.com/skg7on/VERITAS/issues/133)
 
+**Current status (2026-09-24):** Tasks 1-3 and two rounds of refinement are
+implemented. The second round removed the per-row copies and per-row
+allocations in identity derivation, key encoding, batch-id hashing, and
+witness-id derivation; gave the completion sole ownership of its payload;
+released the stripped component capacity; and published facts and provenance
+through multi-row statements.
+
+Measured as a controlled pair on the documented clean Debug configuration
+(clang 17.0.6, the host compiler CLAUDE.md fixes for this machine), this round
+takes peak resident memory from 7.22 GiB to 6.85 GiB and leaves wall time
+unchanged at about 600 s. Every published table hashes byte for byte
+identically to the pre-change run; design specification section 9.5 lists the
+digests, the compilers, an ordering-key experiment that was measured and
+reverted, and the identity movement the functor library's hash causes.
+
+Both acceptance limits are still missed. Sampling the resident set during a
+fresh run shows the peak occurs at about 60% of wall time, while WPA results
+accumulate and before any row is written: the run retains every component's
+facts and witnesses until the whole batch is assembled. Reaching 4 GiB means
+not retaining all payloads at once, which design section 5 and rejected
+alternative 11.3 leave outside this change. Task 4 remains open.
+
 ## Global Constraints
 
 - Preserve the production Soufflé engine and all four WPA domains.
@@ -538,10 +560,14 @@ crashes, timeouts, failures, or skips.
 
 ```bash
 python3 tests/qualification/M9EntryGateTest.py
+# --test-dir makes ctest resolve --output-junit relative to the test
+# directory, so the report lands at build/wpa-qualification.xml.
 ctest --test-dir build -L wpa-qualification --no-tests=error \
-  --output-on-failure --output-junit build/wpa-qualification.xml
+  --output-on-failure --output-junit wpa-qualification.xml
+# --expect takes the exact label membership, comma-separated.
 python3 tests/qualification/check_no_skips.py \
-  build/wpa-qualification.xml --label wpa-qualification
+  build/wpa-qualification.xml \
+  --expect WpaDifferentialQualificationTest,WpaDeterminismQualificationTest,WpaFailureQualificationTest,WpaMigrationQualificationTest,WpaPerformanceQualificationTest
 python3 tools/check_m9_entry.py --build-dir build
 ```
 

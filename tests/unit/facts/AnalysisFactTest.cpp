@@ -72,4 +72,23 @@ TEST(AnalysisFactTest, RejectsInvalidSemanticRow) {
   row.cells[0] = core::MakeStableId(
       core::IdKind::kMemoryRef, std::array<std::byte, 1>{std::byte{0x01}});
   EXPECT_EQ(MakeFact(row).status().code(), StatusCode::kInvalidArgument);
+  EXPECT_EQ(DeriveFactId(row).status().code(), StatusCode::kInvalidArgument);
+}
+
+// Validation and persistence only need the identity, and paying for a row copy
+// per fact is the difference between a bounded and an unbounded peak on a
+// million-fact batch. The identity must nevertheless be the same one MakeFact
+// assigns, or a batch would validate against IDs it did not publish.
+TEST(AnalysisFactTest, DeriveFactIdMatchesMakeFactWithoutCopyingTheRow) {
+  const SemanticRow row = ReachableCallSemanticRow(
+      FunctionStableId(1), FunctionStableId(2), EpistemicState::kMay);
+  auto derived = DeriveFactId(row);
+  auto made = MakeFact(row);
+  ASSERT_TRUE(derived.ok());
+  ASSERT_TRUE(made.ok());
+  EXPECT_EQ(*derived, made->fact_id);
+
+  // The row is untouched by identity derivation and is copied verbatim by
+  // MakeFact, so the two agree on every field.
+  EXPECT_EQ(made->row, row);
 }

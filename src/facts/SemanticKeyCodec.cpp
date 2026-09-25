@@ -34,12 +34,23 @@ bool IsKnownTag(char tag) {
 
 }  // namespace
 
+void AppendField(std::string* out, KeyFieldTag tag, std::string_view value) {
+  out->push_back(static_cast<char>(tag));
+  out->append(std::to_string(value.size()));
+  out->push_back(':');
+  out->append(value);
+}
+
+void AppendKeyHeader(std::string* out, std::string_view relation_name,
+                     std::size_t arity) {
+  out->append(kSemanticKeyVersion);
+  AppendField(out, KeyFieldTag::kSymbol, relation_name);
+  AppendField(out, KeyFieldTag::kUnsigned, std::to_string(arity));
+}
+
 std::string EncodeField(KeyFieldTag tag, std::string_view value) {
   std::string encoded;
-  encoded.push_back(static_cast<char>(tag));
-  encoded.append(std::to_string(value.size()));
-  encoded.push_back(':');
-  encoded.append(value);
+  AppendField(&encoded, tag, value);
   return encoded;
 }
 
@@ -64,9 +75,8 @@ std::string EncodeEnumField(std::uint64_t ordinal) {
 }
 
 std::string EncodeKeyHeader(std::string_view relation_name, std::size_t arity) {
-  std::string header(kSemanticKeyVersion);
-  header.append(EncodeSymbolField(relation_name));
-  header.append(EncodeUnsignedField(static_cast<std::uint64_t>(arity)));
+  std::string header;
+  AppendKeyHeader(&header, relation_name, arity);
   return header;
 }
 

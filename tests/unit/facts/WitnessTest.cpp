@@ -92,6 +92,32 @@ TEST(WitnessTest, EpistemicStateParticipatesInTheKey) {
   EXPECT_NE(EncodeSemanticKey(may), EncodeSemanticKey(must));
 }
 
+// The append form exists so the batch-id hash can stream every row without a
+// per-row key allocation. It must produce the identical byte sequence the
+// returned-string form produces, for every cell domain.
+TEST(WitnessTest, AppendSemanticKeyMatchesReturnedEncoding) {
+  const std::vector<SemanticRow> rows = {
+      Unsupported("node", "feature", "policy"),
+      Unsupported("", "01", ":"),
+      SemanticRow{RelationId::kReachableCall,
+                  {FunctionId("f"), FunctionId("g"), sem::EpistemicState::kMay}},
+      SemanticRow{RelationId::kDirectRead,
+                  {FunctionId("f"), std::int64_t{-7}, std::uint64_t{9},
+                   sem::ByteRangeKind::kUnknown}},
+  };
+  for (const SemanticRow& row : rows) {
+    std::string appended;
+    AppendSemanticKey(&appended, row);
+    EXPECT_EQ(appended, EncodeSemanticKey(row));
+  }
+
+  // Appending onto a non-empty buffer extends it, so one scratch buffer can
+  // carry every row of a batch in sequence.
+  std::string scratch = "sentinel";
+  AppendSemanticKey(&scratch, rows[0]);
+  EXPECT_EQ(scratch, "sentinel" + EncodeSemanticKey(rows[0]));
+}
+
 TEST(RuleRegistryTest, KnownRulesResolveAndUnknownRulesDoNot) {
   EXPECT_NE(RulesV2().Find("wpa.reachability.direct.v2"), nullptr);
   EXPECT_NE(RulesV2().Find("wpa.reachability.transitive.v2"), nullptr);

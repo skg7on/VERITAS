@@ -23,6 +23,7 @@
 #define VERITAS_SUMMARYDB_METADATASTORE_H_
 
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@
 
 // Forward-declare sqlite3 to avoid pulling sqlite3.h into public headers.
 struct sqlite3;
+struct sqlite3_stmt;
 
 namespace veritas::build {
 struct AnalysisManifest;
@@ -135,17 +137,63 @@ class MetadataStore {
   // M3: Rollback a transaction.
   Status RollbackTransaction();
 
+  // The largest number of bind parameters one statement may carry on this
+  // connection. Bulk insertion sizes its batches from the running library
+  // rather than from a constant: SQLite moved this limit from 999 to 32766 in
+  // 3.32, and the vendored toolchain is not the only one that can open a store.
+  int MaxBindParameters() const;
+
   MetadataStore(MetadataStore&&) noexcept;
   MetadataStore& operator=(MetadataStore&&) noexcept;
 
  private:
   explicit MetadataStore(sqlite3* db);
+  void FinalizeCachedStatements();
 
   sqlite3* db_;
   bool in_transaction_ = false;
+  std::map<std::string, sqlite3_stmt*> statement_cache_;
+
+  friend class MetadataStoreTestPeer;
 
   MetadataStore(const MetadataStore&) = delete;
   MetadataStore& operator=(const MetadataStore&) = delete;
+};
+
+// Batches rows for one multi-row INSERT.
+//
+// Publishing a run writes millions of fact and provenance rows, and one
+// statement per row spends nearly all of its time in per-statement overhead
+// rather than on the data. The batcher holds each row's bound values until a
+// batch is full, then emits one statement carrying the whole batch.
+//
+// Rows are queued and emitted in order, so a table with an AUTOINCREMENT key
+// assigns the same ids it would assign one row at a time.
+class BulkInsertBatcher {
+ public:
+  // `sql_prefix` is the statement up to and including its VALUES keyword, for
+  // example "INSERT OR IGNORE INTO analysis_facts (a, b, c) VALUES". It must
+  // name exactly `columns` parameters per row.
+  BulkInsertBatcher(MetadataStore& store, std::string sql_prefix,
+                    std::size_t columns);
+
+  // Queues one row, flushing first if the pending batch is already full.
+  // Returns InvalidArgument for a row whose width is not `columns`.
+  Status Add(std::vector<std::string> values);
+
+  // Writes every queued row. Publication calls this before committing so a
+  // failed write is reported rather than silently dropped.
+  Status Flush();
+
+ private:
+  MetadataStore& store_;
+  std::string batch_sql_;
+  std::string single_sql_;
+  std::size_t columns_;
+  std::size_t max_rows_;
+  std::vector<std::string> pending_;
+
+  friend class MetadataStoreTestPeer;
 };
 
 }  // namespace veritas::summarydb

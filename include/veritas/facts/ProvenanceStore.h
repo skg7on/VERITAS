@@ -24,6 +24,7 @@
 #define VERITAS_FACTS_PROVENANCE_STORE_H_
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include "veritas/core/Ids.h"
@@ -69,13 +70,20 @@ struct ExplainBudget {
   bool include_datalog_derivation = true;
 };
 
+// Writing is queued and batched: a run publishes more than two million
+// provenance rows, and one statement per row is bounded by per-statement
+// overhead rather than by the row. `AddNode`/`AddEdge` queue a row and write in
+// multi-row statements; `Flush` writes whatever is still pending and must be
+// called before the enclosing transaction commits, because nothing else -- not
+// even this object's destruction -- writes the queue. Inserts deduplicate under
+// their primary keys and preserve queue order.
 class ProvenanceStore {
  public:
   explicit ProvenanceStore(summarydb::MetadataStore& store);
 
-  // Deduplicating inserts, idempotent under their primary keys.
-  Status PutNode(const FactWitness& node);
-  Status PutEdge(const FactWitnessEdge& edge);
+  Status AddNode(const FactWitness& node);
+  Status AddEdge(const FactWitnessEdge& edge);
+  Status Flush();
 
   // Bounded explanation. Returns NotFound if the fact or its current binding
   // is absent. The returned graph carries truncated=true and a reason when the
@@ -86,6 +94,10 @@ class ProvenanceStore {
 
  private:
   summarydb::MetadataStore& store_;
+  // Constructed on first queued write, so a store used only for single-row
+  // inserts or for Explain never builds the batched statement text.
+  std::unique_ptr<summarydb::BulkInsertBatcher> node_batcher_;
+  std::unique_ptr<summarydb::BulkInsertBatcher> edge_batcher_;
 };
 
 }  // namespace veritas::facts

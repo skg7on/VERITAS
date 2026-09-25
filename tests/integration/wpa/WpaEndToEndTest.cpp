@@ -226,10 +226,9 @@ TEST(WpaFactBusHandoffTest, OrchestrationProducesValidFactBusBatch) {
   request.components = components;
   auto result = orchestrator.Run(request);
   ASSERT_TRUE(result.ok()) << result.status().message();
-  ASSERT_FALSE(result->facts.empty());
-  ASSERT_FALSE(result->witnesses.empty());
 
-  facts::AnalysisFactBatch batch = facts::MakeAnalysisFactBatch(*result);
+  facts::AnalysisFactBatch batch =
+      facts::MakeAnalysisFactBatch(std::move(*result));
   EXPECT_FALSE(batch.facts.empty());
   EXPECT_FALSE(batch.witnesses.empty());
   EXPECT_EQ(batch.expected_components.size(), batch.completed_components.size());

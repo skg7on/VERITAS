@@ -60,6 +60,16 @@ struct KeyField {
   bool operator==(const KeyField&) const = default;
 };
 
+// Appends the canonical encoding of one field to `out`. Every `Encode*Field`
+// below is defined as this function plus a fresh string, so a caller that
+// already owns a reusable buffer encodes the identical bytes without paying a
+// per-field allocation. This is the only place the field grammar is written.
+void AppendField(std::string* out, KeyFieldTag tag, std::string_view value);
+
+// Appends the key header (codec version, relation name, arity) to `out`.
+void AppendKeyHeader(std::string* out, std::string_view relation_name,
+                     std::size_t arity);
+
 std::string EncodeField(KeyFieldTag tag, std::string_view value);
 std::string EncodeIdField(std::string_view stable_id);
 std::string EncodeSymbolField(std::string_view value);

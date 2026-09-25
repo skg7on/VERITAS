@@ -16,6 +16,9 @@
 
 #include <sqlite3.h>
 
+#include <cstddef>
+#include <utility>
+
 #include "schema_v1.h"
 #include "schema_v2.h"
 #include "schema_v3.h"
@@ -77,24 +80,38 @@ Status StepAndFinalize(sqlite3_stmt *stmt) {
 MetadataStore::MetadataStore(sqlite3 *db) : db_(db) {}
 
 MetadataStore::~MetadataStore() {
+  FinalizeCachedStatements();
   if (db_) {
     sqlite3_close(db_);
   }
 }
 
-MetadataStore::MetadataStore(MetadataStore &&other) noexcept : db_(other.db_) {
-  other.db_ = nullptr;
+MetadataStore::MetadataStore(MetadataStore &&other) noexcept
+    : db_(std::exchange(other.db_, nullptr)),
+      in_transaction_(std::exchange(other.in_transaction_, false)),
+      statement_cache_(std::move(other.statement_cache_)) {
+  other.statement_cache_.clear();
 }
 
 MetadataStore &MetadataStore::operator=(MetadataStore &&other) noexcept {
   if (this != &other) {
+    FinalizeCachedStatements();
     if (db_) {
       sqlite3_close(db_);
     }
-    db_ = other.db_;
-    other.db_ = nullptr;
+    db_ = std::exchange(other.db_, nullptr);
+    in_transaction_ = std::exchange(other.in_transaction_, false);
+    statement_cache_ = std::move(other.statement_cache_);
+    other.statement_cache_.clear();
   }
   return *this;
+}
+
+void MetadataStore::FinalizeCachedStatements() {
+  for (auto &entry : statement_cache_) {
+    sqlite3_finalize(entry.second);
+  }
+  statement_cache_.clear();
 }
 
 StatusOr<MetadataStore>
@@ -449,23 +466,118 @@ Status MetadataStore::PutManifestContext(
 
 Status MetadataStore::Execute(const std::string &sql,
                               const std::vector<std::string> &params) {
-  sqlite3_stmt *stmt = nullptr;
-  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
-  if (rc != SQLITE_OK) {
-    std::string error = sqlite3_errmsg(db_);
-    return Status::Internal("SQLite prepare failed: " + error +
-                            " (SQL: " + sql + ")");
+  sqlite3_stmt *stmt;
+  const auto cached = statement_cache_.find(sql);
+  if (cached != statement_cache_.end()) {
+    stmt = cached->second;
+  } else {
+    stmt = nullptr;
+    const int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+      const std::string error = sqlite3_errmsg(db_);
+      sqlite3_finalize(stmt);
+      statement_cache_.erase(sql);
+      return Status::Internal("SQLite prepare failed: " + error +
+                              " (SQL: " + sql + ")");
+    }
+    statement_cache_.emplace(sql, stmt);
   }
 
   for (size_t i = 0; i < params.size(); ++i) {
     auto status = BindText(stmt, static_cast<int>(i + 1), params[i]);
     if (!status.ok()) {
-      sqlite3_finalize(stmt);
+      sqlite3_reset(stmt);
+      sqlite3_clear_bindings(stmt);
       return status;
     }
   }
 
-  return StepAndFinalize(stmt);
+  const int rc = sqlite3_step(stmt);
+  std::string error;
+  if (rc != SQLITE_DONE) {
+    error = sqlite3_errmsg(db_);
+  }
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  if (rc != SQLITE_DONE) {
+    return Status::Internal("SQLite step failed: " + error);
+  }
+  return Status::Ok();
+}
+
+int MetadataStore::MaxBindParameters() const {
+  return sqlite3_limit(db_, SQLITE_LIMIT_VARIABLE_NUMBER, -1);
+}
+
+namespace {
+
+// " (?, ?, ?), (?, ?, ?), ..." for `rows` rows of `columns` parameters.
+std::string ValueTuples(std::size_t rows, std::size_t columns) {
+  std::string sql;
+  for (std::size_t row = 0; row < rows; ++row) {
+    sql.append(row == 0 ? " (" : ", (");
+    for (std::size_t column = 0; column < columns; ++column) {
+      sql.append(column == 0 ? "?" : ", ?");
+    }
+    sql.push_back(')');
+  }
+  return sql;
+}
+
+}  // namespace
+
+BulkInsertBatcher::BulkInsertBatcher(MetadataStore &store,
+                                     std::string sql_prefix,
+                                     std::size_t columns)
+    : store_(store),
+      columns_(columns),
+      max_rows_(1) {
+  const int limit = store_.MaxBindParameters();
+  if (limit > 0 && columns_ > 0) {
+    const auto rows = static_cast<std::size_t>(limit) / columns_;
+    if (rows > max_rows_) {
+      max_rows_ = rows;
+    }
+  }
+  // Only the full batch gets a multi-row statement. A tail is at most
+  // `max_rows_ - 1` rows, and giving every tail length its own statement text
+  // would fill the prepared-statement cache with near-duplicates.
+  batch_sql_ = sql_prefix + ValueTuples(max_rows_, columns_);
+  single_sql_ = sql_prefix + ValueTuples(1, columns_);
+}
+
+Status BulkInsertBatcher::Add(std::vector<std::string> values) {
+  if (values.size() != columns_) {
+    return Status::InvalidArgument("bulk insert row has the wrong width");
+  }
+  if (pending_.size() / columns_ >= max_rows_) {
+    Status flushed = Flush();
+    if (!flushed.ok()) {
+      return flushed;
+    }
+  }
+  for (std::string &value : values) {
+    pending_.push_back(std::move(value));
+  }
+  return Status::Ok();
+}
+
+Status BulkInsertBatcher::Flush() {
+  const std::size_t rows = pending_.size() / columns_;
+  Status status = Status::Ok();
+  if (rows == max_rows_ && max_rows_ > 1) {
+    status = store_.Execute(batch_sql_, pending_);
+  } else {
+    for (std::size_t row = 0; row < rows && status.ok(); ++row) {
+      const auto begin =
+          pending_.begin() + static_cast<std::ptrdiff_t>(row * columns_);
+      std::vector<std::string> values(
+          begin, begin + static_cast<std::ptrdiff_t>(columns_));
+      status = store_.Execute(single_sql_, values);
+    }
+  }
+  pending_.clear();
+  return status;
 }
 
 StatusOr<std::vector<std::vector<std::string>>>

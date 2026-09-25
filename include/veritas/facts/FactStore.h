@@ -99,8 +99,15 @@ class FactStore : public AnalysisFactSink {
  private:
   explicit FactStore(summarydb::MetadataStore store);
 
-  Status PutFact(const AnalysisFact& fact);
-  Status PutBinding(const RunFactBinding& binding);
+  // Queues one fact on a bulk writer instead of writing a statement per fact.
+  Status AppendFact(summarydb::BulkInsertBatcher& facts,
+                    const AnalysisFact& fact);
+  // Clears the fact's prior current binding, then queues the new one. The
+  // lookup is served by the partial unique index on (run_id, fact_id) with
+  // is_current = 1, so the clear stays a statement per binding while the insert
+  // is batched.
+  Status AppendBinding(summarydb::BulkInsertBatcher& bindings,
+                       const RunFactBinding& binding);
 
   summarydb::MetadataStore metadata_store_;
 

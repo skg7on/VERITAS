@@ -237,11 +237,11 @@ StatusOr<SemanticCellValue> FromProtoCell(const fp::Cell& cell) {
 StatusOr<fact_proto::Fact> ToProtoFact(const AnalysisFact& fact) {
   // Re-derive the identity so a fact carrying an ID inconsistent with its
   // semantic row is rejected rather than serialized.
-  auto expected = MakeFact(fact.row);
+  auto expected = DeriveFactId(fact.row);
   if (!expected.ok()) {
     return expected.status();
   }
-  if (expected->fact_id != fact.fact_id) {
+  if (*expected != fact.fact_id) {
     return Status::InvalidArgument("fact_id does not match its semantic row");
   }
 

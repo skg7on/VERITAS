@@ -59,20 +59,22 @@ struct AnalysisFactBatch {
 
 // Reduces a successful WPA run to a canonical batch: flattens the completed
 // components' facts/witnesses/diagnostics, canonicalizes component, rooted
-// input, fact, and witness ordering, and derives the content-addressed
-// batch_id. Mechanical; the bus re-validates on Publish.
-AnalysisFactBatch MakeAnalysisFactBatch(const wpa::WpaRunResult& result);
+// input, fact, and witness ordering, strips the component payload vectors while
+// retaining their hashes and metadata, and derives the content-addressed
+// batch_id. Lvalues are copied; production passes an rvalue to transfer
+// ownership. Mechanical; the bus re-validates on Publish.
+AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result);
 
 // Recomputes the canonical content-addressed batch id over every immutable
 // field. Exposed so the bus and its callers share one derivation.
-core::StableId DeriveBatchId(const AnalysisFactBatch& batch);
+core::StableId DeriveBatchId(const AnalysisFactBatch &batch);
 
 // A named consumer of analysis fact batches. Repeated publication of the same
 // (run_id, batch_id) must be a successful no-op.
 class AnalysisFactSink {
- public:
+public:
   virtual ~AnalysisFactSink() = default;
-  virtual Status Publish(const AnalysisFactBatch& batch) = 0;
+  virtual Status Publish(const AnalysisFactBatch &batch) = 0;
 };
 
 // Validates and fans out an immutable batch to every registered sink.
@@ -82,24 +84,24 @@ class AnalysisFactSink {
 // partial fan-out retries only the sinks that failed. Cross-sink atomicity is
 // not claimed. Delivery state is recorded durably in the run repository.
 class AnalysisFactBus {
- public:
-  explicit AnalysisFactBus(wpa::WpaRunRepository& delivery_state);
+public:
+  explicit AnalysisFactBus(wpa::WpaRunRepository &delivery_state);
 
-  void AddSink(std::string sink_id, AnalysisFactSink& sink);
+  void AddSink(std::string sink_id, AnalysisFactSink &sink);
 
   // Validates the batch, then delivers it to every pending sink. Returns
   // non-OK (FailedPrecondition for a malformed batch) without mutating any
   // component success when validation fails; on a sink failure, returns that
   // sink's status after recording which sinks already completed.
-  Status Publish(AnalysisFactBatch batch) const;
+  Status Publish(const AnalysisFactBatch &batch) const;
 
- private:
-  Status Validate(const AnalysisFactBatch& batch) const;
+private:
+  Status Validate(const AnalysisFactBatch &batch) const;
 
-  wpa::WpaRunRepository& delivery_state_;
-  std::vector<std::pair<std::string, AnalysisFactSink*>> sinks_;
+  wpa::WpaRunRepository &delivery_state_;
+  std::vector<std::pair<std::string, AnalysisFactSink *>> sinks_;
 };
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_ANALYSIS_FACT_BUS_H_
+#endif // VERITAS_FACTS_ANALYSIS_FACT_BUS_H_
