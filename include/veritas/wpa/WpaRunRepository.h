@@ -25,11 +25,13 @@
 #define VERITAS_WPA_WPA_RUN_REPOSITORY_H_
 
 #include <compare>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
@@ -118,14 +120,37 @@ class WpaRunRepository {
   StatusOr<std::optional<WpaComponentResult>> LoadReusableComponent(
       const ResultCacheDescriptor& descriptor);
 
-  // Stores a successful component result: the immutable object, the cache row,
-  // and the run's component state, in one transaction. The returned completion
-  // owns the payload; a caller that has no further use for its own copy should
-  // pass it by move rather than paying for a second copy of every fact and
-  // witness in the run.
+  // Stores a successful component result: the immutable object, and the cache
+  // and run-state rows that reference it. The object write is immediate and
+  // unchanged; the two rows are queued and committed with the rest of the
+  // batch, because a commit is a durability barrier and a run stores one
+  // component per (SCC, kind) pair. The returned completion owns the payload; a
+  // caller that has no further use for its own copy should pass it by move
+  // rather than paying for a second copy of every fact and witness in the run.
   StatusOr<WpaComponentCompletion> StoreSuccessfulComponent(
       const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
       WpaComponentResult result);
+
+  // Commits every queued cache and run-state row in one transaction.
+  // `StoreSuccessfulComponent` calls this once a batch is full, and
+  // `CompleteRun` calls it before it returns, so every component a completed
+  // run stored is loadable as soon as `Run` returns. A no-op when nothing is
+  // queued.
+  //
+  // Durability, stated plainly: rows queued since the last commit are lost if
+  // the process dies before this returns. Every one of them is a cache row or
+  // the state row of a cache row, so the loss costs recomputation on the next
+  // run and nothing else — no published fact, no provenance edge, and not the
+  // run receipt are affected, and a run that completes publishes exactly what
+  // it published before. A failed flush rolls its whole batch back and is
+  // reported to the caller, which fails the run as it does for any other store
+  // error.
+  Status FlushComponentCache();
+
+  // How many components one commit covers: the number of components whose
+  // cache rows a crash can cost. The batch is also flushed whenever it reaches
+  // this size, so the window never grows past it.
+  static constexpr std::size_t kComponentCacheBatchSize = 256;
 
   // Records a failed component with diagnostics; publishes no result.
   Status RecordComponentFailure(const facts::AnalysisRunManifest& run,
@@ -149,8 +174,24 @@ class WpaRunRepository {
   WpaRunRepository(summarydb::MetadataStore store,
                    std::unique_ptr<summarydb::ObjectStore> results);
 
+  // Queues one stored component's cache row and run-state row for the next
+  // commit. Neither can be rejected: both rows are built here, with the column
+  // count its statement declares.
+  void QueueComponentRows(const facts::AnalysisRunManifest& run,
+                          const WpaComponentKey& key,
+                          const std::string& cache_key,
+                          const WpaComponentResult& result);
+
   summarydb::MetadataStore metadata_store_;
   std::unique_ptr<summarydb::ObjectStore> component_results_;
+
+  // Bound parameter values of the rows queued since the last commit — one row
+  // per stored component in each. They are rows rather than a live
+  // `BulkInsertBatcher` because a batcher binds a `MetadataStore&` and would
+  // have to be rebound by every move of this repository; a batcher built at
+  // flush time always binds the store this repository currently owns.
+  std::vector<std::vector<std::string>> pending_cache_rows_;
+  std::vector<std::vector<std::string>> pending_state_rows_;
 
   WpaRunRepository(const WpaRunRepository&) = delete;
   WpaRunRepository& operator=(const WpaRunRepository&) = delete;

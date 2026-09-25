@@ -396,6 +396,29 @@ std::vector<std::byte> ToBytes(std::string_view text) {
 
 }  // namespace
 
+namespace {
+
+// The two rows one stored component contributes, as the statement text up to
+// and including its VALUES keyword plus the column count `BulkInsertBatcher`
+// appends value tuples for. The conflict rule is part of each statement, so a
+// batched commit resolves a duplicate exactly as a per-component commit did.
+constexpr const char* kComponentCacheInsertPrefix =
+    "INSERT OR IGNORE INTO wpa_component_result_cache_v2 "
+    "(result_cache_key, logical_input_hash, engine_toolchain_identity, "
+    " relation_schema_version, rule_bundle_version, model_bundle_version, "
+    " result_object_key, fixpoint_hash, external_hash) "
+    "VALUES";
+constexpr std::size_t kComponentCacheColumns = 9;
+
+constexpr const char* kComponentStateInsertPrefix =
+    "INSERT OR REPLACE INTO wpa_component_states_v2 "
+    "(run_id, scc_id, component_kind, logical_input_hash, fixpoint_hash, "
+    " external_hash, result_cache_key, result_object_key, status, diagnostics) "
+    "VALUES";
+constexpr std::size_t kComponentStateColumns = 10;
+
+}  // namespace
+
 std::string ResultCacheDescriptor::Encode() const {
   auto append_field = [](std::string* out, std::string_view value) {
     out->append(std::to_string(value.size()));
@@ -571,51 +594,20 @@ StatusOr<WpaComponentCompletion> WpaRunRepository::StoreSuccessfulComponent(
   const std::string serialized = SerializeResult(result);
   const auto bytes = ToBytes(serialized);
 
+  // The immutable object is written now, per component, and is never batched:
+  // a committed cache row therefore always references an object the store
+  // already holds, whether the row is committed in this batch or the next.
   Status put = component_results_->PutIfAbsent(cache_key, bytes);
   if (!put.ok()) {
     return put;
   }
 
-  Status begin = metadata_store_.BeginTransaction();
-  if (!begin.ok()) {
-    return begin;
-  }
-  auto rollback = [&](Status s) {
-    metadata_store_.RollbackTransaction();
-    return s;
-  };
-
-  Status cache = metadata_store_.Execute(
-      "INSERT OR IGNORE INTO wpa_component_result_cache_v2 "
-      "(result_cache_key, logical_input_hash, engine_toolchain_identity, "
-      " relation_schema_version, rule_bundle_version, model_bundle_version, "
-      " result_object_key, fixpoint_hash, external_hash) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      {cache_key, result.logical_input_hash, run.engine_toolchain_identity,
-       run.relation_schema_version, run.rule_bundle_version,
-       run.model_bundle_version, cache_key, result.fixpoint_hash,
-       result.external_hash});
-  if (!cache.ok()) {
-    return rollback(cache);
-  }
-
-  Status state = metadata_store_.Execute(
-      "INSERT OR REPLACE INTO wpa_component_states_v2 "
-      "(run_id, scc_id, component_kind, logical_input_hash, fixpoint_hash, "
-      " external_hash, result_cache_key, result_object_key, status, diagnostics) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      {core::ToString(run.run_id), core::ToString(key.scc_id),
-       std::to_string(static_cast<int>(key.component)),
-       result.logical_input_hash, result.fixpoint_hash, result.external_hash,
-       cache_key, cache_key,
-       std::to_string(static_cast<int>(WpaComponentStatus::kSucceeded)), ""});
-  if (!state.ok()) {
-    return rollback(state);
-  }
-
-  Status commit = metadata_store_.CommitTransaction();
-  if (!commit.ok()) {
-    return commit;
+  QueueComponentRows(run, key, cache_key, result);
+  if (pending_cache_rows_.size() >= kComponentCacheBatchSize) {
+    Status flushed = FlushComponentCache();
+    if (!flushed.ok()) {
+      return flushed;
+    }
   }
 
   WpaComponentCompletion completion;
@@ -623,6 +615,86 @@ StatusOr<WpaComponentCompletion> WpaRunRepository::StoreSuccessfulComponent(
   completion.result_object_key = cache_key;
   completion.result = std::move(result);
   return completion;
+}
+
+void WpaRunRepository::QueueComponentRows(
+    const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
+    const std::string& cache_key, const WpaComponentResult& result) {
+  pending_cache_rows_.push_back(
+      {cache_key, result.logical_input_hash, run.engine_toolchain_identity,
+       run.relation_schema_version, run.rule_bundle_version,
+       run.model_bundle_version, cache_key, result.fixpoint_hash,
+       result.external_hash});
+  pending_state_rows_.push_back(
+      {core::ToString(run.run_id), core::ToString(key.scc_id),
+       std::to_string(static_cast<int>(key.component)),
+       result.logical_input_hash, result.fixpoint_hash, result.external_hash,
+       cache_key, cache_key,
+       std::to_string(static_cast<int>(WpaComponentStatus::kSucceeded)), ""});
+}
+
+Status WpaRunRepository::FlushComponentCache() {
+  if (pending_cache_rows_.empty()) {
+    return Status::Ok();
+  }
+
+  Status begin = metadata_store_.BeginTransaction();
+  if (!begin.ok()) {
+    return begin;
+  }
+  // A failed flush abandons the batch: the rows queued with it are rolled back
+  // with the transaction, so nothing half-written survives, and the caller's
+  // failure path fails the run. What is lost is one batch of cache rows for
+  // components the next run recomputes.
+  auto abandon = [&](Status status) {
+    metadata_store_.RollbackTransaction();
+    pending_cache_rows_.clear();
+    pending_state_rows_.clear();
+    return status;
+  };
+
+  // The statement text up to its VALUES keyword; the batcher appends one value
+  // tuple per queued row. These are the statements an unbatched commit issued,
+  // so the rows — and their conflict rules — are unchanged by the batching.
+  // The transaction is already open, so a batcher that empties itself mid-loop
+  // — it does so once a batch reaches SQLite's bind-parameter limit, which the
+  // batch size is far below — still writes inside this transaction rather
+  // than committing ahead of it.
+  summarydb::BulkInsertBatcher cache_rows(metadata_store_,
+                                          kComponentCacheInsertPrefix,
+                                          kComponentCacheColumns);
+  for (std::vector<std::string>& row : pending_cache_rows_) {
+    Status added = cache_rows.Add(std::move(row));
+    if (!added.ok()) {
+      return abandon(added);
+    }
+  }
+  Status cache_flush = cache_rows.Flush();
+  if (!cache_flush.ok()) {
+    return abandon(cache_flush);
+  }
+
+  summarydb::BulkInsertBatcher state_rows(metadata_store_,
+                                          kComponentStateInsertPrefix,
+                                          kComponentStateColumns);
+  for (std::vector<std::string>& row : pending_state_rows_) {
+    Status added = state_rows.Add(std::move(row));
+    if (!added.ok()) {
+      return abandon(added);
+    }
+  }
+  Status state_flush = state_rows.Flush();
+  if (!state_flush.ok()) {
+    return abandon(state_flush);
+  }
+
+  Status commit = metadata_store_.CommitTransaction();
+  if (!commit.ok()) {
+    return abandon(commit);
+  }
+  pending_cache_rows_.clear();
+  pending_state_rows_.clear();
+  return Status::Ok();
 }
 
 Status WpaRunRepository::RecordComponentFailure(
@@ -640,6 +712,14 @@ Status WpaRunRepository::RecordComponentFailure(
 }
 
 Status WpaRunRepository::CompleteRun(const facts::AnalysisRunManifest& run) {
+  // The run's last batch is committed here, before the run is marked complete
+  // and before `Run` returns. A completed run's every component is therefore
+  // loadable from this store by the time assembly begins, which is what lets
+  // assembly reload component results instead of holding them all in memory.
+  Status flushed = FlushComponentCache();
+  if (!flushed.ok()) {
+    return flushed;
+  }
   return metadata_store_.Execute(
       "UPDATE wpa_analysis_runs SET status = ?, completed_at = strftime('%s', "
       "'now') WHERE run_id = ?",
@@ -648,6 +728,9 @@ Status WpaRunRepository::CompleteRun(const facts::AnalysisRunManifest& run) {
 }
 
 Status WpaRunRepository::MarkIncomplete(const facts::AnalysisRunManifest& run) {
+  // Whatever the failed run had queued is abandoned rather than flushed: it is
+  // cache and run state only, so the next run recomputes those components and
+  // loses nothing else.
   return metadata_store_.Execute(
       "UPDATE wpa_analysis_runs SET status = ? WHERE run_id = ?",
       {std::to_string(static_cast<int>(WpaRunStatus::kIncomplete)),
