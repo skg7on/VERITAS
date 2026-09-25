@@ -20,6 +20,7 @@ add_library(veritas_wpa
   SccStateRepository.cpp
   SccGraph.cpp
   SouffleWpaExecutor.cpp
+  WitnessKey.cpp
   WpaCoordinator.cpp
   WpaInputMaterializer.cpp
   WpaOrchestrator.cpp

@@ -283,8 +283,25 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
     }
   }
 
+  // The run's last batch of convergence state is committed here, before the run
+  // is marked complete and before `Run` returns. A later run reads these rows to
+  // decide whether a component's externally visible hash moved, so leaving the
+  // tail of the run queued would let it compare against a stale row. A failure
+  // takes the same path as every other store error in this run.
+  if (scc_state_ != nullptr) {
+    Status flushed = scc_state_->FlushStateCache();
+    if (!flushed.ok()) {
+      repository_.MarkIncomplete(request.run);
+      return flushed;
+    }
+  }
+
   Status complete = repository_.CompleteRun(request.run);
   if (!complete.ok()) {
+    // `CompleteRun` can now fail on its final batch flush as well as on the
+    // status update, so it gets the same failure path as every other store
+    // error in this run rather than returning with the row left `kInProgress`.
+    repository_.MarkIncomplete(request.run);
     return complete;
   }
   return result;
