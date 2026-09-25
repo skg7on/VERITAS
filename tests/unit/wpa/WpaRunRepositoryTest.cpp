@@ -255,9 +255,9 @@ TEST(WpaRunRepositoryTest, AFullBatchCommitsWithoutAnExplicitFlush) {
 }
 
 // A completed run's whole cache is durable by the time `Run` returns: the final
-// flush is inside `CompleteRun`. Assembly reloads component results from this
-// store after `Run` returns, so a component left queued here would be invisible
-// to it.
+// flush is inside `CompleteRun`. A component left queued here would be invisible
+// to the next run's `LoadReusableComponent`, so a completed run would not leave
+// a consistent store behind it.
 TEST(WpaRunRepositoryTest, CompletedRunLeavesEveryComponentLoadable) {
   const auto db = TempDbPath();
   auto repo = WpaRunRepository::Open(db);

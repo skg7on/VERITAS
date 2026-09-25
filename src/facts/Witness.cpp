@@ -24,6 +24,16 @@
 
 namespace veritas::facts {
 
+// A cell alternative this encoder does not know. A new alternative in
+// `SemanticCellValue` must be encoded here; leaving it out would let two rows
+// that differ only in it derive the same semantic key and, through
+// `DeriveWitnessId`, the same witness id, which merges provenance rather than
+// rejecting a batch. The dependent-false form is what makes the `static_assert`
+// below fire instead of being accepted as an unreachable statement; it mirrors
+// the preimage encoder in `AnalysisFact.cpp`.
+template <typename T>
+inline constexpr bool kUnencodedCellKind = false;
+
 void AppendSemanticKey(std::string* out, const SemanticRow& row) {
   // Delegates to the field codec rather than carrying a second encoding: the
   // Souffle functors expose exactly these primitives, so a key built here and
@@ -42,11 +52,19 @@ void AppendSemanticKey(std::string* out, const SemanticRow& row) {
             AppendField(out, KeyFieldTag::kNumber, std::to_string(value));
           } else if constexpr (std::is_same_v<T, std::uint64_t>) {
             AppendField(out, KeyFieldTag::kUnsigned, std::to_string(value));
-          } else {
+          } else if constexpr (std::is_same_v<T, semantic::DispatchKind> ||
+                               std::is_same_v<T, semantic::AliasKind> ||
+                               std::is_same_v<T, semantic::ByteRangeKind> ||
+                               std::is_same_v<T, semantic::EpistemicState>) {
             // The typed semantic enums travel as their ordinal, which is the
             // same encoding the Datalog side uses for these columns.
             AppendField(out, KeyFieldTag::kEnum,
                         std::to_string(static_cast<std::uint64_t>(value)));
+          } else {
+            static_assert(kUnencodedCellKind<T>,
+                          "SemanticCellValue gained an alternative the "
+                          "semantic-key encoding does not know, so rows "
+                          "differing only in that cell would derive one key");
           }
         },
         cell);

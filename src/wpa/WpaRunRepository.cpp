@@ -724,9 +724,9 @@ Status WpaRunRepository::RecordComponentFailure(
 
 Status WpaRunRepository::CompleteRun(const facts::AnalysisRunManifest& run) {
   // The run's last batch is committed here, before the run is marked complete
-  // and before `Run` returns. A completed run's every component is therefore
-  // loadable from this store by the time assembly begins, which is what lets
-  // assembly reload component results instead of holding them all in memory.
+  // and before `Run` returns, so the next run's `LoadReusableComponent` sees
+  // every component of a completed run: a completed run leaves a consistent
+  // store behind it.
   Status flushed = FlushComponentCache();
   if (!flushed.ok()) {
     return flushed;

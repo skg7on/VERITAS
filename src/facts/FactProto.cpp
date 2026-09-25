@@ -26,6 +26,14 @@ namespace {
 namespace sem = analysis::semantic;
 namespace fp = fact_proto;
 
+// A cell alternative `FillCell` does not know. A new alternative in
+// `SemanticCellValue` must be converted here; leaving it out would silently
+// set no `value_case` at all. This is the same dependent-false guard the
+// preimage and semantic-key encoders carry; the failure here is loud on the
+// way back, but the guard rejects it at compile time instead.
+template <typename T>
+inline constexpr bool kUnconvertedCellKind = false;
+
 // --- Enum conversions -----------------------------------------------------
 
 fp::EpistemicState ToProtoEpistemic(sem::EpistemicState s) {
@@ -178,6 +186,11 @@ void FillCell(fp::Cell* out, const SemanticCellValue& cell) {
           out->set_byte_range_kind(ToProtoByteRange(value));
         } else if constexpr (std::is_same_v<T, sem::EpistemicState>) {
           out->set_epistemic(ToProtoEpistemic(value));
+        } else {
+          static_assert(kUnconvertedCellKind<T>,
+                        "SemanticCellValue gained an alternative FactProto's "
+                        "FillCell does not convert, so the cell would be "
+                        "written with no value_case");
         }
       },
       cell);

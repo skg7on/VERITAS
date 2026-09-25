@@ -173,6 +173,10 @@ public:
   // and the lookup index, which are dead the moment the ranks exist. Releasing
   // them here rather than at destruction keeps ~0.3 GiB from sitting underneath
   // the two sorts that consume the ranks.
+  //
+  // No `Intern` may follow this call. `chunks_`, `keys_`, and `index_` are
+  // released but `ranks_` is not, so a later `Intern` would restart ids at 0
+  // while `Rank` reads the stale, too-short `ranks_` those new ids index past.
   void Finish() {
     std::vector<std::uint32_t> order(keys_.size());
     std::iota(order.begin(), order.end(), std::uint32_t{0});

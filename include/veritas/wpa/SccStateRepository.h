@@ -78,6 +78,14 @@ public:
   // key exactly once per run, because `SccGraph::ReverseTopologicalOrder` yields
   // each SCC exactly once and the run's component list is a set of distinct
   // component kinds. A caller that stores a key twice must flush in between.
+  //
+  // The per-`Run` flush is what extends that argument across runs. When the C++
+  // conformance oracle is enabled, `ProjectAnalyzer` shares one repository
+  // across two `Run`s over the same keys (`src/analysis/ProjectAnalyzer.cpp`
+  // line 233, and the two `Run` calls at lines 264-276 and 309-311), and each
+  // `Run` flushes its last batch before returning, so the second run's first
+  // store of a key cannot land in the first run's still-open batch. The oracle
+  // is off by default (`run_cpp_conformance_oracle = false`).
   StatusOr<ExternalChange> StoreState(const SccContext &context,
                                       const SccResult &result);
 
