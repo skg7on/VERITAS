@@ -244,10 +244,13 @@ deliberate non-build as an omission.
 `AnalysisFactBus::Validate` (`src/facts/AnalysisFactBus.cpp:289`) is a genuine
 integrity check and is retained in full. It begins by recomputing
 `DeriveBatchId(batch)` — a hash over every fact and witness row in the batch —
-and then calls `DeriveFactId` once for each of 1,249,792 facts (line 319) and
-**twice for each of 1,375,911 witness edges**, once for the result row (line 348)
-and once for the input row (line 352). That is approximately 4.0M SHA-256
-computations over encoded rows.
+and then calls `DeriveFactId` once for each of the 752,076 derived facts (line
+319 — the `batch.facts` loop, which is not the 1,249,792 rows of
+`analysis_facts`, a count that also carries their rooted inputs) and **twice for
+each of 1,375,911 witness edges**, once for the result row (line 348) and once
+for the input row (line 352). That is **3,503,898** SHA-256 computations over
+encoded rows in this one pass, and **9,561,990** across the process, which
+derives the same rows again in publication.
 
 The same rows were already derived during canonicalization, and `FactStore`'s
 publication path derives them again. No derivation result is carried forward:
@@ -465,9 +468,10 @@ redundancy:
 1. **Memoize row identity within the pass.** A row's fact identity is a pure
    function of the row, so a single `row → fact_id` memo serves the per-fact
    loop and both endpoints of every witness edge. Distinct rows across the batch
-   are 1,249,792 facts plus the rooted inputs; the witness endpoints are drawn
-   from exactly that set. The memo therefore collapses ~4.0M derivations to
-   roughly the fact count, with no change to any comparison performed.
+   are the 1,249,792 rows of `analysis_facts` — the 752,076 derived facts plus
+   their rooted inputs; the witness endpoints are drawn from exactly that set.
+   The memo therefore collapses the 3,503,898 derivations section 3.3 counts to
+   those 1,249,792 distinct rows, with no change to any comparison performed.
 2. **Make the encoding cheap.** `AppendCell` and `AppendLenPrefixed` reserve the
    encoded length once and write into the buffer directly, instead of appending
    a byte at a time. `DeriveFactId` keeps deriving from the row rather than
@@ -767,6 +771,37 @@ component, which derives facts from them. That is an accuracy trade, and section
 5 forbids accuracy trades. Had the saving been material the trade might have been
 worth making; at 0.037 % of wall time it is not.
 
+**2. Section 7.3 (memoized fact identity) — built, measured, and the memo's memory left to
+section 9.4.** Measured on the same fixture and configuration as this round's baseline: wall
+**520.92 s → 428.19 s (−92.7 s, −17.8 %)**, published content byte-identical, and `DeriveFactId`
+**119.33 s → 29.80 s** over **9,561,990 → 5,792,572** calls, the memo collapsing section 3.3's
+**3,503,898** derivations in `Validate` to its **1,249,792** distinct rows. Of the 92.7 s, 69.1 s is the
+cheaper encoding at an unchanged call count and 34.3 s is fewer derivations, less 4.8 s for the
+memo's own 4,879,809 lookups and the run-to-run remainder; the memo proper is ≈ 10.7 s of it.
+The memo's price is **0.68 GiB of peak RSS** against section 9.4's 4 GiB criterion, so
+keep-or-drop is a section 9.4 decision re-taken on the whole workload: if the wall gate lands
+with margin, dropping the memo banks the 0.68 GiB for free. The encoding half — 69 s of the
+92.7 s for no measurable memory — is not droppable under any reading.
+
+**3. Section 7.4 (batched component cache commits) — built; batch size and crash window
+stated plainly.** `StoreSuccessfulComponent` still writes its content-addressed result object
+per component, unchanged and first, so a committed cache row always references an object the
+store already holds; the cache row and the run-state row are queued and committed by
+`FlushComponentCache`, which the repository calls once a batch reaches
+`WpaRunRepository::kComponentCacheBatchSize` — **256 components** — and once more inside
+`CompleteRun`, before the run is marked complete. A crash before that final commit therefore
+costs **at most the last 256 components' cached results**, which the next run recomputes; no
+published fact, no provenance edge, and not the run receipt are affected, and a completed run
+publishes exactly what it published before. The removed per-component commit measured
+**4,589.3 ms** in the baseline's WPA window (0.335 ms × 13,716 components, 1.08 % of a 424.79 s
+wall), and batching it is **1.1 % of wall time** — smaller than this machine's run-to-run
+spread, so no wall-time movement is claimed for section 7.4 in either direction; the isolated
+measurement of exactly the removed work is the load-bearing evidence, not the end-to-end
+total. `SccStateRepository::StoreState` commits per component in the same window at a
+comparable measured cost and is deliberately **not** batched here: section 7.4's design is
+scoped to the component result cache, and that repository's rows are the incremental
+scheduler's convergence state, which it reads back inside its own transaction.
+
 **What this changes elsewhere.** Section 4 goal 2, section 7.2, section 9.2's
 reuse test bullet, and section 9.3 are marked dropped rather than deleted, and
 nothing is renumbered. Section 7.1 — the in-memory execution that removed the
@@ -777,10 +812,11 @@ nothing for sessions: every component execution still opens and closes its own,
 so session memory is already released per component.
 
 **Accepted consequence.** The round's wall-time work now has to find the whole
-~212 s among sections 7.1, 7.3, 7.4, 7.5, 7.6, and 7.7. Section 3.3 — roughly
-4.0M SHA-256 derivations over encoded rows, with `std::vector<std::byte>`'s
-`push_back` beneath `AppendLenPrefixed` as the heaviest single leaf in the
-publication window — is where the profile points next.
+~212 s among sections 7.1, 7.3, 7.4, 7.5, 7.6, and 7.7. Section 3.3 — the
+**3,503,898** SHA-256 derivations `Validate` performs over encoded rows, with
+`std::vector<std::byte>`'s `push_back` beneath `AppendLenPrefixed` as the
+heaviest single leaf in the publication window — is where the profile points
+next.
 
 ## 10. Open risks
 
