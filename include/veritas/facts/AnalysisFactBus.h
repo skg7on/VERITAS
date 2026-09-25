@@ -27,7 +27,6 @@
 #ifndef VERITAS_FACTS_ANALYSIS_FACT_BUS_H_
 #define VERITAS_FACTS_ANALYSIS_FACT_BUS_H_
 
-#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -58,38 +57,13 @@ struct AnalysisFactBatch {
   std::vector<std::string> diagnostics;
 };
 
-// Resolves one completed component's stored result during assembly. A caller
-// that has released the in-memory payload supplies one of these; the batch is
-// then assembled from the same bytes that were stored, so the published content
-// is what the store holds rather than what this process happens to remember.
-using ComponentReloader = std::function<StatusOr<wpa::WpaComponentResult>(
-    const wpa::WpaComponentKey &)>;
-
 // Reduces a successful WPA run to a canonical batch: flattens the completed
 // components' facts/witnesses/diagnostics, canonicalizes component, rooted
 // input, fact, and witness ordering, strips the component payload vectors while
 // retaining their hashes and metadata, and derives the content-addressed
 // batch_id. Lvalues are copied; production passes an rvalue to transfer
 // ownership. Mechanical; the bus re-validates on Publish.
-//
-// The run must carry its completed components' payloads. A run from
-// `WpaOrchestrator::Run` does not -- it releases them as it stores them -- and
-// must be assembled with the loader overload below instead; assembling one here
-// is a programming error, and is asserted against rather than producing an empty
-// batch.
 AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result);
-
-// The same reduction for a run whose completed components carry no payload,
-// which is how the orchestrator leaves them: each component's result is fetched
-// through `reload` as it is keyed and released again before the next one is
-// fetched, so assembly holds one component's payload rather than every
-// component's. Every reloaded result must agree with the completed component it
-// replaces -- key, logical input hash, fixpoint hash, and external hash -- and a
-// disagreement is a `FailedPrecondition` rather than a silently accepted
-// substitution. A reload failure is returned as it is, and is neither retried
-// nor skipped.
-StatusOr<AnalysisFactBatch> MakeAnalysisFactBatch(wpa::WpaRunResult result,
-                                                  const ComponentReloader &reload);
 
 // Recomputes the canonical content-addressed batch id over every immutable
 // field. Exposed so the bus and its callers share one derivation.

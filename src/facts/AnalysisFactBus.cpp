@@ -15,7 +15,6 @@
 #include "veritas/facts/AnalysisFactBus.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -267,22 +266,7 @@ core::StableId DeriveBatchId(const AnalysisFactBatch &batch) {
                         core::DigestToHex(canonical.Finalize())};
 }
 
-namespace {
-
-// Shared body of both assembly entry points. `reload` is null when every
-// completed component still carries its payload in memory, and set when the
-// orchestrator has released them; in that case each component's payload is
-// fetched through it just before that component is keyed and released again at
-// the end of the iteration.
-StatusOr<AnalysisFactBatch> AssembleBatch(wpa::WpaRunResult result,
-                                          const ComponentReloader *reload) {
-  // A run the orchestrator produced has no payload to assemble, and assembling
-  // it anyway would publish an empty fact set for every component -- which
-  // `Validate` accepts, because an empty batch has no witness to be closed. The
-  // flag is what makes that mistake loud at the seam instead of silent in a
-  // store.
-  assert(reload != nullptr || !result.component_payloads_released);
-
+AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   AnalysisFactBatch batch;
   batch.run = std::move(result.run);
   batch.expected_components = std::move(result.expected_components);
@@ -327,45 +311,8 @@ StatusOr<AnalysisFactBatch> AssembleBatch(wpa::WpaRunResult result,
   // and set membership is the only thing it is asked.
   std::set<std::uint32_t> overridden;
   for (auto &completion : batch.completed_components) {
-    // A completion the orchestrator released carries no payload, so fetch it
-    // back for the duration of this iteration: one component's facts and
-    // witnesses are resident instead of every component's, which is the whole
-    // point of the reload. The three locals die with the iteration.
-    std::vector<AnalysisFact> reloaded_facts;
-    std::vector<WitnessEdge> reloaded_witnesses;
-    std::vector<std::string> reloaded_diagnostics;
-    std::vector<AnalysisFact> *facts = &completion.result.facts;
-    std::vector<WitnessEdge> *witnesses = &completion.result.witnesses;
-    std::vector<std::string> *diagnostics = &completion.result.diagnostics;
-    if (reload != nullptr) {
-      auto loaded = (*reload)(completion.key);
-      if (!loaded.ok()) {
-        return loaded.status();
-      }
-      // The reloaded result has to be the component this completion stands for.
-      // `LoadReusableComponent` already revalidated the object against the
-      // descriptor rebuilt from the completion's own key and logical input
-      // hash, so what is left is the pair of hashes that never entered the
-      // descriptor: they came from the same store write as the object, and must
-      // still match it. A mismatch is a substitution, not a reload.
-      if (loaded->scc_id != completion.key.scc_id ||
-          loaded->component != completion.key.component ||
-          loaded->logical_input_hash != completion.result.logical_input_hash ||
-          loaded->fixpoint_hash != completion.result.fixpoint_hash ||
-          loaded->external_hash != completion.result.external_hash) {
-        return Status::FailedPrecondition(
-            "reloaded component does not match the completed component it "
-            "replaces");
-      }
-      reloaded_facts = std::move(loaded->facts);
-      reloaded_witnesses = std::move(loaded->witnesses);
-      reloaded_diagnostics = std::move(loaded->diagnostics);
-      facts = &reloaded_facts;
-      witnesses = &reloaded_witnesses;
-      diagnostics = &reloaded_diagnostics;
-    }
     overridden.clear();
-    for (auto &fact : *facts) {
+    for (auto &fact : completion.result.facts) {
       fact_key.clear();
       AppendSemanticKey(&fact_key, fact.row);
       if (owned.insert(fact.fact_id).second) {
@@ -375,7 +322,7 @@ StatusOr<AnalysisFactBatch> AssembleBatch(wpa::WpaRunResult result,
         overridden.insert(ranks.Intern(fact_key));
       }
     }
-    for (auto &edge : *witnesses) {
+    for (auto &edge : completion.result.witnesses) {
       result_key.clear();
       AppendSemanticKey(&result_key, edge.result.row);
       // The overridden set's member is the interned id, not the key bytes: the
@@ -397,7 +344,7 @@ StatusOr<AnalysisFactBatch> AssembleBatch(wpa::WpaRunResult result,
           .edge = std::move(edge),
       });
     }
-    for (auto &diagnostic : *diagnostics) {
+    for (auto &diagnostic : completion.result.diagnostics) {
       batch.diagnostics.push_back(std::move(diagnostic));
     }
     // Release the stripped payload vectors, not merely their elements. Moving
@@ -461,21 +408,6 @@ StatusOr<AnalysisFactBatch> AssembleBatch(wpa::WpaRunResult result,
 
   batch.batch_id = DeriveBatchId(batch);
   return batch;
-}
-
-} // namespace
-
-AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
-  // No reload step, so there is no failure to report and no status to hand
-  // back: the run's own payloads are the batch's content.
-  StatusOr<AnalysisFactBatch> assembled =
-      AssembleBatch(std::move(result), nullptr);
-  return std::move(assembled).value();
-}
-
-StatusOr<AnalysisFactBatch> MakeAnalysisFactBatch(
-    wpa::WpaRunResult result, const ComponentReloader &reload) {
-  return AssembleBatch(std::move(result), &reload);
 }
 
 AnalysisFactBus::AnalysisFactBus(wpa::WpaRunRepository &delivery_state)

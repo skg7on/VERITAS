@@ -120,22 +120,6 @@ class WpaRunRepository {
   StatusOr<std::optional<WpaComponentResult>> LoadReusableComponent(
       const ResultCacheDescriptor& descriptor);
 
-  // Reloads one component of a run that has already stored it, for a caller that
-  // holds the component's key but not its payload -- assembly, after the
-  // orchestrator has released the in-memory result. The logical input hash that
-  // keys the cache entry is read from the component's own run-state row, so the
-  // descriptor is rebuilt here and the load goes through
-  // `LoadReusableComponent`: the same object, the same deserialization, and the
-  // same revalidation the reuse path applies.
-  //
-  // Fails with `FailedPrecondition` when the run has no succeeded state row for
-  // the key, when that row's cache entry is gone, or with whatever
-  // `LoadReusableComponent` returns when the stored object fails to revalidate.
-  // Callers must have committed the run's component cache (a completed run has,
-  // through `CompleteRun`) before reloading.
-  StatusOr<WpaComponentResult> ReloadStoredComponent(
-      const facts::AnalysisRunManifest& run, const WpaComponentKey& key);
-
   // Stores a successful component result: the immutable object, and the cache
   // and run-state rows that reference it. The object write is immediate and
   // unchanged; the two rows are queued and committed with the rest of the

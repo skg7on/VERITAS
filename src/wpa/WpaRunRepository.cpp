@@ -586,38 +586,6 @@ StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableCompon
   return std::optional<WpaComponentResult>(std::move(*result));
 }
 
-StatusOr<WpaComponentResult> WpaRunRepository::ReloadStoredComponent(
-    const facts::AnalysisRunManifest& run, const WpaComponentKey& key) {
-  // The state row is the only place the logical input hash of a stored
-  // component is recorded outside the descriptor key that hash contributes to,
-  // so it is what turns "this component of this run" into a cache lookup. Only
-  // a succeeded row is read: a failed component published no result and has no
-  // object to reload.
-  auto rows = metadata_store_.Query(
-      "SELECT logical_input_hash FROM wpa_component_states_v2 "
-      "WHERE run_id = ? AND scc_id = ? AND component_kind = ? AND status = ?",
-      {core::ToString(run.run_id), core::ToString(key.scc_id),
-       std::to_string(static_cast<int>(key.component)),
-       std::to_string(static_cast<int>(WpaComponentStatus::kSucceeded))});
-  if (!rows.ok()) {
-    return rows.status();
-  }
-  if (rows->empty() || (*rows)[0].size() != 1) {
-    return Status::FailedPrecondition(
-        "the run has no stored result for this component");
-  }
-  auto loaded = LoadReusableComponent(
-      MakeResultCacheDescriptor(run, key, (*rows)[0][0]));
-  if (!loaded.ok()) {
-    return loaded.status();
-  }
-  if (!loaded->has_value()) {
-    return Status::FailedPrecondition(
-        "the stored component has no content-addressed result");
-  }
-  return std::move(**loaded);
-}
-
 StatusOr<WpaComponentCompletion> WpaRunRepository::StoreSuccessfulComponent(
     const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
     WpaComponentResult result) {
