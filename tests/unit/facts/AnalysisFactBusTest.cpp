@@ -559,7 +559,8 @@ TEST(AnalysisFactBusTest, PackedRanksKeepTheSameUniqueBoundary) {
   std::filesystem::remove_all(db);
 }
 
-TEST(AnalysisFactBusTest, ConsumesComponentPayloadIntoCanonicalBatchVectors) {  auto run = DuplicateProofRun();
+TEST(AnalysisFactBusTest, ConsumesComponentPayloadIntoCanonicalBatchVectors) {
+  auto run = DuplicateProofRun();
   const auto expected = MakeAnalysisFactBatch(run);
   auto consumed = MakeAnalysisFactBatch(std::move(run));
 
