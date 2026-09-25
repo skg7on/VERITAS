@@ -37,6 +37,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <span>
 #include <string>
 #include <string_view>
@@ -798,6 +799,65 @@ TEST(SouffleSessionTest, ExecutorRowsMatchTheCapturedFlowBaseline) {
   ASSERT_FALSE(raw->results.empty());
   ASSERT_FALSE(raw->witnesses.empty());
   ExpectSameRows(kCapturedFlowRows, RenderRowsSorted(*raw), "fixture kFlow");
+}
+
+TEST(SouffleSessionTest, TheFixtureCarriesRelationsItsComponentDoesNotRegister) {
+  // Non-vacuity for the skip path, and the reason the executor probes at all. A
+  // component's compiled program contains only the relations its rules mention
+  // -- Souffle eliminates the rest -- while the logical input carries the whole
+  // run's EDB. Three of the four fixture components therefore have EDB rows for
+  // a relation their program has no such relation for; an executor that treated
+  // that as a failure would fail most of the run rather than a corner of it.
+  //
+  // An empty insert is the ABI's relation probe: the runner resolves the name
+  // before it looks at any row. The expectation below is a snapshot of what
+  // each generated bundle eliminates today, not a contract the executor
+  // imposes, so a legitimate rule-bundle change shows up here as a named
+  // relation rather than as a mystery failure elsewhere.
+  const std::vector<summary::SummaryArtifact> artifacts =
+      BaselineFixtureProgram();
+  const std::vector<std::pair<WpaComponentKind, std::string_view>> components = {
+      {WpaComponentKind::kReachability, "reachability"},
+      {WpaComponentKind::kMemoryEffects, "memory-effects"},
+      {WpaComponentKind::kFlow, "flow"},
+      {WpaComponentKind::kEffects, "effects"}};
+  const std::map<std::string, std::vector<std::string>> expected = {
+      {"reachability", {"UnmodeledExternal", "UnknownCall"}},
+      {"memory-effects", {"UnmodeledExternal", "UnknownCall"}},
+      {"flow", {"DirectCall", "UnknownCall", "UnmodeledExternal"}},
+      {"effects", {}}};
+
+  for (const auto& [component, name] : components) {
+    auto logical = BaselineFixtureInput(artifacts, component, "f");
+    ASSERT_TRUE(logical.ok()) << name << ": " << logical.status().message();
+
+    VeritasSouffleSession* session = nullptr;
+    ASSERT_EQ(
+        veritas_souffle_session_open(std::string(name).c_str(), 1, &session),
+        0);
+    std::vector<std::string> unregistered;
+    for (const auto& row : logical->edb) {
+      const auto& schema = facts::RelationsV2().Get(row.relation);
+      if (std::find(unregistered.begin(), unregistered.end(), schema.name) !=
+          unregistered.end()) {
+        continue;
+      }
+      if (veritas_souffle_session_insert(session, schema.name.c_str(), nullptr,
+                                         schema.columns.size(), 0) == 3) {
+        unregistered.push_back(schema.name);
+      }
+    }
+    veritas_souffle_session_close(session);
+
+    const auto found = expected.find(std::string(name));
+    ASSERT_TRUE(found != expected.end());
+    std::vector<std::string> expected_names = found->second;
+    std::sort(unregistered.begin(), unregistered.end());
+    std::sort(expected_names.begin(), expected_names.end());
+    EXPECT_EQ(unregistered, expected_names)
+        << name << " eliminates a different set of EDB relations than the "
+                   "pinned baselines were captured against";
+  }
 }
 
 }  // namespace
