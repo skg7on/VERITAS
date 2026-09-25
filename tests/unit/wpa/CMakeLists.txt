@@ -86,6 +86,20 @@ target_link_libraries(WpaRunRepositoryTest PRIVATE
 veritas_add_warnings(WpaRunRepositoryTest)
 gtest_discover_tests(WpaRunRepositoryTest DISCOVERY_TIMEOUT 60)
 
+# The session ABI is exported by the runner library, which veritas_wpa links
+# PRIVATE and so does not re-export: a test that names its symbols links it
+# itself. The target exists only under the Souffle engine.
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  add_executable(SouffleSessionTest SouffleSessionTest.cpp)
+  target_link_libraries(SouffleSessionTest PRIVATE
+    veritas::wpa
+    veritas_souffle_runner
+    GTest::gtest_main
+  )
+  veritas_add_warnings(SouffleSessionTest)
+  gtest_discover_tests(SouffleSessionTest DISCOVERY_TIMEOUT 60)
+endif()
+
 add_executable(WpaOrchestratorTest WpaOrchestratorTest.cpp)
 target_link_libraries(WpaOrchestratorTest PRIVATE
   veritas::wpa
