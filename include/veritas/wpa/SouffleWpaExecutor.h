@@ -14,11 +14,13 @@
 
 // SouffleWpaExecutor.h — the compiled-Souffle production engine adapter.
 //
-// Writes the engine-neutral logical input with RelationIo, runs the compiled
-// Souffle program in-process through the C ABI in SouffleRunner.h, and reads
-// the derived relations and witness relation back into a raw evaluation. A
-// non-zero run status, missing output, schema mismatch, or witness parse
-// failure returns a non-OK Status with no evaluation.
+// Hands the engine-neutral logical input to an in-memory session (the C ABI in
+// SouffleRunner.h), evaluates the compiled Souffle program in-process, and
+// scans the derived relations and the witness relation back into a raw
+// evaluation. Nothing on this path touches the filesystem. A session that will
+// not open, a rejected insert, a non-zero run status, an unscannable relation,
+// a schema mismatch, or a witness key that does not decode returns a non-OK
+// Status with no evaluation.
 
 #ifndef VERITAS_WPA_SOUFFLE_WPA_EXECUTOR_H_
 #define VERITAS_WPA_SOUFFLE_WPA_EXECUTOR_H_
