@@ -7,8 +7,9 @@
 (the round-1/round-2 spec). This design reopens two of that spec's section 5
 non-goals, named in section 5 below.
 
-**Tracking issue:** to be opened as the successor to
-[#133](https://github.com/skg7on/VERITAS/issues/133).
+**Tracking issue:** [#136](https://github.com/skg7on/VERITAS/issues/136), the
+successor to [#133](https://github.com/skg7on/VERITAS/issues/133), which remains
+open.
 
 **Motivating command:**
 
