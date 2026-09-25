@@ -65,11 +65,3 @@ target_link_libraries(AtomicFileTest PRIVATE
 )
 veritas_add_warnings(AtomicFileTest)
 gtest_discover_tests(AtomicFileTest DISCOVERY_TIMEOUT 60)
-
-add_executable(AllocatorReliefTest AllocatorReliefTest.cpp)
-target_link_libraries(AllocatorReliefTest PRIVATE
-  veritas_core
-  GTest::gtest_main
-)
-veritas_add_warnings(AllocatorReliefTest)
-gtest_discover_tests(AllocatorReliefTest DISCOVERY_TIMEOUT 60)

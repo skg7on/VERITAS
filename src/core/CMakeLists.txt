@@ -47,7 +47,6 @@ configure_file(
 add_library(veritas_core
   Status.cpp
   AtomicFile.cpp
-  AllocatorRelief.cpp
   Hash.cpp
   Ids.cpp
   CanonicalValue.cpp
