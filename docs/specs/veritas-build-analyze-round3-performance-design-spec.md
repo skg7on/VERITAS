@@ -30,14 +30,19 @@ measurement actually shows. The dominant costs are not in the paths rounds 1
 and 2 optimized. They are:
 
 1. a filesystem round trip inside every WPA component execution;
-2. a fresh compiled Soufflé program instantiated per component;
+2. a fresh compiled Soufflé program instantiated per component — **listed here
+   by reading the code, then measured at 0.037 % of wall time and dropped; see
+   sections 3.2, 7.2, and 9.6**;
 3. redundant re-derivation of fact identity across validation and publication;
 4. per-component SQLite transactions, one commit each;
 5. a string-keyed comparison sort over 1.38M witness edges;
 6. a resident set that never returns the memory it abandons.
 
 Every one of these produces no semantic content. This round removes them
-without trading accuracy, and without weakening any validation.
+without trading accuracy, and without weakening any validation. Item 2 is the
+exception that proves the rule: the measurement in section 3.2 shows the
+construction it would remove is too small to be worth its correctness risk, so
+this round leaves it in place rather than removing it.
 
 ## 2. Measured baseline
 
@@ -186,11 +191,53 @@ serialize/parse round trip of every EDB and IDB row. The samples place
 
 ### 3.2 A compiled Soufflé program is instantiated per component
 
-`veritas_souffle_run` (`src/wpa/SouffleRunner.cpp:43`) calls
-`ProgramFactory::newInstance(program_name)` on every invocation. Each call builds
-a fresh program object with its own relation tables, symbol table, and
-interpreter state, then `delete`s it. Construction cost is paid 13,716 times to
-produce 13,716 independent evaluations.
+**Measured and negligible. This cost is not removed: section 7.2 is dropped.**
+
+`veritas_souffle_session_open` (`src/wpa/SouffleRunner.cpp:186`) calls
+`ProgramFactory::newInstance(program_name)` on every component execution, as
+`veritas_souffle_run` (`src/wpa/SouffleRunner.cpp:155`) does on the file-backed
+path. Each call builds a fresh program object with its own relation tables,
+symbol table, and interpreter state, then `delete`s it. Construction cost is
+paid 13,716 times to produce 13,716 independent evaluations.
+
+That 13,716 multiplier is why this section was filed as a root cause, and it is
+why the cost had to be measured rather than inferred: a small per-call cost
+looks large when multiplied by the component count. It is not. Timing
+`open`+`close` — which is exactly `newInstance`, `setNumThreads`, and `delete`,
+and therefore the whole quantity a reuse design would remove — 4,000 times per
+component kind, in the baseline's own Debug configuration, gives:
+
+| Component kind | Registered program | `open`+`close` |
+| --- | --- | ---: |
+| reachability | `v2_reach` | 10.9 µs |
+| memory-effects | `v2_memory_effects` | 19.4 µs |
+| flow | `v2_global_flow` | 14.8 µs |
+| effects | `v2_effects` | 18.5 µs |
+
+The mean is **15.9 µs**. Against a measured **0.40 ms** per component execution,
+the fixed cost is 2.6–2.8 % of the smallest component this repository can build,
+and **0.218 s** across all 13,716 instances — **0.037 %** of the 587 s baseline
+and **0.10 %** of the ~212 s gap to the 375 s acceptance limit.
+
+The cost is also **workload-independent**, which is what makes 2.6 % a ceiling
+rather than an average: the four bundles are build-time artefacts generated from
+`logic/`, so the same four programs are instantiated whatever repository is
+analyzed. Timing a synthetic reachability component of `n` call edges confirms
+it — the fixed column is flat to within 7 % while the full session path grows
+~800×:
+
+| n edges | Derived rows | `open`+`close` | Full session path | Fixed share |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 4 | 10.7 µs | 79.8 µs | 13.4 % |
+| 64 | 64 | 10.8 µs | 946.6 µs | 1.1 % |
+| 512 | 512 | 10.8 µs | 7.91 ms | 0.14 % |
+| 4096 | 4096 | 11.4 µs | 65.3 ms | 0.017 % |
+
+Round 3 therefore leaves this cost in place and section 3.1's removal of the file
+round trip stands on its own, which is the outcome section 10 risk 2 anticipated.
+The measured figures are recorded as this round's implementation status in
+section 9.6, so the acceptance report can cite the decision rather than report a
+deliberate non-build as an omission.
 
 ### 3.3 Fact identity is re-derived once per fact and twice per witness edge
 
@@ -246,8 +293,13 @@ payloads are consumed.
 
 1. Execute each WPA component through the compiled program's in-memory
    relations, with no intermediate directory, file, or CSV text.
-2. Instantiate each component's compiled program once per run, not once per
-   component, resetting relations between components.
+2. **Dropped (2026-09-25).** Instantiate each component's compiled program once
+   per run, not once per component, resetting relations between components.
+   Section 3.2 measured the cost this goal would remove at 0.218 s — 0.037 % of
+   the baseline and 0.10 % of the gap to the acceptance limit — and the reset it
+   needs carries section 10 risk 2, whose failure mode is an accuracy trade that
+   section 5 forbids. The goal text is retained rather than renumbered so the
+   drop stays visible; the design is dropped in section 7.2.
 3. Derive each distinct fact identity once per validation pass and once per
    publication pass, without deleting or weakening any check.
 4. Commit component cache state in batches rather than once per component.
@@ -284,8 +336,9 @@ reopened; only the lifetime of memory SVF has already allocated is.
 - No change to SVF analysis configuration, `summary.v2`, `relations.v2`, the
   typed relation registry, rule bundles, model bundles, or fact identity.
 - No batching of multiple SCCs into one Soufflé execution, and no parallel
-  component execution. Goal 2 reuses *one program object* across sequential
-  components; it does not merge components into one evaluation.
+  component execution. Dropping goal 2 does not relax this: it forbids merging
+  components into one evaluation. Had goal 2 been built, it would have reused
+  *one program object* across sequential components and still not merged them.
 - No new CLI flag and no process-global cache.
 
 ## 6. Preserved contracts
@@ -347,24 +400,62 @@ through the C ABI in `SouffleRunner.h`; VERITAS builds with both disabled
 be implemented in `SouffleWpaExecutor.cpp`, which is RTTI-free.
 
 The runner's C ABI is extended into a session interface — open a component
-session, insert a relation's rows, run, scan a relation's rows out, reset, close —
-with all Soufflé types confined to the runner's side and only flat scalar buffers
-crossing the boundary. `SouffleWpaExecutor` then owns the translation between
+session, insert a relation's rows, run, scan a relation's rows out, close — with
+all Soufflé types confined to the runner's side and only flat scalar buffers
+crossing the boundary. (`reset` was part of that signature while section 7.2 was
+in the design; it exists as a stub returning `kNotImplemented` and is not used.
+See section 7.2.) `SouffleWpaExecutor` then owns the translation between
 `facts::SemanticRow` values and those buffers, and keeps its existing dense-ID
 mapping and `ValidateSemanticRow` calls. The plan fixes the exact signatures; this
 section fixes the constraint that no Soufflé type may appear in them.
 
-### 7.2 One program instance per run
+### 7.2 One program instance per run — **Dropped**
 
-`veritas_souffle_run` gains a run-scoped entry point that obtains one program
-instance, runs it for each component, and resets state between components via
-`purgeInputRelations`, `purgeOutputRelations`, and `purgeInternalRelations`.
-The existing one-shot entry point may remain as a thin wrapper; the executor
-uses the scoped form.
+**Dropped (2026-09-25), ratified on measurement. Not built.**
 
-The reset must be proven to restore a state indistinguishable from a fresh
-`newInstance`. Section 9.3 makes this a differential test rather than an
-assumption.
+Section 3.2 measured the quantity this design removes — `newInstance`,
+`setNumThreads`, and `delete`, which is exactly one `open`+`close` pair — at
+10.9–19.4 µs per component, 2.6–2.8 % of the smallest fixture component's 0.40 ms
+execution and **0.218 s** across all 13,716 instances: 0.037 % of the 587 s
+baseline and 0.10 % of the ~212 s gap to the 375 s acceptance limit. It is also
+workload-independent, because the four bundles are build-time artefacts.
+
+The risk trade is unfavourable at that size. Accepting 0.218 s means accepting
+section 10 risk 2, whose reset semantics are unverified in this pinned revision,
+and the failure mode is silent rather than loud: a reused session whose EDB
+relations are neither purged nor replaced presents a previous component's rows
+to the next component, which derives facts from them. That is an accuracy trade,
+and section 5 forbids accuracy trades outright. A design that must not fail
+silently in order to save 0.037 % of wall time is not worth building.
+
+The design is recorded rather than deleted, so that the measurement which
+rejected it stays attached to it:
+
+> `veritas_souffle_run` gains a run-scoped entry point that obtains one program
+> instance, runs it for each component, and resets state between components via
+> `purgeInputRelations`, `purgeOutputRelations`, and `purgeInternalRelations`.
+> The existing one-shot entry point may remain as a thin wrapper; the executor
+> uses the scoped form.
+>
+> The reset must be proven to restore a state indistinguishable from a fresh
+> `newInstance`. Section 9.3 makes this a differential test rather than an
+> assumption.
+
+**State left behind.** `veritas_souffle_session_reset`
+(`src/wpa/SouffleRunner.cpp`) remains the documented stub returning
+`kNotImplemented`. No session is reused: every component execution opens and
+closes its own, so session memory is released per component today and section 7.6
+has nothing to add here. Section 7.1's in-memory execution is unaffected and
+stands. Section 9.3 is dropped with this section, and the reuse bullet in section
+9.2 is dropped with it.
+
+One follow-up belongs to whoever next touches that file: the stub's comments
+(`src/wpa/SouffleRunner.cpp:302` and `:48`, `include/veritas/wpa/SouffleRunner.h:62`
+and `:128`) still attribute the function to "Task 3", and its `kNotImplemented`
+return is still annotated as temporary. After this drop it is not pending work
+but a deliberate standing decision. The comments should say so, and this round's
+documentation-only scope did not include editing them, so the spec records the
+discrepancy here rather than leaving a reader to reconcile the two.
 
 ### 7.3 Memoized fact identity in validation and publication
 
@@ -474,12 +565,16 @@ same bytes that were stored.
 
 **Cost, stated plainly:** 13,716 content-addressed reads plus deserialization
 move into the assembly window, trading wall time for memory. This round is
-constrained on both. The mitigation is that section 7.1 and section 7.2 remove
-far more per-component wall time than these reads add, and section 9.4 measures
-both limits together rather than one at a time. If measurement shows the read
-cost dominates, the fallback is to retain facts in memory and reload only
-witnesses, which is the larger structure per edge; that variant is a
-measurement decision, not a contract change.
+constrained on both. The mitigation is that section 7.1 removes far more
+per-component wall time than these reads add, and section 9.4 measures both
+limits together rather than one at a time. Section 7.2 was listed here as a
+second mitigation until it was dropped on measurement (section 3.2, section 9.6),
+so this trade now rests on section 7.1 alone; that is 2.1 ms of removed file
+round trip per component against the reads added here, and it should be
+re-examined if measurement shows the read cost dominating. If it does, the
+fallback is to retain facts in memory and reload only witnesses, which is the
+larger structure per edge; that variant is a measurement decision, not a
+contract change.
 
 ## 8. Error handling
 
@@ -489,7 +584,9 @@ measurement decision, not a contract change.
   returning the existing `InvalidArgument`/`FailedPrecondition` from the mapping
   `ToStable` paths.
 - A program reset that leaves observable state behind is a conformance failure,
-  not a silent fallback: the differential test in section 9.3 must fail.
+  not a silent fallback: the differential test in section 9.3 must fail. Section
+  7.2 is dropped, so no reset exists and this rule guards nothing today; it is
+  kept because it states the standard any future reuse must meet.
 - Reloading a component result during assembly that fails deserialization or
   revalidation returns the existing `FailedPrecondition` from
   `LoadReusableComponent`; it is not retried and not silently skipped.
@@ -550,9 +647,10 @@ the orderings above, and require `BatchId`, `FixpointHash`, `ExternalHash`, and
 **Step 2b — identity moved.** Require `analysis_facts` equality, equal row counts
 for all four tables, and equality of the identity-bearing tables under a
 projection excluding the run-scoped columns, with that exclusion set
-**determined by the task**, per the caveat above. Sections 7.1, 7.2, and 7.5
-claim no *row* can change; this form tests exactly that while conceding that
-identity columns legitimately move.
+**determined by the task**, per the caveat above. Sections 7.1 and 7.5 — and
+section 7.2, while it was still in the design — claim no *row* can change; this
+form tests exactly that while conceding that identity columns legitimately move.
+Dropping section 7.2 removes one claimant, not the requirement.
 
 The pre-change member of the pair is produced by building the pre-change revision
 in the same build tree, as round 2 did, so the comparison is not confounded by
@@ -564,9 +662,13 @@ the compiler.
   execution produce identical `RawWpaEvaluation` row sets for a fixture
   component, and identical `LogicalInputHash`, `FixpointHash`, and
   `ExternalHash`.
-- A test proves one reused program instance across two sequential components
-  yields the same results as two fresh instances, including the case where the
-  first component is non-empty and the second's relations must start empty.
+- **Dropped with section 7.2.** A test proving one reused program instance
+  across two sequential components yields the same results as two fresh
+  instances, including the case where the first component is non-empty and the
+  second's relations must start empty. There is no reused instance to test.
+  Noted for the record: that last case is the one that makes the drop the safe
+  outcome rather than merely the cheap one, because a reused session's EDB
+  relations may be neither purged nor replaced.
 - `AnalysisFactBusTest` proves the packed-rank ordering reproduces the string
   ordering, including ties on `result_key` with differing `rule_id`, differing
   `input_key`, and differing `input_ordinal`, and including the `std::unique`
@@ -580,12 +682,17 @@ the compiler.
 - No test may be skipped; a `GTEST_SKIP` reports as passed to CTest, so the
   existing no-skips check remains mandatory.
 
-### 9.3 Program-reset differential test
+### 9.3 Program-reset differential test — **Dropped**
 
-Section 7.2's reset is accepted only by measurement: for a set of components
-including one that derives no facts following one that derives many, the reused
-instance must produce results byte-identical to fresh instances, and a component
-run twice on a reused instance must produce identical results both times.
+**Dropped (2026-09-25) with section 7.2.** There is no reset to test.
+
+Recorded for the record, because it is the test the drop avoided having to pass.
+Section 7.2's reset would have been accepted only by measurement: for a set of
+components including one that derives no facts following one that derives many,
+the reused instance must produce results byte-identical to fresh instances, and a
+component run twice on a reused instance must produce identical results both
+times. The section 9.6 drop record cites how much wall time that test was
+guarding.
 
 ### 9.4 Performance acceptance
 
@@ -611,9 +718,76 @@ full CTest suite with no skips, `git diff --check`, license-header check, clean
 working tree. This round's changes are C++ and CMake, so the license-header
 check is in scope for every modified file.
 
+### 9.6 Implementation status (2026-09-25)
+
+This subsection records decisions the acceptance report must cite, so that a
+design deliberately not built is not later read as an omission.
+
+**1. Section 7.2 (one program instance per run) — dropped, ratified on
+measurement. Not built.** Section 3.2 filed "a fresh compiled Soufflé program
+instantiated per component" as a root cause, on the strength of the 13,716
+multiplier. The multiplier is real; the cost is not. Measured in the baseline's
+own Debug configuration on `claude/profile-analyze-bottlenecks`, 4,000 iterations
+per component kind:
+
+| Component kind | Registered program | `open`+`close` |
+| --- | --- | ---: |
+| reachability | `v2_reach` | 10.9 µs |
+| memory-effects | `v2_memory_effects` | 19.4 µs |
+| flow | `v2_global_flow` | 14.8 µs |
+| effects | `v2_effects` | 18.5 µs |
+
+`open`+`close` is exactly `ProgramFactory::newInstance` + `setNumThreads` +
+`delete`, so it is the whole quantity the dropped design would have removed, not
+a proxy for it. Against a measured **0.40 ms** per component execution on the
+pinned fixture, the fixed cost is **2.6–2.8 %** of the smallest component this
+repository can build, and **0.218 s** across all 13,716 instances. That is
+**0.037 %** of the 587 s baseline (section 2.1) and **0.10 %** of the ~212 s gap
+to the 375 s limit.
+
+Two properties of the measurement decided the outcome, and both were checked
+rather than argued:
+
+- **It is workload-independent.** The four bundles are build-time artefacts
+  generated from `logic/`, so the same four programs are instantiated whatever
+  repository is analyzed. Timing a synthetic reachability component shows the
+  fixed column flat to within 7 % (10.7 → 11.4 µs) while the full session path
+  grows ~800× (79.8 µs → 65.3 ms) from 4 to 4,096 edges. The 2.6 % figure is
+  therefore a ceiling, not an average.
+- **The comparison is like-for-like.** The 587 s baseline is a Debug build with
+  `/opt/homebrew/opt/llvm@17/bin/clang++` against LLVM 24.0.0git (section 2.1);
+  the measurement above ran in the same configuration, confirmed against
+  `build/CMakeCache.txt`, so the share is not a build-skew artefact.
+
+The drop is a decision about risk as much as about size. Accepting 0.218 s means
+accepting section 10 risk 2, whose reset semantics are unverified in this pinned
+revision and whose failure mode is silent: a reused session whose EDB relations
+are neither purged nor replaced hands a previous component's rows to the next
+component, which derives facts from them. That is an accuracy trade, and section
+5 forbids accuracy trades. Had the saving been material the trade might have been
+worth making; at 0.037 % of wall time it is not.
+
+**What this changes elsewhere.** Section 4 goal 2, section 7.2, section 9.2's
+reuse test bullet, and section 9.3 are marked dropped rather than deleted, and
+nothing is renumbered. Section 7.1 — the in-memory execution that removed the
+per-component file round trip — is unaffected, is already implemented, and is the
+part of section 7 this round relies on. Section 7.7 loses section 7.2 as a
+secondary mitigation and now rests on section 7.1 alone. Section 7.6 needs
+nothing for sessions: every component execution still opens and closes its own,
+so session memory is already released per component.
+
+**Accepted consequence.** The round's wall-time work now has to find the whole
+~212 s among sections 7.1, 7.3, 7.4, 7.5, 7.6, and 7.7. Section 3.3 — roughly
+4.0M SHA-256 derivations over encoded rows, with `std::vector<std::byte>`'s
+`push_back` beneath `AppendLenPrefixed` as the heaviest single leaf in the
+publication window — is where the profile points next.
+
 ## 10. Open risks
 
-1. **The 4 GiB limit may not be reachable even with all seven designs.**
+1. **The 4 GiB limit may not be reachable even with every reductive design this
+   round keeps.** Six of the seven designs in section 7 survive; section 7.2 is
+   dropped (section 9.6), and it was a wall-time design that never contributed to
+   the memory floor, so the drop does not move this risk either way.
    Section 2.3 establishes a ~3.4 GiB post-SVF floor of which only ~0.7 GiB is
    proven dead at t≈180 s. Section 7.7 removes the retained payload and
    section 7.6 returns emptied arenas, but the residual live SVF footprint is
@@ -622,11 +796,16 @@ check is in scope for every modified file.
    result, report the measured memory floor with its attribution, and reopen the
    4 GiB criterion as a separate decision rather than to weaken accuracy
    silently to reach it.
-2. **The program-reset semantics of the pinned Soufflé revision are not yet
-   verified.** `purgeInternalRelations` must restore a state equivalent to a
-   fresh instance for these four programs. Section 9.3 tests it, and if it
-   cannot be shown, section 7.2 is dropped and the file round trip of section 7.1
-   still stands on its own.
+2. **The program-reset semantics of the pinned Soufflé revision are not
+   verified — and no longer gate anything.** `purgeInternalRelations` must
+   restore a state equivalent to a fresh instance for these four programs.
+   Section 9.3 would have tested it. Section 7.2 is instead dropped on
+   measurement (section 3.2, section 9.6), which is the outcome this risk
+   anticipated, and the file round trip of section 7.1 stands on its own. The
+   risk is recorded as unresolved and unexercised rather than deleted: it is
+   *why* the drop is correct, and it returns as a live blocking risk if the
+   design is ever revisited, at which point section 9.3 is the first thing to
+   restore.
 3. **Wall time and memory pull against each other in section 7.7.** The
    reload-for-assembly trade adds reads to the window this round is trying to
    shorten.
