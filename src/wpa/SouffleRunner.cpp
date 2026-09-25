@@ -299,12 +299,16 @@ int veritas_souffle_session_reset(VeritasSouffleSession* session) {
   if (session == nullptr) {
     return kInvalidArgument;
   }
-  // Task 3 owns this. The purge that makes one program instance serve several
-  // components (purgeInputRelations, purgeOutputRelations,
+  // A deliberate standing decision, not pending work: the design that would
+  // have called this (one program instance reused across a run's components,
+  // reset between them) was measured at 0.218 s across all 13,716 components --
+  // 0.037 % of the run -- and dropped (design spec sections 3.2, 7.2, 9.6).
+  // The purge that makes reuse safe (purgeInputRelations, purgeOutputRelations,
   // purgeInternalRelations) has to be proven indistinguishable from a fresh
-  // instance, so it is not
-  // guessed at here: until Task 3 lands it, this reports failure rather than
-  // returning a success that would make Task 3's red test pass vacuously.
+  // instance, and it is unverified in the pinned revision, so it is not guessed
+  // at here. The stub is kept, and keeps reporting failure, because a caller
+  // that reached it believing it worked would be reasoning about a session that
+  // was never actually reset.
   return kNotImplemented;
 }
 

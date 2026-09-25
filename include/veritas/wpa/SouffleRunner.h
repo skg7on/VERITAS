@@ -59,7 +59,8 @@ int veritas_souffle_run(const char* component, const char* input_dir,
 //      column's declared primitive type
 //   3  no such relation in the component's compiled program (insert, scan), or
 //      no registered program for the component's name (open)
-//   4  not implemented — `veritas_souffle_session_reset` (Task 3 owns it)
+//   4  not implemented — `veritas_souffle_session_reset`, whose design this
+//      round measured and deliberately dropped; see below
 enum VeritasSouffleCellKind {
   VERITAS_SOUFFLE_CELL_SYMBOL = 0,
   VERITAS_SOUFFLE_CELL_NUMBER = 1
@@ -124,10 +125,18 @@ int veritas_souffle_session_scan(VeritasSouffleSession* session,
                                  VeritasSouffleRowSink sink,
                                  void* context);
 
-// Drops every row of every relation so the session can evaluate another
-// component. Not implemented yet: Task 3 owns the purge semantics and the
-// differential proof that a reset session is indistinguishable from a fresh
-// one, so this currently returns 4 rather than pretending to succeed.
+// Drops every row of every relation so the session could evaluate another
+// component. Permanently unimplemented, on purpose.
+//
+// Reusing one program instance across a run's components was designed, then
+// measured at 0.218 s over all 13,716 components — 0.037 % of the run it would
+// have shortened — and dropped (`veritas-build-analyze-round3-performance-
+// design-spec.md` sections 3.2, 7.2, and 9.6). The purge semantics this entry
+// point would need are unverified in the pinned revision, and an EDB relation
+// that is neither purged nor replaced would hand one component's rows to the
+// next and change derived facts silently. That trade is not worth 0.037 %, so
+// no session is reused: every component execution opens and closes its own and
+// `veritas_souffle_session_reset` remains a stub returning 4.
 int veritas_souffle_session_reset(VeritasSouffleSession* session);
 
 // Releases the session and its program instance. Null is accepted.
