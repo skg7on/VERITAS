@@ -199,59 +199,58 @@ Status ValidateExecutionRangePayload(const ExecutionRow& row) {
 // concatenation injective, so two distinct rows cannot share a preimage --
 // which is what lets the identity memo key on it without re-deriving.
 //
-// The preimage is sized exactly and then written through a cursor. The previous
-// encoder appended one byte at a time to a growing vector; the bytes it
-// produced are identical, and `DerivedIdentityCoversEveryCellKind` pins them.
+// One traversal produces both the length and the bytes. `PreimageCursor` has
+// two modes: a measuring cursor has no buffer, advances a position and writes
+// nothing, so `PreimageSize` is a dry run of the same writer. The byte format
+// is therefore expressed once. It used to be expressed twice -- a sizing pass
+// and a writer that had to be kept in step by hand -- and a cell alternative
+// handled by one and not the other is not a loud failure: it truncates the
+// preimage of every row carrying it, and two rows differing only in that cell
+// then share one fact id.
+//
+// The bytes are unchanged by this: `DerivedIdentityCoversEveryCellKind` pins
+// the fact ids of ten rows covering every cell kind, both range payloads, a
+// negative offset, and a string carrying a NUL and a colon.
 
-std::size_t LenPrefixedSize(std::size_t text_size) { return 8 + text_size; }
-
-// The length of a stable ID's rendered form: `<kind>:sha256:<digest>`. One
-// expression, used both to size the field and to write its length prefix.
-std::size_t RenderedStableIdSize(const core::StableId& id) {
-  return IdKindToString(id.kind).size() + kAlgorithmSeparator.size() +
-         id.digest_hex.size();
-}
-
-std::size_t CellSize(const SemanticCellValue& cell) {
-  return 1 + std::visit(
-                 [](const auto& value) -> std::size_t {
-                   using T = std::decay_t<decltype(value)>;
-                   if constexpr (std::is_same_v<T, core::StableId>) {
-                     return LenPrefixedSize(RenderedStableIdSize(value));
-                   } else if constexpr (std::is_same_v<T, std::string>) {
-                     return LenPrefixedSize(value.size());
-                   } else if constexpr (std::is_same_v<T, std::int64_t> ||
-                                        std::is_same_v<T, std::uint64_t>) {
-                     return 8;
-                   } else {
-                     return 1;
-                   }
-                 },
-                 cell);
-}
-
-std::size_t PreimageSize(const SemanticRow& row) {
-  std::size_t size = LenPrefixedSize(std::string_view("relations.v2").size()) +
-                     LenPrefixedSize(PreimageRelationName(row.relation).size());
-  for (const auto& cell : row.cells) {
-    size += CellSize(cell);
+// The big-endian 8-byte form a length prefix and a number cell both take.
+void EncodeU64(std::uint64_t value, std::byte* out) {
+  for (int i = 7; i >= 0; --i) {
+    out[7 - i] = static_cast<std::byte>((value >> (i * 8)) & 0xFF);
   }
-  return size;
 }
 
-// A bounds-respecting cursor over a buffer of exactly `PreimageSize(row)` bytes.
+// A cell alternative this encoder does not know. A new alternative in
+// `SemanticCellValue` must be encoded here; leaving it out would let two rows
+// that differ only in it derive the same fact id, which merges facts rather
+// than rejecting a batch. The dependent-false form is what makes the
+// `static_assert` below fire instead of being accepted as an unreachable
+// statement.
+template <typename T>
+inline constexpr bool kUnencodedCellKind = false;
+
+// A cursor over the preimage. Constructed with `out == nullptr` it measures;
+// constructed over a buffer of exactly `PreimageSize(row)` bytes it writes.
 class PreimageCursor {
 public:
+  PreimageCursor() = default;
   PreimageCursor(std::byte* out, std::size_t size) : out_(out), size_(size) {}
+
+  // The number of bytes written, or, in a measuring pass, that would be.
+  std::size_t Position() const { return pos_; }
 
   void Put(const void* data, std::size_t count) {
     if (count == 0) {
       return;
     }
-    // The count and the writer are two halves of one encoding. The assert is
-    // the debug-build guard that they still agree; the clamp keeps a release
-    // build from writing past the buffer if they ever drift, at the cost of a
-    // truncated (and therefore different) identity rather than a corrupt heap.
+    if (out_ == nullptr) {
+      pos_ += count;
+      return;
+    }
+    // The clamp keeps a release build from writing past the buffer if the
+    // measure and the write ever disagree, at the cost of a truncated -- and
+    // therefore different -- identity rather than a corrupt heap. The size
+    // came from a dry run of this same writer, so the assert is what a mismatch
+    // would be caught by in a build that keeps asserts.
     assert(pos_ + count <= size_);
     if (pos_ + count > size_) {
       pos_ = size_;
@@ -265,15 +264,35 @@ public:
 
   void U64(std::uint64_t value) {
     std::byte encoded[8];
-    for (int i = 7; i >= 0; --i) {
-      encoded[7 - i] = static_cast<std::byte>((value >> (i * 8)) & 0xFF);
-    }
+    EncodeU64(value, encoded);
     Put(encoded, sizeof(encoded));
   }
 
+  // Begins a length-prefixed field and returns the offset of its prefix, for
+  // `EndField`. The prefix is filled in from the bytes the body wrote, so it
+  // cannot disagree with them; a measuring pass writes no prefix and needs
+  // none, because the position already holds the value it must carry.
+  std::size_t BeginField() {
+    const std::size_t at = pos_;
+    U64(0);
+    return at;
+  }
+
+  void EndField(std::size_t field_at) {
+    // `BeginField` reserved these eight bytes, so this is in bounds whenever
+    // the measure held; the bound check is the same release-mode backstop
+    // `Put` carries, so that no path writes past the buffer even if a future
+    // field is miscounted.
+    if (out_ == nullptr || field_at + 8 > size_) {
+      return;
+    }
+    EncodeU64(pos_ - field_at - 8, out_ + field_at);
+  }
+
   void LenPrefixed(std::string_view text) {
-    U64(text.size());
+    const std::size_t at = BeginField();
     Put(text.data(), text.size());
+    EndField(at);
   }
 
   void Cell(const SemanticCellValue& cell) {
@@ -282,13 +301,14 @@ public:
           using T = std::decay_t<decltype(value)>;
           if constexpr (std::is_same_v<T, core::StableId>) {
             Byte(static_cast<std::uint8_t>(CellTag::kStableId));
-            // The whole rendered id is one length-prefixed field: the prefix
-            // counts the kind, the algorithm separator, and the digest.
+            // The whole rendered id is one field: the prefix counts the kind,
+            // the algorithm separator, and the digest together.
+            const std::size_t at = BeginField();
             const std::string_view kind = IdKindToString(value.kind);
-            U64(RenderedStableIdSize(value));
             Put(kind.data(), kind.size());
             Put(kAlgorithmSeparator.data(), kAlgorithmSeparator.size());
             Put(value.digest_hex.data(), value.digest_hex.size());
+            EndField(at);
           } else if constexpr (std::is_same_v<T, std::int64_t>) {
             Byte(static_cast<std::uint8_t>(CellTag::kInt64));
             U64(static_cast<std::uint64_t>(value));
@@ -310,31 +330,46 @@ public:
           } else if constexpr (std::is_same_v<T, semantic::EpistemicState>) {
             Byte(static_cast<std::uint8_t>(CellTag::kEpistemic));
             Byte(static_cast<std::uint8_t>(value));
+          } else {
+            static_assert(kUnencodedCellKind<T>,
+                          "SemanticCellValue gained an alternative the preimage "
+                          "encoding does not know, so rows differing only in "
+                          "that cell would derive one fact id");
           }
         },
         cell);
   }
 
-  bool Complete() const { return pos_ == size_; }
-
 private:
-  std::byte* out_;
-  std::size_t size_;
+  std::byte* out_ = nullptr;
+  std::size_t size_ = 0;
   std::size_t pos_ = 0;
 };
 
-// Writes the preimage of `row` into `out`, which must hold at least
-// `PreimageSize(row)` bytes.
-void WritePreimage(std::byte* out, std::size_t size, const SemanticRow& row) {
-  PreimageCursor cursor(out, size);
+// The preimage of `row` through `cursor`: the single expression of the byte
+// format, used both to measure it and to write it.
+void WritePreimage(PreimageCursor& cursor, const SemanticRow& row) {
   cursor.LenPrefixed("relations.v2");
   cursor.LenPrefixed(PreimageRelationName(row.relation));
   for (const auto& cell : row.cells) {
     cursor.Cell(cell);
   }
-  // The writer and the sizing pass are the same encoding expressed twice; this
-  // is where a divergence between them is caught rather than hashed.
-  assert(cursor.Complete());
+}
+
+// The exact byte count of `row`'s preimage: a dry run of the writer that will
+// produce it.
+std::size_t PreimageSize(const SemanticRow& row) {
+  PreimageCursor measuring;
+  WritePreimage(measuring, row);
+  return measuring.Position();
+}
+
+// Writes the preimage of `row` into `out`, which must hold exactly `size`
+// bytes.
+void WritePreimage(std::byte* out, std::size_t size, const SemanticRow& row) {
+  PreimageCursor cursor(out, size);
+  WritePreimage(cursor, row);
+  assert(cursor.Position() == size);
 }
 
 }  // namespace
