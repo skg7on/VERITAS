@@ -16,16 +16,20 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <map>
+#include <numeric>
 #include <set>
 #include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "veritas/core/Hash.h"
 #include "veritas/facts/Witness.h"
@@ -105,16 +109,111 @@ StatusOr<bool> IsDelivered(summarydb::MetadataStore &store,
 }
 
 struct KeyedFact {
-  std::string key;
+  std::uint32_t key_rank = 0;
   AnalysisFact fact;
 };
 
 struct KeyedWitness {
-  std::string result_key;
-  std::string rule_id;
-  std::string input_key;
+  std::uint32_t result_rank = 0;
+  std::uint32_t rule_rank = 0;
+  std::uint32_t input_rank = 0;
   std::uint32_t input_ordinal = 0;
   WitnessEdge edge;
+};
+
+// Dense ranks over the distinct encoded semantic keys of one assembly call,
+// used in place of the keys themselves.
+//
+// Why ranks and not the keys: a batch is ordered by the encoded key of every
+// fact row and of both endpoints of every witness edge. Held as `std::string`s
+// that is ~2.75M simultaneous heap allocations on the reference fixture, and
+// the ordering is then a lexicographic string comparison through two large
+// comparison sorts. A dense `uint32_t` per occurrence deletes the allocations,
+// the per-comparison string dereference, and the bytes the sorts move.
+//
+// The substitution is only sound if it is an order-isomorphism, and the claim
+// is exact: ranks are assigned by ascending byte order over the distinct key
+// values, so `rank(a) < rank(b)` iff the encoded bytes of `a` precede those of
+// `b`, and equal keys take equal ranks. Byte order here is
+// `std::char_traits<char>::compare`, the same comparison `std::string` uses, so
+// ranking is not an approximation of the string comparison -- it is the same
+// ordering on a smaller alphabet of symbols.
+//
+// Equal keys taking equal ranks is what preserves ties, and it is not the only
+// thing that has to come out identical: `std::sort` permutes a sequence as a
+// function of the comparison outcomes and the element count alone, so an
+// isomorphic comparator over the same elements yields the same permutation,
+// including the relative order of elements it cannot separate. That matters
+// because `std::unique` runs on the sorted output and keeps the first element
+// of each run of equals.
+//
+// One pool serves both the semantic keys and the rule ids. That is safe because
+// the comparator compares position-wise: a rank is a monotone function of the
+// bytes over the whole interned set, so two values in the same position compare
+// exactly as their bytes do, and positions are never compared across domains.
+class FactRanks {
+public:
+  // Interns `encoded_key`, returning a dense id. Ids are dense but not ranked
+  // until `Finish`, and identical bytes always intern to the same id.
+  std::uint32_t Intern(std::string_view encoded_key) {
+    const auto it = index_.find(encoded_key);
+    if (it != index_.end()) {
+      return it->second;
+    }
+    const std::uint32_t id = static_cast<std::uint32_t>(keys_.size());
+    char *const stored = Allocate(encoded_key.size());
+    std::memcpy(stored, encoded_key.data(), encoded_key.size());
+    const std::string_view view(stored, encoded_key.size());
+    keys_.push_back(view);
+    index_.emplace(view, id);
+    return id;
+  }
+
+  // Ranks every interned key by ascending byte order and releases the key bytes
+  // and the lookup index, which are dead the moment the ranks exist. Releasing
+  // them here rather than at destruction keeps ~0.3 GiB from sitting underneath
+  // the two sorts that consume the ranks.
+  void Finish() {
+    std::vector<std::uint32_t> order(keys_.size());
+    std::iota(order.begin(), order.end(), std::uint32_t{0});
+    std::ranges::sort(order, {}, [this](std::uint32_t id) { return keys_[id]; });
+    ranks_.assign(keys_.size(), 0);
+    std::uint32_t rank = 0;
+    for (std::size_t i = 0; i < order.size(); ++i) {
+      if (i != 0 && keys_[order[i]] != keys_[order[i - 1]]) {
+        ++rank;
+      }
+      ranks_[order[i]] = rank;
+    }
+    std::vector<std::string_view>().swap(keys_);
+    std::unordered_map<std::string_view, std::uint32_t>().swap(index_);
+    std::vector<std::vector<char>>().swap(chunks_);
+    used_ = 0;
+  }
+
+  // The rank of the key interned as `id`. Only valid after `Finish`.
+  std::uint32_t Rank(std::uint32_t id) const { return ranks_[id]; }
+
+private:
+  // Bump allocation out of fixed-size chunks. Offsets into one big buffer would
+  // be smaller, but the interned views must survive the buffer's growth, and a
+  // chunk that is never reallocated gives them somewhere stable to point.
+  char *Allocate(std::size_t bytes) {
+    constexpr std::size_t kChunkBytes = std::size_t{1} << 20;
+    if (chunks_.empty() || used_ + bytes > chunks_.back().size()) {
+      chunks_.emplace_back(bytes > kChunkBytes ? bytes : kChunkBytes);
+      used_ = 0;
+    }
+    char *const out = chunks_.back().data() + used_;
+    used_ += bytes;
+    return out;
+  }
+
+  std::vector<std::vector<char>> chunks_;
+  std::size_t used_ = 0;
+  std::vector<std::string_view> keys_;
+  std::unordered_map<std::string_view, std::uint32_t> index_;
+  std::vector<std::uint32_t> ranks_;
 };
 
 } // namespace
@@ -195,37 +294,52 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   // the individual edges) keeps each published result backed by one well-formed
   // proof instead of a mixture of two.
   std::set<core::StableId> owned;
+  // The ranks replace the ordering keys, so a fact or witness carries a
+  // `uint32_t` per compared field instead of a heap string per endpoint. The
+  // three scratch buffers are reused across every row: encoding a row into a
+  // fresh `std::string` per occurrence is an allocation this pass does not need
+  // and, at ~250 encoded bytes a row, one the small-string optimization cannot
+  // absorb.
+  FactRanks ranks;
   std::vector<KeyedFact> keyed_facts;
   std::vector<KeyedWitness> keyed_witnesses;
-  // One reusable per-component key set: the loop runs once per component, so it
-  // does not belong inside it.
-  std::set<std::string, std::less<>> overridden;
+  std::string fact_key;
+  std::string result_key;
+  std::string input_key;
+  // One reusable per-component key set, holding interned ids rather than the
+  // keys: the loop runs once per component, so it does not belong inside it,
+  // and set membership is the only thing it is asked.
+  std::set<std::uint32_t> overridden;
   for (auto &completion : batch.completed_components) {
     overridden.clear();
     for (auto &fact : completion.result.facts) {
-      std::string key;
-      AppendSemanticKey(&key, fact.row);
+      fact_key.clear();
+      AppendSemanticKey(&fact_key, fact.row);
       if (owned.insert(fact.fact_id).second) {
-        keyed_facts.push_back(
-            KeyedFact{.key = std::move(key), .fact = std::move(fact)});
+        keyed_facts.push_back(KeyedFact{.key_rank = ranks.Intern(fact_key),
+                                        .fact = std::move(fact)});
       } else {
-        overridden.insert(std::move(key));
+        overridden.insert(ranks.Intern(fact_key));
       }
     }
     for (auto &edge : completion.result.witnesses) {
-      std::string result_key;
+      result_key.clear();
       AppendSemanticKey(&result_key, edge.result.row);
-      if (overridden.contains(std::string_view(result_key))) {
+      // The overridden set's member is the interned id, not the key bytes: the
+      // set holds the facts a later component re-derived, and a witness's
+      // result row is one of those facts under that same encoding.
+      const std::uint32_t result_id = ranks.Intern(result_key);
+      if (overridden.contains(result_id)) {
         continue;
       }
-      std::string input_key;
+      input_key.clear();
       AppendSemanticKey(&input_key, edge.input.row);
-      // The rule id is copied, not moved: the edge keeps its own, and the
+      // The rule id is interned, not moved: the edge keeps its own, and the
       // published batch is hashed over it.
       keyed_witnesses.push_back(KeyedWitness{
-          .result_key = std::move(result_key),
-          .rule_id = edge.rule_id,
-          .input_key = std::move(input_key),
+          .result_rank = result_id,
+          .rule_rank = ranks.Intern(edge.rule_id),
+          .input_rank = ranks.Intern(input_key),
           .input_ordinal = edge.input_ordinal,
           .edge = std::move(edge),
       });
@@ -242,11 +356,25 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
     std::vector<std::string>().swap(completion.result.diagnostics);
   }
 
+  // Every occurrence now holds a dense id; only the distinct keys have been
+  // encoded once each. Ranking them turns the ids into the comparison domain
+  // the sorts below use, and releases the key bytes and the lookup index, which
+  // no longer have a reader.
+  ranks.Finish();
+  for (auto &keyed : keyed_facts) {
+    keyed.key_rank = ranks.Rank(keyed.key_rank);
+  }
+  for (auto &keyed : keyed_witnesses) {
+    keyed.result_rank = ranks.Rank(keyed.result_rank);
+    keyed.rule_rank = ranks.Rank(keyed.rule_rank);
+    keyed.input_rank = ranks.Rank(keyed.input_rank);
+  }
+
   // 2. Canonical order, and the assembly boundary where uniqueness is
   // established rather than merely checked: sorting puts equal entries
   // adjacent, so the set is collapsed here and Validate's identity checks
   // describe a property this assembler guarantees.
-  std::ranges::sort(keyed_facts, {}, &KeyedFact::key);
+  std::ranges::sort(keyed_facts, {}, &KeyedFact::key_rank);
   batch.facts.reserve(keyed_facts.size());
   for (auto &keyed : keyed_facts) {
     batch.facts.push_back(std::move(keyed.fact));
@@ -259,12 +387,15 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
                                         })
                         .begin(),
                     batch.facts.end());
+  // The same four fields, in the same order, as the comparator over the encoded
+  // keys: ranks preserve the byte order of the values they stand for, so this
+  // decides every pair exactly as the string comparison did, ties included.
   std::ranges::sort(keyed_witnesses,
                     [](const KeyedWitness &left, const KeyedWitness &right) {
-                      return std::tie(left.result_key, left.rule_id,
-                                      left.input_key, left.input_ordinal) <
-                             std::tie(right.result_key, right.rule_id,
-                                      right.input_key, right.input_ordinal);
+                      return std::tie(left.result_rank, left.rule_rank,
+                                      left.input_rank, left.input_ordinal) <
+                             std::tie(right.result_rank, right.rule_rank,
+                                      right.input_rank, right.input_ordinal);
                     });
   batch.witnesses.reserve(keyed_witnesses.size());
   for (auto &keyed : keyed_witnesses) {

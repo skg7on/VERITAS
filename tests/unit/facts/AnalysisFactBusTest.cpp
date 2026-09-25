@@ -14,11 +14,14 @@
 
 #include "veritas/facts/AnalysisFactBus.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -110,6 +113,198 @@ AnalysisRunManifest TestRun() {
   descriptor.engine = EngineIdentity::kSouffle;
   descriptor.engine_toolchain_identity = "test-toolchain";
   return std::move(MakeAnalysisRun(descriptor)).value();
+}
+
+// --- Order preservation -----------------------------------------------------
+//
+// The assembled batch's order is load-bearing: `DeriveBatchId` hashes it, and
+// the row order of every published table derives from it. Since the batch id is
+// a hash, an order that is only approximately right is a *silent* failure --
+// every fact identity in every store moves and nothing reports an error.
+//
+// Everything below reproduces the ordering `MakeAnalysisFactBatch` used before
+// the ordering keys were packed, independently, from the run's own rows: the
+// encoded semantic keys are rebuilt here and compared with the string
+// comparator that used to order them. Comparing against a golden captured from
+// the implementation under test would agree with a defect in it, so no such
+// golden is used.
+
+// Renders the four fields the witness comparator orders by: the result key, the
+// rule id, the input key, and the input ordinal, each length-prefixed so the
+// rendering is injective -- two witnesses the comparator cannot separate render
+// identically, and two it can always render differently. That makes comparing
+// rendered sequences exactly as strong as comparing the edges themselves, while
+// never depending on which of two comparator-equal elements a sort happened to
+// place first. Injectivity is all that is needed; the rendering is not
+// order-faithful, and nothing here compares rendered bytes for order.
+std::string RenderWitnessSortKey(const WitnessEdge &edge) {
+  std::string result_key;
+  AppendSemanticKey(&result_key, edge.result.row);
+  std::string input_key;
+  AppendSemanticKey(&input_key, edge.input.row);
+  std::string out;
+  out.reserve(result_key.size() + input_key.size() + edge.rule_id.size() + 32);
+  const auto append_field = [&out](std::string_view field) {
+    out.append(std::to_string(field.size()));
+    out.push_back(':');
+    out.append(field);
+  };
+  append_field(result_key);
+  append_field(edge.rule_id);
+  append_field(input_key);
+  append_field(std::to_string(edge.input_ordinal));
+  return out;
+}
+
+std::vector<std::string>
+RenderWitnessSortKeys(const std::vector<WitnessEdge> &edges) {
+  std::vector<std::string> rendered;
+  rendered.reserve(edges.size());
+  for (const auto &edge : edges) {
+    rendered.push_back(RenderWitnessSortKey(edge));
+  }
+  return rendered;
+}
+
+std::vector<std::string> RenderFactKeys(const std::vector<AnalysisFact> &facts) {
+  std::vector<std::string> rendered;
+  rendered.reserve(facts.size());
+  for (const auto &fact : facts) {
+    rendered.push_back(EncodeSemanticKey(fact.row));
+  }
+  return rendered;
+}
+
+// The pre-change witness order, reimplemented here from the run's rows: encode
+// each edge's endpoint rows, compare `std::tie(result_key, rule_id, input_key,
+// input_ordinal)` as strings, and collapse exact repeats.
+//
+// Two things this deliberately does not reproduce, both because the fixture
+// below makes them no-ops: the ownership pass that drops a witness whose result
+// fact a second component also derived (the fixture has no doubly derived
+// fact), and the fact sort (covered by `CanonicalFactOrderByStringKeys`). What
+// it does reproduce is the part under test -- the comparator and the
+// `std::unique` that runs on its output.
+std::vector<WitnessEdge>
+CanonicalWitnessOrderByStringKeys(const wpa::WpaRunResult &run) {
+  struct KeyedEdge {
+    std::string result_key;
+    std::string rule_id;
+    std::string input_key;
+    std::uint32_t input_ordinal = 0;
+    WitnessEdge edge;
+  };
+  std::vector<KeyedEdge> keyed;
+  for (const auto &completion : run.completed_components) {
+    for (const auto &edge : completion.result.witnesses) {
+      keyed.push_back(KeyedEdge{
+          .result_key = EncodeSemanticKey(edge.result.row),
+          .rule_id = edge.rule_id,
+          .input_key = EncodeSemanticKey(edge.input.row),
+          .input_ordinal = edge.input_ordinal,
+          .edge = edge,
+      });
+    }
+  }
+  // The ordering decision, spelled out: the same four fields in the same order,
+  // compared through `std::char_traits<char>`, which is what the packed ranks
+  // have to reproduce.
+  std::ranges::sort(keyed, [](const KeyedEdge &left, const KeyedEdge &right) {
+    return std::tie(left.result_key, left.rule_id, left.input_key,
+                    left.input_ordinal) <
+           std::tie(right.result_key, right.rule_id, right.input_key,
+                    right.input_ordinal);
+  });
+  std::vector<WitnessEdge> ordered;
+  ordered.reserve(keyed.size());
+  for (auto &entry : keyed) {
+    ordered.push_back(std::move(entry.edge));
+  }
+  // `unique` removes consecutive `operator==` repeats, so the outcome is
+  // independent of the internal order of a block of comparator-equal elements
+  // only when every such block is a block of wholly identical edges. The
+  // fixtures below satisfy that; a fixture that did not would make this helper
+  // as order-sensitive as the sort it is checking.
+  ordered.erase(std::ranges::unique(ordered).begin(), ordered.end());
+  return ordered;
+}
+
+// The pre-change fact order: sort by the encoded semantic key of the row.
+std::vector<AnalysisFact>
+CanonicalFactOrderByStringKeys(const wpa::WpaRunResult &run) {
+  std::vector<AnalysisFact> facts;
+  for (const auto &completion : run.completed_components) {
+    for (const auto &fact : completion.result.facts) {
+      facts.push_back(fact);
+    }
+  }
+  std::ranges::sort(facts,
+                    [](const AnalysisFact &left, const AnalysisFact &right) {
+                      return EncodeSemanticKey(left.row) <
+                             EncodeSemanticKey(right.row);
+                    });
+  return facts;
+}
+
+// A run whose witness edges are arranged so that every tie the comparator can
+// break is present, and so that byte order is not insertion order:
+//
+//   * two edges agreeing on the result and differing at `rule_id`
+//     ("wpa.rule.zulu" is inserted before "wpa.rule.alpha");
+//   * two agreeing on the result and the rule and differing at `input_key`
+//     (the call sites `tie->a` and `tie->c`);
+//   * two agreeing on all three and differing at `input_ordinal`.
+//
+// Every result is a published fact and every input is a declared root, so the
+// ownership pass drops nothing and the whole surviving order is compared. True
+// to the ownership contract, no fact is derived by two components.
+wpa::WpaRunResult TiebreakerRun() {
+  const SemanticRow result_a = Reachable("tie-alpha", "tie-beta");
+  const SemanticRow result_b = Reachable("tie-gamma", "tie-delta");
+  const SemanticRow result_c = Reachable("tie-epsilon", "tie-zeta");
+  const SemanticRow root_a = DirectCall("tie", "a");
+  const SemanticRow root_b = DirectCall("tie", "b");
+  const SemanticRow root_c = DirectCall("tie", "c");
+  const auto fact = [](const SemanticRow &row) { return MakeFact(row).value(); };
+
+  const auto component = [&](std::string_view scc, std::vector<SemanticRow> rows,
+                             std::vector<WitnessEdge> edges) {
+    wpa::WpaComponentCompletion completion;
+    completion.key =
+        wpa::WpaComponentKey{FunctionId(scc), wpa::WpaComponentKind::kFlow};
+    completion.result.scc_id = completion.key.scc_id;
+    completion.result.component = completion.key.component;
+    completion.result.logical_input_hash = "logical";
+    completion.result.fixpoint_hash = "fixpoint";
+    completion.result.external_hash = "external";
+    for (auto &row : rows) {
+      completion.result.facts.push_back(fact(row));
+    }
+    completion.result.witnesses = std::move(edges);
+    return completion;
+  };
+
+  const auto completion_a =
+      component("scc:tie-a", {result_a},
+                {Edge(result_a, "wpa.rule.zulu", root_a, 0),
+                 Edge(result_a, "wpa.rule.alpha", root_a, 0),
+                 Edge(result_a, "wpa.rule.alpha", root_c, 0),
+                 Edge(result_a, "wpa.rule.alpha", root_c, 1)});
+  const auto completion_b =
+      component("scc:tie-b", {result_b, result_c},
+                {Edge(result_b, "wpa.rule.alpha", root_b, 0),
+                 Edge(result_c, "wpa.rule.gamma", root_c, 2)});
+
+  wpa::WpaRunResult run;
+  run.run = TestRun();
+  run.expected_components = {completion_a.key, completion_b.key};
+  run.completed_components = {completion_a, completion_b};
+  run.rooted_input_fact_ids = {fact(root_a).fact_id, fact(root_b).fact_id,
+                               fact(root_c).fact_id};
+  run.rooted_input_facts = {RootedInputFact{.fact = fact(root_a)},
+                            RootedInputFact{.fact = fact(root_b)},
+                            RootedInputFact{.fact = fact(root_c)}};
+  return run;
 }
 
 std::filesystem::path TempDbPath() {
@@ -286,8 +481,85 @@ TEST(AnalysisFactBusTest, CoalescesAFactProvenByTwoComponents) {
   std::filesystem::remove_all(db);
 }
 
-TEST(AnalysisFactBusTest, ConsumesComponentPayloadIntoCanonicalBatchVectors) {
-  auto run = DuplicateProofRun();
+// The ordering keys used to be the encoded semantic key of each endpoint, held
+// as a `std::string` and compared lexicographically. They are now dense ranks
+// over the distinct keys, and the claim that makes the change safe is that the
+// substitution is an order-isomorphism: equal keys take equal ranks, and
+// ascending rank is ascending byte order. This compares the assembled order
+// against an independent implementation of the string comparator, so the claim
+// is checked rather than assumed.
+TEST(AnalysisFactBusTest, PackedRanksPreserveStringOrderIncludingTies) {
+  auto run = TiebreakerRun();
+  const std::vector<AnalysisFact> canonical_facts =
+      CanonicalFactOrderByStringKeys(run);
+  const std::vector<WitnessEdge> canonical_witnesses =
+      CanonicalWitnessOrderByStringKeys(run);
+
+  // Guard against a vacuous test. The fixture inserts the rule-zulu edge before
+  // the rule-alpha one and the comparator orders alpha first, so the fixture's
+  // insertion order is not the canonical order. Were it already sorted, an
+  // assembly that never sorted at all would satisfy the comparison below. The
+  // rendering helpers are not used here: they are length-prefixed for
+  // injectivity, which is what the comparison needs, and that prefixing is not
+  // order-faithful.
+  const SemanticRow tie_result = Reachable("tie-alpha", "tie-beta");
+  const std::string tie_result_key = EncodeSemanticKey(tie_result);
+  const std::string tie_input_key = EncodeSemanticKey(DirectCall("tie", "a"));
+  EXPECT_LT(std::make_tuple(tie_result_key, std::string("wpa.rule.alpha"),
+                            tie_input_key, std::uint32_t{0}),
+            std::make_tuple(tie_result_key, std::string("wpa.rule.zulu"),
+                            tie_input_key, std::uint32_t{0}));
+
+  const AnalysisFactBatch packed = MakeAnalysisFactBatch(std::move(run));
+
+  EXPECT_EQ(RenderFactKeys(packed.facts), RenderFactKeys(canonical_facts));
+  EXPECT_EQ(RenderWitnessSortKeys(packed.witnesses),
+            RenderWitnessSortKeys(canonical_witnesses));
+
+  // The same requirement restated in the domain where it bites: order is what
+  // `DeriveBatchId` hashes, so a batch ordered differently is a batch
+  // identified differently -- which is the silent failure this test exists to
+  // prevent.
+  AnalysisFactBatch relaid = packed;
+  relaid.facts = canonical_facts;
+  relaid.witnesses = canonical_witnesses;
+  EXPECT_EQ(DeriveBatchId(relaid), packed.batch_id);
+}
+
+// `std::unique` runs on the freshly ordered vectors, so it must remove the same
+// elements it removed before. The witness path can hold exact repeats -- two
+// firings agreeing on the result, the rule, the input and the ordinal are one
+// proof, since `derivation_key` is not part of the ordering -- and the fact
+// path cannot, because the ownership pass keys on `fact_id` and a repeat never
+// reaches the sort. This checks the witness case survives the change.
+TEST(AnalysisFactBusTest, PackedRanksKeepTheSameUniqueBoundary) {
+  auto run = TiebreakerRun();
+  const std::vector<WitnessEdge> canonical_witnesses =
+      CanonicalWitnessOrderByStringKeys(run);
+
+  // An exact repeat of an edge already present, with the same rows, rule, and
+  // ordinal -- so the two are equal under both the comparator and `operator==`,
+  // and the collapse does not depend on which order a sort placed them in.
+  run.completed_components[0].result.witnesses.push_back(
+      Edge(Reachable("tie-alpha", "tie-beta"), "wpa.rule.alpha",
+           DirectCall("tie", "a"), 0));
+
+  const AnalysisFactBatch packed = MakeAnalysisFactBatch(std::move(run));
+
+  EXPECT_EQ(packed.facts.size(), 3u);
+  EXPECT_EQ(packed.witnesses.size(), canonical_witnesses.size());
+  EXPECT_EQ(RenderWitnessSortKeys(packed.witnesses),
+            RenderWitnessSortKeys(canonical_witnesses));
+
+  const auto db = TempDbPath();
+  auto repo = wpa::WpaRunRepository::Open(db);
+  ASSERT_TRUE(repo.ok()) << repo.status().message();
+  AnalysisFactBus bus(*repo);
+  EXPECT_TRUE(bus.Publish(packed).ok());
+  std::filesystem::remove_all(db);
+}
+
+TEST(AnalysisFactBusTest, ConsumesComponentPayloadIntoCanonicalBatchVectors) {  auto run = DuplicateProofRun();
   const auto expected = MakeAnalysisFactBatch(run);
   auto consumed = MakeAnalysisFactBatch(std::move(run));
 
