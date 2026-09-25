@@ -337,6 +337,22 @@ implementation, and if it becomes unreachable it is deleted.
 Because the `.input` directive's "every EDB relation must have a file" constraint
 disappears with the files, empty relations no longer need a placeholder write.
 
+**The C ABI boundary is load-bearing and must be respected.** `souffle::tuple`,
+`souffle::Relation`, and iteration over them require RTTI and exceptions.
+`souffle/SouffleInterface.h` is included by exactly one translation unit,
+`src/wpa/SouffleRunner.cpp`, which is compiled with them enabled and reached
+through the C ABI in `SouffleRunner.h`; VERITAS builds with both disabled
+(`.claude/rules/cpp-compilation-policy.md`). The in-memory path therefore cannot
+be implemented in `SouffleWpaExecutor.cpp`, which is RTTI-free.
+
+The runner's C ABI is extended into a session interface — open a component
+session, insert a relation's rows, run, scan a relation's rows out, reset, close —
+with all Soufflé types confined to the runner's side and only flat scalar buffers
+crossing the boundary. `SouffleWpaExecutor` then owns the translation between
+`facts::SemanticRow` values and those buffers, and keeps its existing dense-ID
+mapping and `ValidateSemanticRow` calls. The plan fixes the exact signatures; this
+section fixes the constraint that no Soufflé type may appear in them.
+
 ### 7.2 One program instance per run
 
 `veritas_souffle_run` gains a run-scoped entry point that obtains one program
