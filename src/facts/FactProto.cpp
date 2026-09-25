@@ -32,7 +32,7 @@ namespace fp = fact_proto;
 // preimage and semantic-key encoders carry; the failure here is loud on the
 // way back, but the guard rejects it at compile time instead.
 template <typename T>
-inline constexpr bool kUnconvertedCellKind = false;
+[[maybe_unused]] inline constexpr bool kUnconvertedCellKind = false;
 
 // --- Enum conversions -----------------------------------------------------
 

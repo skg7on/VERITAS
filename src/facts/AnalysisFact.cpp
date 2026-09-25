@@ -226,7 +226,7 @@ void EncodeU64(std::uint64_t value, std::byte* out) {
 // `static_assert` below fire instead of being accepted as an unreachable
 // statement.
 template <typename T>
-inline constexpr bool kUnencodedCellKind = false;
+[[maybe_unused]] inline constexpr bool kUnencodedCellKind = false;
 
 // A cursor over the preimage. Constructed with `out == nullptr` it measures;
 // constructed over a buffer of exactly `PreimageSize(row)` bytes it writes.

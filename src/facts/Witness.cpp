@@ -32,7 +32,7 @@ namespace veritas::facts {
 // below fire instead of being accepted as an unreachable statement; it mirrors
 // the preimage encoder in `AnalysisFact.cpp`.
 template <typename T>
-inline constexpr bool kUnencodedCellKind = false;
+[[maybe_unused]] inline constexpr bool kUnencodedCellKind = false;
 
 void AppendSemanticKey(std::string* out, const SemanticRow& row) {
   // Delegates to the field codec rather than carrying a second encoding: the
