@@ -75,6 +75,10 @@ struct StableId {
 // Construct a StableId from kind and canonical bytes. Uses SHA-256.
 StableId MakeStableId(IdKind kind, std::span<const std::byte> canonical_bytes);
 
+// The stable spelling of an ID kind, as the serialized form carries it:
+// `funcvar` for kFunctionVariant, `fact` for kFact, and so on.
+std::string_view IdKindToString(IdKind kind);
+
 // Serialize a StableId to its string form: <kind>:<algorithm>:<digest>.
 std::string ToString(const StableId &id);
 

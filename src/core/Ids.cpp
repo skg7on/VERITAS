@@ -24,6 +24,42 @@ namespace veritas::core {
 
 namespace {
 
+std::optional<IdKind> StringToIdKind(std::string_view str) {
+  static const std::unordered_map<std::string_view, IdKind> mapping = {
+      {"repo", IdKind::kRepository},
+      {"rev", IdKind::kRevision},
+      {"bv", IdKind::kBuildVariant},
+      {"tu", IdKind::kTranslationUnit},
+      {"funcsym", IdKind::kFunctionSymbol},
+      {"funcvar", IdKind::kFunctionVariant},
+      {"funcbody", IdKind::kFunctionBody},
+      {"summary", IdKind::kFunctionSummary},
+      {"fact", IdKind::kFact},
+      {"scc", IdKind::kScc},
+      {"run", IdKind::kAnalysisRun},
+      {"obj", IdKind::kAbstractObject},
+      {"model", IdKind::kModel},
+      {"valref", IdKind::kValueRef},
+      {"memref", IdKind::kMemoryRef},
+      {"callsite", IdKind::kCallSite},
+      {"bbsummary", IdKind::kBasicBlockSummary},
+      {"cpgproj", IdKind::kCpgProjection},
+      {"edge", IdKind::kCpgEdge},
+      {"unknown", IdKind::kUnknownNode},
+      {"evidence", IdKind::kEvidence},
+  };
+  auto it = mapping.find(str);
+  if (it != mapping.end()) {
+    return it->second;
+  }
+  return std::nullopt;
+}
+
+} // namespace
+
+// The kind spelling table. It has external linkage because it is the canonical
+// rendering, not a formatting detail: an encoder that has to write an ID's
+// serialized bytes without materializing the string counts them through this.
 std::string_view IdKindToString(IdKind kind) {
   switch (kind) {
   case IdKind::kRepository:
@@ -71,39 +107,6 @@ std::string_view IdKindToString(IdKind kind) {
   }
   return "unknown";
 }
-
-std::optional<IdKind> StringToIdKind(std::string_view str) {
-  static const std::unordered_map<std::string_view, IdKind> mapping = {
-      {"repo", IdKind::kRepository},
-      {"rev", IdKind::kRevision},
-      {"bv", IdKind::kBuildVariant},
-      {"tu", IdKind::kTranslationUnit},
-      {"funcsym", IdKind::kFunctionSymbol},
-      {"funcvar", IdKind::kFunctionVariant},
-      {"funcbody", IdKind::kFunctionBody},
-      {"summary", IdKind::kFunctionSummary},
-      {"fact", IdKind::kFact},
-      {"scc", IdKind::kScc},
-      {"run", IdKind::kAnalysisRun},
-      {"obj", IdKind::kAbstractObject},
-      {"model", IdKind::kModel},
-      {"valref", IdKind::kValueRef},
-      {"memref", IdKind::kMemoryRef},
-      {"callsite", IdKind::kCallSite},
-      {"bbsummary", IdKind::kBasicBlockSummary},
-      {"cpgproj", IdKind::kCpgProjection},
-      {"edge", IdKind::kCpgEdge},
-      {"unknown", IdKind::kUnknownNode},
-      {"evidence", IdKind::kEvidence},
-  };
-  auto it = mapping.find(str);
-  if (it != mapping.end()) {
-    return it->second;
-  }
-  return std::nullopt;
-}
-
-} // namespace
 
 StableId MakeStableId(IdKind kind, std::span<const std::byte> canonical_bytes) {
   auto digest = ComputeSHA256(canonical_bytes);

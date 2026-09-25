@@ -26,6 +26,7 @@
 #include <compare>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -90,6 +91,31 @@ StatusOr<core::StableId> DeriveFactId(const SemanticRow& row);
 
 // Validates a semantic row and derives its witness-independent fact ID.
 StatusOr<AnalysisFact> MakeFact(const SemanticRow& row);
+
+// A pass-scoped memo of row identity.
+//
+// Row identity is a pure function of the row, and the rows a pass sees repeat:
+// a published batch's witness endpoints are drawn from exactly the rows the
+// batch's fact list already contains, so a pass that derives per occurrence
+// derives the same identity two and three times over. One memo collapses those
+// to roughly the distinct row count.
+//
+// It memoizes derivations, never callers' claims: `Identify` derives from the
+// row on every miss and stores only what `DeriveFactId` returned, so a row that
+// fails validation fails here too and is never answered from the memo. Nothing
+// is shared between passes -- the memo is a local of the pass that uses it --
+// and the key is the row's canonical preimage, which is injective, so a hit is
+// only possible for a row identical to the one it memoized.
+class FactIdentityMemo {
+public:
+  // Fallible exactly as `DeriveFactId` is: an invalid row returns its
+  // validation status and is not memoized.
+  StatusOr<core::StableId> Identify(const SemanticRow& row);
+
+private:
+  std::unordered_map<std::string, core::StableId> ids_;
+  std::string key_;
+};
 
 }  // namespace veritas::facts
 

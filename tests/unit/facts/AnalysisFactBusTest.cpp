@@ -368,6 +368,88 @@ TEST(AnalysisFactBusTest, RejectsWitnessLeafOutsideRootSet) {
   std::filesystem::remove_all(db);
 }
 
+// Validate memoizes row identity so that the ~3.5M derivations it performs on a
+// production batch collapse to roughly the distinct row count. The memo must
+// not turn a rejection into an acceptance: this test tampers with one identity
+// field at a time and requires the same rejection, with the same status and
+// message, that the un-memoized pass produced.
+//
+// A row mutation changes the batch id, which is derived over the rows, so the
+// batch id is recomputed after every row mutation. Leaving it stale would
+// reject the batch at the batch-id gate before the check under test could run,
+// and the test would pass without exercising anything.
+//
+// `Validate` is private and `Publish` is the seam that reaches it: a batch that
+// fails validation is rejected before any sink is consulted, and with no sink
+// registered `Publish` returns exactly the status `Validate` returned.
+TEST(AnalysisFactBusTest, ValidateStillRejectsEachTamperedIdentity) {
+  const auto db = TempDbPath();
+  auto repo = wpa::WpaRunRepository::Open(db);
+  ASSERT_TRUE(repo.ok()) << repo.status().message();
+  AnalysisFactBus bus(*repo);
+
+  const AnalysisFactBatch batch = SuccessfulBatch();
+  ASSERT_EQ(batch.facts.size(), 1u);
+  ASSERT_EQ(batch.witnesses.size(), 1u);
+
+  // Baseline: a well-formed batch validates.
+  ASSERT_TRUE(bus.Publish(batch).ok());
+
+  // The tamper values, through the real parser: `ParseStableId` is the only
+  // producer of a `StableId` from text. `funcvar` is the spelling this codebase
+  // parses for a function-variant ID, and `callsite` for a call-site ID.
+  auto zero_fact = core::ParseStableId("fact:sha256:" + std::string(64, '0'));
+  auto other_function = core::ParseStableId("funcvar:sha256:" + std::string(64, 'a'));
+  auto wrong_kind_function =
+      core::ParseStableId("funcvar:sha256:" + std::string(64, 'b'));
+  auto other_call_site =
+      core::ParseStableId("callsite:sha256:" + std::string(64, 'b'));
+  ASSERT_TRUE(zero_fact.ok()) << zero_fact.status().message();
+  ASSERT_TRUE(other_function.ok()) << other_function.status().message();
+  ASSERT_TRUE(wrong_kind_function.ok()) << wrong_kind_function.status().message();
+  ASSERT_TRUE(other_call_site.ok()) << other_call_site.status().message();
+
+  // A mutated fact id no longer matches its own row.
+  AnalysisFactBatch bad_fact = batch;
+  bad_fact.facts[0].fact_id = *zero_fact;
+  const Status fact_status = bus.Publish(bad_fact);
+  EXPECT_EQ(fact_status.code(), StatusCode::kFailedPrecondition);
+  EXPECT_EQ(fact_status.message(), "fact_id does not match its row");
+
+  // A mutated witness result row is no longer a published fact, so it cannot
+  // close the witness for the fact it claims to prove.
+  AnalysisFactBatch bad_result = batch;
+  bad_result.witnesses[0].result.row.cells[0] = *other_function;
+  bad_result.batch_id = DeriveBatchId(bad_result);
+  const Status result_status = bus.Publish(bad_result);
+  EXPECT_EQ(result_status.code(), StatusCode::kFailedPrecondition);
+  EXPECT_EQ(result_status.message(), "fact without a closed witness");
+
+  // A witness input row with a cell of the wrong domain is still rejected by
+  // the per-cell schema check, which runs inside the identity derivation: a
+  // memo hit must never stand in for a row that does not validate.
+  AnalysisFactBatch wrong_kind_input = batch;
+  wrong_kind_input.witnesses[0].input.row.cells[0] = *wrong_kind_function;
+  wrong_kind_input.batch_id = DeriveBatchId(wrong_kind_input);
+  const Status kind_status = bus.Publish(wrong_kind_input);
+  EXPECT_EQ(kind_status.code(), StatusCode::kInvalidArgument);
+  EXPECT_EQ(kind_status.message(), "stable id kind mismatch");
+
+  // A witness input row whose identity is well-formed but is neither a
+  // published fact nor a declared rooted input is still rejected.
+  AnalysisFactBatch bad_input = batch;
+  bad_input.witnesses[0].input.row.cells[0] = *other_call_site;
+  bad_input.batch_id = DeriveBatchId(bad_input);
+  const Status input_status = bus.Publish(bad_input);
+  EXPECT_EQ(input_status.code(), StatusCode::kFailedPrecondition);
+  EXPECT_EQ(input_status.message(), "witness leaf outside the root set");
+
+  // The mutations are independent: the original batch is still accepted.
+  EXPECT_TRUE(bus.Publish(batch).ok());
+
+  std::filesystem::remove_all(db);
+}
+
 TEST(AnalysisFactBusTest, RejectsCyclicWitnessDag) {
   const auto db = TempDbPath();
   auto repo = wpa::WpaRunRepository::Open(db);

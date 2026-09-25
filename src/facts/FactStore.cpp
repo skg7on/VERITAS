@@ -187,11 +187,19 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
 
   struct ResultWitness {
     std::string witness_id;
+    // The result's semantic fact id, derived once where the group is first
+    // filled in and reused by the provenance pass below, which needs the same
+    // value for the node and every edge of this proof.
+    core::StableId fact_id{};
     std::vector<WitnessEdgeRef> ordered_edges;
   };
+  // Input rows repeat: a rooted input is the leaf of every proof that reaches
+  // it, and a derived fact is an input wherever another rule cites it. One memo
+  // derives each distinct input row once instead of once per citing edge.
+  FactIdentityMemo input_identity;
   std::map<std::string, ResultWitness> result_witnesses;
   for (const WitnessEdge& edge : batch.witnesses) {
-    auto input_fact_id = DeriveFactId(edge.input.row);
+    auto input_fact_id = input_identity.Identify(edge.input.row);
     if (!input_fact_id.ok()) {
       return input_fact_id.status();
     }
@@ -219,6 +227,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     if (!fact_id.ok()) {
       return fact_id.status();
     }
+    entry.fact_id = *fact_id;
     witness_id_by_fact[*fact_id] = entry.witness_id;
   }
 
@@ -304,15 +313,11 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   // The witness DAG: one node per selected proof, one edge per derivation step.
   ProvenanceStore provenance(metadata_store_);
   for (const auto& [result_key, entry] : result_witnesses) {
-    auto result_fact_id =
-        DeriveFactId(entry.ordered_edges.front().edge->result.row);
-    if (!result_fact_id.ok()) {
-      return rollback(result_fact_id.status());
-    }
+    const core::StableId& result_fact_id = entry.fact_id;
 
     FactWitness node;
     node.run_id = batch.run.run_id;
-    node.output_fact_id = *result_fact_id;
+    node.output_fact_id = result_fact_id;
     node.witness_id = entry.witness_id;
     node.selected = true;
     node.producer_kind = ProducerKindForEngine(batch.run.engine);
@@ -338,7 +343,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
       const WitnessEdge& edge = *edge_ref.edge;
       FactWitnessEdge witness_edge;
       witness_edge.run_id = batch.run.run_id;
-      witness_edge.output_fact_id = *result_fact_id;
+      witness_edge.output_fact_id = result_fact_id;
       witness_edge.witness_id = entry.witness_id;
       witness_edge.input_kind =
           rooted_inputs.count(edge_ref.input_fact_id) ? "rooted" : "derived";

@@ -313,10 +313,19 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
 
   // Stable fact identity: every fact's ID matches its semantic row, and no two
   // facts share an ID.
+  //
+  // One identity memo serves this loop and both endpoints of every witness
+  // edge below: the witness rows are drawn from exactly the rows the fact list
+  // already carries, so a batch that derives per occurrence derives the same
+  // row's identity three times over. The memo changes no comparison -- a hit
+  // returns the value `DeriveFactId` returned for that same row -- and it
+  // caches only successful derivations, so a row that fails validation fails
+  // identically whether or not it has been seen before.
+  FactIdentityMemo identity;
   std::map<core::StableId, std::size_t> fact_index;
   for (std::size_t i = 0; i < batch.facts.size(); ++i) {
     const auto &fact = batch.facts[i];
-    auto derived = DeriveFactId(fact.row);
+    auto derived = identity.Identify(fact.row);
     if (!derived.ok()) {
       return derived.status();
     }
@@ -345,11 +354,11 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
   bool input_outside_root_set = false;
   bool result_outside_published_set = false;
   for (const auto &edge : batch.witnesses) {
-    auto result = DeriveFactId(edge.result.row);
+    auto result = identity.Identify(edge.result.row);
     if (!result.ok()) {
       return result.status();
     }
-    auto input = DeriveFactId(edge.input.row);
+    auto input = identity.Identify(edge.input.row);
     if (!input.ok()) {
       return input.status();
     }

@@ -14,8 +14,10 @@
 
 #include "veritas/facts/AnalysisFact.h"
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -37,32 +39,22 @@ enum class CellTag : std::uint8_t {
   kEpistemic = 7,
 };
 
-void AppendU8(std::vector<std::byte>& out, std::uint8_t value) {
-  out.push_back(static_cast<std::byte>(value));
-}
-
-void AppendLenPrefixed(std::vector<std::byte>& out, std::string_view text) {
-  const std::uint64_t size = text.size();
-  for (int i = 7; i >= 0; --i) {
-    out.push_back(static_cast<std::byte>((size >> (i * 8)) & 0xFF));
-  }
-  for (const char c : text) {
-    out.push_back(static_cast<std::byte>(static_cast<std::uint8_t>(c)));
-  }
-}
-
-void AppendU64(std::vector<std::byte>& out, std::uint64_t value) {
-  for (int i = 7; i >= 0; --i) {
-    out.push_back(static_cast<std::byte>((value >> (i * 8)) & 0xFF));
-  }
-}
-
-void AppendI64(std::vector<std::byte>& out, std::int64_t value) {
-  AppendU64(out, static_cast<std::uint64_t>(value));
-}
+// The rendered form of a stable ID inside the preimage: exactly what
+// `core::ToString` returns, assembled without the stream it formats through.
+constexpr std::string_view kAlgorithmSeparator = ":sha256:";
 
 bool IsValidRelation(RelationId id) {
   return static_cast<std::size_t>(id) < kRelationCountV2;
+}
+
+// The relation name a row contributes to its preimage. A row whose relation id
+// is out of range is rejected by validation, but the preimage is what the
+// identity memo keys on and it is computed before validation runs, so the
+// lookup here must stay in bounds for any row rather than only for valid ones.
+// An empty name cannot collide with a real relation's, because a real name is
+// never empty and every name is written length-prefixed.
+std::string_view PreimageRelationName(RelationId id) {
+  return IsValidRelation(id) ? RelationsV2().Get(id).name : std::string_view{};
 }
 
 bool IsRangeRelation(RelationId id) {
@@ -202,37 +194,147 @@ Status ValidateExecutionRangePayload(const ExecutionRow& row) {
   return Status::Ok();
 }
 
-void AppendCell(std::vector<std::byte>& out, const SemanticCellValue& cell) {
-  std::visit(
-      [&out](const auto& value) {
-        using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, core::StableId>) {
-          AppendU8(out, static_cast<std::uint8_t>(CellTag::kStableId));
-          AppendLenPrefixed(out, core::ToString(value));
-        } else if constexpr (std::is_same_v<T, std::int64_t>) {
-          AppendU8(out, static_cast<std::uint8_t>(CellTag::kInt64));
-          AppendI64(out, value);
-        } else if constexpr (std::is_same_v<T, std::uint64_t>) {
-          AppendU8(out, static_cast<std::uint8_t>(CellTag::kUint64));
-          AppendU64(out, value);
-        } else if constexpr (std::is_same_v<T, std::string>) {
-          AppendU8(out, static_cast<std::uint8_t>(CellTag::kString));
-          AppendLenPrefixed(out, value);
-        } else if constexpr (std::is_same_v<T, semantic::DispatchKind>) {
-          AppendU8(out, static_cast<std::uint8_t>(CellTag::kDispatchKind));
-          AppendU8(out, static_cast<std::uint8_t>(value));
-        } else if constexpr (std::is_same_v<T, semantic::AliasKind>) {
-          AppendU8(out, static_cast<std::uint8_t>(CellTag::kAliasKind));
-          AppendU8(out, static_cast<std::uint8_t>(value));
-        } else if constexpr (std::is_same_v<T, semantic::ByteRangeKind>) {
-          AppendU8(out, static_cast<std::uint8_t>(CellTag::kByteRangeKind));
-          AppendU8(out, static_cast<std::uint8_t>(value));
-        } else if constexpr (std::is_same_v<T, semantic::EpistemicState>) {
-          AppendU8(out, static_cast<std::uint8_t>(CellTag::kEpistemic));
-          AppendU8(out, static_cast<std::uint8_t>(value));
-        }
-      },
-      cell);
+// The canonical preimage of a semantic row: the byte string whose SHA-256 is
+// the row's fact identity. Length-prefixed, tag-prefixed fields make
+// concatenation injective, so two distinct rows cannot share a preimage --
+// which is what lets the identity memo key on it without re-deriving.
+//
+// The preimage is sized exactly and then written through a cursor. The previous
+// encoder appended one byte at a time to a growing vector; the bytes it
+// produced are identical, and `DerivedIdentityCoversEveryCellKind` pins them.
+
+std::size_t LenPrefixedSize(std::size_t text_size) { return 8 + text_size; }
+
+// The length of a stable ID's rendered form: `<kind>:sha256:<digest>`. One
+// expression, used both to size the field and to write its length prefix.
+std::size_t RenderedStableIdSize(const core::StableId& id) {
+  return IdKindToString(id.kind).size() + kAlgorithmSeparator.size() +
+         id.digest_hex.size();
+}
+
+std::size_t CellSize(const SemanticCellValue& cell) {
+  return 1 + std::visit(
+                 [](const auto& value) -> std::size_t {
+                   using T = std::decay_t<decltype(value)>;
+                   if constexpr (std::is_same_v<T, core::StableId>) {
+                     return LenPrefixedSize(RenderedStableIdSize(value));
+                   } else if constexpr (std::is_same_v<T, std::string>) {
+                     return LenPrefixedSize(value.size());
+                   } else if constexpr (std::is_same_v<T, std::int64_t> ||
+                                        std::is_same_v<T, std::uint64_t>) {
+                     return 8;
+                   } else {
+                     return 1;
+                   }
+                 },
+                 cell);
+}
+
+std::size_t PreimageSize(const SemanticRow& row) {
+  std::size_t size = LenPrefixedSize(std::string_view("relations.v2").size()) +
+                     LenPrefixedSize(PreimageRelationName(row.relation).size());
+  for (const auto& cell : row.cells) {
+    size += CellSize(cell);
+  }
+  return size;
+}
+
+// A bounds-respecting cursor over a buffer of exactly `PreimageSize(row)` bytes.
+class PreimageCursor {
+public:
+  PreimageCursor(std::byte* out, std::size_t size) : out_(out), size_(size) {}
+
+  void Put(const void* data, std::size_t count) {
+    if (count == 0) {
+      return;
+    }
+    // The count and the writer are two halves of one encoding. The assert is
+    // the debug-build guard that they still agree; the clamp keeps a release
+    // build from writing past the buffer if they ever drift, at the cost of a
+    // truncated (and therefore different) identity rather than a corrupt heap.
+    assert(pos_ + count <= size_);
+    if (pos_ + count > size_) {
+      pos_ = size_;
+      return;
+    }
+    std::memcpy(out_ + pos_, data, count);
+    pos_ += count;
+  }
+
+  void Byte(std::uint8_t value) { Put(&value, 1); }
+
+  void U64(std::uint64_t value) {
+    std::byte encoded[8];
+    for (int i = 7; i >= 0; --i) {
+      encoded[7 - i] = static_cast<std::byte>((value >> (i * 8)) & 0xFF);
+    }
+    Put(encoded, sizeof(encoded));
+  }
+
+  void LenPrefixed(std::string_view text) {
+    U64(text.size());
+    Put(text.data(), text.size());
+  }
+
+  void Cell(const SemanticCellValue& cell) {
+    std::visit(
+        [this](const auto& value) {
+          using T = std::decay_t<decltype(value)>;
+          if constexpr (std::is_same_v<T, core::StableId>) {
+            Byte(static_cast<std::uint8_t>(CellTag::kStableId));
+            // The whole rendered id is one length-prefixed field: the prefix
+            // counts the kind, the algorithm separator, and the digest.
+            const std::string_view kind = IdKindToString(value.kind);
+            U64(RenderedStableIdSize(value));
+            Put(kind.data(), kind.size());
+            Put(kAlgorithmSeparator.data(), kAlgorithmSeparator.size());
+            Put(value.digest_hex.data(), value.digest_hex.size());
+          } else if constexpr (std::is_same_v<T, std::int64_t>) {
+            Byte(static_cast<std::uint8_t>(CellTag::kInt64));
+            U64(static_cast<std::uint64_t>(value));
+          } else if constexpr (std::is_same_v<T, std::uint64_t>) {
+            Byte(static_cast<std::uint8_t>(CellTag::kUint64));
+            U64(value);
+          } else if constexpr (std::is_same_v<T, std::string>) {
+            Byte(static_cast<std::uint8_t>(CellTag::kString));
+            LenPrefixed(value);
+          } else if constexpr (std::is_same_v<T, semantic::DispatchKind>) {
+            Byte(static_cast<std::uint8_t>(CellTag::kDispatchKind));
+            Byte(static_cast<std::uint8_t>(value));
+          } else if constexpr (std::is_same_v<T, semantic::AliasKind>) {
+            Byte(static_cast<std::uint8_t>(CellTag::kAliasKind));
+            Byte(static_cast<std::uint8_t>(value));
+          } else if constexpr (std::is_same_v<T, semantic::ByteRangeKind>) {
+            Byte(static_cast<std::uint8_t>(CellTag::kByteRangeKind));
+            Byte(static_cast<std::uint8_t>(value));
+          } else if constexpr (std::is_same_v<T, semantic::EpistemicState>) {
+            Byte(static_cast<std::uint8_t>(CellTag::kEpistemic));
+            Byte(static_cast<std::uint8_t>(value));
+          }
+        },
+        cell);
+  }
+
+  bool Complete() const { return pos_ == size_; }
+
+private:
+  std::byte* out_;
+  std::size_t size_;
+  std::size_t pos_ = 0;
+};
+
+// Writes the preimage of `row` into `out`, which must hold at least
+// `PreimageSize(row)` bytes.
+void WritePreimage(std::byte* out, std::size_t size, const SemanticRow& row) {
+  PreimageCursor cursor(out, size);
+  cursor.LenPrefixed("relations.v2");
+  cursor.LenPrefixed(PreimageRelationName(row.relation));
+  for (const auto& cell : row.cells) {
+    cursor.Cell(cell);
+  }
+  // The writer and the sizing pass are the same encoding expressed twice; this
+  // is where a divergence between them is caught rather than hashed.
+  assert(cursor.Complete());
 }
 
 }  // namespace
@@ -275,13 +377,26 @@ StatusOr<core::StableId> DeriveFactId(const SemanticRow& row) {
   if (Status s = ValidateSemanticRow(row); !s.ok()) {
     return s;
   }
-  std::vector<std::byte> bytes;
-  AppendLenPrefixed(bytes, "relations.v2");
-  AppendLenPrefixed(bytes, RelationsV2().Get(row.relation).name);
-  for (const auto& cell : row.cells) {
-    AppendCell(bytes, cell);
-  }
+  std::vector<std::byte> bytes(PreimageSize(row));
+  WritePreimage(bytes.data(), bytes.size(), row);
   return core::MakeStableId(core::IdKind::kFact, bytes);
+}
+
+StatusOr<core::StableId> FactIdentityMemo::Identify(const SemanticRow& row) {
+  key_.resize(PreimageSize(row));
+  WritePreimage(reinterpret_cast<std::byte*>(key_.data()), key_.size(), row);
+  const auto cached = ids_.find(key_);
+  if (cached != ids_.end()) {
+    return cached->second;
+  }
+  // A miss always derives from the row. Storing only successful derivations is
+  // what keeps a rejected row rejected: it never gets a memo entry that a later
+  // lookup could answer with.
+  auto derived = DeriveFactId(row);
+  if (derived.ok()) {
+    ids_.emplace(key_, *derived);
+  }
+  return derived;
 }
 
 StatusOr<AnalysisFact> MakeFact(const SemanticRow& row) {
