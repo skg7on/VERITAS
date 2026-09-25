@@ -29,6 +29,7 @@
 #include "veritas/analysis/semantic/ModelBundle.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
+#include "veritas/core/AllocatorRelief.h"
 #include "veritas/core/Hash.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Version.h"
@@ -382,6 +383,10 @@ public:
     if (!svf_result.ok())
       return svf_result.status();
 
+    // Boundary: the SVF stage's internal working set is dead now that its
+    // results have been extracted, and nothing downstream needs those pages.
+    core::ReleaseFreedMemory();
+
     // Load the versioned external-model bundle; its hash and rows feed the
     // whole-program analysis, and modeled-function effects attach to the
     // modeled function's summary.
@@ -436,6 +441,10 @@ public:
     if (!published.ok())
       return published.status();
 
+    // Boundary: publication has consumed and released the summary and CPG
+    // working set; only the summaries the WPA stage still needs are live.
+    core::ReleaseFreedMemory();
+
     ProjectAnalysisResult result;
     result.projection_id = projection_id_str;
     result.cpg_node_count = node_count;
@@ -464,6 +473,10 @@ public:
       result.wpa_diagnostics = std::string(wpa_status.message());
       return wpa_status;
     }
+
+    // Boundary: the component payloads the WPA just assembled from are dead
+    // once assembly has consumed them and the run receipt is written.
+    core::ReleaseFreedMemory();
     return result;
   }
 
