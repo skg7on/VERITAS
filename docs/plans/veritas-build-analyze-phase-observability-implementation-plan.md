@@ -532,7 +532,12 @@ TEST(RunMetricsTest, CapsSamplesAndFlagsTruncation) {
   ASSERT_TRUE(d.distribution.has_value());
   // The first cap samples are kept; the rest are dropped and flagged.
   EXPECT_TRUE(d.distribution->samples_truncated);
+  // distribution.max describes the RETAINED samples, so it agrees with the
+  // percentiles beside it: max([1ms, 2ms, 3ms]) = 3ms.
   EXPECT_EQ(d.distribution->max, milliseconds(3));
+  // SpanStats.max is the true max over every occurrence, which is a different
+  // quantity once truncation has occurred: 5ms.
+  EXPECT_EQ(d.max, milliseconds(5));
 }
 
 TEST(RunMetricsTest, SortsCountersByNameOnTake) {
@@ -577,15 +582,21 @@ TEST(RunMetricsTest, ClampsNegativeDurationsAndRecordsDiagnostic) {
   EXPECT_FALSE(stats.complete);
 }
 
-TEST(RunMetricsTest, NullRecorderReadsNoClock) {
-  int clock_reads = 0;
-  RunMetrics* null_metrics = nullptr;
+TEST(RunMetricsTest, NullRecorderIsInert) {
+  // A null recorder must be a harmless no-op. Asserting "zero clock reads"
+  // here would assert nothing: with no recorder there is no clock to read.
+  // What is observable is that a live recorder nearby is left untouched.
+  ScriptedRecorder r;
   {
+    RunMetrics* null_metrics = nullptr;
     PhaseSpan span(null_metrics, "never");
     span.SetLabel("x");
     span.AddCounter("c", 1, "count");
   }
-  EXPECT_EQ(clock_reads, 0);
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  EXPECT_TRUE(stats.root.children.empty());
+  EXPECT_TRUE(stats.counters.empty());
+  EXPECT_TRUE(stats.diagnostics.empty());
 }
 ```
 
@@ -835,12 +846,31 @@ RunMetricsStats RunMetrics::TakeStats() {
             });
   stats.counters = std::move(impl_->counters);
 
-  // Build one SpanStats per accumulator, then attach by parent index. Keeping
-  // identical indices between the two vectors avoids parsing names.
-  std::vector<SpanStats> built(impl_->accums.size());
+  // Classify each accumulator by its parent BEFORE building anything, then
+  // build top-down by index.
+  //
+  // Do NOT fold children into parents in a single forward pass: a parent's
+  // accumulator is always created before its children's, so by the time the
+  // loop reaches a child, its parent has already been moved into the
+  // grandparent. Pushing into a moved-from SpanStats silently corrupts the
+  // tree. Recursive construction by index has no such ordering hazard.
+  std::vector<std::vector<std::size_t>> child_indices(impl_->accums.size());
+  std::vector<std::size_t> roots;
   for (std::size_t i = 0; i < impl_->accums.size(); ++i) {
-    const Impl::Accum& accum = impl_->accums.at(i);
-    SpanStats& out = built.at(i);
+    const std::size_t parent = impl_->accums.at(i).parent_index;
+    if (parent == kNoParent) {
+      roots.push_back(i);
+    } else {
+      child_indices.at(parent).push_back(i);
+    }
+  }
+  const auto by_name = [this](std::size_t left, std::size_t right) {
+    return impl_->accums.at(left).name < impl_->accums.at(right).name;
+  };
+
+  std::function<SpanStats(std::size_t)> build = [&](std::size_t index) {
+    const Impl::Accum& accum = impl_->accums.at(index);
+    SpanStats out;
     out.name = accum.name;
     out.count = accum.count;
     out.wall_inclusive = accum.inclusive;
@@ -856,43 +886,46 @@ RunMetricsStats RunMetrics::TakeStats() {
       distribution.p50 = NearestRank(accum.samples, 50);
       distribution.p95 = NearestRank(accum.samples, 95);
       distribution.p99 = NearestRank(accum.samples, 99);
-      distribution.max = accum.max;
+      // The max of the RETAINED samples, so it is consistent with the
+      // percentiles beside it. SpanStats::max is the true max over every
+      // occurrence and may be larger once samples_truncated is set.
+      distribution.max = NearestRank(accum.samples, 100);
       out.distribution = distribution;
       out.top_n = accum.top;
     }
-  }
-
-  std::vector<std::size_t> roots;
-  for (std::size_t i = 0; i < built.size(); ++i) {
-    const std::size_t parent = impl_->accums.at(i).parent_index;
-    if (parent == kNoParent) {
-      roots.push_back(i);
-    } else {
-      built.at(parent).children.push_back(std::move(built.at(i)));
+    std::vector<std::size_t> children = child_indices.at(index);
+    std::sort(children.begin(), children.end(), by_name);
+    for (const std::size_t child : children) {
+      out.children.push_back(build(child));
     }
-  }
-  // Attaching by index invalidates the moved-from entries, so re-walk the
-  // roots using the accum list rather than the (now partially moved) vector.
-  for (SpanStats& node : built) {
-    std::sort(node.children.begin(), node.children.end(),
-              [](const SpanStats& left, const SpanStats& right) {
-                return left.name < right.name;
-              });
-  }
+    return out;
+  };
 
-  if (roots.size() == 1) {
-    stats.root = std::move(built.at(roots.front()));
+  if (roots.size() == 1 && impl_->accums.at(roots.front()).name == "run") {
+    // The CLI opens a span named "run", so that accumulator is the root.
+    stats.root = build(roots.front());
   } else {
-    // Zero roots (nothing recorded) or several (a span taken outside any
-    // root). Synthesize a root so the tree always has one, in name order.
+    // Zero roots (nothing recorded), or spans taken outside any root. Wrap
+    // them in a synthetic "run" so the tree always has exactly one root, in
+    // name order. Its wall and CPU are the sum of its disjoint children and
+    // its self time is therefore zero by construction.
+    std::sort(roots.begin(), roots.end(), by_name);
     stats.root.name = "run";
     for (const std::size_t index : roots) {
-      stats.root.children.push_back(std::move(built.at(index)));
+      stats.root.children.push_back(build(index));
     }
-    std::sort(stats.root.children.begin(), stats.root.children.end(),
-              [](const SpanStats& left, const SpanStats& right) {
-                return left.name < right.name;
-              });
+    for (const SpanStats& child : stats.root.children) {
+      stats.root.wall_inclusive += child.wall_inclusive;
+      if (child.cpu_measured) {
+        stats.root.cpu_measured = true;
+        stats.root.cpu_inclusive += child.cpu_inclusive;
+      }
+      stats.root.min = stats.root.min == nanoseconds::zero()
+                           ? child.min
+                           : std::min(stats.root.min, child.min);
+      stats.root.max = std::max(stats.root.max, child.max);
+    }
+    stats.root.wall_self = nanoseconds::zero();
   }
   return stats;
 }
