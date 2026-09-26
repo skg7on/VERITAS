@@ -2284,6 +2284,21 @@ TEST(VeritasBuildAnalyzeCliTest, WritesRunMetricsByDefault) {
   EXPECT_TRUE(fs::is_regular_file(output / "run-metrics.json"));
   EXPECT_NE(result.stdout_text.find("Analysis phase report"), std::string::npos)
       << result.stdout_text;
+
+  // Both ingest spans must appear. They are the measurable form of the
+  // duplication spec section 10 records, and the first finding this feature
+  // exists to surface — so their absence is a failure, not a detail.
+  std::ifstream artifact(output / "run-metrics.json");
+  ASSERT_TRUE(artifact.good());
+  std::stringstream buffer;
+  buffer << artifact.rdbuf();
+  const std::string json = buffer.str();
+  EXPECT_NE(json.find("cli.ingest"), std::string::npos) << json.substr(0, 500);
+  EXPECT_NE(json.find("m1.ingest"), std::string::npos) << json.substr(0, 500);
+  // The real root span, not the synthetic fallback: the promotion path in
+  // TakeStats is what keeps the report's total equal to the command's wall time.
+  EXPECT_NE(json.find("\"name\": \"run\""), std::string::npos)
+      << json.substr(0, 500);
 }
 
 TEST(VeritasBuildAnalyzeCliTest, MetricsFalseWritesNoArtifactAndNoReport) {
@@ -2378,20 +2393,51 @@ In `AnalyzeArguments` add:
 
 Parse them with the existing `take_value` idiom, following `--field-sensitive` exactly for the two booleans and `ParsePositiveSize` for the integers. `--metrics-interval-ms` must accept `0` (span-boundary sampling only), so it needs a non-negative parse: add `ParseUnsigned` beside `ParsePositiveSize` rather than reusing the positive-only helper.
 
-In `Analyze`, construct the recorder before the analyzer and pass it:
+In `Analyze`, construct the recorder **first**, before any ingest, and open the root span there. Position matters: if the recorder is built after `ResolveProjectInput`, the `run` span cannot enclose `cli.ingest`, and spec section 10's headline finding — that the CLI ingests the project and then the analyzer ingests it again — becomes invisible in the artifact.
 
 ```cpp
+  // The recorder is built before anything else so the "run" root encloses the
+  // whole command, and so the rootless-accumulator promotion in TakeStats
+  // applies rather than the synthetic-"run" fallback.
   veritas::core::RunMetricsOptions metrics_options;
   if (parsed->metrics) {
-    metrics_options.sample_interval = std::chrono::milliseconds(
-        parsed->metrics_interval_ms);
+    metrics_options.sample_interval =
+        std::chrono::milliseconds(parsed->metrics_interval_ms);
   }
   metrics_options.top_n = parsed->metrics_top_n;
   metrics_options.emit_series = parsed->metrics_series;
   veritas::core::RunMetrics metrics(metrics_options);
-  auto result = analyzer.AnalyzeProject(request, config,
-                                        parsed->metrics ? &metrics : nullptr);
+  veritas::core::RunMetrics* const recorder =
+      parsed->metrics ? &metrics : nullptr;
+  veritas::core::PhaseSpan run_span(recorder, "run",
+                                    veritas::core::SpanMode::kBearing);
+
+  // The CLI's own ingest: resolve the project, load the manifest, write the
+  // diagnostic manifest. The analyzer performs the same two steps again under
+  // `m1.ingest`, so this pair is the measurable form of that duplication.
+  {
+    veritas::core::PhaseSpan ingest_span(recorder, "cli.ingest",
+                                         veritas::core::SpanMode::kBearing);
+    auto input = veritas::build::ResolveProjectInput(request);
+    if (!input.ok()) return input.status();
+    auto manifest = veritas::build::LoadProjectManifest(*input);
+    if (!manifest.ok()) return manifest.status();
+    if (auto status = WriteDiagnosticManifest(input->output_root, *manifest);
+        !status.ok()) {
+      return status;
+    }
+  }
 ```
+
+The existing body then follows unchanged, except that `input` and `manifest` must remain in scope for the later print block — so either hoist those two declarations above the `cli.ingest` scope, or move the print block inside it. Prefer hoisting the declarations and keeping the span scope tightly around the three calls.
+
+Then pass the recorder to the analyzer:
+
+```cpp
+  auto result = analyzer.AnalyzeProject(request, config, recorder);
+```
+
+`run` closes after the artifact is written, so its wall time is the command's wall time — which is the number the report's `total` row shows.
 
 After the existing `Analysis complete` block, when `parsed->metrics`, build the `RunReport`, print `RenderRunReportText`, write `RenderRunReportJson` to the artifact path, and print any recorder diagnostics to **stderr** prefixed `veritas-build: metrics degraded: `. The analysis exit code is unaffected by any metrics failure (spec section 7.1); a write failure prints a diagnostic and returns `Status::Ok()`.
 
@@ -2661,22 +2707,26 @@ git commit -m "feat(wpa,svf,facts): record sub-spans, component aggregates, and 
 
 Three runs of the same binary with metrics off and three with metrics on, same output-root-per-run convention, worst-of-three reported per series:
 
+This is **six full analyses of the LevelDB fixture, and each one takes roughly ten minutes of wall time on this machine**. Two consequences you must plan for:
+
+- **Run them one at a time, never as one command.** A single `for` loop over all six would run for about an hour and will exceed any bounded command timeout. Run one analysis per invocation, in the background, and wait for it to exit before starting the next.
+- **One run per output root.** A second concurrent run against the same output root dies on the RocksDB LOCK, so wait for the process to exit rather than for a log line. The six distinct output roots below already satisfy this.
+
+Metrics **off**, three runs:
+
 ```bash
-for i in 1 2 3; do
-  /usr/bin/time -lp ./build/bin/veritas-build analyze \
-    --project /Users/skg7on/Workspace/Projects/leveldb \
-    --output /tmp/veritas-metrics-off-$i --metrics false 2>&1 | tail -20
-done
-for i in 1 2 3; do
-  /usr/bin/time -lp ./build/bin/veritas-build analyze \
-    --project /Users/skg7on/Workspace/Projects/leveldb \
-    --output /tmp/veritas-metrics-on-$i 2>&1 | tail -20
-done
+/usr/bin/time -lp ./build/bin/veritas-build analyze \
+  --project /Users/skg7on/Workspace/Projects/leveldb \
+  --output /tmp/veritas-metrics-off-1 --metrics false
 ```
 
-One `veritas-build analyze` per store: a second concurrent run against the same output root dies on the RocksDB LOCK, so wait for each to exit rather than for a log line. Confirm `CMakeCache.txt`'s build type and compiler match between series before quoting any delta.
+then the same command with `--output /tmp/veritas-metrics-off-2` and `-3`.
 
-**Report the result whether or not it meets the ≤0.5 % CPU and ≤0.05 GiB ceiling.** A miss is a finding, not a failure to hide.
+Metrics **on**, three runs: the same three commands with `--metrics false` removed, writing to `/tmp/veritas-metrics-on-1`, `-2`, and `-3`.
+
+Each run prints its own phase report and writes its own artifact. Compare worst-of-three per series for both CPU (`user` + `sys` from `/usr/bin/time -lp`) and peak resident. Confirm `CMakeCache.txt`'s build type and compiler match between the two series before quoting any delta — on this machine the host compiler moves these numbers more than the change does.
+
+**Report the result whether or not it meets the ≤0.5 % CPU and ≤0.05 GiB ceiling.** A miss is a finding, not a failure to hide. If the six runs cannot be completed, say so and report how many were taken; **do not** extrapolate a series from fewer runs than the budget requires, and do not present a two-run comparison as evidence — this fixture's own spread is 0.72 GiB.
 
 - [ ] **Step 2: Write the reader's guide**
 
@@ -2688,13 +2738,22 @@ Append a verification-record section to the spec in the round-3 style: the accep
 
 - [ ] **Step 4: Full verification and commit**
 
+The pre-push policy requires a full build and a full suite here, so unlike every other task this one does need the whole tree. **Run the build in the background** — 631 targets takes a long time, and a foreground bounded command will time out. A previous task stalled the session by running it in the foreground.
+
 ```bash
 cmake --build build
+```
+
+Then, once that has exited:
+
+```bash
 ctest --test-dir build --output-on-failure
 git diff --check
 ```
 
-Then commit both documents. The whole suite must pass with zero skips; verify the case count against the expected name set rather than the summary line, because a `GTEST_SKIP` reports as passed.
+The suite takes roughly five minutes (822 cases plus the new ones) and must pass with zero skips. Verify the case count against the expected name set rather than the summary line, because a `GTEST_SKIP` reports as passed. Note that `ctest` is run **serially** here: `-j` races on fixed fixture paths in this repository.
+
+Then commit both documents.
 
 ```bash
 git commit -m "docs(analyze): record phase-observability overhead and add the reader guide" \
@@ -2707,7 +2766,9 @@ git commit -m "docs(analyze): record phase-observability overhead and add the re
 
 **Spec coverage.** Every numbered spec section maps to a task. Section 4.2/4.3/4.4 (recorder, distributions, counters) → T1. Section 4.5 (sampler and join) → T4. Section 4.6 (span inventory) → T3 and T7. Section 4.7 (store read-back) → T5. Section 5.2 (five identity rules) → T3's test for Rules 1–2, T6 for Rule 3, T1's null-recorder test for Rule 4, and the not-a-budget constraint is a Global Constraint. Sections 6.1–6.5 → T2 and T6. Section 7.1–7.4 → T4 and T6. Section 8.1–8.6 → distributed across every task's test steps, with 8.5 landing in T8. Sections 9.1–9.2 → the task list. Section 10 (the duplicated ingest) is measured by T3's `cli.ingest`/`m1.ingest` spans and reported in T8.
 
-**Gaps found and closed.** §8.3's schema contract needed `llvm::json::parse`, so `RunReportTest` links `LLVM` directly rather than relying on the library's `PRIVATE` link. §6.3's `"complete"` and `"diagnostics"` needed a producer: T1 records them, T2 emits them, T6 surfaces them on stderr.
+**Gaps found and closed.** §8.3's schema contract needed `llvm::json::Parse`, so `RunReportTest` links `LLVM` directly rather than relying on the library's `PRIVATE` link. §6.3's `"complete"` and `"diagnostics"` needed a producer: T1 records them, T2 emits them, T6 surfaces them on stderr.
+
+**The largest gap found in review, and how it was closed.** Section 4.6's inventory lists a `run` root span and a `cli.ingest` span, and §10's headline finding — that the CLI ingests the project and then the analyzer ingests it again — depends on both. **No task created either one.** T1's promotion logic and T2's fixture merely *handle* a span named `run`; neither opens one, and T3's span list begins at `m1.ingest`. As written, the feature would have shipped with the duplication invisible and the report's total resting on the synthetic-root fallback. T6 now opens `run` before the first ingest, opens `cli.ingest` around the CLI's three calls, and asserts in its CLI test that both `cli.ingest` and `m1.ingest` appear in the artifact, with the real `run` node present rather than the fallback.
 
 **The initial draft's soft spot, and how it was closed.** The first version of T5/T6 named the inventory fields but left their assembly to the implementer, because the counting sites had not been read. That is a placeholder wearing a caveat, so the sites were read and the plan now names real APIs:
 
