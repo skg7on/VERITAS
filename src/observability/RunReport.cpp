@@ -46,6 +46,7 @@ namespace {
 
 constexpr std::uint64_t kBytesPerGiB = 1024ull * 1024ull * 1024ull;
 constexpr std::uint64_t kBytesPerMiB = 1024ull * 1024ull;
+constexpr std::uint64_t kBytesPerKiB = 1024ull;
 constexpr double kNanosPerSecond = 1000000000.0;
 constexpr double kNanosPerMilli = 1000000.0;
 
@@ -352,17 +353,17 @@ void CollectPhaseRows(const core::SpanStats& span, std::string_view prefix,
   }
 }
 
-// FormatSignedBytes renders a signed memory delta in GiB with two decimals and
-// an explicit sign, as in the report's `+8.59` column. A delta that rounds to
-// zero is written positive so the column never reads "-0.00".
+// FormatSignedBytes renders a signed memory delta with an explicit sign and the
+// same tiers as FormatBytes, so a MiB-scale release beside a GiB-scale peak
+// reads as "-3.00 MiB" instead of being rounded away to a bare "-0.00".
 std::string FormatSignedBytes(std::int64_t bytes) {
-  const double gib = static_cast<double>(bytes) /
-                     static_cast<double>(kBytesPerGiB);
-  char buffer[32];
-  std::snprintf(buffer, sizeof(buffer), "%+.2f", gib);
-  std::string text(buffer);
-  if (text == "-0.00") text = "+0.00";
-  return text;
+  const bool negative = bytes < 0;
+  // Negate in unsigned arithmetic: the magnitude of INT64_MIN has no signed
+  // counterpart, and this form has no overflow to reason about.
+  const std::uint64_t magnitude =
+      negative ? ~static_cast<std::uint64_t>(bytes) + 1ull
+               : static_cast<std::uint64_t>(bytes);
+  return std::string(negative ? "-" : "+") + FormatBytes(magnitude);
 }
 
 std::string FormatPhaseRow(const PhaseRow& row, std::size_t width) {
@@ -375,6 +376,10 @@ std::string FormatPhaseRow(const PhaseRow& row, std::size_t width) {
   const std::string peak = span.memory.has_value()
                                ? FormatBytes(span.memory->peak_within)
                                : std::string("-");
+  // The delta carries its own unit, like the peak beside it, so the reader can
+  // compare the two columns and tell a MiB-scale release from a GiB-scale one.
+  // The column is as wide as the widest value the tiers can produce
+  // ("-1024.00 MiB"): a longer string would push the row's columns out of line.
   const std::string delta = span.memory.has_value()
                                 ? FormatSignedBytes(span.memory->rss_delta)
                                 : std::string("-");
@@ -389,7 +394,7 @@ std::string FormatPhaseRow(const PhaseRow& row, std::size_t width) {
   line.append("  ");
   line.append(PadLeft(peak, 10));
   line.append("  ");
-  line.append(PadLeft(delta, 6));
+  line.append(PadLeft(delta, 11));
   line.push_back('\n');
   return line;
 }
@@ -439,11 +444,15 @@ std::string RenderRunReportJson(const RunReport& report) {
   j.object([&] {
     j.attribute("complete", report.metrics.complete);
 
-    // The recorder options the run actually used. The design's config block
-    // carries the analysis configuration too, but no analysis configuration
-    // reaches a RunReport, so only this half can be emitted.
+    // The recorder options the run actually used, beside the one analysis knob
+    // the artifact has to carry: a second full WPA whose canonical results must
+    // agree changes what the run does and is invisible in either configuration
+    // hash. The rest of the analysis configuration is deliberately absent —
+    // RunReport does not depend on the analysis library, and svf_config_hash
+    // and wpa_config_hash cover every other AnalysisConfig field.
     const core::RunMetricsOptions& options = report.metrics_options;
     j.attributeObject("config", [&] {
+      j.attribute("conformance_oracle", report.conformance_oracle);
       j.attributeObject("metrics", [&] {
         j.attribute("emit_series", options.emit_series);
         j.attribute("sample_interval_ms",
@@ -609,9 +618,20 @@ std::string FormatBytes(std::uint64_t bytes) {
   if (bytes >= kBytesPerGiB) {
     std::snprintf(buffer, sizeof(buffer), "%.2f GiB",
                   value / static_cast<double>(kBytesPerGiB));
-  } else {
+  } else if (bytes >= kBytesPerMiB) {
     std::snprintf(buffer, sizeof(buffer), "%.2f MiB",
                   value / static_cast<double>(kBytesPerMiB));
+  } else if (bytes >= kBytesPerKiB) {
+    // A third tier, not a stop at MiB: a phase that allocates a few hundred
+    // kilobytes would otherwise print as "0.00 MiB", which reads as *nothing
+    // was measured* rather than *this phase is small*. The memory column exists
+    // to tell those two apart.
+    std::snprintf(buffer, sizeof(buffer), "%.1f KiB",
+                  value / static_cast<double>(kBytesPerKiB));
+  } else {
+    // Below a KiB there is no smaller unit to round into, so print the count.
+    std::snprintf(buffer, sizeof(buffer), "%llu B",
+                  static_cast<unsigned long long>(bytes));
   }
   return std::string(buffer);
 }

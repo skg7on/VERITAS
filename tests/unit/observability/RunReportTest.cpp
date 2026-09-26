@@ -22,6 +22,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -219,8 +220,76 @@ TEST(RunReportTest, FormatDurationRendersTheDocumentedUnits) {
 TEST(RunReportTest, FormatBytesRendersTheDocumentedUnits) {
   EXPECT_EQ(FormatBytes(9223372036), "8.59 GiB");
   EXPECT_EQ(FormatBytes(1073741824), "1.00 GiB");
-  // Below one GiB the unit switches to MiB, still two decimals.
+  // Below one GiB the unit is MiB, with two decimals, not a rounded-up GiB.
+  EXPECT_EQ(FormatBytes(1073741823), "1024.00 MiB");
+  EXPECT_EQ(FormatBytes(5242880), "5.00 MiB");
   EXPECT_EQ(FormatBytes(1048576), "1.00 MiB");
+  // Below one MiB the unit is KiB, with one decimal. This is the tier that
+  // keeps a phase that allocates a few hundred kilobytes from reading as
+  // "0.00 MiB" — nothing measured — rather than as small.
+  EXPECT_EQ(FormatBytes(1048575), "1024.0 KiB");
+  EXPECT_EQ(FormatBytes(2048), "2.0 KiB");
+  EXPECT_EQ(FormatBytes(1024), "1.0 KiB");
+  // Below one KiB the byte count is printed as it is.
+  EXPECT_EQ(FormatBytes(1023), "1023 B");
+  EXPECT_EQ(FormatBytes(1), "1 B");
+  EXPECT_EQ(FormatBytes(0), "0 B");
+}
+
+TEST(RunReportTest, TextReportKeepsSmallMemoryDeltasVisible) {
+  // The delta column scales like the peak column, so a MiB-scale release is not
+  // rounded away to a bare "+0.00" beside a GiB-scale peak.
+  RunReport report;
+  report.metrics.root.name = "run";
+  report.metrics.root.count = 1;
+  report.metrics.root.memory =
+      core::SpanMemory{0, 0, 3 * 1024 * 1024, 0, 3 * 1024 * 1024};
+  const std::string grown = RenderRunReportText(report);
+  // Both columns, so the reader can compare them in the same units.
+  EXPECT_NE(grown.find("3.00 MiB"), std::string::npos) << grown;
+  EXPECT_NE(grown.find("+3.00 MiB"), std::string::npos) << grown;
+
+  report.metrics.root.memory = core::SpanMemory{0, 0, 512, 0, -3145728};
+  const std::string shrunk = RenderRunReportText(report);
+  EXPECT_NE(shrunk.find("-3.00 MiB"), std::string::npos) << shrunk;
+
+  // A release smaller than a byte count can express is still signed and spelled.
+  report.metrics.root.memory = core::SpanMemory{0, 0, 512, 0, 512};
+  EXPECT_NE(RenderRunReportText(report).find("+512 B"), std::string::npos);
+  report.metrics.root.memory = core::SpanMemory{0, 0, 512, 0, 0};
+  EXPECT_NE(RenderRunReportText(report).find("+0 B"), std::string::npos);
+}
+
+TEST(RunReportTest, EmitsTheConformanceOracleFlag) {
+  // The block is a boolean, and it carries the field rather than a constant.
+  RunReport report = MakeFixtureReport();
+  report.conformance_oracle = true;
+  auto parsed = llvm::json::parse(RenderRunReportJson(report));
+  ASSERT_TRUE(static_cast<bool>(parsed));
+  const llvm::json::Object* root = parsed->getAsObject();
+  ASSERT_NE(root, nullptr);
+  const llvm::json::Object* config = root->getObject("config");
+  ASSERT_NE(config, nullptr);
+  const std::optional<bool> oracle = config->getBoolean("conformance_oracle");
+  ASSERT_TRUE(oracle.has_value());
+  EXPECT_TRUE(*oracle);
+}
+
+TEST(RunReportTest, ConfigBlockCarriesNoAnalysisObject) {
+  // RunReport does not depend on the analysis library, so the analysis
+  // configuration cannot be emitted; the two configuration hashes cover every
+  // AnalysisConfig field but `conformance_oracle`, which sits beside them.
+  auto parsed = llvm::json::parse(RenderRunReportJson(MakeFixtureReport()));
+  ASSERT_TRUE(static_cast<bool>(parsed));
+  const llvm::json::Object* root = parsed->getAsObject();
+  ASSERT_NE(root, nullptr);
+  const llvm::json::Object* config = root->getObject("config");
+  ASSERT_NE(config, nullptr);
+  EXPECT_EQ(config->getObject("analysis"), nullptr);
+  EXPECT_NE(config->getObject("metrics"), nullptr);
+  const std::optional<bool> oracle = config->getBoolean("conformance_oracle");
+  ASSERT_TRUE(oracle.has_value());
+  EXPECT_FALSE(*oracle);
 }
 
 TEST(RunReportTest, TextReportIsPristineAndNamesThePhases) {

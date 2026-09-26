@@ -126,6 +126,12 @@ struct RunReport {
   RunInventory inventory;
   StoreSummary store;
   core::RunMetricsOptions metrics_options;
+  // The one analysis-config knob no configuration hash covers. It changes what
+  // the run does — a second full WPA whose canonical results must agree — so a
+  // reader comparing two artifacts needs it, and cannot recover it from
+  // svf_config_hash or wpa_config_hash. Every other AnalysisConfig field IS
+  // covered by one of those two hashes; see design section 6.3.
+  bool conformance_oracle = false;
   core::RunMetricsStats metrics;
 };
 
