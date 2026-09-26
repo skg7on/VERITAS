@@ -30,6 +30,31 @@
 namespace veritas::observability {
 namespace {
 
+// Counts terminal columns: the tree's box-drawing characters are one column
+// each whatever their byte length, so this is the measure a padded label column
+// has to use.
+std::size_t DisplayColumns(const std::string& text) {
+  std::size_t columns = 0;
+  for (const char c : text) {
+    // 0b10xxxxxx is a UTF-8 continuation byte; every other byte opens a
+    // character, and every character in a report line is one column wide.
+    if ((static_cast<unsigned char>(c) & 0xc0) != 0x80) ++columns;
+  }
+  return columns;
+}
+
+std::vector<std::string> SplitLines(const std::string& text) {
+  std::vector<std::string> lines;
+  std::size_t start = 0;
+  for (std::size_t i = 0; i < text.size(); ++i) {
+    if (text[i] != '\n') continue;
+    lines.push_back(text.substr(start, i - start));
+    start = i + 1;
+  }
+  if (start < text.size()) lines.push_back(text.substr(start));
+  return lines;
+}
+
 RunReport MakeFixtureReport() {
   RunReport report;
   report.metrics_options.top_n = 10;
@@ -219,6 +244,45 @@ TEST(RunReportTest, TextReportIsPristineAndNamesThePhases) {
       EXPECT_NE(text[i - 1], ' ') << "trailing space at offset " << i - 1;
     }
     line_start = i + 1;
+  }
+}
+
+TEST(RunReportTest, AlignsEveryTreeRowDespiteMultibyteConnectors) {
+  // A fixture with a nested row on purpose: "├─ " and "│  " are three bytes per
+  // box-drawing character and one column each, so a renderer that padded the
+  // label column on std::string::size() would narrow every level and pull its
+  // numbers to the left of its siblings'.
+  RunReport report;
+  report.metrics.root.name = "run";
+  report.metrics.root.count = 1;
+  core::SpanStats first;
+  first.name = "m5.svf";
+  first.count = 1;
+  core::SpanStats grandchild;
+  grandchild.name = "m5.svf.andersen";
+  grandchild.count = 1;
+  first.children.push_back(grandchild);
+  core::SpanStats last;
+  last.name = "wpa.orchestrate";
+  last.count = 1;
+  report.metrics.root.children.push_back(first);
+  report.metrics.root.children.push_back(last);
+
+  const std::vector<std::string> lines = SplitLines(RenderRunReportText(report));
+  ASSERT_EQ(lines.size(), 5u) << RenderRunReportText(report);
+  EXPECT_EQ(lines[0], "Analysis phase report");
+  // Depth-first order, connectors nested: the not-last child's subtree hangs
+  // off a vertical rule, and the last child's off a blank column.
+  EXPECT_EQ(lines[1].find("  run"), 0u) << lines[1];
+  EXPECT_EQ(lines[2].find("  ├─ m5.svf"), 0u) << lines[2];
+  EXPECT_EQ(lines[3].find("  │  └─ m5.svf.andersen"), 0u) << lines[3];
+  EXPECT_EQ(lines[4].find("  └─ wpa.orchestrate"), 0u) << lines[4];
+
+  // Alignment is what the columns' display widths have in common.
+  const std::size_t width = DisplayColumns(lines[1]);
+  for (std::size_t i = 1; i < lines.size(); ++i) {
+    EXPECT_EQ(DisplayColumns(lines[i]), width)
+        << "row " << i << " is ragged: " << lines[i];
   }
 }
 

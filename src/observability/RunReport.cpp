@@ -73,11 +73,28 @@ std::string PadLeft(std::string_view text, std::size_t width) {
   return padded;
 }
 
+// DisplayWidth counts the columns a label occupies on a terminal rather than
+// its bytes. The tree's box-drawing characters ("│", "├", "└", "─") are three
+// bytes and one column each, so a label column measured in bytes would be two
+// columns narrower at every level of nesting and the numbers would drift left
+// as the tree deepens.
+std::size_t DisplayWidth(std::string_view text) {
+  std::size_t columns = 0;
+  for (const char c : text) {
+    // 0b10xxxxxx is a UTF-8 continuation byte; every other byte opens a
+    // character, and every character a label can hold is one column wide.
+    if ((static_cast<unsigned char>(c) & 0xc0) != 0x80) ++columns;
+  }
+  return columns;
+}
+
 // PadRight is PadLeft's mirror, for the label column: the tree's connectors
-// must sit at their own indent, so the name is padded on the right.
+// must sit at their own indent, so the name is padded on the right, to the
+// column count the widest label needs.
 std::string PadRight(std::string_view text, std::size_t width) {
   std::string padded(text);
-  if (padded.size() < width) padded.append(width - padded.size(), ' ');
+  const std::size_t columns = DisplayWidth(text);
+  if (columns < width) padded.append(width - columns, ' ');
   return padded;
 }
 
@@ -485,7 +502,9 @@ std::string RenderRunReportText(const RunReport& report) {
                    /*is_last=*/true, &rows);
 
   std::size_t width = 0;
-  for (const PhaseRow& row : rows) width = std::max(width, row.label.size());
+  for (const PhaseRow& row : rows) {
+    width = std::max(width, DisplayWidth(row.label));
+  }
 
   std::string out = "Analysis phase report\n";
   for (const PhaseRow& row : rows) out.append(FormatPhaseRow(row, width));
