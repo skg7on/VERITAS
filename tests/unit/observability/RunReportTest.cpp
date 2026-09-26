@@ -101,6 +101,9 @@ RunReport MakeFixtureReport() {
   report.metrics.root = parent;
   report.metrics.series = {{std::chrono::milliseconds(0), 100, 90},
                            {std::chrono::milliseconds(100), 200, 180}};
+  // A producer that collected samples says so, and that is what the run-level
+  // memory block keys on rather than the presence of the published series.
+  report.metrics.memory_measured = true;
   return report;
 }
 
@@ -260,26 +263,28 @@ TEST(RunReportTest, TextReportKeepsSmallMemoryDeltasVisible) {
   EXPECT_NE(RenderRunReportText(report).find("+0 B"), std::string::npos);
 }
 
-TEST(RunReportTest, EmitsRunMemoryOnlyWhenTheSeriesHoldsASample) {
-  // The run-level memory block follows the same rule as a span's: it is
-  // present only when a measurement exists. With no series there is none, and
-  // a zeroed peak or an empty `series` array would both read as "measured".
-  RunReport without_series = MakeFixtureReport();
-  without_series.metrics.series.clear();
-  auto parsed = llvm::json::parse(RenderRunReportJson(without_series));
+TEST(RunReportTest, EmitsRunMemoryOnlyWhenMemoryWasMeasured) {
+  // The run-level memory block follows the same rule as a span's, and its
+  // presence test is "was it measured", never "was the series emitted". No
+  // measurement at all is the one case with no block; a zeroed peak or an
+  // empty `series` array would both read as "measured".
+  RunReport not_measured = MakeFixtureReport();
+  not_measured.metrics.memory_measured = false;
+  not_measured.metrics.series.clear();
+  auto parsed = llvm::json::parse(RenderRunReportJson(not_measured));
   ASSERT_TRUE(static_cast<bool>(parsed));
   const llvm::json::Object* root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
   EXPECT_EQ(root->getObject("memory"), nullptr);
 
-  // The positive control: the same fixture keeping its two samples still
-  // emits the block with the peak the producer set, so the assertion above
-  // cannot pass by the block never being emitted at all.
-  RunReport with_series = MakeFixtureReport();
-  with_series.metrics.peak_rss_bytes = 200;
-  with_series.metrics.peak_footprint_bytes = 180;
-  with_series.metrics.peak_at = std::chrono::milliseconds(100);
-  auto parsed_full = llvm::json::parse(RenderRunReportJson(with_series));
+  // The positive control: the same fixture having measured, and publishing,
+  // still emits the block with the peak the producer set, so the assertion
+  // above cannot pass by the block never being emitted at all.
+  RunReport measured = MakeFixtureReport();
+  measured.metrics.peak_rss_bytes = 200;
+  measured.metrics.peak_footprint_bytes = 180;
+  measured.metrics.peak_at = std::chrono::milliseconds(100);
+  auto parsed_full = llvm::json::parse(RenderRunReportJson(measured));
   ASSERT_TRUE(static_cast<bool>(parsed_full));
   const llvm::json::Object* full_root = parsed_full->getAsObject();
   ASSERT_NE(full_root, nullptr);
@@ -300,6 +305,45 @@ TEST(RunReportTest, EmitsRunMemoryOnlyWhenTheSeriesHoldsASample) {
   const llvm::json::Array* series = memory->getArray("series");
   ASSERT_NE(series, nullptr);
   EXPECT_EQ(series->size(), 2u);
+}
+
+TEST(RunReportTest, EmitsRunMemoryPeakWhenTheSeriesIsSuppressed) {
+  // --metrics-series false suppresses the samples, not the measurement: the
+  // peak was measured and must survive, and the samples must be absent rather
+  // than rendered as an empty array, which is a third thing again.
+  RunReport report = MakeFixtureReport();
+  report.metrics_options.emit_series = false;
+  report.metrics.peak_rss_bytes = 200;
+  report.metrics.peak_footprint_bytes = 180;
+  report.metrics.peak_at = std::chrono::milliseconds(100);
+  // What TakeStats leaves behind when it collected samples but suppressed
+  // them: the buffer's policy still stands, the samples are not copied out.
+  report.metrics.series.clear();
+  report.metrics.series_decimation = 4;
+
+  auto parsed = llvm::json::parse(RenderRunReportJson(report));
+  ASSERT_TRUE(static_cast<bool>(parsed));
+  const llvm::json::Object* root = parsed->getAsObject();
+  ASSERT_NE(root, nullptr);
+  const llvm::json::Object* memory = root->getObject("memory");
+  ASSERT_NE(memory, nullptr);
+  const llvm::json::Object* peak = memory->getObject("peak");
+  ASSERT_NE(peak, nullptr);
+  const std::optional<std::int64_t> rss = peak->getInteger("rss_bytes");
+  const std::optional<std::int64_t> footprint =
+      peak->getInteger("footprint_bytes");
+  const std::optional<std::int64_t> at_ms = peak->getInteger("at_ms");
+  ASSERT_TRUE(rss.has_value());
+  ASSERT_TRUE(footprint.has_value());
+  ASSERT_TRUE(at_ms.has_value());
+  EXPECT_EQ(*rss, 200);
+  EXPECT_EQ(*footprint, 180);
+  EXPECT_EQ(*at_ms, 100);
+  EXPECT_EQ(memory->getArray("series"), nullptr);
+  const std::optional<std::int64_t> decimation =
+      memory->getInteger("series_decimation");
+  ASSERT_TRUE(decimation.has_value());
+  EXPECT_EQ(*decimation, 4);
 }
 
 TEST(RunReportTest, EmitsTheConformanceOracleFlag) {

@@ -149,6 +149,11 @@ struct RunMetricsStats {
   SpanStats root;
   std::vector<Counter> counters;
   std::vector<MemorySample> series;
+  // True when the buffer held at least one sample, whether or not those
+  // samples were published. `series` empty and `memory_measured` false is "no
+  // measurement"; `series` empty and true is "measured, series suppressed".
+  // The presence of a memory block keys on this, never on `series`.
+  bool memory_measured = false;
   std::uint64_t series_decimation = 1;
   std::uint64_t peak_rss_bytes = 0;
   std::uint64_t peak_footprint_bytes = 0;
@@ -237,6 +242,11 @@ class RunMetrics {
   // callable directly, like SeriesBuffer::Append, so the measurement path and
   // its failure rule can be exercised without a thread and without a test-only
   // seam. Nothing is appended when the measurement fails; see MemoryReading.
+  //
+  // Like series(), this is a writer, so call it only when no sampler thread is
+  // running — which is the case for every recorder with the default interval
+  // of zero, and for the tests. Calling it on a recorder with a positive
+  // interval while its sampler runs would mutate the buffer without a lock.
   void RecordMemorySample();
 
  private:

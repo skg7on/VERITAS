@@ -297,12 +297,13 @@ void EmitStore(llvm::json::OStream& j, const StoreSummary& store) {
   });
 }
 
-void EmitMemory(llvm::json::OStream& j, const core::RunMetricsStats& metrics) {
-  // Present only when the series holds at least one sample. With no series —
-  // no sampler, or a measurement that never succeeded — there is nothing
-  // measured to report, and a zeroed peak or an empty `series` array would
-  // both read as "measured". A span's block follows the same rule.
-  if (metrics.series.empty()) return;
+void EmitMemory(llvm::json::OStream& j, const core::RunMetricsStats& metrics,
+                bool emit_series) {
+  // The presence test is "was it measured", never "was it emitted". Those are
+  // different questions: a run with no sampler, or none that measured
+  // successfully, has nothing to report, while a run whose series was
+  // suppressed still has a peak. A span's block follows the same rule.
+  if (!metrics.memory_measured) return;
   j.attributeObject("memory", [&] {
     j.attributeObject("peak", [&] {
       j.attribute("at_ms",
@@ -312,17 +313,21 @@ void EmitMemory(llvm::json::OStream& j, const core::RunMetricsStats& metrics) {
       j.attribute("rss_bytes",
                   static_cast<std::int64_t>(metrics.peak_rss_bytes));
     });
-    j.attributeArray("series", [&] {
-      for (const core::MemorySample& sample : metrics.series) {
-        j.object([&] {
-          j.attribute("footprint_bytes",
-                      static_cast<std::int64_t>(sample.footprint_bytes));
-          j.attribute("rss_bytes",
-                      static_cast<std::int64_t>(sample.rss_bytes));
-          j.attribute("t_ms", static_cast<std::int64_t>(sample.t.count()));
-        });
-      }
-    });
+    // Suppressed samples are absent, not an empty array: an empty array is a
+    // third rendering, and reads as "nothing was measured".
+    if (emit_series) {
+      j.attributeArray("series", [&] {
+        for (const core::MemorySample& sample : metrics.series) {
+          j.object([&] {
+            j.attribute("footprint_bytes",
+                        static_cast<std::int64_t>(sample.footprint_bytes));
+            j.attribute("rss_bytes",
+                        static_cast<std::int64_t>(sample.rss_bytes));
+            j.attribute("t_ms", static_cast<std::int64_t>(sample.t.count()));
+          });
+        }
+      });
+    }
     j.attribute("series_decimation",
                 static_cast<std::int64_t>(metrics.series_decimation));
   });
@@ -496,7 +501,7 @@ std::string RenderRunReportJson(const RunReport& report) {
 
     EmitInventory(j, report.inventory);
 
-    EmitMemory(j, report.metrics);
+    EmitMemory(j, report.metrics, report.metrics_options.emit_series);
 
     j.attributeArray("phases", [&] { EmitSpan(j, report.metrics.root); });
 

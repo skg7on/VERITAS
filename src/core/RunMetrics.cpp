@@ -605,6 +605,12 @@ RunMetricsStats RunMetrics::TakeStats() {
     stats.root.wall_self = nanoseconds::zero();
   }
 
+  // Whether anything was measured at all is a fact about the buffer, and it
+  // is recorded before the copy below and independently of emit_series:
+  // publishing the samples is a different question from collecting them, and
+  // the peaks below survive a suppressed series.
+  stats.memory_measured = !impl_->series.samples().empty();
+
   // The run-level peak is a property of the whole run rather than of any one
   // span: the maximum over the series, carrying the time it occurred at.
   // Ties keep the earliest occurrence. The footprint peak can fall at a

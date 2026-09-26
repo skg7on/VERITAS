@@ -352,6 +352,7 @@ TEST(RunMetricsTest, BearingSpanWithNoSeriesHasNoMemoryBlock) {
 
   const RunMetricsStats stats = r.metrics->TakeStats();
   ASSERT_TRUE(stats.series.empty());
+  EXPECT_FALSE(stats.memory_measured);
   // An absent measurement must read as absent rather than as a measured zero,
   // and this is the library default: interval zero means no sampler, so no
   // series, for every bearing span.
@@ -419,7 +420,28 @@ TEST(RunMetricsTest, WorkingMemoryProbeAppendsItsReading) {
   EXPECT_EQ(stats.series.front().rss_bytes, 4096u);
   EXPECT_EQ(stats.series.front().footprint_bytes, 2048u);
   EXPECT_EQ(stats.peak_rss_bytes, 4096u);
+  EXPECT_TRUE(stats.memory_measured);
   EXPECT_TRUE(stats.diagnostics.empty());
+}
+
+TEST(RunMetricsTest, MeasuresThePeakEvenWhenTheSeriesIsNotEmitted) {
+  RunMetricsOptions options;
+  options.emit_series = false;
+  options.memory_probe = [] { return MemoryReading{4096u, 2048u}; };
+  ScriptedRecorder r(options);
+  r.wall_tick = milliseconds(7);
+  r.metrics->RecordMemorySample();
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  // The measurement happened even though the samples are not published.
+  // Whether to publish them is a different question from whether they were
+  // collected, so the peak stands and `memory_measured` says so — an empty
+  // `series` alone would read as "nothing was measured" and lose the peak.
+  EXPECT_TRUE(stats.memory_measured);
+  EXPECT_TRUE(stats.series.empty());
+  EXPECT_EQ(stats.peak_rss_bytes, 4096u);
+  EXPECT_EQ(stats.peak_footprint_bytes, 2048u);
+  EXPECT_EQ(stats.peak_at, milliseconds(7));
 }
 
 TEST(RunMetricsTest, SeriesBufferThinningDoublesDecimationKeepingFirstAndNewest) {
