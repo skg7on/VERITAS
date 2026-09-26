@@ -2440,6 +2440,8 @@ git commit -m "feat(build): emit the analyze phase report and run-metrics artifa
 - Modify: `src/analysis/svf/SvfSession.h`, `src/analysis/svf/SvfSession.cpp`
 - Modify: `src/wpa/WpaOrchestrator.cpp`
 - Modify: `include/veritas/facts/AnalysisFactBus.h`, `src/facts/AnalysisFactBus.cpp`
+- Modify: `tests/integration/analysis/PhaseObservabilityIdentityTest.cpp` (add the span-tree test)
+- Modify: `tests/integration/analysis/CMakeLists.txt` (timeout 60 → 180)
 
 **Interfaces:**
 - Consumes: `core::PhaseSpan`, `SpanMode::kBearing`, `SpanMode::kDistributed`, `RunMetrics::AddCounter`.
@@ -2472,6 +2474,13 @@ Inside the callback, where `view.svfg` is still live, record the SVFG scale as c
 
 `getSVFGNodeNum()` is `SVFG.h:271-274`; `getTotalEdgeNum()` is `GenericGraph.h:428-431`, reachable because `SVFG` derives from `VFG` and thence from `GenericGraph`. `view` is valid only inside the callback, so these counts must be taken there and not later.
 
+Two mechanical requirements for this step, because `SvfSession.cpp` and `SvfAnalysisStage.cpp` live in namespace `veritas::analysis::svf`:
+
+- Every guard is `core::PhaseSpan`, and every mode is `core::SpanMode::...`. An unqualified `PhaseSpan` does not resolve there.
+- Both files need `#include "veritas/core/RunMetrics.h"`, and the four signatures gain a defaulted trailing parameter. `SvfAnalysisStage::Analyze` is `virtual`; a grep found no subclass or override anywhere in `tests/`, so widening the signature breaks no fake. Do not change the parameter order or drop the default — Task 3's call site relies on the default until you update it.
+
+The callback already receives `metrics` through the session parameter, so `m5.svf.map_facts` wraps the `callback(view)` call rather than being taken inside `MapSvfFacts`.
+
 - [ ] **Step 2: Instrument the WPA loop**
 
 In `src/wpa/WpaOrchestrator.cpp`, read `request.metrics` once into a local. Around the `for (const auto& scc_id : scc_order)` / `for (const auto component : request.components)` body at `:172`:
@@ -2496,27 +2505,35 @@ After the loop add:
   metrics->AddCounter("wpa.components.executed", executed_count, "count");
 ```
 
-Per-kind expected counts are the source of the report's `components_by_kind`, one counter per kind, named `wpa.component.<kind-name>.expected` with `<kind-name>` from `ComponentKindName`:
+Per-kind expected counts are the source of the report's `components_by_kind`, one counter per kind, named `wpa.component.<kind-name>.expected` with `<kind-name>` from `ComponentKindName`. Accumulate into a `std::map` first — this avoids both `.at()`, which the compilation policy forbids, and a fixed-size array indexed by an enum whose range this plan has not verified:
 
 ```cpp
-  for (const WpaComponentKind kind : request.components) {
-    metrics->AddCounter(
-        "wpa.component." + std::string(ComponentKindName(kind)) + ".expected",
-        expected_per_kind.at(static_cast<std::size_t>(kind)), "count");
+  std::map<WpaComponentKind, std::uint64_t> per_kind;
+  for (const WpaComponentKey& expected : expected_components) {
+    ++per_kind[expected.component];
+  }
+  for (const auto& entry : per_kind) {
+    metrics->AddCounter("wpa.component." +
+                            std::string(ComponentKindName(entry.first)) +
+                            ".expected",
+                        entry.second, "count");
   }
 ```
 
+Add `#include <map>` to `WpaOrchestrator.cpp`.
+
 Because `wpa.orchestrate` is `kBearing` and the per-component spans are not, `cpu_inclusive` on `wpa.orchestrate` is the CPU cost of the whole component loop — the number round 3 could not attribute.
 
-For `components_by_kind`, count `request.components` directly rather than iterating the 13,716 completed keys — the expected set is the same size and far cheaper to walk. Both the span label and the counter name use the verified helper `std::string_view ComponentKindName(WpaComponentKind)` (`include/veritas/wpa/WpaComponent.h:52`):
+For the span label, use the verified helper `std::string_view ComponentKindName(WpaComponentKind)` (`include/veritas/wpa/WpaComponent.h:52`). **Qualify the guard as `core::PhaseSpan`**: this file is in namespace `veritas::wpa`, so an unqualified `PhaseSpan` does not resolve.
 
 ```cpp
-  PhaseSpan span(metrics, "wpa.component.execute", SpanMode::kDistributed);
+  core::PhaseSpan span(metrics, "wpa.component.execute",
+                       core::SpanMode::kDistributed);
   span.SetLabel(std::string(ComponentKindName(key.component)) + "/" +
                 core::ToString(key.scc_id));
 ```
 
-`WpaComponentKey` carries both fields (`include/veritas/wpa/WpaRunRepository.h:58-63`).
+`WpaComponentKey` carries both `scc_id` and `component` (`include/veritas/wpa/WpaRunRepository.h:58-63`), so both fields are already in hand at that site.
 
 Also add the rooted-input and canonical fact counts once, after the batch is assembled, so the inventory has two more counters rather than a second plumbing path:
 
@@ -2537,20 +2554,94 @@ Add to `AnalysisFactBus`:
 
 and wrap `Validate` in `facts.publish.validate` and each sink's `Publish` in `facts.publish.sink.<sink_id>`.
 
-- [ ] **Step 4: Run the WPA and SVF suites**
+- [ ] **Step 4: Write the test that proves the instrumentation fires**
+
+Nothing so far asserts that a span actually opens. An instrumentation change can compile, run, and record nothing — a wrong null check, a name that does not resolve where you thought, a span opened in a scope that already returned — and no existing test would notice, because every existing test asserts analysis results, and this change deliberately leaves those identical.
+
+Append this case to `tests/integration/analysis/PhaseObservabilityIdentityTest.cpp`. It asserts span **presence and counts, never durations**, so it cannot be flaky. Add `#include <functional>` and `#include <map>` to that file.
+
+```cpp
+TEST(PhaseObservabilityIdentityTest, RecordsTheExpectedSpanTree) {
+  const auto project = testing::FixtureProject("multiple_tus");
+  const auto output = fs::temp_directory_path() /
+                      ("veritas-metrics-spans-" + std::to_string(std::rand()));
+  const ProjectAnalysisRequest request{.project_root = project,
+                                       .output_root = output};
+
+  core::RunMetricsOptions options;
+  core::RunMetrics metrics(options);
+  ProjectAnalyzer analyzer;
+  auto result =
+      analyzer.AnalyzeProject(request, AnalysisConfig::Default(), &metrics);
+  ASSERT_TRUE(result.ok()) << result.status().message();
+
+  const core::RunMetricsStats stats = metrics.TakeStats();
+
+  std::map<std::string, std::uint64_t> counts;
+  std::function<void(const core::SpanStats&)> walk =
+      [&](const core::SpanStats& node) {
+        counts[node.name] += node.count;
+        for (const core::SpanStats& child : node.children) walk(child);
+      };
+  walk(stats.root);
+
+  // A span that never opens shows up here as an absent key, not as a zero.
+  for (const char* name : {"m1.ingest", "m4.local_analysis", "m5.svf",
+                           "m5.model_bundle_load", "m5.merge_svf_facts",
+                           "m6.cpg_projection", "m2m3.publish_summaries",
+                           "wpa.orchestrate", "wpa.graph_build",
+                           "facts.batch_assemble", "facts.store_open",
+                           "facts.publish", "facts.publish.validate"}) {
+    EXPECT_GT(counts[name], 0u) << name << " never opened";
+  }
+  // The SVF session runs its own five numbered steps.
+  for (const char* name : {"m5.svf.module_set", "m5.svf.svfi",
+                           "m5.svf.andersen", "m5.svf.svfg",
+                           "m5.svf.map_facts"}) {
+    EXPECT_GT(counts[name], 0u) << name << " never opened";
+  }
+  // The per-component spans are distributed.
+  for (const char* name : {"wpa.component.materialize",
+                           "wpa.component.cache_lookup",
+                           "wpa.component.execute",
+                           "wpa.component.canonicalize"}) {
+    EXPECT_GT(counts[name], 0u) << name << " never opened";
+  }
+
+  std::map<std::string, std::uint64_t> counters;
+  for (const core::Counter& counter : stats.counters) {
+    counters[counter.name] = counter.value;
+  }
+  for (const char* name : {"svf.svfg_nodes", "svf.svfg_edges",
+                           "wpa.components.expected", "wpa.components.reused",
+                           "wpa.components.executed", "facts.rooted_input",
+                           "facts.canonical"}) {
+    EXPECT_EQ(counters.count(name), 1u) << name << " missing";
+  }
+  EXPECT_GT(counters["wpa.components.expected"], 0u);
+  EXPECT_GT(counters["svf.svfg_nodes"], 0u);
+}
+```
+
+That file now runs the analyzer three times, so raise its CTest timeout from 60 to 180 seconds in `tests/integration/analysis/CMakeLists.txt`.
+
+If a span name here does not appear, do **not** weaken the assertion to make it pass — an absent span is the finding this step exists to produce. Either the span site is wrong or the name differs; report it.
+
+- [ ] **Step 5: Build the touched targets and run the affected suites**
+
+**Never run a bare `cmake --build build`.** This project has 631 targets and a full build has already stalled one session. Name your targets:
 
 ```bash
-cmake --build build -j 8
+cmake --build build --target veritas-build PhaseObservabilityIdentityTest \
+  VeritasBuildAnalyzeCliTest project_analyzer_integration_test -j 8
 ctest --test-dir build -R "Wpa|Svf|ProjectAnalyzer|PhaseObservabilityIdentity" --output-on-failure
 ```
 
-Expected: all pass, unchanged results. Then run the motivating command and confirm the per-component percentiles and the reuse/execute counters appear:
+Expected: all pass, unchanged analysis results, plus the new case.
 
-```bash
-./build/bin/veritas-build analyze --project /Users/skg7on/Workspace/Projects/leveldb --output /tmp/veritas-metrics-check
-```
+**Do not run the motivating leveldb command here.** It takes roughly ten minutes of wall time on this machine, and the design's measurement protocol requires one run per output root, so it belongs to Task 8 where it is explicitly budgeted. The instrumentation's presence is asserted by the test above. If you want one bounded end-to-end look, run the same binary against the `multiple_tus` fixture with a fresh output root under `/tmp`; do not use the leveldb fixture.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git commit -m "feat(wpa,svf,facts): record sub-spans, component aggregates, and counters" \
