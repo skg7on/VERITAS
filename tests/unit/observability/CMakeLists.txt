@@ -38,3 +38,23 @@ veritas_add_warnings(RunReportTest)
 gtest_discover_tests(RunReportTest DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
   PROPERTIES LABELS "observability-unit")
+
+# `StoreSummaryTest` opens a store directly for three of its cases, so
+# `veritas_summarydb` is named here rather than reached through
+# `veritas_observability` (which links it PRIVATE). `veritas_build` and
+# `veritas_test_support` are for the last case, which builds a manifest through
+# the real M1 ingestion and the `multiple_tus` fixture. `veritas_analysis` is
+# not needed: `ProjectAnalysisRequest` is a header-only aggregate and this test
+# never runs the analyzer, so no SVF and no WPA are linked or executed.
+add_executable(StoreSummaryTest StoreSummaryTest.cpp)
+target_link_libraries(StoreSummaryTest PRIVATE
+  veritas_observability
+  veritas_summarydb
+  veritas_build
+  veritas_test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(StoreSummaryTest)
+gtest_discover_tests(StoreSummaryTest DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  PROPERTIES LABELS "observability-unit")

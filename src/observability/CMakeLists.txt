@@ -14,13 +14,17 @@
 
 # src/observability/CMakeLists.txt
 #
-# Builds `veritas_observability`: the run-report model and its two renderers.
-# The public header includes nothing from LLVM, so LLVM is a PRIVATE link —
-# only RunReport.cpp needs `llvm::json::OStream`, and a consumer that merely
-# fills a RunReport compiles without LLVM headers on its include path.
+# Builds `veritas_observability`: the run-report model, its two renderers, and
+# the store/environment collectors that fill it. The public headers include
+# nothing from LLVM, so LLVM is a PRIVATE link — only RunReport.cpp needs
+# `llvm::json::OStream`, and a consumer that merely fills a RunReport compiles
+# without LLVM headers on its include path. The store connection the collectors
+# need is likewise PRIVATE, so a consumer that only renders a report links no
+# storage at all.
 
 add_library(veritas_observability
   RunReport.cpp
+  StoreSummary.cpp
 )
 
 target_include_directories(veritas_observability PUBLIC
@@ -42,6 +46,19 @@ target_link_libraries(veritas_observability
     veritas::core
   PRIVATE
     LLVM
+    veritas_summarydb
+)
+
+# The environment block carries the build identity, so this library needs its
+# own compile definitions. It deliberately does NOT reuse
+# `VERITAS_CPP_BUILD_FINGERPRINT` from src/analysis: that string feeds
+# `CppToolchainIdentity`, which feeds `engine_toolchain_identity`, which feeds
+# `run_id` and every digest chained off it — sharing one spelling would move
+# every content-addressed identity in the project.
+target_compile_definitions(veritas_observability PRIVATE
+  VERITAS_OBSERVABILITY_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+  VERITAS_OBSERVABILITY_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+  VERITAS_OBSERVABILITY_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
 )
 
 veritas_add_warnings(veritas_observability)
