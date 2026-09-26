@@ -108,23 +108,35 @@ records that it loses on scope, not on taste.
 
 ### 4.1 Placement
 
-One new subtree, `include/veritas/observability/` and `src/observability/`,
-holding the recorder and the report. The recorder itself depends only on the
-standard library. `src/core/` stays free of store knowledge: the post-publication
-store read-back (section 4.5) is the one part that reaches into `summarydb` and
-`facts`, and it lives in `observability` so that the dependency points inward
-from the consumer rather than dragging store types into `core`.
+**The recorder lives in `veritas_core`** (`include/veritas/core/RunMetrics.h`,
+`src/core/RunMetrics.cpp`) and depends only on the standard library and POSIX.
+The report model, its two renderers, and the store read-back live in a new
+`observability` subtree (`include/veritas/observability/`,
+`src/observability/`).
+
+This split is forced by library dependencies, not taste. `veritas_wpa` must
+record spans, and `veritas_facts` already includes `veritas/wpa/WpaOrchestrator.h`,
+so `veritas_facts` depends on `veritas_wpa`. A recorder placed in a library that
+also depends on `veritas_facts` — which the store read-back must — would close a
+cycle (`wpa → observability → facts → wpa`). Putting the dependency-free
+recorder in `veritas_core` instead gives `wpa → core` with no cycle, and leaves
+`observability` a leaf consumer that only the CLI links.
+
+`veritas_core` therefore gains its first POSIX dependency (`Threads::Threads`,
+section 7.4) but stays free of store and LLVM knowledge. The LLVM dependency
+needed for JSON rendering stays in `observability`, so a `veritas_core`-only
+consumer — and every `veritas_core` test — links no LLVM.
 
 ### 4.2 Recorder and spans
 
-`observability::RunMetrics` is created by the caller — the CLI for a real run,
+`core::RunMetrics` is created by the caller — the CLI for a real run,
 a test for a unit test — and passed by pointer. It is the *only* place a
 measurement is accumulated.
 
 A span is an RAII guard over an injected clock:
 
 ```cpp
-observability::PhaseSpan span(metrics, "wpa.component.execute");
+core::PhaseSpan span(metrics, "wpa.component.execute");
 span.SetLabel(component_kind + "/" + core::ToString(scc_id));  // top-N attribution
 span.AddCounter("wpa.components.reused", reused_count, "count");
 ```
@@ -280,7 +292,7 @@ and therefore on schema versions. Section 7.1 makes it degrade alone.
 ### 5.2 Rules
 
 **Rule 1 — metrics options do not live in `AnalysisConfig`.** They travel in a
-separate `RunMetricsOptions`. This is structural, not stylistic.
+separate `core::RunMetricsOptions`. This is structural, not stylistic.
 `svf_configuration_hash` hashes *whatever `ToSvfConfig` emits*, and `ToSvfConfig`
 (`:82-91`) is a designated-initializer copy of five `AnalysisConfig` fields.
 Adding a metrics field to `AnalysisConfig` plus one line in `ToSvfConfig` would
@@ -292,7 +304,7 @@ class as the recorded trap that editing `SemanticKeyCodec.cpp` moves both run
 and batch ids.
 
 **Rule 2 — the recorder is a parameter, never a field of a hashed struct.**
-`WpaRunRequest` gains `observability::RunMetrics* metrics = nullptr`. That
+`WpaRunRequest` gains `core::RunMetrics* metrics = nullptr`. That
 request is not hashed today — `wpa_configuration_hash` reads `AnalysisConfig` —
 and this design keeps it so. The guard is executable: section 8.2.
 
@@ -462,7 +474,8 @@ self-describing: a stderr line, `"complete": false`, and an entry in
 | `pthread_create` fails | degrade to span-boundary sampling; `complete: false`; diagnostic |
 | Artifact path unwritable | one stderr line; exit code unchanged |
 | Store read-back fails (schema drift, locked DB) | omit only the `store` block; keep the rest; diagnostic |
-| Negative span duration (reachable only via a misbehaving injected clock) | `assert` in debug; clamp to 0 and count a diagnostic in release |
+| Negative span duration (reachable only via a misbehaving injected clock) | clamp to 0 and count a diagnostic, **unconditionally** |
+| `EndSpan` token not the innermost open span | record a diagnostic and return without folding; never abort |
 | Series capacity reached | adaptive thinning; `series_decimation` incremented |
 | Per-span sample cap reached | `samples_truncated: true`; diagnostic |
 
@@ -477,9 +490,16 @@ stderr line and `complete: false` are the honest signals instead.
 Two classic instrumentation bugs are unrepresentable here, and are recorded so
 that nobody writes defensive code against them:
 
-- **Unclosed or mismatched spans.** RAII closes exactly what it opened.
+- **Unclosed spans.** `PhaseSpan`'s destructor closes exactly what its
+  constructor opened, on every return path including the error paths.
 - **A span folded onto the wrong stack.** Spans are taken from one thread;
   there is no second stack to get wrong (section 4.7).
+
+`RunMetrics::BeginSpan`/`EndSpan` are also reachable directly, where RAII does
+not apply. That path is checked rather than assumed: a mismatched `EndSpan`
+records a diagnostic and returns without folding (section 7.1), so a caller
+error becomes a visible diagnostic instead of a silently corrupted tree. In
+correct use the check never fires and the two bullets above hold.
 
 ### 7.3 Overhead budget
 
@@ -609,10 +629,11 @@ rather than the summary line.
 
 | File | Change |
 | --- | --- |
-| `include/veritas/observability/RunMetrics.h`, `src/observability/RunMetrics.cpp` | new — recorder, spans, counters, distributions, sampler |
+| `include/veritas/core/RunMetrics.h`, `src/core/RunMetrics.cpp` | new — recorder, spans, counters, distributions, sampler (std + POSIX only) |
 | `include/veritas/observability/RunReport.h`, `src/observability/RunReport.cpp` | new — report model, JSON schema, text rendering, inventory assembly |
 | `include/veritas/observability/StoreSummary.h`, `src/observability/StoreSummary.cpp` | new — post-publication store read-back (depends on `summarydb`/`facts`) |
-| `src/observability/CMakeLists.txt` | new |
+| `src/observability/CMakeLists.txt` | new — links `veritas_core`, `veritas_facts`, `veritas_summarydb`, LLVM |
+| `src/core/CMakeLists.txt` | `RunMetrics.cpp` added to the library; `find_package(Threads)` + `Threads::Threads` |
 | `include/veritas/analysis/ProjectAnalyzer.h` | `AnalyzeProject` gains a trailing defaulted `RunMetrics*` |
 | `src/analysis/ProjectAnalyzer.cpp` | spans; `RunWpa` signature; publication and batch spans |
 | `include/veritas/wpa/WpaOrchestrator.h` | `WpaRunRequest::metrics` |
