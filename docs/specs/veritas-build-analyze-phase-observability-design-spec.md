@@ -218,15 +218,23 @@ Two details this fixes rather than leaves ambiguous:
   for nested spans — a child's `t_end` lies inside its parent's window, so the
   parent includes the sample either way.
 
-- **When the `memory` block is present at all.** Only when at least one sample
-  falls inside the span's window. With no series — which is what
-  `--metrics-interval-ms 0` produces, and the state of the library until the CLI
-  wires a sampler — or with a window that no sample lands in, the block is
-  **absent**, not zeroed. An all-zero block is indistinguishable from a measured
-  zero, and the artifact's contract everywhere else is that an absent
+- **When the `memory` block is present at all — and this rule applies at both
+  levels.** A *span's* block is present only when at least one sample falls
+  inside its window; the *run-level* `memory` block, including its `peak`, is
+  present only when the series holds at least one sample. With no series — which
+  is what `--metrics-interval-ms 0` produces, and the state of the library until
+  the CLI wires a sampler — or with a window that no sample lands in, the block
+  is **absent**, not zeroed. An all-zero block is indistinguishable from a
+  measured zero, and the artifact's contract everywhere else is that an absent
   measurement is visibly absent rather than plausibly zero; the memory column
   exists precisely to tell a small phase apart from no measurement at all. A
   present block therefore means "measured", and its figures are real.
+
+  The two levels are stated together because an earlier revision of this rule
+  was span-scoped, and the run level then kept emitting a zeroed `peak` for
+  exactly the runs the rule was written to protect — the same reading, one level
+  up. Stating a rule for one level of a nested structure is how the sibling
+  survives.
 - **Which spans keep intervals:** only interval-bearing spans (tens, not
   13,716) and the retained top-N entries. A distributed span does not retain
   68,580 intervals.
@@ -507,6 +515,7 @@ self-describing: a stderr line, `"complete": false`, and an entry in
 | Failure | Behaviour |
 | --- | --- |
 | `pthread_create` fails | degrade to span-boundary sampling; `complete: false`; diagnostic |
+| A platform memory reader fails (`task_info` or `statm`) | append **no sample at all** and record a diagnostic once; never append the failure value. A reader that returns 0 on failure and has that 0 appended as a genuine sample produces a *present* block of zeroes on the measured path — the reading this design exists to prevent, reached through a different door. |
 | Artifact path unwritable | one stderr line; exit code unchanged |
 | Store read-back fails (schema drift, locked DB) | omit only the `store` block; keep the rest; diagnostic |
 | Negative span duration (reachable only via a misbehaving injected clock) | clamp to 0 and count a diagnostic, **unconditionally** |
