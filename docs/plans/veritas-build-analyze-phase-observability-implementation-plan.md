@@ -2599,7 +2599,7 @@ So this task carries a **small authorized cross-task change**: add four fields t
 | `inventory.output.unknowns_by_reason` | histogram over `result->unknowns`, keyed by `reason`, sorted by key |
 | `inventory.output.cpg_nodes`, `cpg_edges` | `result->cpg_node_count`, `result->cpg_edge_count` |
 | `inventory.output.svfg_nodes` | counter `svf.svfg_nodes` |
-| `inventory.output.svfg_edges` | **no source** — reported as not recorded with a `metrics note:`, like `summaries_recomputed` and `summaries_reused`. See the span-inventory note in this task: the SVFG has no live edge counter, and an always-zero field would be a falsehood rather than a measurement. |
+| `inventory.output.svfg_edges` | **no source** — reported as not recorded with a `metrics note:` **and its key omitted from the artifact rather than emitted as `0`**, like `summaries_recomputed` and `summaries_reused`. See the span-inventory note in this task: the SVFG has no live edge counter, and an always-zero field would be a falsehood rather than a measurement. |
 | `inventory.output.components_by_kind` | counters named `wpa.component.<kind-name>.expected` |
 | `inventory.output.rooted_input_facts` | counter `facts.rooted_input` |
 | `inventory.output.canonical_facts` | counter `facts.canonical` |

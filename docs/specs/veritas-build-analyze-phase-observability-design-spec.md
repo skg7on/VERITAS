@@ -426,13 +426,11 @@ are named in section 9.2. The sampler thread exists only when recording is on.
                                "source_tree_hash": "", "include_closure_hash": "" },
                    "output": { "summaries_published": 0, "unknowns_by_reason": {},
                                "cpg_nodes": 0, "cpg_edges": 0,
-                               "svfg_nodes": 0, "svfg_edges": 0,
+                               "svfg_nodes": 0,
                                "components_by_kind": {}, "rooted_input_facts": 0,
                                "canonical_facts": 0 },
                    "incrementality": { "components_reused": 0,
-                                       "components_executed": 0,
-                                       "summaries_recomputed": 0,
-                                       "summaries_reused": 0 } },
+                                       "components_executed": 0 } },
   "store":       { "tables": [], "bytes": {}, "cross_checks": [] },
   "phases":      [],
   "memory":      { "peak": {}, "series": [], "series_decimation": 1 },
@@ -486,7 +484,7 @@ and is recorded because it is easy to repeat: **verify that a source carries the
 value, not merely that it exists.** Checking that an accessor is reachable is not
 checking that anything writes what it reads.
 
-**Three things in the shape above are conditional, and the example shows their
+**Four things in the shape above are conditional, and the example shows their
 populated form only.** Every empty string shown is a *shape*, not a value the
 artifact may contain.
 
@@ -507,6 +505,14 @@ artifact may contain.
    batch it already holds and a `RunWpa` failure returns before the report is
    built; the omission rule is the guard for the case where that stops being
    true.
+4. **The three unproduced counts omit their keys too, and the shape above shows
+   that by not listing them.** `inventory.output.svfg_edges`,
+   `inventory.incrementality.summaries_recomputed` and
+   `...summaries_reused` have no producer, so they are absent rather than `0` —
+   which is why `output` above stops at `svfg_nodes` and `incrementality` at
+   `components_executed`. The rule and its reason are stated in full in the
+   paragraphs just above; this item exists because an earlier revision of the
+   shape contradicted them, presenting all three as present keys carrying `0`.
 
 **The presence test is "was it measured", never "was it emitted".** Those are
 different questions — `emit_series` decides whether the samples are *published*,
@@ -916,8 +922,8 @@ Three runs each; worst of three is what both ceilings are judged on.
 | --- | --- | ---: | ---: | ---: |
 | 1 | metrics off | 420.79 | 420.10 | 6.7263 |
 | 2 | metrics off | 420.20 | 419.25 | 7.8923 |
-| 3 | metrics off | 423.68 | 422.45 | 7.7146 |
-| 4 | metrics on | 419.95 | 419.09 | 7.7990 |
+| 3 | metrics off | 423.68 | 422.45 | 7.7148 |
+| 4 | metrics on | 419.95 | 419.09 | 7.7993 |
 | 5 | metrics on | 417.49 | 416.91 | 8.2212 |
 | 6 | metrics on | 418.20 | 417.37 | 7.9441 |
 
@@ -1004,7 +1010,7 @@ root wall is **419.316 s** against a wall of **419.95 s**, a 0.63 s gap of the
 same composition.
 
 The artifact's sampled peak for run 4, **8,317,222,912 B**, is not offered as a
-third agreement. It sits beside the criterion's own **7.7990 GiB** for that run
+third agreement. It sits beside the criterion's own **7.7993 GiB** for that run
 rather than replacing it, and it is the lower of the two by design: the sampler
 observes at a 250 ms interval, so its maximum is a lower bound on the true one
 and can miss the instant the peak occurs. `/usr/bin/time`'s `ru_maxrss` remains
@@ -1017,7 +1023,7 @@ the artifact:
 
 | Run | `cli.ingest` (ms) | `m1.ingest` (ms) |
 | --- | ---: | ---: |
-| 4 | 10.0 | 4.0 |
+| 4 | 10.4 | 4.0 |
 | 5 | 9.8 | 3.8 |
 | 6 | 11.0 | 4.0 |
 
@@ -1044,11 +1050,12 @@ fixture, where SVF's own SVFG statistic reports **19 edges** for the same graph.
 The implementer reported that rather than substituting a plausible number, the
 counter was removed, and **a plan that cited that line as "verified" would have
 shipped an always-zero field in place of a measurement**. Section 6.3 carries
-the field's disposition; section 10 of the round-3 specification carries the
-general rule. A second correction of the same class is worth recording, because
-it was a name promising more than the code did: the `wpa.graph_build` span
-initially did not cover the graph construction its name names, and was widened
-to open above `CallGraph::FromSummaries` and close at the frozen expected set.
+both the field's disposition and the general rule the episode produced — verify
+that a source carries the value, not merely that it exists. A second correction
+of the same class is worth recording, because it was a name promising more than
+the code did: the `wpa.graph_build` span initially did not cover the graph
+construction its name names, and was widened to open above
+`CallGraph::FromSummaries` and close at the frozen expected set.
 The rule the two produced — a count travels as a recorder counter added at the
 producing site, never through a second plumbing path — is why a count with no
 producer is now visibly absent rather than plausibly zero.

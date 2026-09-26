@@ -104,15 +104,27 @@ std::string PadRight(std::string_view text, std::size_t width) {
 // The JSON artifact
 // ---------------------------------------------------------------------------
 
-// EmitIfMeasured is the artifact's one omission mechanism: `key` is written only
-// when the field carries a measurement, and is omitted entirely otherwise.
-// Written as a zero or as "", an unmeasured field compares equal between two
-// runs that both failed to measure it, so a field-level diff reports "unchanged"
-// where the truth is "never measured" — and a diagnostic string elsewhere in the
-// document does not repair that, because a field-level comparison never consults
-// it. Presence must mean "measured" at the granularity a consumer actually
-// reads, which is why the count overload exists beside the string one rather
-// than a second, parallel omission path.
+// EmitIfMeasured is the omission mechanism for the fields whose absence is
+// carried by an empty string or an unset std::optional<std::uint64_t>: `key`
+// is written only when the field carries a measurement, and is omitted
+// entirely otherwise. Written as a zero or as "", an unmeasured field compares
+// equal between two runs that both failed to measure it, so a field-level diff
+// reports "unchanged" where the truth is "never measured" — and a diagnostic
+// string elsewhere in the document does not repair that, because a field-level
+// comparison never consults it. Presence must mean "measured" at the
+// granularity a consumer actually reads, which is why the count overload
+// exists beside the string one rather than a second, parallel omission path.
+//
+// It is not the artifact's only omission path, and this comment must not read
+// as though it were. The same rule is written inline wherever a field's
+// absence is carried by some type other than the two above: in EmitSpan,
+// `cpu_inclusive_ns` gated on `SpanStats::cpu_measured`, plus `distribution`,
+// `memory` and `top_n`; and in EmitMemory, the run-level `memory` block gated
+// on `memory_measured` and `series` gated on `emit_series`. The
+// `cpu_inclusive_ns` guard is this rule written a second way, and routing it
+// through this helper would mean making `SpanStats::cpu_measured` optional. So
+// what this helper guarantees is that the inventory and identity omissions are
+// uniform — not that no other key in this file is ever omitted.
 void EmitIfMeasured(llvm::json::OStream& j, llvm::StringRef key,
                     const std::string& value) {
   if (!value.empty()) j.attribute(key, value);

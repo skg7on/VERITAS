@@ -258,6 +258,47 @@ TEST(RunReportTest, OmitsUnproducedCountsInsteadOfEmittingZero) {
   EXPECT_EQ(produced_incrementality->getInteger("summaries_reused"), 11);
 }
 
+TEST(RunReportTest, EmitsAMeasuredZeroInsteadOfOmittingIt) {
+  // The direction the case above leaves unpinned. Spec section 6.3's rule is
+  // "presence means measured", not "presence means nonzero": a producer that
+  // measured zero must be seen to have measured zero, and the artifact must say
+  // so with a key carrying `0`. The case above uses positive values only, so a
+  // guard written as `if (*value != 0)` would satisfy it and every other case in
+  // this file while silently hiding a real measured zero — trading one lie for
+  // another, which is the whole reason the omission rule exists. This case pins
+  // the direction: a set zero is emitted, not omitted.
+  RunReport report = MakeFixtureReport();
+  report.inventory.output.svfg_edges = 0;
+  report.inventory.incrementality.summaries_recomputed = 0;
+  report.inventory.incrementality.summaries_reused = 0;
+
+  const std::string json = RenderRunReportJson(report);
+  auto parsed = llvm::json::parse(json);
+  ASSERT_TRUE(static_cast<bool>(parsed));
+  const llvm::json::Object* inventory =
+      parsed->getAsObject()->getObject("inventory");
+  ASSERT_NE(inventory, nullptr);
+  const llvm::json::Object* output = inventory->getObject("output");
+  ASSERT_NE(output, nullptr);
+  const llvm::json::Object* incrementality =
+      inventory->getObject("incrementality");
+  ASSERT_NE(incrementality, nullptr);
+
+  // `getInteger` returns a value only for a present key, so a `nullopt` here is
+  // the omitted key and `0` is the emitted measured zero. The literal search is
+  // the second reading, since the parsed object and the text can in principle
+  // disagree.
+  EXPECT_EQ(output->getInteger("svfg_edges"), 0);
+  EXPECT_EQ(incrementality->getInteger("summaries_recomputed"), 0);
+  EXPECT_EQ(incrementality->getInteger("summaries_reused"), 0);
+  for (const char* key :
+       {"\"svfg_edges\"", "\"summaries_recomputed\"", "\"summaries_reused\""}) {
+    EXPECT_NE(json.find(key), std::string::npos)
+        << key << " was omitted for a count a producer measured as zero: "
+        << json;
+  }
+}
+
 TEST(RunReportTest, JsonCarriesEverySchemaBlockWithItsExpectedType) {
   // The versioned-schema contract of spec section 8.3: a reader that asks for a
   // block by name and type must find it. A missing block is the failure this
