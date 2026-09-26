@@ -2348,6 +2348,7 @@ After this task a real run produces the report and the artifact.
 **Files:**
 - Modify: `src/tools/veritas-build.cpp`
 - Modify: `src/tools/CMakeLists.txt` (link `veritas_observability` into `veritas-build`)
+- Modify: `tests/integration/build/CMakeLists.txt` (link `LLVM` into `VeritasBuildAnalyzeCliTest`, plus `target_include_directories(... SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})` — the include line is not optional; linking the imported `LLVM` target brings no include directories, and without it the test would compile `llvm/Support/JSON.h` from whatever LLVM is on the default search path while linking another. Add `#include <llvm/Support/JSON.h>` and `#include <optional>` to the test.)
 - Modify: `tests/integration/build/VeritasBuildAnalyzeCliTest.cpp`
 
 **Interfaces:**
@@ -2378,16 +2379,41 @@ TEST(VeritasBuildAnalyzeCliTest, WritesRunMetricsByDefault) {
   const std::string json = buffer.str();
   EXPECT_NE(json.find("cli.ingest"), std::string::npos) << json.substr(0, 500);
   EXPECT_NE(json.find("m1.ingest"), std::string::npos) << json.substr(0, 500);
-  // The real root span, not the synthetic fallback: the promotion path in
-  // TakeStats is what keeps the report's total equal to the command's wall time.
-  EXPECT_NE(json.find("\"name\": \"run\""), std::string::npos)
-      << json.substr(0, 500);
+
+  // Parse, rather than searching for a substring, because the root's NAME
+  // cannot distinguish the thing this asserts. The synthetic-root fallback in
+  // TakeStats is ALSO named "run", so `json.find("\"name\": \"run\"")` passes
+  // identically whether the CLI's own run span was promoted or the fallback
+  // was used — and it passes even if `run` was left open at TakeStats, which
+  // folds nothing and yields count 0 with wall 0.
+  auto parsed = llvm::json::parse(json);
+  ASSERT_TRUE(static_cast<bool>(parsed)) << json.substr(0, 500);
+  const llvm::json::Object* root = parsed->getAsObject();
+  ASSERT_NE(root, nullptr);
+  const llvm::json::Array* phases = root->getArray("phases");
+  ASSERT_NE(phases, nullptr);
+  ASSERT_FALSE(phases->empty());
+  const llvm::json::Object* run = phases->front().getAsObject();
+  ASSERT_NE(run, nullptr);
+  EXPECT_EQ(*run->getString("name"), "run");
+  // These two are the discriminating assertions: an open or absent root span
+  // folds nothing, so count is 0 and the wall is 0.
+  EXPECT_EQ(*run->getInteger("count"), 1);
+  const std::optional<std::int64_t> wall = run->getInteger("wall_inclusive_ns");
+  ASSERT_TRUE(wall.has_value());
+  EXPECT_GT(*wall, 0);
 }
 
 TEST(VeritasBuildAnalyzeCliTest, MetricsFalseWritesNoArtifactAndNoReport) {
   const auto project = testing::FixtureProject("multiple_tus");
+  // The prefix must differ from the one `PhaseObservabilityIdentityTest` uses
+  // for its metrics-off run. Both files call `std::rand()` unseeded, so the
+  // first value is identical in every process, and an identical prefix makes
+  // the two cases resolve to the SAME directory. Each gtest case is its own
+  // CTest entry, so under `ctest -j` they would analyze into one store — this
+  // repository's recorded single-writer-per-store hazard.
   const auto output = fs::temp_directory_path() /
-                      ("veritas-metrics-off-" + std::to_string(std::rand()));
+                      ("veritas-metrics-disabled-" + std::to_string(std::rand()));
   const auto result = RunVeritasBuild({"analyze", "--project", project.string(),
                                        "--output", output.string(),
                                        "--metrics", "false"});
@@ -2526,13 +2552,39 @@ Then pass the recorder to the analyzer:
 
 The consequence to state plainly rather than hide: rendering the report and writing the artifact fall **outside** `run`, so the total row is the *analysis* wall time, not the command's full wall time. They differ by the render and write, which is small but nonzero. If a future change wants the command's true wall time, the place for it is a separate span that closes last and is not part of the tree's total — not an open root.
 
-After the existing `Analysis complete` block, when `parsed->metrics`, build the `RunReport`, print `RenderRunReportText`, write `RenderRunReportJson` to the artifact path, and print any recorder diagnostics to **stderr** prefixed `veritas-build: metrics degraded: `. The analysis exit code is unaffected by any metrics failure (spec section 7.1); a write failure prints a diagnostic and returns `Status::Ok()`.
+After the existing `Analysis complete` block, when `parsed->metrics`, build the `RunReport`, print `RenderRunReportText`, write `RenderRunReportJson` to the artifact path, and print any recorder diagnostics to **stderr**.
+
+**Use two prefixes, not one, and choose them by severity rather than by subsystem.** A missing producer — a counter an uninstrumented stage did not add — is *not* a degradation, and on a healthy metrics-on run there are ten of them. Labelling all ten `metrics degraded:` puts a false alarm in front of the operator ten times per run, which devalues the words for the case that matters. So:
+
+- `veritas-build: metrics degraded: ` — for a **failure**: a failed artifact write, a missing store block, a failed `pthread_create` or memory probe, anything that clears `complete`.
+- `veritas-build: metrics note: ` — for a **not-recorded**: an absent counter or a not-yet-populated field, which keeps `complete` as the recorder found it.
+
+The sentence after the prefix carries the detail either way. The analysis exit code is unaffected by any metrics failure (spec section 7.1); a write failure prints a `degraded` line and returns `Status::Ok()`.
 
 Populate the report from these exact sources. **Output-scale counts come from the recorder's counters, not from a second plumbing path** — Task 7 adds them at the producing site, and this task reads them back:
 
 | Report field | Source |
 | --- | --- |
-| `identity.*` | `*result` (`run_id` is `wpa_run_id`, `projection_id`, `revision_id`, `build_variant_id`) and `manifest->context` (`repository_id`) |
+| `identity.run_id`, `projection_id`, `revision_id`, `build_variant_id`, `repository_id` | `*result` and `manifest->context` — no new plumbing needed for these five |
+| `identity.batch_id`, `svf_config_hash`, `wpa_config_hash`, `engine_toolchain_identity` | **four new fields on `ProjectAnalysisResult`** — see below |
+
+**Four identity fields need plumbing the CLI cannot reach, and leaving them empty is not acceptable.** `SvfConfigurationHash`, `WpaConfigurationHash` and `CppToolchainIdentity` are file-local in `src/analysis/ProjectAnalyzer.cpp` with no declaration under `include/`, and `batch_id` is minted inside the fact bus. So the CLI has no source for them, and the artifact would ship four empty strings.
+
+That is worse than a cosmetic gap, for two reasons. First, the design elsewhere records that the rest of the `AnalysisConfig` is deliberately absent from the artifact *because* `svf_config_hash` and `wpa_config_hash` cover it — with both empty, the artifact records **no configuration at all**, and nothing distinguishes a `--wpa-engine cpp-emergency` run, a `--field-sensitive false` run, or a `--max-alias-pairs` run from the default. Second, the keys are emitted as `""` rather than omitted, so an absent value *diffs as unchanged* between two differently-configured runs — precisely the failure class this feature exists to prevent.
+
+So this task carries a **small authorized cross-task change**: add four fields to `ProjectAnalysisResult` (`include/veritas/analysis/ProjectAnalyzer.h`) and populate them in `RunWpa` (`src/analysis/ProjectAnalyzer.cpp`), which already holds the descriptor it builds and the batch it assembles:
+
+```cpp
+  // On ProjectAnalysisResult, alongside wpa_run_id et al.
+  std::string svf_configuration_hash;      // descriptor.svf_configuration_hash
+  std::string wpa_configuration_hash;      // descriptor.wpa_configuration_hash
+  std::string engine_toolchain_identity;   // descriptor / toolchain_identity
+  std::string batch_id;                    // core::ToString(batch.batch_id)
+```
+
+`RunWpa` already computes all four — `descriptor.svf_configuration_hash` and `descriptor.wpa_configuration_hash` at the point it builds the descriptor, `toolchain_identity` just after, and `batch.batch_id` from the batch it publishes. Set them on `*result` before returning, and populate the identity block from them here.
+
+**And make absence visible rather than plausible.** If any identity field still has no value, **omit the key** rather than emitting `""`. The rule is the same one the memory block follows: an absent value must not be representable as a value, because `""` compares equal across runs that differ.
 | `metrics_options`, `metrics` | the recorder: `metrics.TakeStats()` and the options you constructed |
 | `conformance_oracle` | `config.run_cpp_conformance_oracle` — the one AnalysisConfig knob neither configuration hash covers (design section 6.3) |
 | `environment` | `observability::FillEnvironment` |
