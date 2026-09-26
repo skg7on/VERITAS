@@ -163,14 +163,30 @@ sleeps.
 **One honest caveat about `cpu_inclusive`.** A process CPU delta counts every
 thread. VERITAS is single-threaded (section 4.7), so today it is the span's own
 work; if concurrency is ever added, this field becomes "process CPU consumed
-during the span" and must not be read as the span's own cost. The field is
-nonetheless the right instrument for the question round 3 could not answer from
-outside: 421.67 s CPU against 572.82 s wall, with the gap unattributed.
+during the span" and must not be read as the span's own cost.
+
+**And a correction to this section's own original justification, because it
+cited a magnitude nobody measured.** An earlier revision of this paragraph said
+the field answers the question round 3 could not, quoting "421.67 s CPU against
+572.82 s wall, with the gap unattributed". Those two figures are not from the
+same series and their difference is not a gap. `572.82 s` is run 4 of the
+**pre-round** binary `62bc573` (round-3 spec section 2.1), while `421.67 s` is
+the **post-round** worst-of-three CPU (its section 9.4); the difference between
+them is the round's measured −26.5 % gain, not an unattributed wall-versus-CPU
+gap. That record also states those runs were "99.7 % CPU-bound", i.e. wall minus
+CPU was 0.07–1.24 s, so at *run* granularity there was never a large gap to
+attribute. The instrument's value is therefore not closing a run-level gap; it
+is **per-phase** attribution, which is what a process-wide figure cannot give
+and what made this round's phase boundaries come from 30-second stack samples.
+This is recorded rather than quietly deleted because it is the same error the
+round-3 record identifies as its most transferable lesson — a plausible
+magnitude asserted without measurement — committed while writing a design whose
+subject is that failure.
 
 ### 4.3 Distributed spans
 
-The five per-component spans retain every sample and report exact percentiles.
-Worst case is 13,716 components × 5 spans ≈ 68,580 samples ≈ 550 KB, held for
+The **four** per-component spans retain every sample and report exact
+percentiles. Worst case is 13,716 components × 4 spans ≈ 54,864 samples ≈ 440 KB, held for
 the duration of the run and **dropped once the report is built** — the artifact
 carries percentiles, never samples.
 
@@ -237,7 +253,7 @@ Two details this fixes rather than leaves ambiguous:
   survives.
 - **Which spans keep intervals:** only interval-bearing spans (tens, not
   13,716) and the retained top-N entries. A distributed span does not retain
-  68,580 intervals.
+  54,864 intervals.
 
 **Series bounds.** The buffer is pre-allocated at 65,536 samples (≈1.5 MiB) so
 the sampler thread never allocates and the analysis path never locks. On
@@ -538,7 +554,7 @@ produces none.
 
 ```
 Analysis phase report
-  run                                         572.820s    0.101s  421.670s   8.59 GiB  +8.59
+  run                                         572.820s    0.101s  421.670s   8.59 GiB  +8.59 GiB
   ├─ cli.ingest                                 1.234s    1.100s    1.234s   0.89 GiB  +0.12
   ├─ m5.svf                                   105.100s  105.100s   52.910s   3.52 GiB  +2.34
   │  ├─ m5.svf.andersen                        20.300s   20.300s   20.300s   2.90 GiB  +1.10
@@ -559,12 +575,23 @@ Recorded here so future instruments do not quietly break them:
 2. Top-N ordered by `(wall_inclusive desc, label asc)`.
 3. Durations are integers; no floats anywhere.
 4. **No absolute paths anywhere in the artifact.** `project_root` is
-   deliberately excluded. It is the one field guaranteed to differ between
-   machines and checkouts, and `manifest.json` already carries it.
+   deliberately excluded; `manifest.json` already carries it. Do not restate
+   this as "the only machine-scoped field": the `environment` block is
+   machine-scoped throughout (`os`, `arch`, `cpu_model`, `cores`, `ram_bytes`,
+   `build_type`, `host_compiler`, `veritas_version`, `git_revision`), so a
+   comparison script that wants cross-machine diffs must exclude that block as
+   well as the run-scoped coordinates below.
 5. The series lives in its own block, so `--metrics-series false` yields a calm
    diff.
 6. The `identity` block is separable, so a comparison script can exclude the
-   run-scoped coordinates without parsing the rest.
+   **run-scoped** coordinates without parsing the rest. Exclude those
+   *selectively*: only `run_id` and `batch_id` move between two runs of the same
+   fixture, while `repository_id`, `revision_id`, `build_variant_id`,
+   `projection_id`, `svf_config_hash`, `wpa_config_hash` and
+   `engine_toolchain_identity` are content- and config-derived and therefore
+   stable. Blanket-excluding the whole block discards exactly the configuration
+   comparison it exists to enable — and two runs whose configuration hashes
+   disagree did *not* have the same effective configuration.
 
 ## 7. Failure handling, overhead, and concurrency
 
@@ -622,8 +649,8 @@ evidence.
 The design's contribution to that budget:
 
 - `getrusage` costs roughly 1–2 µs, so `cpu_inclusive` is captured **only on
-  interval-bearing spans** (tens), never on the 68,580 per-component stages,
-  which take `steady_clock` reads only (≈50 ns each, on the order of 17 ms
+  interval-bearing spans** (tens), never on the 54,864 per-component stages,
+  which take `steady_clock` reads only (≈50 ns each, on the order of 14 ms
   across a 421 s CPU run).
 - The sampler buffer is pre-allocated at ≈1.5 MiB; the sampler thread never
   allocates.
