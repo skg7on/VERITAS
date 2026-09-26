@@ -2207,8 +2207,9 @@ Add to the header:
 void FillEnvironment(RunEnvironment* environment);
 
 // FillInventoryFromManifest copies the input-scale fields the manifest
-// already carries. Header-only: it reads struct fields and needs no link
-// against veritas_build.
+// already carries. It is defined in StoreSummary.cpp; the reason it lives in
+// this header rather than RunReport.h is that it needs AnalysisManifest.h,
+// which RunReport.h deliberately does not include.
 void FillInventoryFromManifest(const build::AnalysisManifest& manifest,
                                RunInputInventory* input);
 ```
