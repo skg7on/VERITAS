@@ -1168,8 +1168,20 @@ TEST(RunReportTest, ContainsNoAbsolutePath) {
 }
 
 TEST(RunReportTest, SortsCountersAndComponentKindsByName) {
-  // Build with insertion order deliberately reversed and assert the emitted
-  // order, so instrumentation order cannot leak into the artifact.
+  // The fixture supplies these out of order on purpose, so a renderer that
+  // emits insertion order fails here. Spec section 6.5 rule 1.
+  const std::string json = RenderRunReportJson(MakeFixtureReport());
+  const std::size_t first = json.find("a.counter");
+  const std::size_t last = json.find("z.counter");
+  ASSERT_NE(first, std::string::npos);
+  ASSERT_NE(last, std::string::npos);
+  EXPECT_LT(first, last);
+
+  const std::size_t effects = json.find("effects");
+  const std::size_t reachability = json.find("reachability");
+  ASSERT_NE(effects, std::string::npos);
+  ASSERT_NE(reachability, std::string::npos);
+  EXPECT_LT(effects, reachability);
 }
 
 TEST(RunReportTest, JsonParsesAndCarriesTheSchemaVersion) {
@@ -1182,7 +1194,58 @@ TEST(RunReportTest, JsonParsesAndCarriesTheSchemaVersion) {
 }
 ```
 
-`MakeFixtureReport()` is a helper in the same file returning a fully populated `RunReport` with two nested phases, one distributed span with a top-N entry, one counter, and a two-entry series. Write it with real values.
+`MakeFixtureReport()` is a helper in the same file. Write it exactly as follows: its counters and component kinds are **deliberately out of order**, so the ordering assertions below prove the renderer sorts rather than restating the fixture's insertion order.
+
+```cpp
+RunReport MakeFixtureReport() {
+  RunReport report;
+  report.metrics_options.top_n = 10;
+  report.identity.run_id = "run:sha256:0000";
+  report.environment.os = "test";
+  report.inventory.output.cpg_nodes = 12;
+  // Reversed on purpose: "z" precedes "a" here, and "reachability" precedes
+  // "effects". A renderer that emits insertion order fails the sort test.
+  report.metrics.counters = {
+      core::Counter{"z.counter", 3, "count"},
+      core::Counter{"a.counter", 1, "count"},
+  };
+  report.inventory.output.components_by_kind = {{"reachability", 2},
+                                                {"effects", 1}};
+  report.store.tables = {{"analysis_facts", 1249792}};
+
+  core::SpanStats parent;
+  parent.name = "run";
+  parent.count = 1;
+  parent.wall_inclusive = std::chrono::seconds(2);
+  parent.wall_self = std::chrono::seconds(1);
+
+  core::SpanStats child;
+  child.name = "m5.svf";
+  child.count = 1;
+  child.wall_inclusive = std::chrono::seconds(1);
+  child.wall_self = std::chrono::seconds(1);
+  parent.children.push_back(child);
+
+  core::SpanStats distributed;
+  distributed.name = "wpa.component.execute";
+  distributed.count = 3;
+  core::Distribution distribution;
+  distribution.p50 = std::chrono::milliseconds(2);
+  distribution.p95 = std::chrono::milliseconds(9);
+  distribution.p99 = std::chrono::milliseconds(9);
+  distribution.max = std::chrono::milliseconds(9);
+  distributed.distribution = distribution;
+  distributed.top_n.push_back(
+      core::TopEntry{"flow/scc:sha256:aaaa", std::chrono::milliseconds(9)});
+  parent.children.push_back(distributed);
+
+  report.metrics.root = parent;
+  report.metrics.series = {{std::chrono::milliseconds(0), 100, 90},
+                           {std::chrono::milliseconds(100), 200, 180}};
+  return report;
+}
+```
+
 
 Add to the test target's link line (in `tests/unit/observability/CMakeLists.txt`):
 
@@ -1229,7 +1292,11 @@ add_library(veritas::observability ALIAS veritas_observability)
 
 Add `add_subdirectory(src/observability)` to `CMakeLists.txt` immediately after `add_subdirectory(src/evidence)`.
 
-Implement `RenderRunReportJson` with `llvm::json::OStream` writing **attributes in sorted key order** and durations via `static_cast<std::int64_t>(value.count())`. The recursive span emitter:
+Implement `RenderRunReportJson` with `llvm::json::OStream` writing **attributes in sorted key order** and durations via `static_cast<std::int64_t>(value.count())`.
+
+**The renderer sorts every name-keyed list itself, on a copy — counters, `unknowns_by_reason`, and `components_by_kind`.** Do not trust the producer to have sorted them: `TakeStats` sorts counters today, but a defensive sort here makes the artifact's stability a property of the renderer, which is where the diffability contract lives. Sort a local copy; never mutate the `RunReport` passed in, since callers render the same report twice (JSON and text).
+
+The recursive span emitter:
 
 ```cpp
 void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
