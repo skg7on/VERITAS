@@ -421,7 +421,9 @@ TEST(RunMetricsTest, SubtractsChildrenFromParentSelfTime) {
   const SpanStats& p = stats.root.children.front();
   EXPECT_EQ(p.name, "p");
   EXPECT_EQ(p.wall_inclusive, milliseconds(10));
-  EXPECT_EQ(p.wall_self, milliseconds(3));
+  // Self time is inclusive minus children: 10 ms - 3 ms = 7 ms. (An earlier
+  // draft of this plan said 3 ms here, which is the CHILD's self time.)
+  EXPECT_EQ(p.wall_self, milliseconds(7));
   ASSERT_EQ(p.children.size(), 1u);
   EXPECT_EQ(p.children.front().name, "c");
   EXPECT_EQ(p.children.front().wall_inclusive, milliseconds(3));
