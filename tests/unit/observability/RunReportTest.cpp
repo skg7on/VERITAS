@@ -197,6 +197,67 @@ TEST(RunReportTest, OmitsIdentityKeysThatHaveNoValue) {
   }
 }
 
+TEST(RunReportTest, OmitsUnproducedCountsInsteadOfEmittingZero) {
+  // Spec section 6.3: three inventory counts have no producer, and the artifact
+  // says so in the strongest form it has — the key is absent. `0` is a *value*,
+  // so a key present and zero compares equal between two runs that both failed
+  // to measure it: a field-level diff would report "unchanged" where the truth
+  // is "never measured", and no diagnostic elsewhere in the document repairs
+  // that, because a field-level comparison never consults it.
+  const std::string unproduced_json = RenderRunReportJson(MakeFixtureReport());
+  auto unproduced = llvm::json::parse(unproduced_json);
+  ASSERT_TRUE(static_cast<bool>(unproduced));
+  const llvm::json::Object* unproduced_root = unproduced->getAsObject();
+  ASSERT_NE(unproduced_root, nullptr);
+  const llvm::json::Object* inventory =
+      unproduced_root->getObject("inventory");
+  ASSERT_NE(inventory, nullptr);
+  const llvm::json::Object* output = inventory->getObject("output");
+  ASSERT_NE(output, nullptr);
+  const llvm::json::Object* incrementality =
+      inventory->getObject("incrementality");
+  ASSERT_NE(incrementality, nullptr);
+
+  // Asserted on the parsed object AND on the text: `getInteger` reports "no
+  // integer here", which an absent key and a present non-integer share, and the
+  // literal search is what distinguishes a missing key from a misread one.
+  EXPECT_EQ(output->getInteger("svfg_edges"), std::nullopt);
+  EXPECT_EQ(incrementality->getInteger("summaries_recomputed"), std::nullopt);
+  EXPECT_EQ(incrementality->getInteger("summaries_reused"), std::nullopt);
+  for (const char* key :
+       {"\"svfg_edges\"", "\"summaries_recomputed\"", "\"summaries_reused\""}) {
+    EXPECT_EQ(unproduced_json.find(key), std::string::npos)
+        << key << " was emitted for a count nothing produces: "
+        << unproduced_json;
+  }
+
+  // The blocks and their produced neighbours stay, so this is an absent key
+  // inside a present object rather than a dropped block.
+  EXPECT_TRUE(output->getInteger("svfg_nodes").has_value());
+  EXPECT_TRUE(incrementality->getInteger("components_executed").has_value());
+
+  // The positive control, so the omission cannot be a blanket drop: a producer
+  // that does fill them gets a key carrying the measured value.
+  RunReport produced_report = MakeFixtureReport();
+  produced_report.inventory.output.svfg_edges = 19;
+  produced_report.inventory.incrementality.summaries_recomputed = 7;
+  produced_report.inventory.incrementality.summaries_reused = 11;
+  auto produced = llvm::json::parse(RenderRunReportJson(produced_report));
+  ASSERT_TRUE(static_cast<bool>(produced));
+  const llvm::json::Object* produced_inventory =
+      produced->getAsObject()->getObject("inventory");
+  ASSERT_NE(produced_inventory, nullptr);
+  const llvm::json::Object* produced_output =
+      produced_inventory->getObject("output");
+  ASSERT_NE(produced_output, nullptr);
+  const llvm::json::Object* produced_incrementality =
+      produced_inventory->getObject("incrementality");
+  ASSERT_NE(produced_incrementality, nullptr);
+  EXPECT_EQ(produced_output->getInteger("svfg_edges"), 19);
+  EXPECT_EQ(produced_incrementality->getInteger("summaries_recomputed"), 7);
+  EXPECT_EQ(produced_incrementality->getInteger("summaries_reused"), 11);
+}
+
 TEST(RunReportTest, JsonCarriesEverySchemaBlockWithItsExpectedType) {
   // The versioned-schema contract of spec section 8.3: a reader that asks for a
   // block by name and type must find it. A missing block is the failure this

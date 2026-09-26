@@ -26,6 +26,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -76,7 +77,10 @@ struct RunOutputInventory {
   std::uint64_t cpg_nodes = 0;
   std::uint64_t cpg_edges = 0;
   std::uint64_t svfg_nodes = 0;
-  std::uint64_t svfg_edges = 0;
+  // No producer can fill this, so it stays unset and its key is omitted from
+  // the artifact rather than emitted as 0 — an unproduced count must not diff
+  // as "unchanged". See RunIncrementality and design section 6.3.
+  std::optional<std::uint64_t> svfg_edges;
   std::vector<std::pair<std::string, std::uint64_t>> components_by_kind;
   std::uint64_t rooted_input_facts = 0;
   std::uint64_t canonical_facts = 0;
@@ -85,8 +89,11 @@ struct RunOutputInventory {
 struct RunIncrementality {
   std::uint64_t components_reused = 0;
   std::uint64_t components_executed = 0;
-  std::uint64_t summaries_recomputed = 0;
-  std::uint64_t summaries_reused = 0;
+  // Both unset for the same reason as svfg_edges above: no producer anywhere in
+  // the pipeline, so the key is absent rather than a plausibly-zero value. The
+  // tri-state is deliberate — present means measured.
+  std::optional<std::uint64_t> summaries_recomputed;
+  std::optional<std::uint64_t> summaries_reused;
 };
 
 struct RunInventory {

@@ -250,6 +250,30 @@ TEST(VeritasBuildAnalyzeCliTest, WritesRunMetricsByDefault) {
   EXPECT_EQ(result.stdout_text.find("veritas-build: metrics degraded: "),
             std::string::npos)
       << result.stdout_text;
+
+  // The three counts with no producer are absent from the artifact rather than
+  // present as 0 (spec section 6.3), and the CLI is the end of the path that
+  // decides it: a key that is present would make a field-level diff of two
+  // artifacts read "unchanged" for a count neither run ever measured. Asserted
+  // on the parsed object, since a substring search for a name could be
+  // satisfied by the diagnostic text elsewhere.
+  const llvm::json::Object* inventory = root->getObject("inventory");
+  ASSERT_NE(inventory, nullptr) << json.substr(0, 500);
+  const llvm::json::Object* inventory_output = inventory->getObject("output");
+  ASSERT_NE(inventory_output, nullptr) << json.substr(0, 500);
+  const llvm::json::Object* incrementality =
+      inventory->getObject("incrementality");
+  ASSERT_NE(incrementality, nullptr) << json.substr(0, 500);
+  EXPECT_EQ(inventory_output->getInteger("svfg_edges"), std::nullopt)
+      << "emitted for a count nothing produces: " << json.substr(0, 500);
+  EXPECT_EQ(incrementality->getInteger("summaries_recomputed"), std::nullopt)
+      << "emitted for a count nothing produces: " << json.substr(0, 500);
+  EXPECT_EQ(incrementality->getInteger("summaries_reused"), std::nullopt)
+      << "emitted for a count nothing produces: " << json.substr(0, 500);
+  // The produced counts beside them are still emitted, so this is an absent key
+  // inside a present block rather than a dropped block.
+  EXPECT_TRUE(inventory_output->getInteger("svfg_nodes").has_value());
+  EXPECT_TRUE(incrementality->getInteger("components_executed").has_value());
 }
 
 TEST(VeritasBuildAnalyzeCliTest, MetricsFalseWritesNoArtifactAndNoReport) {

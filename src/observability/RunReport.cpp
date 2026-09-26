@@ -23,9 +23,10 @@
 // Attribute order. `llvm::json::OStream` emits attributes in call order and
 // sorts nothing, so the sorted-key rule is produced explicitly: within every
 // object, attributes are written in lexicographic key order. The conditional
-// keys (`cpu_inclusive_ns`, `distribution`, `top_n`, `memory`) appear only when
-// the producer set the corresponding field, so an absent measurement is visibly
-// absent rather than plausibly zero.
+// keys (`cpu_inclusive_ns`, `distribution`, `top_n`, `memory`, and the
+// unproduced inventory counts) appear only when the producer set the
+// corresponding field, so an absent measurement is visibly absent rather than
+// plausibly zero.
 
 #include "veritas/observability/RunReport.h"
 
@@ -103,6 +104,25 @@ std::string PadRight(std::string_view text, std::size_t width) {
 // The JSON artifact
 // ---------------------------------------------------------------------------
 
+// EmitIfMeasured is the artifact's one omission mechanism: `key` is written only
+// when the field carries a measurement, and is omitted entirely otherwise.
+// Written as a zero or as "", an unmeasured field compares equal between two
+// runs that both failed to measure it, so a field-level diff reports "unchanged"
+// where the truth is "never measured" — and a diagnostic string elsewhere in the
+// document does not repair that, because a field-level comparison never consults
+// it. Presence must mean "measured" at the granularity a consumer actually
+// reads, which is why the count overload exists beside the string one rather
+// than a second, parallel omission path.
+void EmitIfMeasured(llvm::json::OStream& j, llvm::StringRef key,
+                    const std::string& value) {
+  if (!value.empty()) j.attribute(key, value);
+}
+
+void EmitIfMeasured(llvm::json::OStream& j, llvm::StringRef key,
+                    const std::optional<std::uint64_t>& value) {
+  if (value.has_value()) j.attribute(key, static_cast<std::int64_t>(*value));
+}
+
 void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
   j.object([&] {
     j.attributeArray("children", [&] {
@@ -172,24 +192,21 @@ void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
 }
 
 void EmitIdentity(llvm::json::OStream& j, const RunIdentity& identity) {
-  // A field with no value omits its key rather than writing "". Written as "",
-  // an unset coordinate diffs as *unchanged* between two runs that differ
-  // exactly there — the reading this block exists to prevent, since it is the
-  // block a comparison script keys on. The object itself stays, so a consumer
-  // can still address `identity` unconditionally.
-  const auto emit = [&j](llvm::StringRef key, const std::string& value) {
-    if (!value.empty()) j.attribute(key, value);
-  };
+  // An unset coordinate is omitted rather than written as "" — the reading this
+  // block exists to prevent, since it is the block a comparison script keys on.
+  // The object itself stays, so a consumer can still address `identity`
+  // unconditionally.
   j.attributeObject("identity", [&] {
-    emit("batch_id", identity.batch_id);
-    emit("build_variant_id", identity.build_variant_id);
-    emit("engine_toolchain_identity", identity.engine_toolchain_identity);
-    emit("projection_id", identity.projection_id);
-    emit("repository_id", identity.repository_id);
-    emit("revision_id", identity.revision_id);
-    emit("run_id", identity.run_id);
-    emit("svf_config_hash", identity.svf_config_hash);
-    emit("wpa_config_hash", identity.wpa_config_hash);
+    EmitIfMeasured(j, "batch_id", identity.batch_id);
+    EmitIfMeasured(j, "build_variant_id", identity.build_variant_id);
+    EmitIfMeasured(j, "engine_toolchain_identity",
+                   identity.engine_toolchain_identity);
+    EmitIfMeasured(j, "projection_id", identity.projection_id);
+    EmitIfMeasured(j, "repository_id", identity.repository_id);
+    EmitIfMeasured(j, "revision_id", identity.revision_id);
+    EmitIfMeasured(j, "run_id", identity.run_id);
+    EmitIfMeasured(j, "svf_config_hash", identity.svf_config_hash);
+    EmitIfMeasured(j, "wpa_config_hash", identity.wpa_config_hash);
   });
 }
 
@@ -217,11 +234,9 @@ void EmitInventory(llvm::json::OStream& j, const RunInventory& inventory) {
                   static_cast<std::int64_t>(incrementality.components_executed));
       j.attribute("components_reused",
                   static_cast<std::int64_t>(incrementality.components_reused));
-      j.attribute(
-          "summaries_recomputed",
-          static_cast<std::int64_t>(incrementality.summaries_recomputed));
-      j.attribute("summaries_reused",
-                  static_cast<std::int64_t>(incrementality.summaries_reused));
+      EmitIfMeasured(j, "summaries_recomputed",
+                     incrementality.summaries_recomputed);
+      EmitIfMeasured(j, "summaries_reused", incrementality.summaries_reused);
     });
     j.attributeObject("input", [&] {
       j.attribute("compiler_id", input.compiler_id);
@@ -249,7 +264,7 @@ void EmitInventory(llvm::json::OStream& j, const RunInventory& inventory) {
                   static_cast<std::int64_t>(output.rooted_input_facts));
       j.attribute("summaries_published",
                   static_cast<std::int64_t>(output.summaries_published));
-      j.attribute("svfg_edges", static_cast<std::int64_t>(output.svfg_edges));
+      EmitIfMeasured(j, "svfg_edges", output.svfg_edges);
       j.attribute("svfg_nodes", static_cast<std::int64_t>(output.svfg_nodes));
       j.attributeObject("unknowns_by_reason", [&] {
         for (const auto& reason : SortedCopy(

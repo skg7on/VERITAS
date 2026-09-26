@@ -282,7 +282,10 @@ same effective configuration. Exclude the two run-scoped keys, not the block
 The same discipline shows up in the text report as the `-` in
 [section 2](#2-the-columns), and in the JSON as keys that appear only on the
 spans they describe: `cpu_inclusive_ns` only on interval-bearing spans,
-`distribution` and `top_n` only on distributed spans.
+`distribution` and `top_n` only on distributed spans. It applies to **numeric**
+inventory fields too, and section 9 lists the three where the key's absence is
+today the whole report: an unproduced count is omitted, because `0` is a value
+that diffs as "unchanged".
 
 ## 7. The stderr prefixes
 
@@ -373,12 +376,11 @@ measured it.
 Each still carries its `metrics note:` line on stderr, so the absence is named
 as well as visible (spec §6.3).
 
-> **This is the intended contract, and the code is being changed to match it.**
-> As this guide is first written, the artifact still emits all three keys with
-> the value `0` and relies on `diagnostics` to say they were not measured. The
-> change to key omission lands in the same change as this guide. An artifact
-> produced before it carries the three keys at `0`, and for those, stderr is
-> the only thing that distinguishes "not measured" from "measured zero".
+> **This is the contract a current artifact implements.** The three keys are
+> absent, and the `metrics note:` lines above are a named second signal rather
+> than the only one. An artifact produced before the omission landed carries the
+> three keys at `0`, and for those, stderr alone distinguishes "not measured"
+> from "measured zero".
 
 `svfg_edges` is the instructive one. A source appeared to exist:
 `SVFG::getTotalEdgeNum()` is reachable through `SVFG → VFG → GenericGraph`,

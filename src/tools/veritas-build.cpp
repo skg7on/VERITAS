@@ -478,21 +478,24 @@ std::vector<std::size_t> FillReport(
   incrementality.components_executed =
       builder.Counter("wpa.components.executed");
   // These three have no producer anywhere in the pipeline, so there is no
-  // counter to read them back from. svfg_edges is the sharpest case: a producer
-  // looked like it existed, but the SVF accessor it read returns a field
-  // nothing increments for an SVFG, so it would have reported an always-zero
-  // figure as if it were measured. All three stay zero and are named, so "0
-  // edges" and "0 recomputed" are not read as measurements.
+  // counter to read them back from and no value to write. They are left unset,
+  // and the renderer omits their keys: a present key means "measured", so an
+  // unproduced count must be absent rather than 0, which would diff as
+  // *unchanged* against a second run that also never measured it (design
+  // section 6.3). svfg_edges is the sharpest case: a producer looked like it
+  // existed, but the SVF accessor it read returns a field nothing increments for
+  // an SVFG. The notes below name each one, since an absent key is visibly
+  // absent only to a reader who knows the schema expects it.
   builder.Note(
-      "summaries_recomputed has no producer; the field is zero rather than a "
-      "measurement");
+      "inventory.incrementality.summaries_recomputed has no producer; its key "
+      "is omitted from the artifact");
   builder.Note(
-      "summaries_reused has no producer; the field is zero rather than a "
-      "measurement");
+      "inventory.incrementality.summaries_reused has no producer; its key is "
+      "omitted from the artifact");
   builder.Note(
-      "svf_edges has no producer: the SVF SVFG edge counter is never "
-      "incremented in the pinned revision, so the field is zero rather than a "
-      "measurement");
+      "inventory.output.svfg_edges has no producer: the SVF SVFG edge counter "
+      "is never incremented in the pinned revision, so its key is omitted from "
+      "the artifact");
 
   // Per-kind expected counts, one counter per kind, named
   // `wpa.component.<kind-name>.expected`.
