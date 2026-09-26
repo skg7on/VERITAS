@@ -442,10 +442,24 @@ no current producer can fill:
   precisely what this design exists to prevent.
 - `summaries_recomputed` and `summaries_reused` have no producer at all.
 
-All three are reported with a `metrics note:` line rather than a zero or an
-invented count. The general rule they illustrate: **verify that a source carries
-the value, not merely that it exists.** Checking that an accessor is reachable
-is not checking that anything writes what it reads.
+All three are reported with a `metrics note:` line, and — this is the part an
+earlier revision left ambiguous — **their keys are omitted from the artifact, not
+emitted as `0`.** The omission mechanism is the same one `memory` and `identity`
+use, applied to numeric fields: an unproduced count is `std::optional<std::uint64_t>`
+in the report model and is absent from the JSON when unset.
+
+The reason is the one this design applies everywhere else, and it is worth
+stating in the numeric case explicitly because it is less obvious than the string
+case. `0` is a *value*. A reader diffing two artifacts sees `svfg_edges: 0` in
+both and concludes it is unchanged, when in fact neither run measured it. A
+diagnostic string elsewhere in the document does not repair that, because a
+field-level comparison never consults it. Presence must mean "measured" at the
+granularity a consumer actually reads.
+
+The general lesson they illustrate, which cost this project an always-zero counter
+and is recorded because it is easy to repeat: **verify that a source carries the
+value, not merely that it exists.** Checking that an accessor is reachable is not
+checking that anything writes what it reads.
 
 **Three things in the shape above are conditional, and the example shows their
 populated form only.** Every empty string shown is a *shape*, not a value the
