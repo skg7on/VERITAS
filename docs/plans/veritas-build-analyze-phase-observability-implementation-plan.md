@@ -2342,9 +2342,11 @@ TEST(VeritasBuildAnalyzeCliTest, RejectsANonBooleanMetricsValue) {
 }
 
 TEST(VeritasBuildAnalyzeCliTest, AcceptsZeroSamplingInterval) {
-  // Zero means span-boundary sampling only: no sampler thread. The run must
-  // still succeed and still produce a parseable artifact, because the
-  // fallback is a degradation of the series, not of the report.
+  // Zero disables the series entirely: no sampler thread and no samples. The
+  // run must still succeed and still produce a parseable artifact, because
+  // turning the series off is a choice about the series, not a failure of the
+  // run. (Span-boundary sampling is a different mechanism — the fallback when
+  // pthread_create fails — and is not reachable through this flag.)
   const auto project = testing::FixtureProject("multiple_tus");
   const auto output = fs::temp_directory_path() /
                       ("veritas-metrics-zero-" + std::to_string(std::rand()));
@@ -2410,7 +2412,7 @@ In `AnalyzeArguments` add:
   fs::path metrics_path;  // empty = <output>/run-metrics.json
 ```
 
-Parse them with the existing `take_value` idiom, following `--field-sensitive` exactly for the two booleans and `ParsePositiveSize` for the integers. `--metrics-interval-ms` must accept `0` (span-boundary sampling only), so it needs a non-negative parse: add `ParseUnsigned` beside `ParsePositiveSize` rather than reusing the positive-only helper.
+Parse them with the existing `take_value` idiom, following `--field-sensitive` exactly for the two booleans and `ParsePositiveSize` for the integers. `--metrics-interval-ms` must accept `0`, which disables the series entirely — `ParsePositiveSize` rejects zero by design, so add `ParseUnsigned` beside it rather than reusing the positive-only helper.
 
 In `Analyze`, construct the recorder **first**, before any ingest, and open the root span there. Position matters: if the recorder is built after `ResolveProjectInput`, the `run` span cannot enclose `cli.ingest`, and spec section 10's headline finding — that the CLI ingests the project and then the analyzer ingests it again — becomes invisible in the artifact.
 

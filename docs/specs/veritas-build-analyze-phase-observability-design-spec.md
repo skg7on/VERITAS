@@ -209,8 +209,14 @@ the join deterministic.
 
 Two details this fixes rather than leaves ambiguous:
 
-- **Boundary rule:** a sample exactly at `t_start` belongs to the span; exactly
-  at `t_end` belongs to the next span. Both cases are tested (section 8.1).
+- **Boundary rule: start-inclusive and end-inclusive.** A sample exactly at
+  `t_start` belongs to the span, and so does one exactly at `t_end`. Both cases
+  are tested (section 8.1). An earlier draft made the end exclusive, so that a
+  boundary sample would fall only to the following sibling; that reading has no
+  analytical consequence here, because the report publishes per-span peaks and
+  deltas rather than a partition of the series, and it cannot be stated cleanly
+  for nested spans — a child's `t_end` lies inside its parent's window, so the
+  parent includes the sample either way.
 - **Which spans keep intervals:** only interval-bearing spans (tens, not
   13,716) and the retained top-N entries. A distributed span does not retain
   68,580 intervals.
@@ -351,7 +357,7 @@ well-formed spelling.
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--metrics true\|false` | `true` | record and report; `false` restores pre-change behaviour exactly, with no thread |
-| `--metrics-interval-ms N` | `250` | sampler period; `0` samples at span boundaries only |
+| `--metrics-interval-ms N` | `250` | sampler period; `0` disables the series entirely — no sampler thread and no samples |
 | `--metrics-top-n K` | `10` | slowest occurrences retained per distributed span |
 | `--metrics-series true\|false` | `true` | emit the memory series |
 | `--metrics-path <path>` | `<output>/run-metrics.json` | override the artifact location |
@@ -620,7 +626,10 @@ the schema test carries the contract instead.
 - The default produces both, and `--metrics false` output matches the
   pre-change stdout byte for byte.
 - `--metrics maybe` is `InvalidArgument`.
-- `--metrics-interval-ms 0` is accepted and samples at span boundaries only.
+- `--metrics-interval-ms 0` is accepted and disables the series entirely: the
+  run succeeds and the artifact still parses, but no samples are collected. The
+  span-boundary fallback of section 7.4 is reachable only through a
+  `pthread_create` failure, never through this flag.
 - `--metrics-top-n K` honours K.
 - `--metrics-path` is honoured.
 
