@@ -10,7 +10,9 @@ four root-cause magnitudes were refuted on measurement, and every one of them
 was wrong in the same direction — a cost was read out of the code, multiplied
 by a component count, and recorded as a root cause without ever being timed.
 
-**Tracking issue:** not yet filed.
+**Tracking issue:** [#138](https://github.com/skg7on/VERITAS/issues/138), which
+carries the problem statement, the scope, the acceptance criteria, and the known
+open items.
 
 **Motivating command:**
 
