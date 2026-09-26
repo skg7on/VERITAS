@@ -676,6 +676,9 @@ The design's contribution to that budget:
   rejects `limits.threads != 1` outright; the sampler is the only other actor,
   and it writes only into its own pre-allocated buffer behind an atomic cursor.
 
+The measurement against this budget is section 12, with both verdicts — the CPU
+half met, the memory half exceeded and unresolvable at three runs per series.
+
 ### 7.4 The sampler is the codebase's first thread
 
 Verified: `grep` for `std::thread`, `std::async`, `std::jthread`,
@@ -868,3 +871,203 @@ should be expected to show.
    stage 5 measures it, and round 3's lesson applies to this document as much
    as to that one: every magnitude quoted here about cost is a hypothesis until
    a task measures its own target. This design deliberately quotes none.
+   **Measured: section 12.** The CPU half of the budget holds; the memory half
+   is exceeded by the worst-of-three delta and is not resolvable by this method,
+   and section 12 states both without revising the ceiling.
+
+## 12. Verification record (2026-09-26)
+
+The measurement section 8.5 defers to, in the form section 9.6 of the round-3
+design specification established: provenance, the measured series, a verdict on
+each budget number, and the artifact's own reading of the run.
+
+**Provenance.** Source: branch `claude/analyze-phase-observability-design`,
+whose tip at the time of writing is `64d7f44`. Command, one run per output root,
+serially on an otherwise idle machine, with `/usr/bin/time -lp` measuring from
+outside the process:
+
+```bash
+./build/bin/veritas-build analyze \
+  --project /Users/skg7on/Workspace/Projects/leveldb \
+  --output <fresh /tmp dir>
+```
+
+Debug, host compiler `/opt/homebrew/opt/llvm@17/bin/clang++` (Clang 17.0.6)
+against LLVM 24.x libraries, `VERITAS_WPA_ENGINE=souffle`. Apple M5, arm64,
+Darwin 27.0.0, 10 cores, 32 GiB. The six runs used **one binary**, built once
+before the first run and unchanged across the series, so the two series differ
+by the flag and by nothing else. That binary carries the branch's source: its
+diagnostics quote the sub-span and span-coverage fixes, and the only source
+commit the branch gained after the build (`64d7f44`) changes comments alone in
+`src/tools/veritas-build.cpp`. The artifact's own `environment.git_revision`
+reads `91f8dc5`, which is **not** a source revision at all: it is stamped at
+CMake configure time (`src/core/Version.cpp.in`) and is stale by design, so the
+artifact of a run on this branch reports the revision the build tree was last
+configured at. Recorded here so that a reader diffing an artifact against
+`git log` is not misled by it.
+
+The criterion is evaluated on the `/usr/bin/time` figure, because that is the
+figure section 7.3 names, and not on the artifact's sampled one.
+
+**The two series.** Metrics off is `--metrics false`; metrics on is the default.
+Three runs each; worst of three is what both ceilings are judged on.
+
+| Run | Series | Wall (s) | CPU user+sys (s) | Max RSS (GiB) |
+| --- | --- | ---: | ---: | ---: |
+| 1 | metrics off | 420.79 | 420.10 | 6.7263 |
+| 2 | metrics off | 420.20 | 419.25 | 7.8926 |
+| 3 | metrics off | 423.68 | 422.45 | 7.7146 |
+| 4 | metrics on | 419.95 | 419.09 | 7.7990 |
+| 5 | metrics on | 417.49 | 416.91 | 8.2211 |
+| 6 | metrics on | 418.20 | 417.37 | 7.9441 |
+
+Worst of three per series: wall **423.68 s off / 419.95 s on**; CPU **422.45 s
+off / 419.09 s on**; max RSS **7.8923 GiB off / 8.2212 GiB on**.
+
+**CPU — the ≤0.5 % ceiling is met, and the instrument is not detectable.** The
+worst-of-three CPU delta is **−3.36 s, −0.80 %**: the metrics-on series is
+*lower* than the metrics-off series. That is not an improvement and must not be
+read as one — measurement cannot make analysis faster — it is the statement that
+this series cannot see the instrument at all. The reason is the resolution: CPU
+spread **within** the metrics-off series alone is **3.2 s** (422.45 − 419.25),
+the same order as the delta between the series, so a 0.80 % movement is inside
+this fixture's own run-to-run variation. The honest form is **no measurable CPU
+overhead at this resolution**, which satisfies the ≤0.5 % ceiling: the measured
+difference is inside the fixture's own variation, so it is not evidence of a
+cost, and no direction of it may be claimed as a benefit.
+
+**Max RSS — the ≤0.05 GiB ceiling is exceeded by the worst-of-three delta, and
+the criterion is not resolvable by this method.** The numbers as measured are
+**7.8923 GiB off / 8.2212 GiB on**, a delta of **+0.3289 GiB (+4.17 %)**, which
+is 6.6× the 0.05 GiB budget. **The criterion is not met on this evidence, and it
+is also not decided by it**, and both statements belong in the record together:
+the metrics-off series' own run-to-run spread is **1.166 GiB** (7.8926 − 6.7263),
+which is **3.5× the observed delta** and **23× the entire budget**. A threshold
+one twenty-third the size of the series' own noise is not decidable from three
+samples per side, so the measurement does not settle whether a real increase
+exists.
+
+Two things can be said about it beyond that. The first is negative and it is
+useful: the recorder's own state is on the order of **2 MiB** — a 1.5 MiB
+pre-allocated series buffer plus transient accumulators, both bounded at design
+time (section 7.3) — so a genuine 0.3 GiB shift would **not** be attributable to
+the recorder's data structures. Nothing in this design allocates in proportion
+to run length, which means the delta, if real, comes from somewhere the
+instrument perturbs only indirectly, and an instrument whose own cost is
+bounded in MiB does not become a 300 MiB cost by running on a larger fixture.
+The second is the honest reading: **consistent with a small real increase, not
+distinguishable from noise at n = 3.** The ceiling is **not revised** here, and
+the criterion is **not** reported as met. This is the same class of honest
+negative as round-3 section 9.4's "the wall gate is not measurable in this
+environment", and it is recorded for the same reason: a criterion that the
+method cannot decide must say so rather than borrow confidence from a
+measurement that cannot support it.
+
+**The artifact's own reading of the run.** The artifact does not record which
+`/usr/bin/time` figure belongs to it, so run 4 is identified by its root wall
+time: the three metrics-on artifacts order exactly as the external walls order
+runs 4–6, each 0.63–0.64 s below the wall that `/usr/bin/time` reports for it.
+Run 4's top-level rows with the figures as the artifact records them — count,
+wall inclusive, wall self and CPU inclusive. The rows are ordered by wall time
+for reading; the artifact itself carries siblings in span-name order, which
+section 6.5's sorted-key rule produces:
+
+| Span | count | wall (s) | self (s) | CPU (s) |
+| --- | ---: | ---: | ---: | ---: |
+| run (root) | 1 | 419.316 | 8.136 | 418.363 |
+| wpa.orchestrate | 1 | 157.643 | 15.768 | 158.017 |
+| facts.publish | 1 | 119.914 | 0.001 | 119.077 |
+| m5.svf | 1 | 74.419 | 0.827 | 74.243 |
+| facts.batch_assemble | 1 | 32.713 | 32.713 | 32.697 |
+| m2m3.publish_summaries | 1 | 11.749 | 11.749 | 11.652 |
+| m4.local_analysis | 1 | 10.646 | 10.646 | 10.518 |
+| m6.cpg_projection | 1 | 2.142 | 2.142 | 2.139 |
+| m5.merge_svf_facts | 1 | 1.576 | 1.576 | 1.575 |
+| wpa.graph_build | 1 | 0.355 | 0.355 | 0.353 |
+| cli.ingest | 1 | 0.010 | 0.010 | 0.006 |
+| wpa.scc_state_flush | 1 | 0.004 | 0.004 | 0.003 |
+| m1.ingest | 1 | 0.004 | 0.004 | 0.004 |
+| m5.model_bundle_load | 1 | 0.003 | 0.003 | 0.000 |
+| facts.store_open | 1 | 0.001 | 0.001 | 0.001 |
+
+The four per-component spans under `wpa.orchestrate` — `canonicalize` 66.315 s,
+`execute` 42.096 s, `materialize` 33.177 s, `cache_lookup` 0.287 s — each carry
+**count 13,716** and no CPU column, which is section 7.3's design decision
+visible in the artifact: `getrusage` is taken only on interval-bearing spans, so
+the per-component stages show `-` rather than a fabricated zero.
+
+Two checks against the external instrument, and both agree: the artifact's root
+CPU figure is **418.363 s** against `/usr/bin/time`'s **419.09 s** for the same
+run, the 0.73 s being process start-up, teardown, and the report's own rendering
+and writing, which the `run` span deliberately excludes (section 6.4); and its
+root wall is **419.316 s** against a wall of **419.95 s**, a 0.63 s gap of the
+same composition.
+
+The artifact's sampled peak for run 4, **8,317,222,912 B**, is not offered as a
+third agreement. It sits beside the criterion's own **7.7990 GiB** for that run
+rather than replacing it, and it is the lower of the two by design: the sampler
+observes at a 250 ms interval, so its maximum is a lower bound on the true one
+and can miss the instant the peak occurs. `/usr/bin/time`'s `ru_maxrss` remains
+the figure section 7.3's ceiling is judged on, in both series equally.
+
+**The first finding the instrument was built to surface.** Section 10 records
+that `veritas-build analyze` ingests the project twice and that this design
+measures the duplication instead of repairing it. It is now a measured pair in
+the artifact:
+
+| Run | `cli.ingest` (ms) | `m1.ingest` (ms) |
+| --- | ---: | ---: |
+| 4 | 10.0 | 4.0 |
+| 5 | 9.8 | 3.8 |
+| 6 | 11.0 | 4.0 |
+
+The analyzer's repeat is the smaller of the two — **3.8–4.0 ms** — while the
+CLI's own ingest, which also writes the diagnostic manifest (section 10), is
+**9.8–11.0 ms**. The duplication is therefore **confirmed as a fact and measured
+as immaterial on this fixture**: the repeated work is ≈4 ms of a 419 s run,
+three orders of magnitude below the ±15 s of phase-boundary uncertainty that
+round 3 section 2.2 recorded and that section 1 cites as this design's first
+motivation. That is the form this design predicted: the inference "the project
+is ingested twice, so roughly half the ingest cost is wasted" had never been
+timed, and timing it puts the waste at ≈0.001 % of the run rather than at half
+of a visible phase. Whether to still repair it is a question about the
+CLI/library boundary, not about cost.
+
+**Refuted, and corrected before it shipped.** The design's first draft
+instructed the SVF session to emit `svfg_edges` from
+`SVFG::getTotalEdgeNum()`, having verified that the accessor is reachable
+through `SVFG → VFG → GenericGraph`. Existence was not the question: the method
+reads `GenericGraph::edgeNum`, and nothing increments that field for a VFG or
+SVFG, so it returns 0 for every SVFG ever built. The implementation record has
+the measurement: **0** reported against `svf.svfg_nodes` **24** on the test
+fixture, where SVF's own SVFG statistic reports **19 edges** for the same graph.
+The implementer reported that rather than substituting a plausible number, the
+counter was removed, and **a plan that cited that line as "verified" would have
+shipped an always-zero field in place of a measurement**. Section 6.3 carries
+the field's disposition; section 10 of the round-3 specification carries the
+general rule. A second correction of the same class is worth recording, because
+it was a name promising more than the code did: the `wpa.graph_build` span
+initially did not cover the graph construction its name names, and was widened
+to open above `CallGraph::FromSummaries` and close at the frozen expected set.
+The rule the two produced — a count travels as a recorder counter added at the
+producing site, never through a second plumbing path — is why a count with no
+producer is now visibly absent rather than plausibly zero.
+
+**One artifact-format change lands after this measurement, and the artifacts
+above predate it.** The three inventory counts with no producer —
+`inventory.output.svfg_edges`, `inventory.incrementality.summaries_recomputed`
+and `...summaries_reused` — were omitted-as-keys rather than emitted as `0` after
+the series was taken, per section 6.3. The six artifacts under `/tmp/vm-*`
+therefore carry those three keys at `0` with a `metrics note:` line naming each,
+and this record's figures are unaffected by the change: it moves no span, no
+counter and no duration. The reader's guide
+(`docs/guides/analyze-phase-report-guide.md`) states the omission contract and
+records that an artifact produced before it exists.
+
+**What this record does not establish.** It does not establish that the memory
+budget is met — it does not establish that it is missed either, and that
+indecision is the finding. It makes no wall-time or performance claim in either
+direction, which section 3's first non-goal forbids; the −0.80 % CPU figure is a
+statement about the instrument's detectability and not about the analysis. And
+it is one machine, one fixture, three runs per series: only the CPU verdict is
+strong enough to carry beyond this host.
