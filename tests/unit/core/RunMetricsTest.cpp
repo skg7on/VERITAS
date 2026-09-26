@@ -51,6 +51,15 @@ struct ScriptedRecorder {
   }
 };
 
+// Appends one memory sample at time t, with resident set and physical
+// footprint both in bytes. This is the same SeriesBuffer::Append the sampler
+// thread calls, driven directly so the join is testable without a thread and
+// without a clock.
+void AppendSample(RunMetrics& metrics, std::chrono::milliseconds t,
+                  std::uint64_t rss, std::uint64_t footprint) {
+  metrics.series().Append(MemorySample{t, rss, footprint});
+}
+
 TEST(RunMetricsTest, RecordsCountAndWallTimeForOneSpan) {
   ScriptedRecorder r;
   r.wall_tick = milliseconds(0);
@@ -265,6 +274,111 @@ TEST(RunMetricsTest, NullRecorderIsInert) {
   EXPECT_TRUE(stats.root.children.empty());
   EXPECT_TRUE(stats.counters.empty());
   EXPECT_TRUE(stats.diagnostics.empty());
+}
+
+TEST(RunMetricsTest, JoinsSeriesToBearingSpanInterval) {
+  ScriptedRecorder r;
+  // Wall ticks are 0 and 10 ms, so the span's window is [0, 10] ms.
+  r.wall_tick = milliseconds(0);
+  const std::size_t token = r.metrics->BeginSpan("p", SpanMode::kBearing);
+  r.wall_tick = milliseconds(10);
+  r.metrics->EndSpan(token);
+
+  AppendSample(*r.metrics, milliseconds(0), 100, 90);
+  AppendSample(*r.metrics, milliseconds(5), 300, 250);
+  AppendSample(*r.metrics, milliseconds(10), 200, 180);
+  AppendSample(*r.metrics, milliseconds(20), 999, 999);  // outside the window
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  const SpanStats& p = stats.root.children.front();
+  ASSERT_TRUE(p.memory.has_value());
+  EXPECT_EQ(p.memory->rss_start, 100u);
+  EXPECT_EQ(p.memory->rss_end, 200u);
+  EXPECT_EQ(p.memory->rss_delta, 100);
+  EXPECT_EQ(p.memory->peak_within, 300u);  // 999 is outside and must not count
+  EXPECT_EQ(p.memory->footprint_peak, 250u);
+}
+
+TEST(RunMetricsTest, BothSpanBoundariesAreInclusive) {
+  // The boundary rule is start-inclusive and end-inclusive: a sample at
+  // exactly t_start belongs to the span, and so does one at exactly t_end.
+  ScriptedRecorder r;
+  r.wall_tick = milliseconds(0);
+  const std::size_t token = r.metrics->BeginSpan("p", SpanMode::kBearing);
+  r.wall_tick = milliseconds(10);
+  r.metrics->EndSpan(token);
+
+  AppendSample(*r.metrics, milliseconds(0), 100, 10);
+  AppendSample(*r.metrics, milliseconds(10), 500, 50);
+  AppendSample(*r.metrics, milliseconds(11), 999, 999);
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  const SpanStats& p = stats.root.children.front();
+  ASSERT_TRUE(p.memory.has_value());
+  EXPECT_EQ(p.memory->rss_start, 100u);  // t == t_start is inside
+  EXPECT_EQ(p.memory->rss_end, 500u);    // t == t_end is inside
+  EXPECT_EQ(p.memory->peak_within, 500u);
+}
+
+TEST(RunMetricsTest, PlainSpansGetNoMemoryButTheParentWindowStillCoversThem) {
+  ScriptedRecorder r;
+  r.wall_tick = milliseconds(0);
+  const std::size_t parent = r.metrics->BeginSpan("p", SpanMode::kBearing);
+  r.wall_tick = milliseconds(5);
+  const std::size_t child = r.metrics->BeginSpan("c", SpanMode::kPlain);
+  r.wall_tick = milliseconds(15);
+  r.metrics->EndSpan(child);
+  r.wall_tick = milliseconds(20);
+  r.metrics->EndSpan(parent);
+
+  AppendSample(*r.metrics, milliseconds(10), 700, 70);
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  const SpanStats& p = stats.root.children.front();
+  ASSERT_TRUE(p.memory.has_value());
+  ASSERT_EQ(p.children.size(), 1u);
+  // A kPlain span records no memory block at all...
+  EXPECT_FALSE(p.children.front().memory.has_value());
+  // ...but the sample taken while it ran is still inside the parent's window.
+  EXPECT_EQ(p.memory->peak_within, 700u);
+}
+
+TEST(RunMetricsTest, SeriesBufferThinningDoublesDecimationKeepingFirstAndNewest) {
+  SeriesBuffer buffer(4);
+  for (int i = 0; i < 4; ++i) {
+    buffer.Append(MemorySample{milliseconds(i * 10), 100u + i, 10u});
+  }
+  EXPECT_EQ(buffer.decimation(), 1u);
+  EXPECT_EQ(buffer.samples().size(), 4u);
+
+  // The fifth sample overflows the capacity and triggers thinning.
+  buffer.Append(MemorySample{milliseconds(40), 104u, 14u});
+
+  EXPECT_EQ(buffer.decimation(), 2u);
+  ASSERT_LE(buffer.samples().size(), 4u);
+  EXPECT_EQ(buffer.samples().front().t, milliseconds(0));  // the first survives
+  EXPECT_EQ(buffer.samples().back().t, milliseconds(40));  // the newest survives
+}
+
+TEST(RunMetricsTest, PeakIsTheMaximumOfTheWholeSeries) {
+  ScriptedRecorder r;
+  r.wall_tick = milliseconds(0);
+  const std::size_t token = r.metrics->BeginSpan("p", SpanMode::kBearing);
+  r.wall_tick = milliseconds(30);
+  r.metrics->EndSpan(token);
+
+  AppendSample(*r.metrics, milliseconds(0), 100, 90);
+  AppendSample(*r.metrics, milliseconds(10), 900, 850);
+  AppendSample(*r.metrics, milliseconds(20), 200, 180);
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  // The peak is a property of the run, not of any one span: the maximum over
+  // the whole series, carrying the time it occurred at.
+  EXPECT_EQ(stats.peak_rss_bytes, 900u);
+  EXPECT_EQ(stats.peak_footprint_bytes, 850u);
+  EXPECT_EQ(stats.peak_at, milliseconds(10));
+  EXPECT_EQ(stats.series_decimation, 1u);
+  EXPECT_EQ(stats.series.size(), 3u);
 }
 
 }  // namespace

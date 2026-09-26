@@ -58,6 +58,15 @@ using CpuClock = std::function<std::chrono::nanoseconds()>;
 // ProcessCpuNow is the default CpuClock: getrusage(RUSAGE_SELF).
 std::chrono::nanoseconds ProcessCpuNow();
 
+// CurrentResidentBytes is the process resident set size in bytes, or zero
+// when the platform cannot report it. CurrentFootprintBytes is Darwin's
+// physical footprint — the pages actually charging the process — and on
+// platforms without that distinction it is the resident set. Both are
+// measured by the sampler thread and, on the no-thread fallback path, at
+// bearing-span boundaries.
+std::uint64_t CurrentResidentBytes();
+std::uint64_t CurrentFootprintBytes();
+
 struct RunMetricsOptions {
   // The sampler thread runs only when this is positive. Zero means no thread
   // and no series; the recorder still produces per-span wall, self and CPU
@@ -131,6 +140,32 @@ struct RunMetricsStats {
   bool complete = true;
 };
 
+// SeriesBuffer holds the memory samples and owns the bounded-memory policy.
+//
+// It is the one part of the recorder a second thread appends to, so it is a
+// class with a direct Append rather than a field: tests exercise the policy
+// without starting a thread, and the sampler's two concerns stay separate.
+class SeriesBuffer {
+ public:
+  explicit SeriesBuffer(std::size_t capacity = 65536);
+
+  // Append one sample. While the buffer is below capacity this is a push.
+  // On overflow it drops every other retained sample, halves the size, and
+  // doubles the decimation factor, so the whole timeline stays covered at
+  // coarser resolution rather than the early curve being lost. The first
+  // sample and the newest are never discarded.
+  void Append(MemorySample sample);
+
+  const std::vector<MemorySample>& samples() const { return samples_; }
+  std::uint64_t decimation() const { return decimation_; }
+  std::size_t capacity() const { return capacity_; }
+
+ private:
+  std::size_t capacity_;
+  std::uint64_t decimation_ = 1;
+  std::vector<MemorySample> samples_;
+};
+
 // RunMetrics accumulates one run's measurements.
 //
 // Single-threaded by design: VERITAS takes spans on one thread, so the fold
@@ -170,6 +205,13 @@ class RunMetrics {
   // samples are dropped here, so the result carries percentiles only. Not
   // const, and not repeatable with the same fidelity.
   RunMetricsStats TakeStats();
+
+  // series() exposes the memory sample buffer. The sampler thread is its only
+  // writer while a run is in progress, and TakeStats stops and joins that
+  // thread before reading it, so a caller may append only when no sampler is
+  // running — which is the case for every recorder with the default interval
+  // of zero, and for the tests.
+  SeriesBuffer& series();
 
  private:
   struct Impl;
