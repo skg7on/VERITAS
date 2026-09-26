@@ -52,7 +52,7 @@
   ```
   For CMake files use the same text with `#` instead of `//`.
 - **No RTTI, no exceptions** (`.claude/rules/cpp-compilation-policy.md`). No `dynamic_cast`, `typeid`, `throw`, `try`, or `catch`. Never use throwing standard facilities: no `std::stoi`, `std::stoull`, `std::stod`, `std::map::at`, `std::vector::at`, or `std::thread`. Parse integers with `std::strtoull`, and use `std::filesystem`'s `std::error_code` overloads. Fallible functions return `veritas::Status` or `veritas::StatusOr<T>`.
-- **Span names must not contain `.`** They are emitted as-is and are the artifact's node keys.
+- **Span names are dotted paths** — `m5.svf.andersen`, `wpa.component.execute` — emitted as-is, and they are the artifact's node keys. They are **not parsed**: the span tree is assembled by parent index, not by splitting on `.`, so a dot inside a name is ordinary text. An earlier draft of this plan forbade dots in span names because that draft's tree assembly split on them; that assembly was replaced during pre-flight review and the constraint was left behind. The stale wording still sits in `include/veritas/core/RunMetrics.h`'s comment and is corrected in Task 2's fix round (ruling R19).
 - **Metrics never touch identity.** Spec section 5.2 is binding: metrics options are not fields of `AnalysisConfig`; the recorder is a parameter, never a field of a hashed struct; no span duration may drive a budget, timeout, or retry.
 - **Commit trailer.** Every commit ends with `Co-Authored-By: Claude Code <noreply@anthropic.com>`.
 - **Two clock reads per span maximum.** `getrusage` is captured only on `SpanMode::kBearing` spans. Do not add it to `kPlain` or `kDistributed`.
@@ -1105,6 +1105,12 @@ struct RunReport {
   StoreSummary store;
   core::RunMetricsOptions metrics_options;
   core::RunMetricsStats metrics;
+  // The one analysis-config knob no configuration hash covers. It changes what
+  // the run does — a second full WPA whose canonical results must agree — so a
+  // reader comparing two artifacts needs it, and cannot recover it from
+  // svf_config_hash or wpa_config_hash. Every other AnalysisConfig field IS
+  // covered by one of those two hashes; see design section 6.3.
+  bool conformance_oracle = false;
 };
 
 // RenderRunReportJson emits the versioned artifact. Object keys are written in
@@ -2457,6 +2463,7 @@ Populate the report from these exact sources. **Output-scale counts come from th
 | --- | --- |
 | `identity.*` | `*result` (`run_id` is `wpa_run_id`, `projection_id`, `revision_id`, `build_variant_id`) and `manifest->context` (`repository_id`) |
 | `metrics_options`, `metrics` | the recorder: `metrics.TakeStats()` and the options you constructed |
+| `conformance_oracle` | `config.run_cpp_conformance_oracle` — the one AnalysisConfig knob neither configuration hash covers (design section 6.3) |
 | `environment` | `observability::FillEnvironment` |
 | `inventory.input.*` | `manifest->context` |
 | `inventory.output.summaries_published` | `result->published_summary_ids.size()` |

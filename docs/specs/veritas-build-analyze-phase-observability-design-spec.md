@@ -378,7 +378,7 @@ are named in section 9.2. The sampler thread exists only when recording is on.
   "environment": { "os": "", "arch": "", "cpu_model": "", "cores": 0,
                    "ram_bytes": 0, "build_type": "", "host_compiler": "",
                    "veritas_version": "", "git_revision": "" },
-  "config":      { "analysis": {}, "metrics": {} },
+  "config":      { "metrics": {}, "conformance_oracle": false },
   "inventory":   { "input":  { "translation_units": 0, "compiler_id": "",
                                "compiler_version": "", "target_triple": "",
                                "source_tree_hash": "", "include_closure_hash": "" },
@@ -399,7 +399,26 @@ are named in section 9.2. The sampler thread exists only when recording is on.
 ```
 
 `identity` is the block that moves run to run, and it is separated precisely so
-that a comparison script can ignore it. **Durations are integer nanoseconds and
+that a comparison script can ignore it.
+
+**Why `config` echoes the analysis configuration only as a hash and one flag.**
+The effective `AnalysisConfig` is already recoverable from the two configuration
+hashes in `identity`: `wpa_configuration_hash` covers the component timeout,
+memory cap, thread count, and the rule and model bundle versions
+(`src/analysis/ProjectAnalyzer.cpp:106-122`), and `svf_configuration_hash`
+covers the pointer-analysis kind, soft budget, graph-node, emitted-fact, and
+alias-pair limits and field sensitivity (`:99-101` via `ToSvfConfig`, `:82-91`).
+A change to any of those fields moves the corresponding hash, so two runs whose
+hashes agree had the same effective configuration. Echoing the fields
+individually would duplicate that and force this library to depend on the
+analysis library's config type.
+
+The one exception is `run_cpp_conformance_oracle`: no hash covers it, and it
+changes what the run *does* by executing a second full WPA and requiring the two
+canonical results to agree. It is therefore emitted explicitly as
+`config.conformance_oracle`. This is why the block carries
+`{ "metrics": {}, "conformance_oracle": false }` rather than the
+`{ "analysis": {}, "metrics": {} }` an earlier draft showed. **Durations are integer nanoseconds and
 never floating point.** A float's text form is a diff-noise and portability
 hazard, and byte-diffing is this file's purpose; the text report performs the
 human conversion.
