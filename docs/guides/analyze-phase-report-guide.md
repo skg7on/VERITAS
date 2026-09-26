@@ -76,9 +76,9 @@ under-estimate, clamped at zero rather than reported negative.
 
 **`-` means nothing measured that column, not zero.** The three trailing
 columns can show it. The CPU column is `-` on any span whose mode does not
-record CPU time (the five `wpa.component.*` spans), and the peak and delta
+record CPU time (the **four** `wpa.component.*` spans), and the peak and delta
 columns are `-` on any span that has no memory window — which today is those
-same five, plus every bearing span on a run with no memory samples. The wall
+same four, plus every bearing span on a run with no memory samples. The wall
 and self columns always carry a duration. A *measured* zero prints as a value:
 `0ns` for a duration, `0 B` for a byte count. The distinction is deliberate
 and is the subject of
@@ -89,11 +89,19 @@ alphabetically so that two runs of the same pipeline render identically, which
 means a reader looking for the order phases ran in should follow the pipeline
 description in the design spec (§4.6) rather than the row order.
 
-Two further blocks follow the tree, and are omitted rather than zeroed when
-nothing was recorded:
+Three further blocks follow the tree, in this order. Each is omitted rather
+than zeroed when nothing was recorded, so an absent block means *not measured*,
+not *measured zero*:
 
-- the per-component distribution block — `execute p50 … p95 … p99 … max` and
-  the slowest occurrences retained, for each distributed span (spec §4.3);
+- the per-component distribution block — for each distributed span, one line
+  naming the span in full (`wpa.component.execute p50 1.9ms · p95 14.2ms ·
+  p99 41.0ms · max 2.31s`), then a `slowest:` line with the occurrences
+  retained by `--metrics-top-n` (spec §4.3);
+- the component totals — `WPA components: <expected> expected, <reused>
+  reused, <executed> executed`. `expected` is the sum of the per-kind expected
+  counts the run recorded; `reused` and `executed` are the component loop's own
+  counters. It is omitted when no per-kind count and neither counter was
+  recorded (spec §6.4);
 - `Store:` — row counts per published table and byte sizes per store file,
   then `Cross-check:` — a count the pipeline held in memory against the same
   count read back from the store (spec §4.7).
@@ -101,11 +109,14 @@ nothing was recorded:
 ## 3. `cpu_inclusive` and its one caveat
 
 `cpu_inclusive` is the **process** CPU delta across the span's window: every
-thread's work in that window, not just the thread inside the span. That is
-exactly the right instrument for the question an external timing tool cannot
-answer — round 3 measured 421.67 s CPU against 572.82 s wall on this command
-and could not attribute the gap — and it is the wrong number to read as "this
-span's own cost" if the codebase ever becomes multi-threaded.
+thread's work in that window, not just the thread inside the span. Its value is
+**per-phase** attribution — which phase inside the run consumed the CPU — and
+that is what a process-wide figure cannot give: a run-level CPU number says
+the run was CPU-bound but never says where the CPU went. It is *not* there to
+close a run-level wall-versus-CPU gap, which on a single-threaded CPU-bound run
+is small: round 3's record puts wall minus CPU at 0.07–1.24 s across the runs
+of its post-round series. And it is the wrong number to read as "this span's
+own cost" if the codebase ever becomes multi-threaded.
 
 Today the distinction is academic: VERITAS is single-threaded at the component
 level, the Soufflé executor rejects `limits.threads != 1`, and the only other
@@ -163,10 +174,14 @@ appear (spec §11.4).
 
 The nesting is worth noting because it is not the same as the file boundary:
 `wpa.graph_build` and `wpa.scc_state_flush` are siblings of `wpa.orchestrate`
-under `run`, not children of it, and the `facts.*` spans likewise hang directly
-off `run` rather than under the WPA spans that precede them in wall time.
+under `run`, not children of it. Three of the `facts.*` spans likewise hang
+directly off `run` rather than under the WPA spans that precede them in wall
+time — `facts.batch_assemble`, `facts.store_open` and `facts.publish` — while
+the remaining two, `facts.publish.validate` and `facts.publish.sink.fact-store`,
+are children of `facts.publish`: `AnalysisFactBus::Publish` opens both inside
+the `facts.publish` span.
 
-The five `wpa.component.*` spans are **distributed**: they run once per
+The four `wpa.component.*` spans are **distributed**: they run once per
 component, so instead of one row per occurrence they report one aggregate row
 plus a percentile block. The four component spans hang under
 `wpa.orchestrate`, and repeated occurrences fold into a single node by
@@ -204,10 +219,13 @@ Two bounds on the series are worth knowing when you read it:
 
 - The buffer holds 65,536 samples. On overflow it does **not** ring-buffer —
   a ring would discard the early curve, which is where the SVF burst lives.
-  It drops every other retained sample, halves the buffer, and doubles
-  `series_decimation`, so the whole timeline survives at coarser resolution.
-  The factor is written into the artifact; a decimation above 1 means the
-  series is thinner than the sample interval suggests.
+  It drops every other retained sample and doubles `series_decimation`. The
+  capacity is unchanged: it is the *retained* series that halves, so the buffer
+  then refills to capacity and thins again, and again, keeping the whole
+  timeline at coarser resolution rather than losing its start. The first and
+  newest samples survive each thinning. The factor is written into the artifact;
+  a decimation above 1 means the series is thinner than the sample interval
+  suggests.
 - **The `run` row excludes the report's own rendering and writing.** The
   `run` span closes before either the report or the artifact is produced, so
   the number the whole report is anchored to is the analysis command's time and
@@ -243,14 +261,23 @@ measurement — and the peak would be silently lost (spec §6.3). So a run with
 the series suppressed still carries `memory.peak` and `series_decimation`, and
 no `series`.
 
-**Rule 2 — an `identity` field with no value omits its key entirely.** The
-`identity` block is where the two runs of a diff differ, and `""` is a
-*value*: an empty `wpa_config_hash` compares equal against a run that was
+**Rule 2 — an `identity` field with no value omits its key entirely.** `""` is
+a *value*: an empty `wpa_config_hash` compares equal against a run that was
 configured differently and reads as "unchanged", which is precisely the
 comparison failure this artifact exists to prevent. In practice all nine
 fields are populated on any successful run, because a WPA failure returns
 before the report is built; the omission rule is the guard for the case where
 that stops being true (spec §6.3).
+
+Only two of those nine fields, though, are *run-scoped*: `run_id` and
+`batch_id`. The other seven — `repository_id`, `revision_id`,
+`build_variant_id`, `projection_id`, `svf_config_hash`, `wpa_config_hash` and
+`engine_toolchain_identity` — are content- and config-derived, so two runs of
+one fixture agree on every one of them. Excluding the whole block to calm a
+diff therefore throws away exactly the configuration comparison the block
+exists for: two runs whose `wpa_config_hash` values differ did *not* have the
+same effective configuration. Exclude the two run-scoped keys, not the block
+(section 8, rule 6).
 
 The same discipline shows up in the text report as the `-` in
 [section 2](#2-the-columns), and in the JSON as keys that appear only on the
@@ -269,11 +296,21 @@ different claims about the run:
 
 Notes are expected on a healthy run — today three of them appear on every run
 (section 9) — while a degradation is not. The two are told apart on stderr
-because an operator needs that distinction at a glance, and the artifact
-carries both kinds together in its `diagnostics` array, where the difference
-is visible as the value of `complete`. The split exists so that a run full of
-unfilled fields does not wear out the words that have to mean something on the
-run where the write really did fail.
+because an operator needs that distinction at a glance. The split exists so
+that a run full of unfilled fields does not wear out the words that have to
+mean something on the run where the write really did fail.
+
+**The artifact does not carry that distinction.** Both kinds are entries in one
+`diagnostics` array, and `complete` is a single top-level boolean: it tells you
+whether the run had *any* degradation, not which entries are notes. On a run
+with both kinds — the only run where the question arises — you cannot classify
+the entries from the artifact at all; the per-entry discriminator is the stderr
+prefix, so a script that wants the classification must read stderr.
+
+One degradation can never be classified from the artifact even in principle.
+The unwritable-artifact case below is appended to `diagnostics` *after* the
+artifact has been rendered and written, and the artifact is not rendered again,
+so that `degraded` line cannot appear inside an artifact — only on stderr.
 
 Two checks are enough to judge a run: no `metrics degraded:` line on stderr,
 and `"complete": true` in the artifact. The absence of the artifact means
@@ -286,10 +323,13 @@ failed. Metrics never fail the analysis (spec §7.1).
 
 ## 8. The diffability contract
 
-These six rules are the contract that makes `run-metrics.json` diffable byte
-for byte. They are recorded so that a future instrument does not quietly break
-them (spec §6.5); changing one is an artifact-format change, not an internal
-detail.
+These six rules are the contract that makes `run-metrics.json` diffable. They
+fix ordering and representation, not values: timings, counters, `run_id` and
+`batch_id` all still move, so the `diff` of two real runs is non-empty by
+design. What the rules guarantee is that everything in it is a real difference
+rather than a re-ordering or a float's text form. They are recorded so that a
+future instrument does not quietly break them (spec §6.5); changing one is an
+artifact-format change, not an internal detail.
 
 1. JSON object keys are sorted; counters are sorted by name, so instrumentation
    order cannot leak into the artifact.
@@ -299,19 +339,30 @@ detail.
    form is a diff-noise and portability hazard. The text report performs the
    human conversion.
 4. **No absolute paths anywhere in the artifact.** `project_root` is
-   deliberately excluded: it is the one field guaranteed to differ between
-   machines and checkouts, and `manifest.json` already carries it. Where a
-   store read-back failure would have quoted a path, the artifact describes the
-   failure instead.
+   deliberately excluded, and `manifest.json` already carries it. That does
+   *not* make it the only machine-scoped content: the `environment` block is
+   machine-scoped throughout — `os`, `arch`, `cpu_model`, `cores`, `ram_bytes`,
+   `build_type`, `host_compiler`, `veritas_version`, `git_revision` — so a
+   script that wants cross-machine diffs must exclude that block as well as the
+   run-scoped coordinates of rule 6. Where a store read-back failure would have
+   quoted a path, the artifact describes the failure instead.
 5. The memory series lives in its own block, so `--metrics-series false` yields
    a calm diff.
 6. The `identity` block is separable, so a comparison script can exclude the
-   run-scoped coordinates without parsing the rest of the artifact.
+   **run-scoped** coordinates without parsing the rest of the artifact. Exclude
+   them selectively: only `run_id` and `batch_id` move between two runs of one
+   fixture (section 6, rule 2).
 
 ## 9. Fields reported as not recorded today
 
-Three inventory fields are emitted with a `metrics note:` line and a zero,
-because no producer can fill them. They are not measurements:
+Three inventory fields have no producer that can fill them. They are not
+measurements, and the artifact says so in the strongest form it has: **the key
+is absent.** Key absent means "not measured"; a present key means "measured" —
+the same mechanism [section 6](#6-the-two-rules-that-make-absence-visible)
+describes for `memory`, applied to a numeric field. It has to be the key,
+because `0` is a *value*: a script diffing two artifacts would otherwise read
+`svfg_edges: 0` in both and conclude it was unchanged, when in fact neither run
+measured it.
 
 | Field | Why it is empty |
 | --- | --- |
@@ -319,14 +370,15 @@ because no producer can fill them. They are not measurements:
 | `inventory.incrementality.summaries_recomputed` | no producer anywhere in the pipeline |
 | `inventory.incrementality.summaries_reused` | no producer anywhere in the pipeline |
 
-Read the three with care, because they do not use the mechanism
-[section 6](#6-the-two-rules-that-make-absence-visible) describes for
-`memory`. The keys **are** present in the artifact, carrying the value `0`, and
-the not-recorded status is carried by the `diagnostics` array and the stderr
-note rather than by the key's absence. A comparison script that reads only the
-numbers will therefore see a zero here. Check `diagnostics`, or `complete`
-together with the stderr lines, before treating a zero in these three fields
-as a measurement.
+Each still carries its `metrics note:` line on stderr, so the absence is named
+as well as visible (spec §6.3).
+
+> **This is the intended contract, and the code is being changed to match it.**
+> As this guide is first written, the artifact still emits all three keys with
+> the value `0` and relies on `diagnostics` to say they were not measured. The
+> change to key omission lands in the same change as this guide. An artifact
+> produced before it carries the three keys at `0`, and for those, stderr is
+> the only thing that distinguishes "not measured" from "measured zero".
 
 `svfg_edges` is the instructive one. A source appeared to exist:
 `SVFG::getTotalEdgeNum()` is reachable through `SVFG → VFG → GenericGraph`,
@@ -349,7 +401,10 @@ The same discipline applies to counters generally. Output-scale counts
 execute counts, the per-kind expected counts) travel as recorder counters added
 at the producing site, so a counter that was never recorded leaves its report
 field at zero **and** records a note naming it. There is no second plumbing
-path that could supply a plausible default.
+path that could supply a plausible default. These fields differ from the three
+above in that a producer exists and normally runs: for them the note, not the
+key's absence, is what marks the difference between a measured zero and an
+unfilled field, because the key is present either way.
 
 ## 10. The flags
 
