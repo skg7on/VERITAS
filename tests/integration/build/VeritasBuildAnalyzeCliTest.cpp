@@ -98,6 +98,13 @@ TEST(VeritasBuildAnalyzeCliTest, AcceptsProjectLevelSourceInput) {
             std::string::npos)
       << result.stdout_text;
   EXPECT_TRUE(fs::is_regular_file(project / ".veritas" / "manifest.json"));
+  // The metrics artifact follows the output root, so with `--output` omitted it
+  // lands inside the same `.veritas` directory rather than beside it or in a
+  // directory of its own. That is the requirement, and nothing pinned it: the
+  // assertion above covers the manifest only, so an artifact written elsewhere
+  // would have gone unnoticed.
+  EXPECT_TRUE(
+      fs::is_regular_file(project / ".veritas" / "run-metrics.json"));
 }
 
 TEST(VeritasBuildAnalyzeCliTest, HonorsExplicitOutputDirectory) {
@@ -109,6 +116,8 @@ TEST(VeritasBuildAnalyzeCliTest, HonorsExplicitOutputDirectory) {
       {"analyze", "--project", project.string(), "--output", output.string()});
   EXPECT_EQ(result.exit_code, 0) << result.stdout_text;
   EXPECT_TRUE(fs::is_regular_file(output / "manifest.json"));
+  // The artifact follows the explicit root as well as the default one.
+  EXPECT_TRUE(fs::is_regular_file(output / "run-metrics.json"));
   EXPECT_FALSE(fs::exists(project / ".veritas"));
 }
 
