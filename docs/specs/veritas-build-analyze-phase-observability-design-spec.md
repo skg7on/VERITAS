@@ -425,6 +425,28 @@ are named in section 9.2. The sampler thread exists only when recording is on.
 `identity` is the block that moves run to run, and it is separated precisely so
 that a comparison script can ignore it.
 
+**Three inventory fields have no source and are reported as not recorded, not as
+zero.** `inventory.output.svfg_edges`, `inventory.incrementality.
+summaries_recomputed` and `...summaries_reused` are fields the design wants and
+no current producer can fill:
+
+- `svfg_edges` is the sharpest case, because a source *appeared* to exist.
+  `SVFG::getTotalEdgeNum()` is reachable through `SVFG → VFG → GenericGraph`, but
+  it reads `GenericGraph::edgeNum`, and nothing increments that field for a
+  VFG/SVFG: `incEdgeNum()` is called only from `lib/Graphs/CDG.cpp` and
+  `lib/SVFIR/SVFStatements.cpp`, while `VFG::addVFGEdge` maintains only the
+  endpoint nodes' edge lists. It returns 0 for every SVFG ever built. An earlier
+  revision of this design instructed the SVF session to emit it, which would have
+  put a structurally-zero field into the artifact in place of a measurement —
+  a falsehood that is indistinguishable from a measured zero, and therefore
+  precisely what this design exists to prevent.
+- `summaries_recomputed` and `summaries_reused` have no producer at all.
+
+All three are reported with a `metrics note:` line rather than a zero or an
+invented count. The general rule they illustrate: **verify that a source carries
+the value, not merely that it exists.** Checking that an accessor is reachable
+is not checking that anything writes what it reads.
+
 **Three things in the shape above are conditional, and the example shows their
 populated form only.** Every empty string shown is a *shape*, not a value the
 artifact may contain.

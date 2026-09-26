@@ -2592,7 +2592,8 @@ So this task carries a **small authorized cross-task change**: add four fields t
 | `inventory.output.summaries_published` | `result->published_summary_ids.size()` |
 | `inventory.output.unknowns_by_reason` | histogram over `result->unknowns`, keyed by `reason`, sorted by key |
 | `inventory.output.cpg_nodes`, `cpg_edges` | `result->cpg_node_count`, `result->cpg_edge_count` |
-| `inventory.output.svfg_nodes`, `svfg_edges` | counter `svf.svfg_nodes`, `svf.svfg_edges` |
+| `inventory.output.svfg_nodes` | counter `svf.svfg_nodes` |
+| `inventory.output.svfg_edges` | **no source** — reported as not recorded with a `metrics note:`, like `summaries_recomputed` and `summaries_reused`. See the span-inventory note in this task: the SVFG has no live edge counter, and an always-zero field would be a falsehood rather than a measurement. |
 | `inventory.output.components_by_kind` | counters named `wpa.component.<kind-name>.expected` |
 | `inventory.output.rooted_input_facts` | counter `facts.rooted_input` |
 | `inventory.output.canonical_facts` | counter `facts.canonical` |
@@ -2655,13 +2656,14 @@ Inside the callback, where `view.svfg` is still live, record the SVFG scale as c
     metrics->AddCounter("svf.svfg_nodes",
                         static_cast<std::uint64_t>(view.svfg->getSVFGNodeNum()),
                         "count");
-    metrics->AddCounter("svf.svfg_edges",
-                        static_cast<std::uint64_t>(view.svfg->getTotalEdgeNum()),
-                        "count");
   }
 ```
 
-`getSVFGNodeNum()` is `SVFG.h:271-274`; `getTotalEdgeNum()` is `GenericGraph.h:428-431`, reachable because `SVFG` derives from `VFG` and thence from `GenericGraph`. `view` is valid only inside the callback, so these counts must be taken there and not later.
+`getSVFGNodeNum()` is `SVFG.h:271-274` and it carries the value: `SVFG::addSVFGNode` maintains `nodeNum`. `view` is valid only inside the callback, so the count must be taken there and not later.
+
+**There is NO edge counter, and an earlier draft of this plan was wrong to add one.** It said to use `SVFG::getTotalEdgeNum()`, having verified that the method *exists* — reachable through `SVFG → VFG → GenericGraph`. Existence was not the question. The method reads `GenericGraph::edgeNum`, and nothing increments that field for a VFG/SVFG: `grep` over the vendored SVF finds `incEdgeNum()` called only from `lib/Graphs/CDG.cpp` and `lib/SVFIR/SVFStatements.cpp`, while `VFG::addVFGEdge` maintains only the endpoint nodes' in/out edge lists and never touches the counter. So it returns 0 for every SVFG ever built — and the implementer measured exactly that: `svf.svfg_edges` 0 against `svf.svfg_nodes` 24, while SVF's own SVFG stat for the same graph reports 19 edges.
+
+**Do not emit an always-zero counter.** A field that reads 0 because nothing writes it is indistinguishable from a measured zero, which is the failure this whole design exists to prevent — and emitting it while *knowing* it is structurally zero would be shipping a known falsehood in the artifact. So `svf.svfg_edges` is dropped, and `inventory.output.svfg_edges` is reported as **not recorded** (a `metrics note:` line), exactly like `summaries_recomputed` and `summaries_reused`. If a future task wants the number, `SVFGStat` computes it for its own reporting — but it is a stat printer rather than an accessor, so reaching it is its own piece of work, not a one-line addition.
 
 **Two call sites in `ProjectAnalyzer.cpp` must change, and they pull in opposite directions.**
 
@@ -2690,7 +2692,7 @@ In `src/wpa/WpaOrchestrator.cpp`, read `request.metrics` once into a local. Arou
 | Span | Mode | Site |
 | --- | --- | --- |
 | `wpa.orchestrate` | `kBearing` | around `Run`'s component loop |
-| `wpa.graph_build` | `kBearing` | `:150-170` |
+| `wpa.graph_build` | `kBearing` | **`:131-170`** — it must enclose the call/SCC graph construction *and* the frozen expected set, not the latter alone |
 | `wpa.component.materialize` | `kDistributed` | `:176-194` plus `:203-210` |
 | `wpa.component.cache_lookup` | `kDistributed` | `:212-214` |
 | `wpa.component.execute` | `kDistributed` | `:227` |
@@ -2698,6 +2700,8 @@ In `src/wpa/WpaOrchestrator.cpp`, read `request.metrics` once into a local. Arou
 | `wpa.scc_state_flush` | `kBearing` | `:292` |
 
 Give every distributed span a label via `token`/`SetLabel` of the form `<component-kind>/<scc-id>` so top-N entries are attributable. **Do not call `AddCounter` inside the loop** — accumulate into local counters and add them once after the loop, so the counter list stays small and deterministic.
+
+**A span must measure what its name says, so move the span rather than the code.** Build the call/SCC graph *inside* `wpa.graph_build`. A first implementation opened the span after the `CallGraph`/`SccGraph`/`WpaSummaryIndex` construction, to get a clean scope boundary, which leaves the graph's actual construction unmeasured by the span named for it — a measurement that misattributes cost, which is the error three performance rounds made and this feature exists to eliminate. If a scope boundary is awkward, open the span earlier; do not hoist the construction out of it.
 
 After the loop add:
 
@@ -2814,7 +2818,7 @@ TEST(PhaseObservabilityIdentityTest, RecordsTheExpectedSpanTree) {
   for (const core::Counter& counter : stats.counters) {
     counters[counter.name] = counter.value;
   }
-  for (const char* name : {"svf.svfg_nodes", "svf.svfg_edges",
+  for (const char* name : {"svf.svfg_nodes",
                            "wpa.components.expected", "wpa.components.reused",
                            "wpa.components.executed", "facts.rooted_input",
                            "facts.canonical"}) {
@@ -2929,7 +2933,7 @@ git commit -m "docs(analyze): record phase-observability overhead and add the re
 **The initial draft's soft spot, and how it was closed.** The first version of T5/T6 named the inventory fields but left their assembly to the implementer, because the counting sites had not been read. That is a placeholder wearing a caveat, so the sites were read and the plan now names real APIs:
 
 - SVFG nodes: `SVFG::getSVFGNodeNum()` (`third_party/SVF/svf/include/Graphs/SVFG.h:271-274`), verified.
-- SVFG edges: `GenericGraph::getTotalEdgeNum()` (`third_party/SVF/svf/include/Graphs/GenericGraph.h:428-431`), verified reachable through `SVFG → VFG → GenericGraph`.
+- SVFG edges: **no counter exists.** `GenericGraph::getTotalEdgeNum()` (`third_party/SVF/svf/include/Graphs/GenericGraph.h:428-431`) is reachable through `SVFG → VFG → GenericGraph`, but it reads a field that nothing writes for these graph types — `incEdgeNum()` is called only from `lib/Graphs/CDG.cpp` and `lib/SVFIR/SVFStatements.cpp`, and `VFG::addVFGEdge` maintains only the endpoint nodes' edge lists. It returns 0 for every SVFG. Recorded here as the run's clearest instance of a **verification that checked existence rather than semantics**: this plan originally cited that line as "verified" and instructed an implementer to emit it, which would have shipped an always-zero field in place of a measurement. The implementer measured it (0 against 24 nodes, where SVF's own stat says 19) and reported rather than substituting silently.
 - Component kind: `ComponentKindName(WpaComponentKind)` (`include/veritas/wpa/WpaComponent.h:52`); `WpaComponentKey` carries `scc_id` and `component` (`include/veritas/wpa/WpaRunRepository.h:58-63`).
 - Store counts: `MetadataStore::Open` and `MetadataStore::Query` (`include/veritas/summarydb/MetadataStore.h:94,128`).
 - Test fixture helper: `veritas::testing::FixtureProject(std::string_view)` (`tests/support/ProjectFixture.h:40`).
