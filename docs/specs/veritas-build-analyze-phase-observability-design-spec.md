@@ -440,8 +440,15 @@ are named in section 9.2. The sampler thread exists only when recording is on.
 }
 ```
 
-`identity` is the block that moves run to run, and it is separated precisely so
-that a comparison script can ignore it.
+`identity` is separated because part of it is run-scoped, so a comparison script
+can exclude those coordinates without parsing the rest. **Exclude them
+selectively, not wholesale.** Only `run_id` and `batch_id` move between two runs
+of the same fixture; the other seven fields are content- and config-derived and
+therefore stable, and they are the comparison the block exists to enable. An
+earlier revision of this sentence said the block was separated so a script "can
+ignore it" — the wholesale reading that section 6.5's rule 6 corrects, and the
+one that would discard the configuration evidence while believing it had
+excluded noise.
 
 **Three inventory fields have no source and are reported as not recorded, not as
 zero.** `inventory.output.svfg_edges`, `inventory.incrementality.
@@ -556,18 +563,26 @@ produces none.
 
 ```
 Analysis phase report
-  run                                         572.820s    0.101s  421.670s   8.59 GiB  +8.59 GiB
-  ├─ cli.ingest                                 1.234s    1.100s    1.234s   0.89 GiB  +0.12
-  ├─ m5.svf                                   105.100s  105.100s   52.910s   3.52 GiB  +2.34
-  │  ├─ m5.svf.andersen                        20.300s   20.300s   20.300s   2.90 GiB  +1.10
-  │  └─ m5.svf.svfg                            32.610s   32.610s   32.610s   3.52 GiB  +0.62
-  └─ wpa.orchestrate                          254.900s   41.200s  186.400s   6.92 GiB  +3.40
+  run                                           6.240s    0.180s    6.410s   1.02 GiB  +0.41 GiB
+  ├─ cli.ingest                                 0.412s    0.390s    0.412s   0.11 GiB  +0.02 GiB
+  ├─ m5.svf                                     2.810s    2.810s    2.640s   0.86 GiB  +0.24 GiB
+  │  ├─ m5.svf.andersen                         0.980s    0.980s    0.980s   0.60 GiB  +0.11 GiB
+  │  └─ m5.svf.svfg                             1.120s    1.120s    1.030s   0.86 GiB  +0.09 GiB
+  └─ wpa.orchestrate                            2.230s    0.470s    2.980s   1.02 GiB  +0.15 GiB
 WPA components: 13716 expected, 5614 reused, 8102 executed
-  execute p50 1.9ms · p95 14.2ms · p99 41.0ms · max 2.31s
+  wpa.component.execute p50 1.9ms · p95 14.2ms · p99 41.0ms · max 2.31s
   slowest: flow/scc:sha256:4a1c… 2.310s · memory_effects/scc:sha256:8f02… 1.870s
 Store: analysis_facts 1249792 rows · provenance_edges 1375911 rows · metadata.db 412 MiB · total 3.18 GiB
 Cross-check: components 13716 (store) == 13716 (in-memory) OK
 ```
+
+Three details in that sample are load-bearing, and an earlier revision got all
+three wrong: **every** delta carries its unit, not only the first row, because
+`FormatSignedBytes` always appends one; the block label is the span's **full**
+name (`wpa.component.execute`), matching what the renderer prints; and the row
+counts are deliberately unlike any figure quoted elsewhere in this document,
+because an earlier revision reused the two numbers that section 4.2 now records
+as a mispaired citation.
 
 ### 6.5 Diffability rules
 

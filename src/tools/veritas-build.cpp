@@ -401,15 +401,20 @@ std::vector<std::size_t> FillReport(
     const veritas::analysis::AnalysisConfig& config,
     const fs::path& output_root,
     veritas::observability::RunReport* report) {
-  // The identity block is the part that moves run to run, separated so a
-  // comparison script can exclude it wholesale. Every coordinate comes from the
-  // run itself: four from the analysis outcome, the repository from the
-  // manifest, and the two configuration hashes, the toolchain identity and the
-  // batch id from the fields ProjectAnalysisResult carries for exactly this
-  // purpose. Without them the artifact would record no configuration at all —
-  // nothing would separate a cpp-emergency, non-field-sensitive, or
-  // alias-limited run from the default — and an unset coordinate written as ""
-  // would diff as unchanged, which is the failure this block exists to prevent.
+  // The identity block is separated so a comparison script can exclude its
+  // run-scoped coordinates without parsing the rest — SELECTIVELY, not
+  // wholesale: only run_id and batch_id move between two runs of one fixture,
+  // while the two configuration hashes, the toolchain identity, projection id
+  // and the revision coordinates are content- and config-derived and stable.
+  // Excluding the whole block would discard exactly the comparison it exists to
+  // enable. Every coordinate comes from the run itself: four from the analysis
+  // outcome, the repository from the manifest, and the two configuration hashes,
+  // the toolchain identity and the batch id from the fields
+  // ProjectAnalysisResult carries for exactly this purpose. Without them the
+  // artifact would record no configuration at all — nothing would separate a
+  // cpp-emergency, non-field-sensitive, or alias-limited run from the default —
+  // and an unset coordinate written as "" would diff as unchanged, which is the
+  // failure this block exists to prevent.
   report->identity.run_id = result.wpa_run_id;
   report->identity.projection_id = result.projection_id;
   report->identity.revision_id = result.revision_id;
