@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -147,6 +148,17 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
     return begin;
   }
 
+  // Opened above the call graph and closed once the expected set is frozen, so
+  // the span covers the construction its name promises rather than only the
+  // publication of the result. It cannot be a scope block: `scc_graph` and
+  // `summary_index` are read by the component loop below, so the values built
+  // under the span outlive it, and PhaseSpan is neither copyable nor movable,
+  // which is why the holder is constructed in place and reset at the freeze
+  // point. Every early return in between leaves the function through this
+  // destructor, so the span stays balanced on all of them.
+  std::optional<core::PhaseSpan> graph_build;
+  graph_build.emplace(metrics, "wpa.graph_build", core::SpanMode::kBearing);
+
   auto call_graph = CallGraph::FromSummaries(request.summaries);
   if (!call_graph.ok()) {
     repository_.MarkIncomplete(request.run);
@@ -163,34 +175,31 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
     return summary_index.status();
   }
 
-  WpaRunResult result;
-  result.run = request.run;
-
   SccContext context;
   context.revision_id = core::ToString(request.run.revision_id);
   context.build_variant_id = core::ToString(request.run.build_variant_id);
-  const auto scc_order = scc_graph->ReverseTopologicalOrder();
-
-  // The persisted call/SCC graph and the frozen expected set are one measured
-  // unit: the set is read off the same SCC order the graph state was built
-  // from, so the two cannot describe different decompositions.
-  {
-    core::PhaseSpan span(metrics, "wpa.graph_build", core::SpanMode::kBearing);
-    if (scc_state_ != nullptr) {
-      Status published =
-          scc_state_->PublishGraph(context, *call_graph, *scc_graph);
-      if (!published.ok()) {
-        repository_.MarkIncomplete(request.run);
-        return published;
-      }
-    }
-
-    for (const auto& scc_id : scc_order) {
-      for (const auto component : request.components) {
-        result.expected_components.push_back({scc_id, component});
-      }
+  if (scc_state_ != nullptr) {
+    Status published =
+        scc_state_->PublishGraph(context, *call_graph, *scc_graph);
+    if (!published.ok()) {
+      repository_.MarkIncomplete(request.run);
+      return published;
     }
   }
+
+  WpaRunResult result;
+  result.run = request.run;
+
+  const auto scc_order = scc_graph->ReverseTopologicalOrder();
+  for (const auto& scc_id : scc_order) {
+    for (const auto component : request.components) {
+      result.expected_components.push_back({scc_id, component});
+    }
+  }
+
+  // The freeze point. Everything the span was opened to measure is built, and
+  // the component loop below is `wpa.orchestrate`'s to account for.
+  graph_build.reset();
 
   // Where each completed component's result lives in `result.completed_components`,
   // which is the single owner of every component's facts and witnesses.

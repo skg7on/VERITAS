@@ -83,7 +83,10 @@ TEST(PhaseObservabilityIdentityTest, RecordsTheExpectedSpanTree) {
   // reason that has nothing to do with the instrumentation it exists to prove.
   std::string output_template =
       (fs::temp_directory_path() / "veritas-metrics-spans-XXXXXX").string();
-  const fs::path output = ::mkdtemp(output_template.data());
+  char* created = ::mkdtemp(output_template.data());
+  ASSERT_NE(created, nullptr) << "cannot create an output root under "
+                              << fs::temp_directory_path();
+  const fs::path output = created;
   const ProjectAnalysisRequest request{.project_root = project,
                                        .output_root = output};
 
@@ -131,10 +134,9 @@ TEST(PhaseObservabilityIdentityTest, RecordsTheExpectedSpanTree) {
   for (const core::Counter& counter : stats.counters) {
     counters[counter.name] = counter.value;
   }
-  for (const char* name : {"svf.svfg_nodes", "svf.svfg_edges",
-                           "wpa.components.expected", "wpa.components.reused",
-                           "wpa.components.executed", "facts.rooted_input",
-                           "facts.canonical"}) {
+  for (const char* name : {"svf.svfg_nodes", "wpa.components.expected",
+                           "wpa.components.reused", "wpa.components.executed",
+                           "facts.rooted_input", "facts.canonical"}) {
     EXPECT_EQ(counters.count(name), 1u) << name << " missing";
   }
   EXPECT_GT(counters["wpa.components.expected"], 0u);

@@ -465,7 +465,6 @@ std::vector<std::size_t> FillReport(
   // Output-scale counts come from the recorder's counters, never from a second
   // plumbing path: the producing site is where the number is known.
   output.svfg_nodes = builder.Counter("svf.svfg_nodes");
-  output.svfg_edges = builder.Counter("svf.svfg_edges");
   output.rooted_input_facts = builder.Counter("facts.rooted_input");
   output.canonical_facts = builder.Counter("facts.canonical");
   veritas::observability::RunIncrementality& incrementality =
@@ -473,14 +472,21 @@ std::vector<std::size_t> FillReport(
   incrementality.components_reused = builder.Counter("wpa.components.reused");
   incrementality.components_executed =
       builder.Counter("wpa.components.executed");
-  // These two have no producer anywhere in the pipeline, so there is no counter
-  // to read them back from. They stay zero and are named, so "0 recomputed" is
-  // not read as a measurement.
+  // These three have no producer anywhere in the pipeline, so there is no
+  // counter to read them back from. svfg_edges is the sharpest case: a producer
+  // looked like it existed, but the SVF accessor it read returns a field
+  // nothing increments for an SVFG, so it would have reported an always-zero
+  // figure as if it were measured. All three stay zero and are named, so "0
+  // edges" and "0 recomputed" are not read as measurements.
   builder.Note(
       "summaries_recomputed has no producer; the field is zero rather than a "
       "measurement");
   builder.Note(
       "summaries_reused has no producer; the field is zero rather than a "
+      "measurement");
+  builder.Note(
+      "svf_edges has no producer: the SVF SVFG edge counter is never "
+      "incremented in the pinned revision, so the field is zero rather than a "
       "measurement");
 
   // Per-kind expected counts, one counter per kind, named

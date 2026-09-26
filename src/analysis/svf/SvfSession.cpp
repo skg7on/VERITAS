@@ -150,13 +150,15 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
   return [&] {
     core::PhaseSpan span(metrics, "m5.svf.map_facts", core::SpanMode::kBearing);
     // The SVFG is live only inside this scope, so its scale is counted here or
-    // not at all.
+    // not at all -- and only its node count is: `getTotalEdgeNum()` returns
+    // GenericGraph::edgeNum, which nothing increments for a VFG or SVFG (only
+    // CDG and the SVFIR call incEdgeNum; VFG::addVFGEdge maintains the endpoint
+    // nodes' edge lists and never the counter), so it reads 0 for every SVFG
+    // ever built. An always-zero counter is indistinguishable from a measured
+    // zero, so no edge counter is emitted.
     if (metrics != nullptr) {
       metrics->AddCounter("svf.svfg_nodes",
                           static_cast<std::uint64_t>(view.svfg->getSVFGNodeNum()),
-                          "count");
-      metrics->AddCounter("svf.svfg_edges",
-                          static_cast<std::uint64_t>(view.svfg->getTotalEdgeNum()),
                           "count");
     }
     return callback(view);
