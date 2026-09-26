@@ -15,14 +15,18 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "llvm/Support/JSON.h"
 
 #include "ProjectFixture.h"
 
@@ -202,16 +206,62 @@ TEST(VeritasBuildAnalyzeCliTest, WritesRunMetricsByDefault) {
   const std::string json = buffer.str();
   EXPECT_NE(json.find("cli.ingest"), std::string::npos) << json.substr(0, 500);
   EXPECT_NE(json.find("m1.ingest"), std::string::npos) << json.substr(0, 500);
-  // The real root span, not the synthetic fallback: the promotion path in
-  // TakeStats is what keeps the report's total equal to the command's wall time.
-  EXPECT_NE(json.find("\"name\": \"run\""), std::string::npos)
-      << json.substr(0, 500);
+
+  // Parsed, not searched. The synthetic root is named "run" as well, and an
+  // unclosed "run" folds nothing, so a substring search for the name cannot
+  // tell the three apart: a regression to a zeroed total would pass it. Only
+  // the folded count and wall time distinguish the real promoted root.
+  auto parsed = llvm::json::parse(json);
+  ASSERT_TRUE(static_cast<bool>(parsed)) << json.substr(0, 500);
+  const llvm::json::Object* root = parsed->getAsObject();
+  ASSERT_NE(root, nullptr);
+  const llvm::json::Array* phases = root->getArray("phases");
+  ASSERT_NE(phases, nullptr);
+  ASSERT_FALSE(phases->empty());
+  const llvm::json::Object* run = phases->front().getAsObject();
+  ASSERT_NE(run, nullptr);
+  const std::optional<llvm::StringRef> run_name = run->getString("name");
+  ASSERT_TRUE(run_name.has_value()) << json.substr(0, 500);
+  EXPECT_EQ(*run_name, "run");
+  const std::optional<std::int64_t> run_count = run->getInteger("count");
+  ASSERT_TRUE(run_count.has_value()) << json.substr(0, 500);
+  EXPECT_EQ(*run_count, 1);
+  const std::optional<std::int64_t> wall = run->getInteger("wall_inclusive_ns");
+  ASSERT_TRUE(wall.has_value()) << json.substr(0, 500);
+  EXPECT_GT(*wall, 0) << json.substr(0, 500);
+
+  // The identity block is what separates two differently-configured runs, so
+  // an empty configuration coordinate would make the artifact record no
+  // configuration at all. Each of these is a value the run itself produced.
+  const llvm::json::Object* identity = root->getObject("identity");
+  ASSERT_NE(identity, nullptr);
+  for (const char* key : {"run_id", "batch_id", "svf_config_hash",
+                          "wpa_config_hash", "engine_toolchain_identity"}) {
+    const std::optional<llvm::StringRef> value = identity->getString(key);
+    ASSERT_TRUE(value.has_value()) << key << " absent: " << json.substr(0, 500);
+    EXPECT_FALSE(value->empty()) << key << " empty: " << json.substr(0, 500);
+  }
+
+  // A healthy run has nothing to degrade: the absent producers are notes. The
+  // distinction is the whole point of the split, so assert both directions.
+  EXPECT_NE(result.stdout_text.find("veritas-build: metrics note: "),
+            std::string::npos)
+      << result.stdout_text;
+  EXPECT_EQ(result.stdout_text.find("veritas-build: metrics degraded: "),
+            std::string::npos)
+      << result.stdout_text;
 }
 
 TEST(VeritasBuildAnalyzeCliTest, MetricsFalseWritesNoArtifactAndNoReport) {
   const auto project = testing::FixtureProject("multiple_tus");
+  // Not "veritas-metrics-off-": PhaseObservabilityIdentityTest already uses
+  // that prefix for its own metrics-off run, and both files draw their suffix
+  // from an unseeded std::rand(), whose first value is the same in every
+  // process. The two would then analyze into one store — a hazard this
+  // repository has recorded, and one that a serial run never shows.
   const auto output = fs::temp_directory_path() /
-                      ("veritas-metrics-off-" + std::to_string(std::rand()));
+                      ("veritas-metrics-disabled-" +
+                       std::to_string(std::rand()));
   const auto result = RunVeritasBuild({"analyze", "--project", project.string(),
                                        "--output", output.string(),
                                        "--metrics", "false"});

@@ -169,6 +169,34 @@ TEST(RunReportTest, JsonParsesAndCarriesTheSchemaVersion) {
   EXPECT_EQ(*root->getString("schema"), "veritas.run-metrics.v1");
 }
 
+TEST(RunReportTest, OmitsIdentityKeysThatHaveNoValue) {
+  // An unset identity coordinate written as "" diffs as *unchanged* between two
+  // runs that differ exactly there — and the identity block is the one a
+  // comparison script keys on — so the key is omitted instead. The object
+  // itself stays, so a consumer can still address `identity` unconditionally
+  // and see a present-but-empty block rather than a missing one.
+  const std::string json = RenderRunReportJson(MakeFixtureReport());
+  auto parsed = llvm::json::parse(json);
+  ASSERT_TRUE(static_cast<bool>(parsed));
+  const llvm::json::Object* root = parsed->getAsObject();
+  ASSERT_NE(root, nullptr);
+  const llvm::json::Object* identity = root->getObject("identity");
+  ASSERT_NE(identity, nullptr);
+
+  // The fixture sets only run_id, so this case covers both directions: the
+  // populated key is emitted, and every unpopulated one is absent.
+  const std::optional<llvm::StringRef> run_id = identity->getString("run_id");
+  ASSERT_TRUE(run_id.has_value());
+  EXPECT_EQ(*run_id, "run:sha256:0000");
+  for (const char* key : {"batch_id", "build_variant_id",
+                          "engine_toolchain_identity", "projection_id",
+                          "repository_id", "revision_id", "svf_config_hash",
+                          "wpa_config_hash"}) {
+    EXPECT_FALSE(identity->getString(key).has_value())
+        << key << " was emitted for a field with no value: " << json;
+  }
+}
+
 TEST(RunReportTest, JsonCarriesEverySchemaBlockWithItsExpectedType) {
   // The versioned-schema contract of spec section 8.3: a reader that asks for a
   // block by name and type must find it. A missing block is the failure this

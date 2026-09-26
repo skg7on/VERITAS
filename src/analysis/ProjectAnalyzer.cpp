@@ -285,6 +285,13 @@ Status RunWpa(const std::filesystem::path &output_root,
     return wpa_result.status();
   }
   result->wpa_run_id = core::ToString(wpa_result->run.run_id);
+  // The identity inputs this stage already holds. Nothing here is recomputed:
+  // `descriptor` and `toolchain_identity` are what produced `run_id`, so a
+  // caller reporting them reports the run that actually happened rather than a
+  // re-derivation of it.
+  result->svf_configuration_hash = descriptor.svf_configuration_hash;
+  result->wpa_configuration_hash = descriptor.wpa_configuration_hash;
+  result->engine_toolchain_identity = descriptor.engine_toolchain_identity;
 
   // Optional C++ conformance oracle: run a second, separately identified
   // kCppConformance execution over the same logical inputs and require the
@@ -337,6 +344,9 @@ Status RunWpa(const std::filesystem::path &output_root,
                          core::SpanMode::kBearing);
     return facts::MakeAnalysisFactBatch(std::move(*wpa_result));
   }();
+  // The batch id is part of the run's identity and is minted here, so it is
+  // surfaced from here rather than re-derived by a caller.
+  result->batch_id = core::ToString(batch.batch_id);
   auto fact_store = [&] {
     core::PhaseSpan span(metrics, "facts.store_open",
                          core::SpanMode::kBearing);

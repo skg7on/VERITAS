@@ -90,6 +90,20 @@ struct ProjectAnalysisResult {
   std::string wpa_run_id;
   WpaEngineMode wpa_engine = WpaEngineMode::kSouffle;
   std::string wpa_diagnostics;
+  // The run's identity inputs, surfaced so a caller can record what the run
+  // actually ran under without reaching into the store. They are exactly the
+  // fields that move `run_id`: the two configuration hashes that cover every
+  // AnalysisConfig field between them, the engine's toolchain identity, and the
+  // batch id the facts were published under. Two runs with different
+  // `--wpa-engine`, `--field-sensitive`, or `--max-alias-pairs` values differ
+  // in these strings, and in nothing else a caller can see.
+  //
+  // Empty only when the run did not reach the stage that mints them; the
+  // reporting layer omits an empty field's key rather than writing "".
+  std::string svf_configuration_hash;
+  std::string wpa_configuration_hash;
+  std::string engine_toolchain_identity;
+  std::string batch_id;
 };
 
 // ProjectAnalyzer orchestrates the full M1→M4→M5→M3 analysis pipeline.

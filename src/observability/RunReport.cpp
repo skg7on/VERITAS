@@ -172,16 +172,24 @@ void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
 }
 
 void EmitIdentity(llvm::json::OStream& j, const RunIdentity& identity) {
+  // A field with no value omits its key rather than writing "". Written as "",
+  // an unset coordinate diffs as *unchanged* between two runs that differ
+  // exactly there — the reading this block exists to prevent, since it is the
+  // block a comparison script keys on. The object itself stays, so a consumer
+  // can still address `identity` unconditionally.
+  const auto emit = [&j](llvm::StringRef key, const std::string& value) {
+    if (!value.empty()) j.attribute(key, value);
+  };
   j.attributeObject("identity", [&] {
-    j.attribute("batch_id", identity.batch_id);
-    j.attribute("build_variant_id", identity.build_variant_id);
-    j.attribute("engine_toolchain_identity", identity.engine_toolchain_identity);
-    j.attribute("projection_id", identity.projection_id);
-    j.attribute("repository_id", identity.repository_id);
-    j.attribute("revision_id", identity.revision_id);
-    j.attribute("run_id", identity.run_id);
-    j.attribute("svf_config_hash", identity.svf_config_hash);
-    j.attribute("wpa_config_hash", identity.wpa_config_hash);
+    emit("batch_id", identity.batch_id);
+    emit("build_variant_id", identity.build_variant_id);
+    emit("engine_toolchain_identity", identity.engine_toolchain_identity);
+    emit("projection_id", identity.projection_id);
+    emit("repository_id", identity.repository_id);
+    emit("revision_id", identity.revision_id);
+    emit("run_id", identity.run_id);
+    emit("svf_config_hash", identity.svf_config_hash);
+    emit("wpa_config_hash", identity.wpa_config_hash);
   });
 }
 

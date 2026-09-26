@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -285,10 +286,15 @@ veritas::Status WriteDiagnosticManifest(
   return veritas::Status::Ok();
 }
 
-// Every degraded-metrics line on stderr carries this prefix, so a reader can
-// tell an observability degradation from an analysis failure.
+// Every metrics line on stderr carries one of these prefixes, so a reader can
+// tell a not-recorded field from a failure — and an analysis failure from both.
+// A degradation is something that failed and cleared `complete`; a note is a
+// field whose producer did not run, which leaves `complete` as the recorder
+// found it. Ten notes on every healthy run would otherwise wear out the words
+// that have to mean something on the run where the write really did fail.
 constexpr std::string_view kMetricsDegraded =
     "veritas-build: metrics degraded: ";
+constexpr std::string_view kMetricsNote = "veritas-build: metrics note: ";
 
 // WriteRunMetrics writes the rendered artifact. A path that cannot be written
 // is reported rather than swallowed, and a partially written file is removed:
@@ -352,8 +358,10 @@ class ReportBuilder {
 
   // Note records a diagnostic that does not mean a whole part of the report is
   // missing: an absent producer's zero, or a contradiction between two numbers
-  // the artifact carries. `complete` stays the recorder's own verdict here.
+  // the artifact carries. `complete` stays the recorder's own verdict here. The
+  // index is kept so the caller can prefix it as a note rather than a failure.
   void Note(std::string message) {
+    note_indices_.push_back(report_->metrics.diagnostics.size());
     report_->metrics.diagnostics.push_back(std::move(message));
   }
 
@@ -362,11 +370,19 @@ class ReportBuilder {
   // design section 7.1's "loud and self-describing".
   void Degrade(std::string message) {
     report_->metrics.complete = false;
-    Note(std::move(message));
+    report_->metrics.diagnostics.push_back(std::move(message));
+  }
+
+  // note_indices lists, in ascending order, the diagnostics that are notes.
+  // Every other entry is a degradation: the recorder's own diagnostics all are
+  // (each one cleared `complete`), and so is anything recorded by Degrade.
+  const std::vector<std::size_t>& note_indices() const {
+    return note_indices_;
   }
 
  private:
   std::map<std::string, std::uint64_t> values_;
+  std::vector<std::size_t> note_indices_;
   veritas::observability::RunReport* report_;
 };
 
@@ -375,21 +391,34 @@ class ReportBuilder {
 // one of the sources the plan names; nothing is derived from a second plumbing
 // path, and no absolute path reaches the report — a status message that might
 // carry one is described in the report's own words instead of quoted.
-void FillReport(const veritas::analysis::ProjectAnalysisResult& result,
-                const veritas::build::AnalysisManifest& manifest,
-                const veritas::analysis::AnalysisConfig& config,
-                const fs::path& output_root,
-                veritas::observability::RunReport* report) {
+//
+// Returns the indices, in ascending order, of the diagnostics that are notes
+// rather than degradations, so the caller can prefix the two differently on
+// stderr. Both kinds are entries in the artifact's `diagnostics`.
+std::vector<std::size_t> FillReport(
+    const veritas::analysis::ProjectAnalysisResult& result,
+    const veritas::build::AnalysisManifest& manifest,
+    const veritas::analysis::AnalysisConfig& config,
+    const fs::path& output_root,
+    veritas::observability::RunReport* report) {
   // The identity block is the part that moves run to run, separated so a
-  // comparison script can exclude it wholesale. svf_config_hash,
-  // wpa_config_hash, engine_toolchain_identity and batch_id have no source on
-  // this path — they live in the WPA run descriptor, which the CLI never sees —
-  // so they stay empty rather than being reconstructed from a second path.
+  // comparison script can exclude it wholesale. Every coordinate comes from the
+  // run itself: four from the analysis outcome, the repository from the
+  // manifest, and the two configuration hashes, the toolchain identity and the
+  // batch id from the fields ProjectAnalysisResult carries for exactly this
+  // purpose. Without them the artifact would record no configuration at all —
+  // nothing would separate a cpp-emergency, non-field-sensitive, or
+  // alias-limited run from the default — and an unset coordinate written as ""
+  // would diff as unchanged, which is the failure this block exists to prevent.
   report->identity.run_id = result.wpa_run_id;
   report->identity.projection_id = result.projection_id;
   report->identity.revision_id = result.revision_id;
   report->identity.build_variant_id = result.build_variant_id;
   report->identity.repository_id = manifest.context.repository_id;
+  report->identity.svf_config_hash = result.svf_configuration_hash;
+  report->identity.wpa_config_hash = result.wpa_configuration_hash;
+  report->identity.engine_toolchain_identity = result.engine_toolchain_identity;
+  report->identity.batch_id = result.batch_id;
 
   // The one analysis knob no configuration hash covers: it changes what the run
   // does by executing a second full WPA whose canonical results must agree, and
@@ -401,6 +430,22 @@ void FillReport(const veritas::analysis::ProjectAnalysisResult& result,
                                                     &report->inventory.input);
 
   ReportBuilder builder(report->metrics.counters, report);
+
+  // An identity coordinate with no value has its key omitted (RunReport), and
+  // is named here: an absent key is visibly absent, but only to a reader who
+  // knows the schema expects it.
+  const auto note_if_empty = [&builder](std::string_view field,
+                                        const std::string& value) {
+    if (value.empty()) {
+      builder.Note("identity field " + std::string(field) +
+                   " has no value; its key is omitted from the artifact");
+    }
+  };
+  note_if_empty("batch_id", report->identity.batch_id);
+  note_if_empty("engine_toolchain_identity",
+                report->identity.engine_toolchain_identity);
+  note_if_empty("svf_config_hash", report->identity.svf_config_hash);
+  note_if_empty("wpa_config_hash", report->identity.wpa_config_hash);
   veritas::observability::RunOutputInventory& output = report->inventory.output;
 
   output.summaries_published = result.published_summary_ids.size();
@@ -492,7 +537,7 @@ void FillReport(const veritas::analysis::ProjectAnalysisResult& result,
         store.status().code() == veritas::StatusCode::kNotFound
             ? "the store block is omitted: no metadata.db under the output root"
             : "the store block is omitted: the store read-back failed");
-    return;
+    return builder.note_indices();
   }
   report->store = std::move(*store);
 
@@ -501,7 +546,7 @@ void FillReport(const veritas::analysis::ProjectAnalysisResult& result,
   // store. It is a cross-check only when both sides were measured: with the
   // counter absent there is nothing to compare, and a 0-versus-N "MISMATCH"
   // would be an uninstrumented zero dressed up as a disagreement.
-  if (!builder.Has("wpa.components.expected")) return;
+  if (!builder.Has("wpa.components.expected")) return builder.note_indices();
   for (const veritas::observability::TableRowCount& table :
        report->store.tables) {
     // `_v2` deliberately. `wpa_component_states` (schema v1) is the SCC
@@ -511,11 +556,12 @@ void FillReport(const veritas::analysis::ProjectAnalysisResult& result,
     report->store.cross_checks.push_back(veritas::observability::CrossCheck{
         "components", table.rows, expected_components,
         table.rows == expected_components});
-    return;
+    return builder.note_indices();
   }
   builder.Note(
       "the component cross-check is omitted: wpa_component_states_v2 was not "
       "counted in the store read-back");
+  return builder.note_indices();
 }
 
 veritas::Status Analyze(const std::vector<std::string>& args) {
@@ -625,7 +671,8 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
   veritas::observability::RunReport report;
   report.metrics = metrics.TakeStats();
   report.metrics_options = metrics_options;
-  FillReport(result, manifest, config, input.output_root, &report);
+  const std::vector<std::size_t> note_indices =
+      FillReport(result, manifest, config, input.output_root, &report);
 
   std::cout << veritas::observability::RenderRunReportText(report);
 
@@ -647,8 +694,14 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
         std::string(written.message()));
   }
 
-  for (const std::string& message : report.metrics.diagnostics) {
-    std::cerr << kMetricsDegraded << message << '\n';
+  // Notes and degradations share the artifact's diagnostics array and are told
+  // apart here on stderr, where the operator needs to know whether a run failed
+  // or merely has a field its producer has not filled in yet.
+  for (std::size_t i = 0; i < report.metrics.diagnostics.size(); ++i) {
+    const bool is_note =
+        std::binary_search(note_indices.begin(), note_indices.end(), i);
+    std::cerr << (is_note ? kMetricsNote : kMetricsDegraded)
+              << report.metrics.diagnostics[i] << '\n';
   }
   return veritas::Status::Ok();
 }
