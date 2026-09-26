@@ -181,5 +181,109 @@ TEST(VeritasBuildAnalyzeCliTest, RejectsFlagValueThatIsAnotherFlag) {
       << result.stdout_text;
 }
 
+TEST(VeritasBuildAnalyzeCliTest, WritesRunMetricsByDefault) {
+  const auto project = testing::FixtureProject("multiple_tus");
+  const auto output = fs::temp_directory_path() /
+                      ("veritas-metrics-cli-" + std::to_string(std::rand()));
+  const auto result = RunVeritasBuild({"analyze", "--project", project.string(),
+                                       "--output", output.string()});
+  ASSERT_EQ(result.exit_code, 0) << result.stdout_text;
+  EXPECT_TRUE(fs::is_regular_file(output / "run-metrics.json"));
+  EXPECT_NE(result.stdout_text.find("Analysis phase report"), std::string::npos)
+      << result.stdout_text;
+
+  // Both ingest spans must appear. They are the measurable form of the
+  // duplication spec section 10 records, and the first finding this feature
+  // exists to surface — so their absence is a failure, not a detail.
+  std::ifstream artifact(output / "run-metrics.json");
+  ASSERT_TRUE(artifact.good());
+  std::stringstream buffer;
+  buffer << artifact.rdbuf();
+  const std::string json = buffer.str();
+  EXPECT_NE(json.find("cli.ingest"), std::string::npos) << json.substr(0, 500);
+  EXPECT_NE(json.find("m1.ingest"), std::string::npos) << json.substr(0, 500);
+  // The real root span, not the synthetic fallback: the promotion path in
+  // TakeStats is what keeps the report's total equal to the command's wall time.
+  EXPECT_NE(json.find("\"name\": \"run\""), std::string::npos)
+      << json.substr(0, 500);
+}
+
+TEST(VeritasBuildAnalyzeCliTest, MetricsFalseWritesNoArtifactAndNoReport) {
+  const auto project = testing::FixtureProject("multiple_tus");
+  const auto output = fs::temp_directory_path() /
+                      ("veritas-metrics-off-" + std::to_string(std::rand()));
+  const auto result = RunVeritasBuild({"analyze", "--project", project.string(),
+                                       "--output", output.string(),
+                                       "--metrics", "false"});
+  ASSERT_EQ(result.exit_code, 0) << result.stdout_text;
+  EXPECT_FALSE(fs::exists(output / "run-metrics.json"));
+  EXPECT_EQ(result.stdout_text.find("Analysis phase report"), std::string::npos)
+      << result.stdout_text;
+}
+
+TEST(VeritasBuildAnalyzeCliTest, RejectsANonBooleanMetricsValue) {
+  const auto result = RunVeritasBuild(
+      {"analyze", "--project", "/tmp", "--metrics", "maybe"});
+  EXPECT_NE(result.exit_code, 0);
+  EXPECT_NE(result.stdout_text.find("--metrics must be true or false"),
+            std::string::npos);
+}
+
+TEST(VeritasBuildAnalyzeCliTest, AcceptsZeroSamplingInterval) {
+  // Zero disables the series entirely: no sampler thread and no samples. The
+  // run must still succeed and still produce a parseable artifact, because
+  // turning the series off is a choice about the series, not a failure of the
+  // run. (Span-boundary sampling is a different mechanism — the fallback when
+  // pthread_create fails — and is not reachable through this flag.)
+  const auto project = testing::FixtureProject("multiple_tus");
+  const auto output = fs::temp_directory_path() /
+                      ("veritas-metrics-zero-" + std::to_string(std::rand()));
+  const auto result =
+      RunVeritasBuild({"analyze", "--project", project.string(), "--output",
+                       output.string(), "--metrics-interval-ms", "0"});
+  ASSERT_EQ(result.exit_code, 0) << result.stdout_text;
+  std::ifstream artifact(output / "run-metrics.json");
+  ASSERT_TRUE(artifact.good());
+  std::stringstream buffer;
+  buffer << artifact.rdbuf();
+  EXPECT_NE(buffer.str().find("veritas.run-metrics.v1"), std::string::npos);
+}
+
+TEST(VeritasBuildAnalyzeCliTest, HonoursTopNAndMetricsPath) {
+  const auto project = testing::FixtureProject("multiple_tus");
+  const auto output = fs::temp_directory_path() /
+                      ("veritas-metrics-path-" + std::to_string(std::rand()));
+  const auto custom = output / "custom-metrics.json";
+  const auto result = RunVeritasBuild(
+      {"analyze", "--project", project.string(), "--output", output.string(),
+       "--metrics-top-n", "3", "--metrics-path", custom.string()});
+  ASSERT_EQ(result.exit_code, 0) << result.stdout_text;
+  EXPECT_TRUE(fs::is_regular_file(custom));
+  // The default location is not also written: --metrics-path replaces it.
+  EXPECT_FALSE(fs::exists(output / "run-metrics.json"));
+}
+
+TEST(VeritasBuildAnalyzeCliTest, EmitsNoAbsolutePathInTheArtifact) {
+  const auto project = testing::FixtureProject("multiple_tus");
+  const auto output = fs::temp_directory_path() /
+                      ("veritas-metrics-paths-" + std::to_string(std::rand()));
+  const auto result = RunVeritasBuild({"analyze", "--project", project.string(),
+                                       "--output", output.string()});
+  ASSERT_EQ(result.exit_code, 0) << result.stdout_text;
+
+  std::ifstream artifact(output / "run-metrics.json");
+  ASSERT_TRUE(artifact.good());
+  std::stringstream buffer;
+  buffer << artifact.rdbuf();
+  const std::string json = buffer.str();
+  ASSERT_FALSE(json.empty());
+  // Spec section 6.5 rule 4: an absolute path would make two machines'
+  // artifacts differ for no semantic reason, so the artifact carries none.
+  EXPECT_EQ(json.find(output.string()), std::string::npos)
+      << json.substr(0, 500);
+  EXPECT_EQ(json.find(project.string()), std::string::npos)
+      << json.substr(0, 500);
+}
+
 }  // namespace
 }  // namespace veritas::build

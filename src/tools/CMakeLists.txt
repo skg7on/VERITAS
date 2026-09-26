@@ -25,8 +25,11 @@ foreach(_veritas_cli veritas-build veritas-query veritas-diff veritas-explain)
 endforeach()
 
 # veritas-build is the project-analysis entry point: it loads the M1 manifest,
-# writes the diagnostic manifest, then runs the analyzer.
-target_link_libraries(veritas-build PRIVATE veritas_analysis veritas_build)
+# writes the diagnostic manifest, then runs the analyzer. It links the
+# observability library because it renders the run report and writes the
+# run-metrics artifact.
+target_link_libraries(veritas-build PRIVATE veritas_analysis veritas_build
+  veritas_observability)
 
 # veritas-query queries published CPG projections; its `evidence` subcommand
 # additionally assembles an M10B EvidenceBuildInput from the M9 fact store.
