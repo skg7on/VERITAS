@@ -298,6 +298,11 @@ void EmitStore(llvm::json::OStream& j, const StoreSummary& store) {
 }
 
 void EmitMemory(llvm::json::OStream& j, const core::RunMetricsStats& metrics) {
+  // Present only when the series holds at least one sample. With no series —
+  // no sampler, or a measurement that never succeeded — there is nothing
+  // measured to report, and a zeroed peak or an empty `series` array would
+  // both read as "measured". A span's block follows the same rule.
+  if (metrics.series.empty()) return;
   j.attributeObject("memory", [&] {
     j.attributeObject("peak", [&] {
       j.attribute("at_ms",

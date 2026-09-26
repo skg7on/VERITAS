@@ -67,6 +67,15 @@ std::chrono::nanoseconds ProcessCpuNow();
 std::uint64_t CurrentResidentBytes();
 std::uint64_t CurrentFootprintBytes();
 
+// MemoryReading is one observation of the process's memory, both figures in
+// bytes: the resident set, and the physical footprint where the platform
+// distinguishes it. A reading with no resident set is a failed measurement
+// rather than a measured zero, because a running process never has none.
+struct MemoryReading {
+  std::uint64_t rss_bytes = 0;
+  std::uint64_t footprint_bytes = 0;
+};
+
 struct RunMetricsOptions {
   // The sampler thread runs only when this is positive. Zero means no thread
   // and no series; the recorder still produces per-span wall, self and CPU
@@ -77,6 +86,10 @@ struct RunMetricsOptions {
   bool emit_series = true;
   std::size_t span_sample_cap = 65536;
   std::size_t series_capacity = 65536;
+  // Where a measurement comes from. Empty means the platform readers,
+  // CurrentResidentBytes and CurrentFootprintBytes; a test injects a probe to
+  // drive the measurement and its failure path without a sampler thread.
+  std::function<MemoryReading()> memory_probe;
 };
 
 struct Counter {
@@ -216,6 +229,15 @@ class RunMetrics {
   // running — which is the case for every recorder with the default interval
   // of zero, and for the tests.
   SeriesBuffer& series();
+
+  // RecordMemorySample measures process memory now and appends the reading to
+  // the series at the current wall time. This is the recorder's measurement
+  // primitive: the sampler thread performs exactly this once per interval, and
+  // the no-thread fallback performs it at a bearing span's boundaries. It is
+  // callable directly, like SeriesBuffer::Append, so the measurement path and
+  // its failure rule can be exercised without a thread and without a test-only
+  // seam. Nothing is appended when the measurement fails; see MemoryReading.
+  void RecordMemorySample();
 
  private:
   struct Impl;

@@ -205,6 +205,9 @@ struct RunMetrics::Impl {
   // sample_interval == 0: a zero interval asks for no sampling at all, so the
   // series stays empty rather than filling with boundary readings.
   bool boundary_only = false;
+  // Set by the first failed measurement, so the reason is recorded once
+  // rather than once per sample the sampler tries to take.
+  bool memory_probe_failed = false;
 
   Impl(RunMetricsOptions opts, WallClock w, CpuClock c)
       : options(opts),
@@ -243,15 +246,38 @@ struct RunMetrics::Impl {
   // a second thread without re-reading the design spec, section 7.4.
   static void* SamplerMain(void* arg);
 
+  // Where a measurement comes from: the injected probe when the caller set
+  // one, the platform readers otherwise.
+  MemoryReading ProbeMemory() const {
+    if (options.memory_probe) return options.memory_probe();
+    return MemoryReading{CurrentResidentBytes(), CurrentFootprintBytes()};
+  }
+
   // Measure now and append the reading at `at`, an instant on the series'
   // time axis. The sampler thread passes a fresh reading of the wall clock;
   // the boundary fallback passes the span boundary it is measuring, so it
   // takes no clock reading of its own.
+  //
+  // A failed measurement appends nothing. Zero resident bytes is the failure
+  // signal — a running process never has none — and it is not a measured zero,
+  // so recording it would put a present block of zeroes on the artifact and
+  // claim a measurement that never happened. The failure is reported once,
+  // because a reader that fails would otherwise add a diagnostic per tick.
   void AppendSampleAt(std::chrono::steady_clock::time_point at) {
+    const MemoryReading reading = ProbeMemory();
+    if (reading.rss_bytes == 0) {
+      if (!memory_probe_failed) {
+        memory_probe_failed = true;
+        Diagnose(
+            "memory probe returned no resident set: samples are missing from "
+            "the series");
+      }
+      return;
+    }
     const auto offset =
         std::chrono::duration_cast<std::chrono::milliseconds>(at - run_start);
     series.Append(
-        MemorySample{offset, CurrentResidentBytes(), CurrentFootprintBytes()});
+        MemorySample{offset, reading.rss_bytes, reading.footprint_bytes});
   }
 
   // StopSampler stops the sampler and joins it, so that what the buffer holds
@@ -467,6 +493,10 @@ void RunMetrics::AddDiagnostic(std::string message) {
 }
 
 SeriesBuffer& RunMetrics::series() { return impl_->series; }
+
+void RunMetrics::RecordMemorySample() {
+  impl_->AppendSampleAt(impl_->wall());
+}
 
 RunMetricsStats RunMetrics::TakeStats() {
   // The series is read below and the join is done below that, so the sampler

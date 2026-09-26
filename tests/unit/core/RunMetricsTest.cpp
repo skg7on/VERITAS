@@ -387,6 +387,41 @@ TEST(RunMetricsTest, BearingSpanWhoseWindowHoldsNoSampleHasNoMemoryBlock) {
   EXPECT_EQ(late_span.memory->peak_within, 600u);
 }
 
+TEST(RunMetricsTest, FailedMemoryProbeAppendsNoSampleAndDiagnosesOnce) {
+  RunMetricsOptions options;
+  // A reading with no resident set is a failed measurement: a running process
+  // never has zero resident bytes, so zero is the failure signal.
+  options.memory_probe = [] { return MemoryReading{0, 0}; };
+  ScriptedRecorder r(options);
+  r.metrics->RecordMemorySample();
+  r.metrics->RecordMemorySample();
+  r.metrics->RecordMemorySample();
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  // Nothing was measured, so nothing is claimed to have been.
+  EXPECT_TRUE(stats.series.empty());
+  // Once, not once per tick: a failing reader would otherwise flood the
+  // diagnostics at the sampling rate.
+  ASSERT_EQ(stats.diagnostics.size(), 1u);
+  EXPECT_FALSE(stats.complete);
+}
+
+TEST(RunMetricsTest, WorkingMemoryProbeAppendsItsReading) {
+  RunMetricsOptions options;
+  options.memory_probe = [] { return MemoryReading{4096u, 2048u}; };
+  ScriptedRecorder r(options);
+  r.wall_tick = milliseconds(7);
+  r.metrics->RecordMemorySample();
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  ASSERT_EQ(stats.series.size(), 1u);
+  EXPECT_EQ(stats.series.front().t, milliseconds(7));
+  EXPECT_EQ(stats.series.front().rss_bytes, 4096u);
+  EXPECT_EQ(stats.series.front().footprint_bytes, 2048u);
+  EXPECT_EQ(stats.peak_rss_bytes, 4096u);
+  EXPECT_TRUE(stats.diagnostics.empty());
+}
+
 TEST(RunMetricsTest, SeriesBufferThinningDoublesDecimationKeepingFirstAndNewest) {
   SeriesBuffer buffer(4);
   for (int i = 0; i < 4; ++i) {
