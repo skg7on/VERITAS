@@ -111,6 +111,34 @@ TEST(StoreSummaryTest, CountsInsertedRows) {
   EXPECT_EQ(found->rows, 1u);
 }
 
+TEST(StoreSummaryTest, ReportsFailureRatherThanDroppingAnUnstattableEntry) {
+  // A dangling symlink is a stat FAILURE, which is not the same thing as "not a
+  // regular file": `is_regular_file` reports `false` for both a directory and a
+  // failed stat, but only the failure sets an error code. Folding the two
+  // together — or letting the loop's own `increment(error)` clear the error on
+  // the way to the next iteration — drops the entry from the byte total with
+  // nothing reporting it, which is a failed measurement reading as a smaller
+  // one. Measured against the real iterator: a subdirectory gives
+  // `is_regular_file -> false` with a clear error, a dangling symlink gives
+  // `false` with ENOENT, and the next `increment` clears it to zero.
+  const fs::path output_root = FreshDir("dangling");
+  ASSERT_TRUE(fs::create_directories(output_root));
+  auto store = summarydb::MetadataStore::Open(output_root / "metadata.db");
+  ASSERT_TRUE(store.ok()) << store.status().message();
+  ASSERT_TRUE(store->ApplySchema().ok());
+  std::error_code error;
+  fs::create_symlink(output_root / "absent-target", output_root / "broken",
+                     error);
+  ASSERT_FALSE(error) << error.message();
+
+  const auto summary = CollectStoreSummary(output_root);
+  ASSERT_FALSE(summary.ok());
+  // The failure has to be the walk, not the store: a wrong-reason pass would
+  // hide the very silent drop this case exists to catch.
+  EXPECT_NE(summary.status().message().find("cannot stat"), std::string::npos)
+      << summary.status().message();
+}
+
 TEST(StoreSummaryTest, GroupsStoreBytesByTopLevelEntryWithoutAbsolutePaths) {
   const fs::path output_root = FreshDir("bytes");
   ASSERT_TRUE(fs::create_directories(output_root / "cas"));

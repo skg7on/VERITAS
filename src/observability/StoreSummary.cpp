@@ -85,7 +85,18 @@ StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
       return Status::Internal("cannot walk " + output_root.string() + ": " +
                               error.message());
     }
-    if (!it->is_regular_file(error)) continue;
+    // Read the error from `is_regular_file` IMMEDIATELY, and do not fold it
+    // into the `continue`. The `continue` is correct for a directory or a
+    // symlink — those are not failures — but a stat that FAILED also arrives
+    // here as false, and the loop's own `increment(error)` clears `error` on
+    // success, so a skipped entry would be silently dropped from the byte
+    // total with nothing reporting it.
+    const bool is_regular = it->is_regular_file(error);
+    if (error) {
+      return Status::Internal("cannot stat " + it->path().string() + ": " +
+                              error.message());
+    }
+    if (!is_regular) continue;
     const auto relative =
         std::filesystem::relative(it->path(), output_root, error);
     if (error) {
