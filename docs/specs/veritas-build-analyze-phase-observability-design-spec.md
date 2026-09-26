@@ -425,14 +425,27 @@ are named in section 9.2. The sampler thread exists only when recording is on.
 `identity` is the block that moves run to run, and it is separated precisely so
 that a comparison script can ignore it.
 
-**Two keys in the shape above are conditional, and the example shows their
-populated form only.** `memory` is absent entirely when nothing was measured —
-see section 4.5's presence rule — so `"peak": {}` above means "present and
-populated when measured", not "always emitted, zero when not". Within a present
-`memory`, `series` is absent when `--metrics-series false` suppresses it while
-`peak` and `series_decimation` remain. An artifact produced with no sampler at
-all therefore carries no `memory` key, and one produced with the series
-suppressed carries `memory.peak` with no `series`.
+**Three things in the shape above are conditional, and the example shows their
+populated form only.** Every empty string shown is a *shape*, not a value the
+artifact may contain.
+
+1. `memory` is absent entirely when nothing was measured — see section 4.5's
+   presence rule — so `"peak": {}` above means "present and populated when
+   measured", not "always emitted, zero when not". An artifact produced with no
+   sampler at all therefore carries no `memory` key.
+2. Within a present `memory`, `series` is absent when `--metrics-series false`
+   suppresses it while `peak` and `series_decimation` remain. So one produced
+   with the series suppressed carries `memory.peak` with no `series`.
+3. **An `identity` field with no value omits its key entirely**, rather than
+   being emitted as `""`. The reason is the same one the memory rule rests on,
+   and it is sharper here: `""` is a *value*, so it compares equal between two
+   runs that differ — an empty `wpa_config_hash` reads as "unchanged" against a
+   run configured differently, which is precisely the comparison failure this
+   artifact exists to prevent. In practice all nine are populated on any
+   successful run, because `RunWpa` assigns them from the descriptor and the
+   batch it already holds and a `RunWpa` failure returns before the report is
+   built; the omission rule is the guard for the case where that stops being
+   true.
 
 **The presence test is "was it measured", never "was it emitted".** Those are
 different questions — `emit_series` decides whether the samples are *published*,
@@ -532,6 +545,7 @@ self-describing: a stderr line, `"complete": false`, and an entry in
 | --- | --- |
 | `pthread_create` fails | degrade to span-boundary sampling; `complete: false`; diagnostic |
 | A platform memory reader fails (`task_info` or `statm`) | append **no sample at all** and record a diagnostic once; never append the failure value. A reader that returns 0 on failure and has that 0 appended as a genuine sample produces a *present* block of zeroes on the measured path — the reading this design exists to prevent, reached through a different door. |
+| The component counts **disagree** — the sum of `components_by_kind` differs from the `wpa.components.expected` counter | `complete: false` and a **degraded** diagnostic, not a note. A divergence is a contradiction, not an absence: two figures in one artifact both claim to be the expected component count and do not match, so neither can be trusted. The two-way diagnostic split is defined by what the message says about the artifact — a *failure* means a measurement did not happen, a *not-recorded* means a field was never produced, and a *contradiction* means the artifact is internally inconsistent. The third kind is a degradation. |
 | Artifact path unwritable | one stderr line; exit code unchanged |
 | Store read-back fails (schema drift, locked DB) | omit only the `store` block; keep the rest; diagnostic |
 | Negative span duration (reachable only via a misbehaving injected clock) | clamp to 0 and count a diagnostic, **unconditionally** |
