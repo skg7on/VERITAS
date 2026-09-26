@@ -1247,15 +1247,23 @@ RunReport MakeFixtureReport() {
 ```
 
 
-Add to the test target's link line (in `tests/unit/observability/CMakeLists.txt`):
+Register the test target in `tests/unit/observability/CMakeLists.txt` (and add `add_subdirectory(observability)` to `tests/unit/CMakeLists.txt` if Task 2 is the first to touch that directory):
 
 ```cmake
+add_executable(RunReportTest RunReportTest.cpp)
+target_include_directories(RunReportTest SYSTEM PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+)
 target_link_libraries(RunReportTest PRIVATE
   veritas_observability
   LLVM
   GTest::gtest_main
 )
+veritas_add_warnings(RunReportTest)
+gtest_discover_tests(RunReportTest DISCOVERY_TIMEOUT 60)
 ```
+
+**`${LLVM_INCLUDE_DIRS}` is not optional, and linking `LLVM` does not imply it.** The imported `LLVM` target brings no include directories, so a test that includes `<llvm/Support/JSON.h>` without this line silently compiles against whatever LLVM headers are on the default search path — on this machine, Homebrew's llvm@17 — while linking LLVM 24. That is a header/library version mismatch that compiles cleanly and is exactly the class of bug that hides until it does not. Every other target in this repository that uses LLVM headers adds this line explicitly (`src/build/CMakeLists.txt:40`, `src/evidence/CMakeLists.txt:87`, `src/facts/CMakeLists.txt:68`); follow them.
 
 - [ ] **Step 3: Run the tests to confirm they fail**
 
@@ -1359,7 +1367,9 @@ void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
 }
 ```
 
-`FormatDuration` renders seconds with three decimals for values at or above one second, milliseconds with three decimals below that, and `"0ns"` for zero. `FormatBytes` renders GiB with two decimals at or above 1 GiB, MiB below.
+`FormatDuration` renders seconds with three decimals for values at or above one second, milliseconds with three decimals below that, and `"0ns"` for zero.
+
+`FormatBytes` uses **three** tiers, not two: GiB with two decimals at or above 1 GiB, MiB with two decimals at or above 1 MiB, and KiB with one decimal below that, with plain bytes below 1 KiB. A two-tier rule that bottomed out at MiB would print a genuinely small peak — a phase that allocates a few hundred kilobytes — as `"0.00 MiB"`, which reads as *nothing was measured* rather than *this phase is small*. The whole point of the memory column is to distinguish those two cases.
 
 - [ ] **Step 5: Run the tests and confirm they pass**
 
@@ -2462,6 +2472,8 @@ Populate the report from these exact sources. **Output-scale counts come from th
 | `complete`, `diagnostics` | `RunMetricsStats::complete`, `RunMetricsStats::diagnostics` |
 
 A counter that is absent because its producer did not run leaves the field at zero **and** is named in a diagnostic, so an uninstrumented zero is never mistaken for a measured zero. Do not derive a count from a source not listed here.
+
+**Add a divergence diagnostic.** The text report prints the expected-component count as the *sum* of `components_by_kind`, while the store cross-check compares the separate `wpa.components.expected` counter against the store's row count. Both are derived from the same frozen expected set in Task 7, so they should always agree — but if they ever diverge, two numbers in one artifact would both claim to be "expected components" and nothing would say which is right. Compare them while building the report and, on disagreement, record a diagnostic naming both values. A cheap check that makes a silent contradiction loud is exactly what this feature is for.
 
 - [ ] **Step 4: Run the CLI tests and the full build test suite**
 
