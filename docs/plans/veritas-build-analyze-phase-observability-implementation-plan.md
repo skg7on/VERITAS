@@ -1054,7 +1054,11 @@ struct RunOutputInventory {
   std::uint64_t cpg_nodes = 0;
   std::uint64_t cpg_edges = 0;
   std::uint64_t svfg_nodes = 0;
-  std::uint64_t svfg_edges = 0;
+  // Optional because it has no producer: the SVFG exposes no live edge counter,
+  // and an unmeasured count must be ABSENT rather than zero — a `0` is a value,
+  // so it compares equal between two runs that both failed to measure it. The
+  // renderer omits the key when this is unset.
+  std::optional<std::uint64_t> svfg_edges;
   std::vector<std::pair<std::string, std::uint64_t>> components_by_kind;
   std::uint64_t rooted_input_facts = 0;
   std::uint64_t canonical_facts = 0;
@@ -1063,8 +1067,10 @@ struct RunOutputInventory {
 struct RunIncrementality {
   std::uint64_t components_reused = 0;
   std::uint64_t components_executed = 0;
-  std::uint64_t summaries_recomputed = 0;
-  std::uint64_t summaries_reused = 0;
+  // Optional for the same reason as `svfg_edges`: neither has a producer, so
+  // both are omitted rather than reported as a measured zero.
+  std::optional<std::uint64_t> summaries_recomputed;
+  std::optional<std::uint64_t> summaries_reused;
 };
 
 struct RunInventory {

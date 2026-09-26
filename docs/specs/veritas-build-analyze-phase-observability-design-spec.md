@@ -915,10 +915,10 @@ Three runs each; worst of three is what both ceilings are judged on.
 | Run | Series | Wall (s) | CPU user+sys (s) | Max RSS (GiB) |
 | --- | --- | ---: | ---: | ---: |
 | 1 | metrics off | 420.79 | 420.10 | 6.7263 |
-| 2 | metrics off | 420.20 | 419.25 | 7.8926 |
+| 2 | metrics off | 420.20 | 419.25 | 7.8923 |
 | 3 | metrics off | 423.68 | 422.45 | 7.7146 |
 | 4 | metrics on | 419.95 | 419.09 | 7.7990 |
-| 5 | metrics on | 417.49 | 416.91 | 8.2211 |
+| 5 | metrics on | 417.49 | 416.91 | 8.2212 |
 | 6 | metrics on | 418.20 | 417.37 | 7.9441 |
 
 Worst of three per series: wall **423.68 s off / 419.95 s on**; CPU **422.45 s
@@ -941,7 +941,7 @@ the criterion is not resolvable by this method.** The numbers as measured are
 **7.8923 GiB off / 8.2212 GiB on**, a delta of **+0.3289 GiB (+4.17 %)**, which
 is 6.6× the 0.05 GiB budget. **The criterion is not met on this evidence, and it
 is also not decided by it**, and both statements belong in the record together:
-the metrics-off series' own run-to-run spread is **1.166 GiB** (7.8926 − 6.7263),
+the metrics-off series' own run-to-run spread is **1.166 GiB** (7.8923 − 6.7263),
 which is **3.5× the observed delta** and **23× the entire budget**. A threshold
 one twenty-third the size of the series' own noise is not decidable from three
 samples per side, so the measurement does not settle whether a real increase
