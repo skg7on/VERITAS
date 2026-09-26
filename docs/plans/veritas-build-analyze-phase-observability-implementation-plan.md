@@ -2764,7 +2764,9 @@ and wrap `Validate` in `facts.publish.validate` and each sink's `Publish` in `fa
 
 Nothing so far asserts that a span actually opens. An instrumentation change can compile, run, and record nothing — a wrong null check, a name that does not resolve where you thought, a span opened in a scope that already returned — and no existing test would notice, because every existing test asserts analysis results, and this change deliberately leaves those identical.
 
-Append this case to `tests/integration/analysis/PhaseObservabilityIdentityTest.cpp`. It asserts span **presence and counts, never durations**, so it cannot be flaky. Add `#include <functional>` and `#include <map>` to that file.
+Append this case to `tests/integration/analysis/PhaseObservabilityIdentityTest.cpp`. It asserts span **presence and counts, never durations**, so the assertions themselves cannot flake — but that is only half of being non-flaky, and an earlier draft of this plan stopped at the assertions and was wrong to. **The output root must be unique per run.** With `std::rand()` unseeded the value is the same in every process, so a fixed path makes run two hit the component-result cache keyed on that root, and the case then fails on `wpa.component.execute`/`canonicalize` — a failure the implementer hit and diagnosed. Use `::mkdtemp` with a template, as the implementer did, and check its return for null. Add `#include <functional>`, `#include <map>`, and `<unistd.h>`.
+
+The general form of that mistake is worth stating because it recurs in this plan's tests: *deterministic assertions are not the same as a deterministic test* — a test can assert only counts and still flake because of the state it inherits from a previous run.
 
 ```cpp
 TEST(PhaseObservabilityIdentityTest, RecordsTheExpectedSpanTree) {
