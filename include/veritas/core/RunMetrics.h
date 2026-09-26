@@ -15,9 +15,10 @@
 // RunMetrics.h — the span recorder for `veritas-build analyze`.
 //
 // A run opens and closes named spans; the recorder folds them into
-// per-name aggregates and hands the caller a tree at the end. No span name
-// may contain '.': span names are the artifact's node keys, and a dotted
-// name would collide with the counter namespaces built on top of them.
+// per-name aggregates and hands the caller a tree at the end. A span name may
+// contain '.' — `m5.svf.andersen` and `wpa.component.execute` are real ones —
+// because the tree is assembled from parent links rather than by splitting
+// names, and counters carry names of their own.
 
 #ifndef VERITAS_CORE_RUNMETRICS_H_
 #define VERITAS_CORE_RUNMETRICS_H_
