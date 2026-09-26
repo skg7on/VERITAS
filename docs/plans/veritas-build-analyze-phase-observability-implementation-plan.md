@@ -1397,7 +1397,24 @@ git commit -m "feat(observability): add the run report model and renderers" \
 
 The single most important test in this change: it is the executable form of spec section 5.2 Rule 2. It runs the analyzer twice on one fixture — once recording, once not — and asserts that every identity is byte-equal.
 
+Create `tests/integration/analysis/PhaseObservabilityIdentityTest.cpp` with the license header, then the includes and namespace that `ProjectAnalyzerTest.cpp` in the same directory already uses. Inside `veritas::analysis`, the names `core::` and `testing::` resolve to `veritas::core` and `veritas::testing` through enclosing-namespace lookup, so do not qualify them further:
+
 ```cpp
+#include "veritas/analysis/ProjectAnalyzer.h"
+
+#include <cstdlib>
+#include <filesystem>
+#include <string>
+
+#include <gtest/gtest.h>
+
+#include "ProjectFixture.h"
+
+namespace veritas::analysis {
+namespace {
+
+namespace fs = std::filesystem;
+
 TEST(PhaseObservabilityIdentityTest, RecordingDoesNotMoveAnyIdentity) {
   const auto project = testing::FixtureProject("multiple_tus");
   const auto output_a = fs::temp_directory_path() /
@@ -1433,14 +1450,41 @@ TEST(PhaseObservabilityIdentityTest, RecordingDoesNotMoveAnyIdentity) {
   // The recorder actually ran, so an empty tree cannot make this vacuous.
   EXPECT_FALSE(metrics.TakeStats().root.children.empty());
 }
+
+}  // namespace
+}  // namespace veritas::analysis
 ```
+
+Register the target at the end of `tests/integration/analysis/CMakeLists.txt`, mirroring the `ProjectAnalyzerTest` block in that file exactly. The two support libraries are both required — `veritas_test_support` carries `FixtureProject`, and `veritas_unit_test_support` is the INTERFACE library that brings in `GTest::gtest_main`, which is why that block does not name GTest directly. The timeout is 60 s rather than `ProjectAnalyzerTest`'s 30 s because this test analyzes the fixture twice:
+
+```cmake
+add_executable(phase_observability_identity_integration_test
+  PhaseObservabilityIdentityTest.cpp
+)
+target_link_libraries(phase_observability_identity_integration_test
+  PRIVATE
+    veritas_analysis
+    veritas_test_support
+    veritas_unit_test_support
+)
+add_test(NAME PhaseObservabilityIdentityTest
+  COMMAND phase_observability_identity_integration_test)
+set_tests_properties(PhaseObservabilityIdentityTest PROPERTIES
+  TIMEOUT 60
+  LABELS "integration;analysis"
+)
+```
+
+The CTest name and the gtest suite name are deliberately the same string; `add_test` names it explicitly rather than via `gtest_discover_tests`, which is the convention in this directory.
 
 - [ ] **Step 2: Run it to confirm it fails**
 
 ```bash
 cmake --build build --target PhaseObservabilityIdentityTest -j 8
-ctest --test-dir build -R "^PhaseObservabilityIdentityTest\." --output-on-failure
+ctest --test-dir build -R "PhaseObservabilityIdentityTest" --output-on-failure
 ```
+
+Note the filter has **no `^...\.` anchor and no trailing dot**. This target is registered with `add_test`, so its CTest name is exactly `PhaseObservabilityIdentityTest`; the `Suite.Case` form only exists for targets that use `gtest_discover_tests`. An anchored filter here would match zero tests, and a zero-match CTest filter **reports success** — so a green result would be meaningless. Confirm a test actually ran.
 
 Expected: build failure — `AnalyzeProject` takes two arguments and there is no third parameter.
 
