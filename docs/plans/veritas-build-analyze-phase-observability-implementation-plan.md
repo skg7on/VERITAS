@@ -1949,18 +1949,28 @@ TEST(StoreSummaryTest, CountsInsertedRows) {
   auto store = summarydb::MetadataStore::Open(output_root / "metadata.db");
   ASSERT_TRUE(store.ok()) << store.status().message();
   ASSERT_TRUE(store->ApplySchema().ok());
-  // One minimal row in a table with no foreign-key parent, so the insert
-  // cannot fail for a reason unrelated to counting.
+
+  // provenance_nodes has NO foreign-key parent — only five NOT NULL columns and
+  // the composite primary key (run_id, output_fact_id, witness_id) — so one
+  // synthetic row needs no other table to exist first, and the insert cannot
+  // fail for a reason unrelated to counting. Read the columns from
+  // `src/summarydb/schema/v3.sql` rather than assuming them: an earlier draft
+  // of this plan inserted into a `node_id` column this table does not have.
   ASSERT_TRUE(store
-                  ->Execute("INSERT INTO provenance_nodes (node_id) VALUES (?)",
-                            {"node:sha256:test"})
+                  ->Execute("INSERT INTO provenance_nodes "
+                            "(run_id, output_fact_id, witness_id, selected, "
+                            "producer_kind) VALUES (?, ?, ?, ?, ?)",
+                            {"run:sha256:test", "fact:sha256:test",
+                             "witness:sha256:test", "0", "0"})
                   .ok());
 
   auto summary = CollectStoreSummary(output_root);
   ASSERT_TRUE(summary.ok()) << summary.status().message();
   const auto found = std::find_if(
       summary->tables.begin(), summary->tables.end(),
-      [](const TableRowCount& table) { return table.table == "provenance_nodes"; });
+      [](const TableRowCount& table) {
+        return table.table == "provenance_nodes";
+      });
   ASSERT_NE(found, summary->tables.end());
   EXPECT_EQ(found->rows, 1u);
 }
