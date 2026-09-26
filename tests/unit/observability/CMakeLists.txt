@@ -16,10 +16,15 @@
 # only way to assert that what the renderer wrote is a JSON document rather than
 # merely a string that looks like one. `veritas_observability` links LLVM
 # PRIVATE, so nothing propagates to this target and the dependency is named
-# here. The include tree is SYSTEM for the same reason it is in
-# src/observability: upstream headers are not held to this project's -Werror
-# warning contract, and LLVM's imported targets carry no include directories of
-# their own, so `${LLVM_INCLUDE_DIRS}` is spelled out.
+# here.
+#
+# `${LLVM_INCLUDE_DIRS}` is spelled out because the LLVM imported targets carry
+# no include directories of their own: linking `LLVM` brings the library and
+# nothing else. Without this line `<llvm/Support/JSON.h>` still resolves — but
+# against whatever other LLVM headers sit on the prefix (Homebrew's llvm@17
+# here) while linking the LLVM this build was configured with. The tree is
+# SYSTEM for the same reason it is in src/observability: upstream headers are
+# not held to this project's -Werror warning contract.
 add_executable(RunReportTest RunReportTest.cpp)
 target_include_directories(RunReportTest SYSTEM PRIVATE
   ${LLVM_INCLUDE_DIRS}
