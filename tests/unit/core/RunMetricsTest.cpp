@@ -343,6 +343,50 @@ TEST(RunMetricsTest, PlainSpansGetNoMemoryButTheParentWindowStillCoversThem) {
   EXPECT_EQ(p.memory->peak_within, 700u);
 }
 
+TEST(RunMetricsTest, BearingSpanWithNoSeriesHasNoMemoryBlock) {
+  ScriptedRecorder r;
+  r.wall_tick = milliseconds(0);
+  const std::size_t token = r.metrics->BeginSpan("p", SpanMode::kBearing);
+  r.wall_tick = milliseconds(10);
+  r.metrics->EndSpan(token);
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  ASSERT_TRUE(stats.series.empty());
+  // An absent measurement must read as absent rather than as a measured zero,
+  // and this is the library default: interval zero means no sampler, so no
+  // series, for every bearing span.
+  EXPECT_FALSE(stats.root.children.front().memory.has_value());
+}
+
+TEST(RunMetricsTest, BearingSpanWhoseWindowHoldsNoSampleHasNoMemoryBlock) {
+  ScriptedRecorder r;
+  r.wall_tick = milliseconds(0);
+  const std::size_t early = r.metrics->BeginSpan("early", SpanMode::kBearing);
+  r.wall_tick = milliseconds(10);
+  r.metrics->EndSpan(early);
+  r.wall_tick = milliseconds(20);
+  const std::size_t late = r.metrics->BeginSpan("late", SpanMode::kBearing);
+  r.wall_tick = milliseconds(30);
+  r.metrics->EndSpan(late);
+
+  // A real series, but both samples fall inside `late`'s [20, 30] ms window
+  // and outside `early`'s [0, 10] ms one.
+  AppendSample(*r.metrics, milliseconds(20), 500, 50);
+  AppendSample(*r.metrics, milliseconds(30), 600, 60);
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  ASSERT_EQ(stats.root.children.size(), 2u);
+  const SpanStats& early_span = stats.root.children.at(0);
+  const SpanStats& late_span = stats.root.children.at(1);
+  ASSERT_EQ(early_span.name, "early");
+  ASSERT_EQ(late_span.name, "late");
+  EXPECT_FALSE(early_span.memory.has_value());
+  // The positive control: the same series does fill a window it lands in, so
+  // the absence above is a fact about the window, not about the series.
+  ASSERT_TRUE(late_span.memory.has_value());
+  EXPECT_EQ(late_span.memory->peak_within, 600u);
+}
+
 TEST(RunMetricsTest, SeriesBufferThinningDoublesDecimationKeepingFirstAndNewest) {
   SeriesBuffer buffer(4);
   for (int i = 0; i < 4; ++i) {

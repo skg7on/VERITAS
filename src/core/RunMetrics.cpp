@@ -273,7 +273,10 @@ struct RunMetrics::Impl {
   }
 
   // JoinMemory describes one bearing accumulator's interval against the
-  // series, with both ends of the window inclusive.
+  // series, with both ends of the window inclusive. It returns nullopt when
+  // no measurement exists for this span — no series at all, or a window no
+  // sample landed in — so that an absent measurement is visibly absent rather
+  // than plausibly zero, and a present block always means "measured".
   //
   // The window is the UNION of every occurrence: for a span that ran more
   // than once the interval is [first_start, last_end], and the figures below
@@ -282,6 +285,7 @@ struct RunMetrics::Impl {
   // the window, and the series is monotonic in t, so they are its first and
   // last in-window entries.
   std::optional<SpanMemory> JoinMemory(const Accum& accum) const {
+    if (series.samples().empty()) return std::nullopt;
     SpanMemory memory;
     const auto offset = [this](std::chrono::steady_clock::time_point at) {
       return std::chrono::duration_cast<std::chrono::milliseconds>(at -
@@ -301,8 +305,8 @@ struct RunMetrics::Impl {
       memory.footprint_peak =
           std::max(memory.footprint_peak, sample.footprint_bytes);
     }
-    // Signed: a phase may release more than it allocates. With no sample in
-    // the window both ends are zero and so is the difference.
+    if (!saw_any) return std::nullopt;
+    // Signed: a phase may release more than it allocates.
     memory.rss_delta = static_cast<std::int64_t>(memory.rss_end) -
                        static_cast<std::int64_t>(memory.rss_start);
     return memory;
@@ -519,8 +523,8 @@ RunMetricsStats RunMetrics::TakeStats() {
     out.max = accum.max;
     if (accum.mode == SpanMode::kBearing) {
       // Bearings keep an interval, so these are the spans the series can be
-      // joined to. A bearing span whose window holds no sample reports
-      // zeroes, which is what "nothing was measured in here" looks like.
+      // joined to. A bearing span no sample landed in gets no block at all,
+      // rather than one full of zeroes that reads as a measured zero.
       out.memory = impl_->JoinMemory(accum);
     }
     if (accum.mode == SpanMode::kDistributed) {

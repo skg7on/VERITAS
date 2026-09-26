@@ -118,6 +118,10 @@ struct SpanStats {
   std::chrono::nanoseconds max{};
   std::optional<Distribution> distribution;
   std::vector<TopEntry> top_n;
+  // Present only when the memory series held at least one sample inside this
+  // span's interval, so a present block means "measured" and its figures are
+  // real. A span with no series to join to — no sampler, or no sample in the
+  // window — has no block, and a kPlain or kDistributed span never has one.
   std::optional<SpanMemory> memory;
   std::vector<SpanStats> children;
 };
