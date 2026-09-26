@@ -56,7 +56,7 @@ StatusOr<ProjectInput> ResolveProjectInput(
 
   fs::path output;
   if (request.output_root.empty()) {
-    output = root / ".veritas";
+    output = root / "veritas-metrics";
   } else {
     std::error_code output_error;
     output = fs::weakly_canonical(request.output_root, output_error);

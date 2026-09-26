@@ -91,7 +91,7 @@ StatusOr<std::string> RepositoryId(const std::filesystem::path& project_root) {
 // run's current fact IDs.
 inline StatusOr<RealEvidenceSnapshot> AnalyzeRealFixture(std::string_view name) {
   const auto project_root = FixtureProject(name);
-  const auto output_root = project_root / ".veritas";
+  const auto output_root = project_root / "veritas-metrics";
 
   const auto repository = RepositoryId(project_root);
   if (!repository.ok()) {

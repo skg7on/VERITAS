@@ -54,7 +54,7 @@ TEST(WpaFixtureHarnessTest, AnalysisAndReloadShareOneFixtureCopy) {
   auto snapshot = AnalyzeAndLoadFixture("function_pointer",
                                         analysis::AnalysisConfig::Default());
   ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
-  EXPECT_EQ(snapshot->project_root / ".veritas", snapshot->output_root);
+  EXPECT_EQ(snapshot->project_root / "veritas-metrics", snapshot->output_root);
   EXPECT_FALSE(snapshot->analysis.published_summary_ids.empty());
   EXPECT_EQ(snapshot->summaries.size(),
             snapshot->analysis.published_summary_ids.size());

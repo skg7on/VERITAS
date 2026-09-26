@@ -16,8 +16,10 @@
 //
 // A project directory is the only public entry point into VERITAS analysis.
 // `output_root` is diagnostic only; it never participates in semantic
-// identity. When empty, callers default it to `project_root / ".veritas"`
-// during resolution.
+// identity. When empty, callers default it to `project_root /
+// "veritas-metrics"` during resolution; that directory is the whole analysis
+// store root (manifest, metadata database, object store, WPA results), not
+// just the run metrics.
 
 #ifndef VERITAS_ANALYSIS_PROJECTANALYSISREQUEST_H_
 #define VERITAS_ANALYSIS_PROJECTANALYSISREQUEST_H_

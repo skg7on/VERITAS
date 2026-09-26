@@ -208,7 +208,7 @@ StatusOr<AnalyzedFixtureSnapshot> AnalyzeAndLoadFixture(
     std::string_view name, const analysis::AnalysisConfig& config) {
   auto fixture_root = std::make_unique<FixtureRootOwner>(FixtureProject(name));
   const auto project_root = fixture_root->project_root();
-  const auto output_root = project_root / ".veritas";
+  const auto output_root = project_root / "veritas-metrics";
   auto manifest = LoadFixtureManifest(project_root);
   if (!manifest.ok()) {
     return manifest.status();

@@ -143,7 +143,10 @@ Use `--wpa-engine cpp-emergency` only as a deliberate degraded run. VERITAS
 does not automatically fall back from a failed or mismatched Soufflé run.
 
 If `--output` is omitted, VERITAS writes to
-`/absolute/path/to/project/.veritas`.
+`/absolute/path/to/project/veritas-metrics`. That directory is the whole
+analysis store root, not just the run metrics: it holds `manifest.json`,
+`metadata.db`, the `objects/` content-addressed store, the WPA component
+results, and `run-metrics.json`.
 
 The current command performs this deterministic flow:
 

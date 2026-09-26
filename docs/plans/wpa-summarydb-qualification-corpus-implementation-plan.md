@@ -496,7 +496,7 @@ TEST(WpaFixtureHarnessTest, AnalysisAndReloadShareOneFixtureCopy) {
   auto snapshot = AnalyzeAndLoadFixture("function_pointer",
                                         AnalysisConfig::Default());
   ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
-  EXPECT_EQ(snapshot->project_root / ".veritas", snapshot->output_root);
+  EXPECT_EQ(snapshot->project_root / "veritas-metrics", snapshot->output_root);
   EXPECT_FALSE(snapshot->analysis.published_summary_ids.empty());
   EXPECT_EQ(snapshot->summaries.size(),
             snapshot->analysis.published_summary_ids.size());
@@ -549,10 +549,10 @@ std::vector<const summary::v2::MemoryEffect*> MemoryEffectsWithObjectKind(
 `MapFixtureWithSvf` performs `ResolveProjectInput`, `LoadProjectManifest`,
 `RunLocalAnalysis`, and one `SvfAnalysisStage::Analyze` with a provenance
 context derived from the manifest and module hash. `AnalyzeAndLoadFixture`
-copies once, runs `ProjectAnalyzer`, opens the same `.veritas` root, and lists
-artifacts under the returned revision/build coordinates. Predicates inspect
-semantic enums and stable-ID prefixes; diagnostic names may select an expected
-source scenario but never establish identity equality.
+copies once, runs `ProjectAnalyzer`, opens the same `veritas-metrics` root, and
+lists artifacts under the returned revision/build coordinates. Predicates
+inspect semantic enums and stable-ID prefixes; diagnostic names may select an
+expected source scenario but never establish identity equality.
 
 Add a dedicated `veritas_wpa_fixture_support` static library containing the
 two new source files. Give it private include access to `${PROJECT_SOURCE_DIR}/src`

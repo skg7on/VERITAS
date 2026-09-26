@@ -39,10 +39,10 @@ TEST(ProjectInputTest, ResolvesCompileDatabaseInsideProjectRoot) {
   EXPECT_EQ(resolved->project_root, project);
   EXPECT_EQ(resolved->compile_database_path,
             resolved->project_root / "compile_commands.json");
-  EXPECT_EQ(resolved->output_root, resolved->project_root / ".veritas");
+  EXPECT_EQ(resolved->output_root, resolved->project_root / "veritas-metrics");
 }
 
-TEST(ProjectInputTest, DefaultsOutputRootToDotVeritas) {
+TEST(ProjectInputTest, DefaultsOutputRootToVeritasMetrics) {
   const auto project = testing::FixtureProject("smoke");
   const analysis::ProjectAnalysisRequest request{
       .project_root = project,
@@ -52,7 +52,7 @@ TEST(ProjectInputTest, DefaultsOutputRootToDotVeritas) {
   ASSERT_TRUE(ResolveProjectInput(request).ok());
   auto resolved = *ResolveProjectInput(request);
   EXPECT_TRUE(resolved.output_root.is_absolute());
-  EXPECT_EQ(resolved.output_root.filename(), ".veritas");
+  EXPECT_EQ(resolved.output_root.filename(), "veritas-metrics");
 }
 
 TEST(ProjectInputTest, HonorsExplicitOutputRoot) {
@@ -66,7 +66,7 @@ TEST(ProjectInputTest, HonorsExplicitOutputRoot) {
   auto resolved = ResolveProjectInput(request);
   ASSERT_TRUE(resolved.ok()) << resolved.status().message();
   EXPECT_TRUE(resolved->output_root.is_absolute());
-  EXPECT_NE(resolved->output_root, resolved->project_root / ".veritas");
+  EXPECT_NE(resolved->output_root, resolved->project_root / "veritas-metrics");
 }
 
 TEST(ProjectInputTest, RejectsProjectWithoutCompileDatabase) {
