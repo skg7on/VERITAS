@@ -1496,9 +1496,11 @@ The CTest name and the gtest suite name are deliberately the same string; `add_t
 - [ ] **Step 2: Run it to confirm it fails**
 
 ```bash
-cmake --build build --target PhaseObservabilityIdentityTest -j 8
+cmake --build build --target phase_observability_identity_integration_test -j 8
 ctest --test-dir build -R "PhaseObservabilityIdentityTest" --output-on-failure
 ```
+
+**The build target and the CTest name differ, deliberately and confusingly.** The executable is `phase_observability_identity_integration_test` (the convention in that directory); `PhaseObservabilityIdentityTest` is only the `add_test` name. Passing the test name to `--target` fails with "unknown target", so build the executable and filter CTest by the test name.
 
 Note the filter has **no `^...\.` anchor and no trailing dot**. This target is registered with `add_test`, so its CTest name is exactly `PhaseObservabilityIdentityTest`; the `Suite.Case` form only exists for targets that use `gtest_discover_tests`. An anchored filter here would match zero tests, and a zero-match CTest filter **reports success** — so a green result would be meaningless. Confirm a test actually ran.
 
@@ -1574,7 +1576,8 @@ struct WpaRunRequest {
 - [ ] **Step 4: Run the identity test and the existing analyzer suite**
 
 ```bash
-cmake --build build --target PhaseObservabilityIdentityTest ProjectAnalyzerTest ProjectAnalyzerWpaTest -j 8
+cmake --build build --target phase_observability_identity_integration_test \
+  project_analyzer_integration_test project_analyzer_wpa_integration_test -j 8
 ctest --test-dir build -R "PhaseObservabilityIdentityTest|ProjectAnalyzer" --output-on-failure
 ```
 
@@ -2505,6 +2508,7 @@ git commit -m "feat(build): emit the analyze phase report and run-metrics artifa
 - Modify: `src/analysis/svf/SvfSession.h`, `src/analysis/svf/SvfSession.cpp`
 - Modify: `src/wpa/WpaOrchestrator.cpp`
 - Modify: `include/veritas/facts/AnalysisFactBus.h`, `src/facts/AnalysisFactBus.cpp`
+- Modify: `src/analysis/ProjectAnalyzer.cpp` — the SVF call site must now pass the recorder, and the conformance-oracle request must be given a null one (both below)
 - Modify: `tests/integration/analysis/PhaseObservabilityIdentityTest.cpp` (add the span-tree test)
 - Modify: `tests/integration/analysis/CMakeLists.txt` (timeout 60 → 180)
 
@@ -2538,6 +2542,19 @@ Inside the callback, where `view.svfg` is still live, record the SVFG scale as c
 ```
 
 `getSVFGNodeNum()` is `SVFG.h:271-274`; `getTotalEdgeNum()` is `GenericGraph.h:428-431`, reachable because `SVFG` derives from `VFG` and thence from `GenericGraph`. `view` is valid only inside the callback, so these counts must be taken there and not later.
+
+**Two call sites in `ProjectAnalyzer.cpp` must change, and they pull in opposite directions.**
+
+1. The M5 call site, currently `svf_stage_->Analyze(local->program_ir, run_context, ToSvfConfig(config))`, must pass the recorder as the new fourth argument. Task 3 left it relying on the default, so without this edit none of the sub-spans you are adding here can ever fire — and your own span-tree test will fail on `m5.svf.andersen` and friends. That failure is the correct signal, not a test to relax.
+2. The conformance-oracle request must be given a **null** recorder. `RunWpa` builds it as `WpaRunRequest conformance_request = wpa_request;`, which copies the `metrics` pointer, so the oracle's second full WPA run would record its spans under exactly the same names as the primary run. Every per-component span would then be counted twice, and the percentiles and the top-N list would silently describe two runs blended into one. The report describes the primary run; the oracle is a conformance check, not a phase.
+
+```cpp
+  wpa::WpaRunRequest conformance_request = wpa_request;
+  conformance_request.run = *conformance_run;
+  // The oracle re-runs the same components. Sharing the recorder would double
+  // every per-component count and blend two runs into one top-N list.
+  conformance_request.metrics = nullptr;
+```
 
 Two mechanical requirements for this step, because `SvfSession.cpp` and `SvfAnalysisStage.cpp` live in namespace `veritas::analysis::svf`:
 
@@ -2697,8 +2714,8 @@ If a span name here does not appear, do **not** weaken the assertion to make it 
 **Never run a bare `cmake --build build`.** This project has 631 targets and a full build has already stalled one session. Name your targets:
 
 ```bash
-cmake --build build --target veritas-build PhaseObservabilityIdentityTest \
-  VeritasBuildAnalyzeCliTest project_analyzer_integration_test -j 8
+cmake --build build --target veritas-build VeritasBuildAnalyzeCliTest \
+  phase_observability_identity_integration_test project_analyzer_integration_test -j 8
 ctest --test-dir build -R "Wpa|Svf|ProjectAnalyzer|PhaseObservabilityIdentity" --output-on-failure
 ```
 
