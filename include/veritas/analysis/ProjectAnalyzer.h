@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "veritas/analysis/ProjectAnalysisRequest.h"
+#include "veritas/core/RunMetrics.h"
 #include "veritas/core/Status.h"
 
 namespace veritas::analysis {
@@ -121,8 +122,14 @@ class ProjectAnalyzer {
   //
   // Does NOT fail on budget limits or unmapped SVF nodes; those return
   // kCompleteWithUnknowns with explanatory unknowns.
+  //
+  // When `metrics` is non-null the pipeline records per-phase spans into it.
+  // The recorder is caller-owned so that a run which fails part-way still
+  // yields its partial timeline. Metrics are non-semantic: they never enter
+  // any content-addressed identity (design section 5.2).
   StatusOr<ProjectAnalysisResult> AnalyzeProject(
-      const ProjectAnalysisRequest& request, const AnalysisConfig& config);
+      const ProjectAnalysisRequest& request, const AnalysisConfig& config,
+      core::RunMetrics* metrics = nullptr);
 
  private:
   class Impl;
