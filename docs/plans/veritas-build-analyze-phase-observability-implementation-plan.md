@@ -1580,33 +1580,40 @@ git commit -m "feat(analysis): record top-level phase spans and guard run identi
 ### Task 4: The sampler thread and the interval join
 
 **Files:**
-- Modify: `include/veritas/core/RunMetrics.h` (declare `CurrentResidentBytes`, `CurrentFootprintBytes`)
+- Modify: `include/veritas/core/RunMetrics.h` (add `class SeriesBuffer`; declare `CurrentResidentBytes`, `CurrentFootprintBytes`; add a `series()` accessor to `RunMetrics`)
 - Modify: `src/core/RunMetrics.cpp` (sampler, thinning, join)
 - Modify: `tests/unit/core/RunMetricsTest.cpp`
 
 **Interfaces:**
 - Consumes: Task 1's recorder.
-- Produces: `std::uint64_t core::CurrentResidentBytes()`, `std::uint64_t core::CurrentFootprintBytes()`; `RunMetricsStats::series`, `series_decimation`, `peak_rss_bytes`, `peak_footprint_bytes`, `peak_at`; `SpanStats::memory` populated for bearing spans.
+- Produces: `std::uint64_t core::CurrentResidentBytes()`, `std::uint64_t core::CurrentFootprintBytes()`; `core::SeriesBuffer` with `explicit SeriesBuffer(std::size_t capacity = 65536)`, `void Append(MemorySample)`, `const std::vector<MemorySample>& samples() const`, `std::uint64_t decimation() const`, `std::size_t capacity() const`; `SeriesBuffer& RunMetrics::series()`; `RunMetricsStats::series`, `series_decimation`, `peak_rss_bytes`, `peak_footprint_bytes`, `peak_at`; `SpanStats::memory` populated for bearing spans.
+
+**Why `SeriesBuffer` is a class and not a field.** The append-and-thin policy is the one piece of the recorder a second thread touches, and the plan requires these tests not to sleep. A separate class with a direct `Append` makes the policy testable with no thread and no test-only seam in the production API — the alternative was a `ForTest` setter plus a decimation getter, two seams that exist only for tests. It also splits the sampler's two concerns cleanly: the thread handle and stop flag stay in the sampler, the data and its policy live in the buffer.
 
 - [ ] **Step 1: Write the failing tests**
 
-These tests must not sleep. Drive the join with a synthetic series injected through a test-only seam: add `void SetSeriesForTest(std::vector<MemorySample>, std::uint64_t decimation)` under a `ForTest` name, documented as test-only. Then:
+These tests must not sleep and must not start the sampler. Drive the series through `RunMetrics::series()`, which returns a `SeriesBuffer&`; the tests call `Append` directly, which is the same code path the sampler thread runs. No test-only seam is needed. Keep every case in the `RunMetricsTest` suite so the filtered CTest command below still selects them — a second suite in the same file would be silently excluded by the `^RunMetricsTest\.` filter.
 
 ```cpp
+// Appends one memory sample at time t, with resident set and physical
+// footprint both in bytes.
+void AppendSample(RunMetrics& metrics, std::chrono::milliseconds t,
+                  std::uint64_t rss, std::uint64_t footprint) {
+  metrics.series().Append(MemorySample{t, rss, footprint});
+}
+
 TEST(RunMetricsTest, JoinsSeriesToBearingSpanInterval) {
   ScriptedRecorder r;
-  // Wall ticks are 0, 10, 20 ms across the span.
+  // Wall ticks are 0 and 10 ms, so the span's window is [0, 10] ms.
   r.wall_tick = milliseconds(0);
   const std::size_t token = r.metrics->BeginSpan("p", SpanMode::kBearing);
   r.wall_tick = milliseconds(10);
   r.metrics->EndSpan(token);
 
-  r.metrics->SetSeriesForTest(
-      {{milliseconds(0), 100, 90},
-       {milliseconds(5), 300, 250},
-       {milliseconds(10), 200, 180},
-       {milliseconds(20), 999, 999}},  // outside the span
-      1);
+  AppendSample(*r.metrics, milliseconds(0), 100, 90);
+  AppendSample(*r.metrics, milliseconds(5), 300, 250);
+  AppendSample(*r.metrics, milliseconds(10), 200, 180);
+  AppendSample(*r.metrics, milliseconds(20), 999, 999);  // outside the window
 
   const RunMetricsStats stats = r.metrics->TakeStats();
   const SpanStats& p = stats.root.children.front();
@@ -1618,24 +1625,86 @@ TEST(RunMetricsTest, JoinsSeriesToBearingSpanInterval) {
   EXPECT_EQ(p.memory->footprint_peak, 250u);
 }
 
-TEST(RunMetricsTest, SampleOnStartBoundaryBelongsToTheSpan) {
-  // A sample at exactly t_start is inside; at exactly t_end of one span and
-  // t_start of the next, the rule is start-inclusive and end-inclusive.
-  // Assert both, so the rule cannot drift.
+TEST(RunMetricsTest, BothSpanBoundariesAreInclusive) {
+  // The boundary rule is start-inclusive and end-inclusive: a sample at
+  // exactly t_start belongs to the span, and so does one at exactly t_end.
+  ScriptedRecorder r;
+  r.wall_tick = milliseconds(0);
+  const std::size_t token = r.metrics->BeginSpan("p", SpanMode::kBearing);
+  r.wall_tick = milliseconds(10);
+  r.metrics->EndSpan(token);
+
+  AppendSample(*r.metrics, milliseconds(0), 100, 10);
+  AppendSample(*r.metrics, milliseconds(10), 500, 50);
+  AppendSample(*r.metrics, milliseconds(11), 999, 999);
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  const SpanStats& p = stats.root.children.front();
+  ASSERT_TRUE(p.memory.has_value());
+  EXPECT_EQ(p.memory->rss_start, 100u);  // t == t_start is inside
+  EXPECT_EQ(p.memory->rss_end, 500u);    // t == t_end is inside
+  EXPECT_EQ(p.memory->peak_within, 500u);
 }
 
-TEST(RunMetricsTest, PlainSpansGetNoMemory) {
-  // A kPlain span inside a bearing parent must have no memory block, and the
-  // parent's peak must still include the samples taken during the child.
+TEST(RunMetricsTest, PlainSpansGetNoMemoryButTheParentWindowStillCoversThem) {
+  ScriptedRecorder r;
+  r.wall_tick = milliseconds(0);
+  const std::size_t parent = r.metrics->BeginSpan("p", SpanMode::kBearing);
+  r.wall_tick = milliseconds(5);
+  const std::size_t child = r.metrics->BeginSpan("c", SpanMode::kPlain);
+  r.wall_tick = milliseconds(15);
+  r.metrics->EndSpan(child);
+  r.wall_tick = milliseconds(20);
+  r.metrics->EndSpan(parent);
+
+  AppendSample(*r.metrics, milliseconds(10), 700, 70);
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  const SpanStats& p = stats.root.children.front();
+  ASSERT_TRUE(p.memory.has_value());
+  ASSERT_EQ(p.children.size(), 1u);
+  // A kPlain span records no memory block at all...
+  EXPECT_FALSE(p.children.front().memory.has_value());
+  // ...but the sample taken while it ran is still inside the parent's window.
+  EXPECT_EQ(p.memory->peak_within, 700u);
 }
 
-TEST(RunMetricsTest, ThinningDoublesDecimationAndKeepsTheFirstSample) {
-  // Force overflow of a small series_capacity, then assert the first sample
-  // survives, decimation doubled, and the last sample is at or near the run end.
+TEST(RunMetricsTest, SeriesBufferThinningDoublesDecimationKeepingFirstAndNewest) {
+  SeriesBuffer buffer(4);
+  for (int i = 0; i < 4; ++i) {
+    buffer.Append(MemorySample{milliseconds(i * 10), 100u + i, 10u});
+  }
+  EXPECT_EQ(buffer.decimation(), 1u);
+  EXPECT_EQ(buffer.samples().size(), 4u);
+
+  // The fifth sample overflows the capacity and triggers thinning.
+  buffer.Append(MemorySample{milliseconds(40), 104u, 14u});
+
+  EXPECT_EQ(buffer.decimation(), 2u);
+  ASSERT_LE(buffer.samples().size(), 4u);
+  EXPECT_EQ(buffer.samples().front().t, milliseconds(0));  // the first survives
+  EXPECT_EQ(buffer.samples().back().t, milliseconds(40));  // the newest survives
 }
 
 TEST(RunMetricsTest, PeakIsTheMaximumOfTheWholeSeries) {
-  // peak_rss_bytes and peak_at reflect the whole run, not a single span.
+  ScriptedRecorder r;
+  r.wall_tick = milliseconds(0);
+  const std::size_t token = r.metrics->BeginSpan("p", SpanMode::kBearing);
+  r.wall_tick = milliseconds(30);
+  r.metrics->EndSpan(token);
+
+  AppendSample(*r.metrics, milliseconds(0), 100, 90);
+  AppendSample(*r.metrics, milliseconds(10), 900, 850);
+  AppendSample(*r.metrics, milliseconds(20), 200, 180);
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  // The peak is a property of the run, not of any one span: the maximum over
+  // the whole series, carrying the time it occurred at.
+  EXPECT_EQ(stats.peak_rss_bytes, 900u);
+  EXPECT_EQ(stats.peak_footprint_bytes, 850u);
+  EXPECT_EQ(stats.peak_at, milliseconds(10));
+  EXPECT_EQ(stats.series_decimation, 1u);
+  EXPECT_EQ(stats.series.size(), 3u);
 }
 ```
 
@@ -1698,31 +1767,62 @@ std::uint64_t CurrentFootprintBytes() {
 The sampler lives in `Impl`:
 
 ```cpp
+  // The thread handle and its stop flag only. The samples and the thinning
+  // policy live in SeriesBuffer, which is the object the tests drive directly.
   struct Sampler {
     pthread_t thread {};
     std::atomic<bool> stop {false};
-    std::atomic<std::size_t> cursor {0};
-    std::vector<MemorySample> buffer;   // pre-sized to options.series_capacity
-    std::atomic<std::uint64_t> decimation {1};
     bool started = false;
   };
   Sampler sampler;
+  SeriesBuffer series;
   std::chrono::steady_clock::time_point run_start;
-  // Used when pthread_create fails, or when sample_interval is zero: a sparse
-  // series recorded at span boundaries instead of on a timer.
-  std::vector<MemorySample> boundary_samples;
+  // Set when the sampler could not start: samples are then taken at span
+  // boundaries instead of on a timer, and the artifact reports itself
+  // incomplete.
+  bool boundary_only = false;
 
   static void* SamplerMain(void* arg);
+```
+
+And in the header, beside `RunMetrics`:
+
+```cpp
+// SeriesBuffer holds the memory samples and owns the bounded-memory policy.
+//
+// It is the one part of the recorder a second thread appends to, so it is a
+// class with a direct Append rather than a field: tests exercise the policy
+// without starting a thread, and the sampler's two concerns stay separate.
+class SeriesBuffer {
+ public:
+  explicit SeriesBuffer(std::size_t capacity = 65536);
+
+  // Append one sample. While the buffer is below capacity this is a push.
+  // On overflow it drops every other retained sample, halves the size, and
+  // doubles the decimation factor, so the whole timeline stays covered at
+  // coarser resolution rather than the early curve being lost. The first
+  // sample and the newest are never discarded.
+  void Append(MemorySample sample);
+
+  const std::vector<MemorySample>& samples() const { return samples_; }
+  std::uint64_t decimation() const { return decimation_; }
+  std::size_t capacity() const { return capacity_; }
+
+ private:
+  std::size_t capacity_;
+  std::uint64_t decimation_ = 1;
+  std::vector<MemorySample> samples_;
+};
 ```
 
 Rules to implement exactly:
 
 - Start the sampler in the constructor **only** when `options.sample_interval > 0`. Record `run_start` there.
-- The thread loop sleeps `sample_interval`, measures, and appends. On reaching `series_capacity`: drop every other sample in `buffer`, halve the cursor, and double `decimation`. Never discard the newest sample, and never discard the first.
-- `pthread_create` failure: `Diagnose("sampler thread unavailable: ...")`, set a `boundary_only` flag, and append a sample from `BeginSpan` (bearing only) and `EndSpan`.
+- The thread loop sleeps `sample_interval`, measures resident and footprint, and calls `series.Append(...)`. The buffer's own policy handles overflow; the loop does not manage capacity, a cursor, or decimation itself.
+- `pthread_create` failure: `Diagnose("sampler thread unavailable: ...")`, set `boundary_only = true`, and from then on append one sample in `BeginSpan` and one in `EndSpan`, but only while a **bearing** span is open, so the boundary series stays sparse rather than one sample per component.
 - The destructor sets `stop`, then `pthread_join`s if started. Join before reading the buffer.
-- No lock on the analysis path: only the sampler writes the buffer, and only `TakeStats` reads it, after the join.
-- `TakeStats` converts each bearing accumulator's `first_start`/`last_end` to millisecond offsets from `run_start` and applies the join, with the boundary rule **start-inclusive, end-inclusive**. It also computes `peak_rss_bytes`, `peak_footprint_bytes` and `peak_at` over the whole series, and moves the used series into `stats.series` (or leaves it empty when `emit_series` is false).
+- No lock on the analysis path: only the sampler thread appends during the run, and only `TakeStats` reads, after the join. When `boundary_only` is set there is no sampler thread at all, and the appends happen on the analysis thread.
+- `TakeStats` converts each bearing accumulator's `first_start`/`last_end` to millisecond offsets from `run_start` and applies the join, with the boundary rule **start-inclusive, end-inclusive**. For a bearing span that occurred more than once, the window is the union `[first_start, last_end]`, and that is what the memory figures describe — not a per-occurrence average; say so in a comment. It also computes `peak_rss_bytes`, `peak_footprint_bytes` and `peak_at` over the whole series, and moves the used series into `stats.series` (or leaves it empty when `emit_series` is false), setting `series_decimation` from the buffer.
 
 Link: `src/core/CMakeLists.txt` already gained `Threads::Threads` in Task 1.
 
@@ -1733,7 +1833,7 @@ cmake --build build --target RunMetricsTest -j 8
 ctest --test-dir build -R "^RunMetricsTest\." --output-on-failure
 ```
 
-Expected: all pass, including the five new cases.
+Expected: all pass — 16 cases, the 11 from Task 1 plus the five added here. Confirm the count in the output rather than trusting the exit code, since a filter matching zero tests also reports success.
 
 - [ ] **Step 5: Commit**
 
