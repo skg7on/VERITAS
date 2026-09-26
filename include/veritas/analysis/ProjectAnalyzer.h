@@ -101,8 +101,10 @@ struct ProjectAnalysisResult {
   // They are not `run_id`'s input list. `run_id` hashes ten descriptor fields
   // (the revision and build-variant ids, the summary, relation, rule-bundle and
   // model-bundle versions, the two configuration hashes, the engine tag and the
-  // toolchain identity), of which four are here, and `batch_id` is derived from
-  // the assembled fact batch rather than from `run_id` at all. The other
+  // toolchain identity), of which three are here — the two configuration hashes
+  // and the toolchain identity. The fourth field introduced below, `batch_id`,
+  // is not among them: it is derived from the assembled fact batch, and
+  // `DeriveBatchId` hashes that batch's `run_id` as its first field. The other
   // coordinates are already on this result beside them. An earlier revision of
   // this comment claimed these were "exactly the fields that move `run_id`";
   // they are the subset the reporting layer has no other source for.

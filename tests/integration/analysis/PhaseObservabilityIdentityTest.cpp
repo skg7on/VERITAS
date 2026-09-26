@@ -58,11 +58,13 @@ namespace fs = std::filesystem;
 //
 // `run_id` is the only column excluded, from the three tables that carry it
 // (`run_fact_bindings`, `provenance_nodes`, `provenance_edges`) and from
-// nothing else. It is excluded because it is the one column a second run of the
-// same fixture could legitimately disagree on and still be the same published
-// content — and because its own stability is pinned separately, by the
-// `EXPECT_EQ` cases in `RecordingDoesNotMoveAnyIdentity`. Excluding a whole
-// table would make this comparison a statement about the tables that were left.
+// nothing else. It is excluded because the digest is a statement about the
+// published content rather than about the run key: `run_id` is content-derived
+// from the run descriptor, and the `EXPECT_EQ` cases in
+// `RecordingDoesNotMoveAnyIdentity` pin its equality between these same two
+// runs directly, so re-pinning it here would compare one string twice.
+// Excluding a whole table would make this comparison a statement about the
+// tables that were left.
 // `analysis_facts` carries no run-scoped column at all, so its dump is the
 // table.
 //

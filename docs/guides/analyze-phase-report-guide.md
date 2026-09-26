@@ -271,15 +271,15 @@ fields are populated on any successful run, because a WPA failure returns
 before the report is built; the omission rule is the guard for the case where
 that stops being true (spec §6.3).
 
-Only two of those nine fields, though, are *run-scoped*: `run_id` and
-`batch_id`. The other seven — `repository_id`, `revision_id`,
-`build_variant_id`, `projection_id`, `svf_config_hash`, `wpa_config_hash` and
-`engine_toolchain_identity` — are content- and config-derived, so two runs of
-one fixture agree on every one of them. Excluding the whole block to calm a
-diff therefore throws away exactly the configuration comparison the block
-exists for: two runs whose `wpa_config_hash` values differ did *not* have the
-same effective configuration. Exclude the two run-scoped keys, not the block
-(section 8, rule 6).
+None of those nine fields, though, is *run-scoped*. The seven listed above are
+content- or config-derived; `run_id` is a pure function of the ten descriptor
+fields, five of which are among those seven, and `batch_id` hashes the assembled
+fact batch whose first field is that `run_id`. Two like-for-like runs of one
+fixture therefore agree on every one of the nine. Excluding the whole block to
+calm a diff throws away exactly the configuration comparison the block exists
+for: two runs whose `wpa_config_hash` values differ did *not* have the same
+effective configuration. Compare the block; do not exclude it (section 8,
+rule 6).
 
 The same discipline shows up in the text report as the `-` in
 [section 2](#2-the-columns), and in the JSON as keys that appear only on the
@@ -348,15 +348,17 @@ artifact-format change, not an internal detail.
    *not* make it the only machine-scoped content: the `environment` block is
    machine-scoped throughout — `os`, `arch`, `cpu_model`, `cores`, `ram_bytes`,
    `build_type`, `host_compiler`, `veritas_version`, `git_revision` — so a
-   script that wants cross-machine diffs must exclude that block as well as the
-   run-scoped coordinates of rule 6. Where a store read-back failure would have
-   quoted a path, the artifact describes the failure instead.
+   script that wants cross-machine diffs must exclude that block. The `identity`
+   block is not machine-scoped, so it stays comparable (rule 6). Where a store
+   read-back failure would have quoted a path, the artifact describes the
+   failure instead.
 5. The memory series lives in its own block, so `--metrics-series false` yields
    a calm diff.
-6. The `identity` block is separable, so a comparison script can exclude the
-   **run-scoped** coordinates without parsing the rest of the artifact. Exclude
-   them selectively: only `run_id` and `batch_id` move between two runs of one
-   fixture (section 6, rule 2).
+6. The `identity` block is separable, so a comparison script can address it
+   without parsing the rest of the artifact — and it should be compared, not
+   excluded. None of the nine fields is **run-scoped**: all are content- or
+   config-derived, so two like-for-like runs of one fixture agree on every one
+   (section 6, rule 2).
 
 ## 9. Fields reported as not recorded today
 

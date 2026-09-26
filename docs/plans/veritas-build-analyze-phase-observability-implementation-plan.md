@@ -1017,14 +1017,17 @@ Create `include/veritas/observability/RunReport.h` with the license header and t
 
 namespace veritas::observability {
 
-// The identity block is separated so a comparison script can exclude its
-// run-scoped coordinates without parsing the rest — SELECTIVELY, not wholesale:
-// only `run_id` and `batch_id` move between two runs of one fixture. The other
-// seven — `repository_id`, `revision_id`, `build_variant_id`, `projection_id`,
-// `svf_config_hash`, `wpa_config_hash` and `engine_toolchain_identity` — are
-// content- and config-derived and therefore stable, and they are the comparison
-// the block exists to enable. See design section 6.5 rule 6, which corrects the
-// earlier wording that read "exclude it wholesale".
+// The identity block is separated so a comparison script can address it without
+// parsing the rest — and it should be COMPARED, not excluded. All nine
+// coordinates are content- or config-derived, so none of them moves between two
+// like-for-like re-runs of one fixture. `run_id` is a pure function of the ten
+// descriptor fields canonicalized in `AnalysisRun.cpp`, and `batch_id` hashes
+// the assembled fact batch, whose first field is that same `run_id`. A
+// difference inside this block is therefore not noise to be filtered: it means
+// the two runs were not like-for-like — a different revision, configuration,
+// engine, or toolchain. Excluding the whole block would discard exactly that
+// evidence while believing it had excluded noise. See design section 6.5
+// rule 6, which corrects the earlier wording that read "exclude it wholesale".
 struct RunIdentity {
   std::string run_id;
   std::string batch_id;
@@ -2098,8 +2101,11 @@ constexpr std::string_view kCountedTables[] = {
     "run_fact_bindings", "wpa_component_states_v2"};
 
 // Groups on-disk bytes by the first path component under output_root, so the
-// artifact names stores (cas, metadata.db, ...) rather than individual files,
-// and never contains an absolute path.
+// artifact names stores (objects, metadata.db, ...) rather than individual
+// files, and never contains an absolute path. `objects` is the name the shipped
+// root actually has: `SummaryRepository::Open(db_path)` puts the RocksDB object
+// store at `<db_path>/objects` and the SQLite metadata store beside it at
+// `<db_path>/metadata.db`, and `db_path` is the output root.
 StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
     const std::filesystem::path& output_root) {
   std::map<std::string, std::uint64_t> totals;

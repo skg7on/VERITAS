@@ -401,11 +401,13 @@ std::vector<std::size_t> FillReport(
     const veritas::analysis::AnalysisConfig& config,
     const fs::path& output_root,
     veritas::observability::RunReport* report) {
-  // The identity block is separated so a comparison script can exclude its
-  // run-scoped coordinates without parsing the rest — SELECTIVELY, not
-  // wholesale: only run_id and batch_id move between two runs of one fixture,
-  // while the two configuration hashes, the toolchain identity, projection id
-  // and the revision coordinates are content- and config-derived and stable.
+  // The identity block is separated so a comparison script can address it
+  // without parsing the rest — and it should be COMPARED, not excluded. All
+  // nine coordinates are content- or config-derived, so none of them moves
+  // between two like-for-like re-runs of one fixture: run_id is a pure function
+  // of the ten descriptor fields, and batch_id hashes the assembled fact batch,
+  // whose first field is that same run_id. A difference inside the block is not
+  // noise to be filtered; it means the two runs were not like-for-like.
   // Excluding the whole block would discard exactly the comparison it exists to
   // enable. Every coordinate comes from the run itself: four from the analysis
   // outcome, the repository from the manifest, and the two configuration hashes,

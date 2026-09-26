@@ -420,8 +420,9 @@ TEST(RunReportTest, MemoryColumnWidthsFitTheWidestRenderedMeasurement) {
 
   const std::vector<std::string> lines = SplitLines(RenderRunReportText(report));
   ASSERT_EQ(lines.size(), 4u) << RenderRunReportText(report);
-  // Row 0 is the header, row 1 the root (which carries no memory block, so it
-  // prints the "-" placeholders), rows 2 and 3 the two children.
+  // Row 0 is the `Analysis phase report` title — there is no column-header
+  // row — row 1 the root (which carries no memory block, so it prints the "-"
+  // placeholders), rows 2 and 3 the two children.
   EXPECT_NE(lines[2].find("1024.00 MiB"), std::string::npos) << lines[2];
   EXPECT_NE(lines[2].find("+1024.00 MiB"), std::string::npos) << lines[2];
   EXPECT_NE(lines[3].find("-1024.00 MiB"), std::string::npos) << lines[3];

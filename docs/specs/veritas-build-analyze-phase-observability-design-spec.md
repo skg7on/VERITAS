@@ -441,22 +441,26 @@ are named in section 9.2. The sampler thread exists only when recording is on.
                                "canonical_facts": 0 },
                    "incrementality": { "components_reused": 0,
                                        "components_executed": 0 } },
-  "store":       { "tables": [], "bytes": {}, "cross_checks": [] },
+  "store":       { "tables": [{"table": "analysis_facts", "rows": 0}],
+                   "bytes": {"objects": 0},
+                   "cross_checks": [{"name": "", "from_store": 0,
+                                     "from_memory": 0, "agrees": true}] },
   "phases":      [],
   "memory":      { "peak": {}, "series": [], "series_decimation": 1 },
   "counters":    []
 }
 ```
 
-`identity` is separated because part of it is run-scoped, so a comparison script
-can exclude those coordinates without parsing the rest. **Exclude them
-selectively, not wholesale.** Only `run_id` and `batch_id` move between two runs
-of the same fixture; the other seven fields are content- and config-derived and
-therefore stable, and they are the comparison the block exists to enable. An
-earlier revision of this sentence said the block was separated so a script "can
-ignore it" — the wholesale reading that section 6.5's rule 6 corrects, and the
-one that would discard the configuration evidence while believing it had
-excluded noise.
+`identity` is separated so a comparison script can address it without parsing
+the rest — and it should be **compared, not excluded**. None of the nine fields
+is run-scoped: all are content- or config-derived and therefore stable across
+like-for-like re-runs of the same fixture, and they are the comparison the block
+exists to enable. A difference inside the block means the two runs were not
+like-for-like, so excluding it discards precisely the configuration evidence the
+block carries while believing it had excluded noise. An earlier revision of this
+sentence said the block was separated so a script "can ignore it"; the revision
+after that said only `run_id` and `batch_id` move between runs. Neither moves,
+and section 6.5's rule 6 corrects both readings.
 
 **Three inventory fields have no source and are reported as not recorded, not as
 zero.** `inventory.output.svfg_edges`, `inventory.incrementality.
@@ -494,7 +498,7 @@ and is recorded because it is easy to repeat: **verify that a source carries the
 value, not merely that it exists.** Checking that an accessor is reachable is not
 checking that anything writes what it reads.
 
-**Four things in the shape above are conditional, and the example shows their
+**Five things in the shape above are conditional, and the example shows their
 populated form only.** Every empty string shown is a *shape*, not a value the
 artifact may contain.
 
@@ -523,6 +527,16 @@ artifact may contain.
    `components_executed`. The rule and its reason are stated in full in the
    paragraphs just above; this item exists because an earlier revision of the
    shape contradicted them, presenting all three as present keys carrying `0`.
+5. **The `store` block is all-or-nothing.** It is emitted only when the
+   read-back collected at least one table count or one byte size — the gate in
+   `RunReport.cpp` reads `!tables.empty() || !bytes.empty()` — so a run whose
+   store read-back failed (schema drift, a locked DB) carries no `store` key at
+   all rather than an empty one. The shape above therefore shows a *populated*
+   `store`, and the empty-collection form an earlier revision of the shape
+   showed (`{"tables": [], "bytes": {}, "cross_checks": []}`) is a shape the
+   artifact cannot emit. Only one half can be empty: an empty `tables` list is
+   reachable alongside a non-empty `bytes` map, and vice versa, because the gate
+   is an OR.
 
 **The presence test is "was it measured", never "was it emitted".** Those are
 different questions — `emit_series` decides whether the samples are *published*,
@@ -614,19 +628,26 @@ Recorded here so future instruments do not quietly break them:
    this as "the only machine-scoped field": the `environment` block is
    machine-scoped throughout (`os`, `arch`, `cpu_model`, `cores`, `ram_bytes`,
    `build_type`, `host_compiler`, `veritas_version`, `git_revision`), so a
-   comparison script that wants cross-machine diffs must exclude that block as
-   well as the run-scoped coordinates below.
+   comparison script that wants cross-machine diffs must exclude that block.
+   The `identity` block is not machine-scoped, so it stays comparable across
+   machines — compare it, per rule 6.
 5. The series lives in its own block, so `--metrics-series false` yields a calm
    diff.
-6. The `identity` block is separable, so a comparison script can exclude the
-   **run-scoped** coordinates without parsing the rest. Exclude those
-   *selectively*: only `run_id` and `batch_id` move between two runs of the same
-   fixture, while `repository_id`, `revision_id`, `build_variant_id`,
-   `projection_id`, `svf_config_hash`, `wpa_config_hash` and
-   `engine_toolchain_identity` are content- and config-derived and therefore
-   stable. Blanket-excluding the whole block discards exactly the configuration
-   comparison it exists to enable — and two runs whose configuration hashes
-   disagree did *not* have the same effective configuration.
+6. The `identity` block is separable, so a comparison script can address it
+   without parsing the rest — and it should be **compared, not excluded**. All
+   nine coordinates are content- or config-derived, so **none of them moves
+   between two like-for-like re-runs of the same fixture**: `run_id` is a pure
+   function of the ten descriptor fields `Canonicalize` hashes, and `batch_id`
+   hashes the assembled fact batch, whose first field is that same `run_id`. A
+   difference inside the block is therefore *not* noise to be filtered: it means
+   the two runs were not like-for-like — a different revision, configuration,
+   engine, or toolchain. Excluding the whole block discards exactly that signal,
+   including the configuration comparison it exists to enable: two runs whose
+   configuration hashes disagree did *not* have the same effective
+   configuration. An earlier revision of this rule read "only `run_id` and
+   `batch_id` move between two runs"; measurement says neither moves — repeated
+   runs of one binary over one project carry the same pair of ids, byte for
+   byte, both in the artifact and in the store's batch receipts.
 
 ## 7. Failure handling, overhead, and concurrency
 
