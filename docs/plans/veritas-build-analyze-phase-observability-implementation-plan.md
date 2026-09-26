@@ -1851,7 +1851,7 @@ git commit -m "feat(core): sample resident set and footprint, and join it to spa
 **Files:**
 - Create: `include/veritas/observability/StoreSummary.h`
 - Create: `src/observability/StoreSummary.cpp`
-- Modify: `src/observability/CMakeLists.txt` (add `StoreSummary.cpp`; link `veritas_facts`, `veritas_summarydb`)
+- Modify: `src/observability/CMakeLists.txt` (add `StoreSummary.cpp`; link `veritas_summarydb`; add this library's own build-identity compile definitions)
 - Modify: `CMakeLists.txt` **only if** `veritas_observability` is added before `src/facts`/`src/summarydb` — it is added after `src/evidence`, so no change is needed.
 - Create: `tests/unit/observability/StoreSummaryTest.cpp`
 - Modify: `tests/unit/observability/CMakeLists.txt`
@@ -1862,44 +1862,231 @@ git commit -m "feat(core): sample resident set and footprint, and join it to spa
 
 - [ ] **Step 1: Write the failing test**
 
+Create `tests/unit/observability/StoreSummaryTest.cpp` with the license header, then:
+
 ```cpp
-TEST(StoreSummaryTest, CountsPublishedTablesAndStoreBytes) {
-  // Build a store by running the analyzer on the multi-TU fixture into a temp
-  // output root, then assert every published table appears with a positive
-  // row count and that total bytes are at least the metadata database's size.
-  auto summary = veritas::observability::CollectStoreSummary(output_root);
+#include "veritas/observability/StoreSummary.h"
+
+#include <algorithm>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+#include <gtest/gtest.h>
+
+#include "veritas/summarydb/MetadataStore.h"
+
+namespace veritas::observability {
+namespace {
+
+namespace fs = std::filesystem;
+
+// A unique temp directory per case, so the cases never share a store.
+fs::path FreshDir(const std::string& tag) {
+  const fs::path dir = fs::temp_directory_path() /
+                       ("veritas-store-summary-" + tag + "-" +
+                        std::to_string(std::rand()));
+  std::error_code error;
+  fs::remove_all(dir, error);
+  return dir;
+}
+
+TEST(StoreSummaryTest, CountsEveryPublishedTableIncludingEmptyOnes) {
+  // A schema-applied store has the tables but no rows. This is the test that
+  // catches a misspelled table name: a name the schema does not define makes
+  // the count query fail, and CollectStoreSummary propagates that failure
+  // rather than reporting zero.
+  const fs::path output_root = FreshDir("empty");
+  ASSERT_TRUE(fs::create_directories(output_root));
+  auto store = summarydb::MetadataStore::Open(output_root / "metadata.db");
+  ASSERT_TRUE(store.ok()) << store.status().message();
+  ASSERT_TRUE(store->ApplySchema().ok());
+
+  auto summary = CollectStoreSummary(output_root);
   ASSERT_TRUE(summary.ok()) << summary.status().message();
-  EXPECT_FALSE(summary->tables.empty());
-  for (const auto& table : summary->tables) {
-    EXPECT_GT(table.rows, 0u) << table.table;
+
+  // The four published fact tables plus the component-state table the
+  // cross-check reads. Ordering is by name, which the next assertion pins.
+  ASSERT_EQ(summary->tables.size(), 5u);
+  for (const TableRowCount& table : summary->tables) {
+    EXPECT_EQ(table.rows, 0u) << table.table;
   }
-  EXPECT_GT(summary->bytes.front().bytes, 0u);
+  EXPECT_TRUE(std::is_sorted(
+      summary->tables.begin(), summary->tables.end(),
+      [](const TableRowCount& left, const TableRowCount& right) {
+        return left.table < right.table;
+      }));
+  // A store that exists but has no rows is a success, not a failure.
+  EXPECT_TRUE(summary->cross_checks.empty() ||
+              !summary->cross_checks.front().agrees);
+}
+
+TEST(StoreSummaryTest, CountsInsertedRows) {
+  const fs::path output_root = FreshDir("rows");
+  ASSERT_TRUE(fs::create_directories(output_root));
+  auto store = summarydb::MetadataStore::Open(output_root / "metadata.db");
+  ASSERT_TRUE(store.ok()) << store.status().message();
+  ASSERT_TRUE(store->ApplySchema().ok());
+  // One minimal row in a table with no foreign-key parent, so the insert
+  // cannot fail for a reason unrelated to counting.
+  ASSERT_TRUE(store
+                  ->Execute("INSERT INTO provenance_nodes (node_id) VALUES (?)",
+                            {"node:sha256:test"})
+                  .ok());
+
+  auto summary = CollectStoreSummary(output_root);
+  ASSERT_TRUE(summary.ok()) << summary.status().message();
+  const auto found = std::find_if(
+      summary->tables.begin(), summary->tables.end(),
+      [](const TableRowCount& table) { return table.table == "provenance_nodes"; });
+  ASSERT_NE(found, summary->tables.end());
+  EXPECT_EQ(found->rows, 1u);
+}
+
+TEST(StoreSummaryTest, GroupsStoreBytesByTopLevelEntryWithoutAbsolutePaths) {
+  const fs::path output_root = FreshDir("bytes");
+  ASSERT_TRUE(fs::create_directories(output_root / "cas"));
+  std::ofstream(output_root / "cas" / "one.bin") << "12345678";
+  std::ofstream(output_root / "metadata.db") << "1234";
+
+  auto summary = CollectStoreSummary(output_root);
+  ASSERT_TRUE(summary.ok()) << summary.status().message();
+  ASSERT_FALSE(summary->bytes.empty());
+  EXPECT_TRUE(std::is_sorted(
+      summary->bytes.begin(), summary->bytes.end(),
+      [](const NamedBytes& left, const NamedBytes& right) {
+        return left.name < right.name;
+      }));
+  for (const NamedBytes& entry : summary->bytes) {
+    // Names are relative to the output root; an absolute path here would make
+    // two machines' artifacts differ for no semantic reason.
+    EXPECT_EQ(entry.name.find(output_root.string()), std::string::npos);
+    EXPECT_EQ(entry.name.find('/'), std::string::npos);
+  }
 }
 
 TEST(StoreSummaryTest, ReportsFailureRatherThanZeroForAMissingStore) {
-  auto summary = veritas::observability::CollectStoreSummary(
-      fs::temp_directory_path() / "veritas-absent-store");
+  const auto summary = CollectStoreSummary(FreshDir("absent"));
   EXPECT_FALSE(summary.ok());
 }
+
+}  // namespace
+}  // namespace veritas::observability
 ```
+
+`FreshDir` returns a path that does not exist, so the "absent" case needs no creation.
+
+Register the target at the end of `tests/unit/observability/CMakeLists.txt`, mirroring the `RunReportTest` block that Task 2 added, and adding `veritas_summarydb` because this test opens a store directly:
+
+```cmake
+add_executable(StoreSummaryTest StoreSummaryTest.cpp)
+target_link_libraries(StoreSummaryTest PRIVATE
+  veritas_observability
+  veritas_summarydb
+  veritas_build
+  veritas_test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(StoreSummaryTest)
+gtest_discover_tests(StoreSummaryTest DISCOVERY_TIMEOUT 60)
+```
+
+`veritas_build` and `veritas_test_support` are needed only by the last case, which builds a manifest through the real M1 ingestion (`veritas_build::ResolveProjectInput` and `LoadProjectManifest`) and the `multiple_tus` fixture. `veritas_analysis` is **not** needed: `ProjectAnalysisRequest` is a header-only struct, and this test never runs the analyzer, so no SVF and no WPA are linked or executed.
 
 - [ ] **Step 2: Run it to confirm it fails**
 
 - [ ] **Step 3: Implement the collector**
 
+Create `src/observability/StoreSummary.cpp` with the license header, then:
+
 ```cpp
-StatusOr<StoreSummary> CollectStoreSummary(const std::filesystem::path& output_root) {
-  StoreSummary summary;
-  const auto db_path = output_root / "metadata.db";
-  auto store = summarydb::MetadataStore::Open(db_path);
+#include "veritas/observability/StoreSummary.h"
+
+#include <algorithm>
+#include <cstdlib>
+#include <map>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
+#include <vector>
+
+#include "veritas/core/Status.h"
+#include "veritas/summarydb/MetadataStore.h"
+
+namespace veritas::observability {
+
+namespace {
+
+// Every table the report counts. The four analysis tables are published
+// content; wpa_component_states_v2 is the component-RESULT table, read so the
+// cross-check can compare the store's component count against the expected
+// count the run held in memory.
+//
+// Note the _v2 suffix. `wpa_component_states` (schema v1) is the SCC
+// convergence state and holds a different row count, so "correcting" this name
+// to v1 would silently make the cross-check meaningless while still passing.
+constexpr std::string_view kCountedTables[] = {
+    "analysis_facts", "provenance_edges", "provenance_nodes",
+    "run_fact_bindings", "wpa_component_states_v2"};
+
+// Groups on-disk bytes by the first path component under output_root, so the
+// artifact names stores (cas, metadata.db, ...) rather than individual files,
+// and never contains an absolute path.
+StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
+    const std::filesystem::path& output_root) {
+  std::map<std::string, std::uint64_t> totals;
+  std::error_code error;
+  const auto options =
+      std::filesystem::directory_options::skip_permission_denied;
+  std::filesystem::recursive_directory_iterator it(output_root, options, error);
+  const std::filesystem::recursive_directory_iterator end;
+  for (; it != end; it.increment(error)) {
+    if (error) {
+      return Status::Internal("cannot walk " + output_root.string() + ": " +
+                              error.message());
+    }
+    if (!it->is_regular_file(error)) continue;
+    const auto relative =
+        std::filesystem::relative(it->path(), output_root, error);
+    if (error) {
+      return Status::Internal("cannot relativize " + it->path().string() +
+                              ": " + error.message());
+    }
+    const auto first = relative.begin();
+    if (first == relative.end()) continue;
+    const std::uint64_t size = it->file_size(error);
+    if (error) {
+      return Status::Internal("cannot size " + it->path().string() + ": " +
+                              error.message());
+    }
+    totals[first->string()] += size;
+  }
+  // std::map iterates in key order, so the vector is already sorted by name.
+  std::vector<NamedBytes> bytes;
+  bytes.reserve(totals.size());
+  for (const auto& entry : totals) {
+    bytes.push_back(NamedBytes{entry.first, entry.second});
+  }
+  return bytes;
+}
+
+}  // namespace
+
+StatusOr<StoreSummary> CollectStoreSummary(
+    const std::filesystem::path& output_root) {
+  std::error_code error;
+  if (!std::filesystem::exists(output_root / "metadata.db", error) || error) {
+    return Status::NotFound("no metadata.db under " + output_root.string());
+  }
+
+  auto store = summarydb::MetadataStore::Open(output_root / "metadata.db");
   if (!store.ok()) return store.status();
 
-  static constexpr std::string_view kTables[] = {
-      "analysis_facts", "run_fact_bindings", "provenance_nodes",
-      "provenance_edges"};
-  for (const std::string_view table : kTables) {
-    const std::string sql = "SELECT COUNT(*) FROM " + std::string(table);
-    auto rows = store->Query(sql, {});
+  StoreSummary summary;
+  for (const std::string_view table : kCountedTables) {
+    auto rows = store->Query("SELECT COUNT(*) FROM " + std::string(table), {});
     if (!rows.ok()) return rows.status();
     if (rows->empty() || rows->front().empty()) {
       return Status::Internal("count query returned no rows for " +
@@ -1908,21 +2095,157 @@ StatusOr<StoreSummary> CollectStoreSummary(const std::filesystem::path& output_r
     // std::stoull throws; the project builds with -fno-exceptions.
     const unsigned long long count =
         std::strtoull(rows->front().front().c_str(), nullptr, 10);
-    summary.tables.push_back(TableRowCount{std::string(table), count});
+    summary.tables.push_back(
+        TableRowCount{std::string(table), static_cast<std::uint64_t>(count)});
   }
   std::sort(summary.tables.begin(), summary.tables.end(),
             [](const TableRowCount& left, const TableRowCount& right) {
               return left.table < right.table;
             });
-  // ... byte sizes by walking output_root with the std::error_code overloads,
-  //     grouping by top-level entry name, then sorted by name.
+
+  auto bytes = MeasureStoreBytes(output_root);
+  if (!bytes.ok()) return bytes.status();
+  summary.bytes = std::move(*bytes);
   return summary;
 }
 ```
 
-For bytes, use `std::filesystem::recursive_directory_iterator(path, error_code)` and `std::filesystem::file_size(entry, error_code)`. Group by the first path component under `output_root` so the artifact names stores rather than files, then sort by name.
+Every `std::filesystem` call uses the `std::error_code` overload, because the throwing ones are banned. `cross_checks` is left empty here: the store side cannot fill it, since comparing against the in-memory count is the caller's job (Task 6).
 
-**Do not emit absolute paths** — the names are relative to `output_root`.
+- [ ] **Step 3b: Add the environment and input-inventory fillers**
+
+Both live in `StoreSummary.{h,cpp}`, not in `RunReport.{h,cpp}`: they need `veritas/build/AnalysisManifest.h` and POSIX headers, and `RunReport.h` deliberately includes neither.
+
+**A constraint that is not negotiable: do not touch `src/analysis/CMakeLists.txt`.** Its `VERITAS_CPP_BUILD_FINGERPRINT` definition (line 46) feeds `CppToolchainIdentity`, which feeds `engine_toolchain_identity`, which feeds `run_id` and every digest chained off it. Re-spelling it so both libraries could share one definition would move every content-addressed identity in the project. `veritas_observability` therefore gets its **own** definitions:
+
+```cmake
+target_compile_definitions(veritas_observability PRIVATE
+  VERITAS_OBSERVABILITY_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+  VERITAS_OBSERVABILITY_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+  VERITAS_OBSERVABILITY_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
+)
+```
+
+Add to the header:
+
+```cpp
+// FillEnvironment reads the machine and build identity for the artifact's
+// environment block: uname for os/arch, sysctl on Darwin and sysconf/sysinfo
+// on Linux for cores, RAM and CPU model, and this library's own compile
+// definitions for the build identity. It deliberately does not reuse the
+// analysis library's build fingerprint, which is an identity input.
+void FillEnvironment(RunEnvironment* environment);
+
+// FillInventoryFromManifest copies the input-scale fields the manifest
+// already carries. Header-only: it reads struct fields and needs no link
+// against veritas_build.
+void FillInventoryFromManifest(const build::AnalysisManifest& manifest,
+                               RunInputInventory* input);
+```
+
+Add `#include "veritas/build/AnalysisManifest.h"` to the header, and to the `.cpp`:
+
+```cpp
+#include <sys/utsname.h>
+
+#if defined(__APPLE__)
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#else
+#include <sys/sysinfo.h>
+#include <unistd.h>
+#endif
+
+#include "veritas/core/Version.h"
+
+void FillInventoryFromManifest(const build::AnalysisManifest& manifest,
+                               RunInputInventory* input) {
+  input->translation_units = manifest.translation_units.size();
+  input->compiler_id = manifest.context.compiler_id;
+  input->compiler_version = manifest.context.compiler_version;
+  input->target_triple = manifest.context.target_triple;
+  input->source_tree_hash = manifest.context.source_tree_hash;
+  input->include_closure_hash = manifest.context.include_closure_hash;
+}
+
+void FillEnvironment(RunEnvironment* environment) {
+  struct utsname uts {};
+  if (uname(&uts) == 0) {
+    environment->os = uts.sysname;
+    environment->arch = uts.machine;
+  }
+#if defined(__APPLE__)
+  const auto sysctl_u64 = [](const char* name) -> std::uint64_t {
+    std::uint64_t value = 0;
+    std::size_t size = sizeof(value);
+    if (sysctlbyname(name, &value, &size, nullptr, 0) != 0) return 0;
+    return value;
+  };
+  char brand[256] = {};
+  std::size_t brand_size = sizeof(brand);
+  if (sysctlbyname("machdep.cpu.brand_string", brand, &brand_size, nullptr, 0) ==
+      0) {
+    environment->cpu_model = brand;
+  }
+  environment->cores = sysctl_u64("hw.ncpu");
+  environment->ram_bytes = sysctl_u64("hw.memsize");
+#else
+  const long cores = sysconf(_SC_NPROCESSORS_ONLN);
+  if (cores > 0) environment->cores = static_cast<std::uint64_t>(cores);
+  struct sysinfo info {};
+  if (sysinfo(&info) == 0) {
+    environment->ram_bytes =
+        static_cast<std::uint64_t>(info.totalram) * info.mem_unit;
+  }
+#endif
+  environment->build_type = VERITAS_OBSERVABILITY_BUILD_TYPE;
+  environment->host_compiler = std::string(VERITAS_OBSERVABILITY_COMPILER_ID) +
+                               " " +
+                               VERITAS_OBSERVABILITY_COMPILER_VERSION;
+  const auto version = veritas::GetVersion();
+  environment->veritas_version = std::to_string(version.major) + "." +
+                                 std::to_string(version.minor) + "." +
+                                 std::to_string(version.patch);
+  environment->git_revision = version.git_revision;
+}
+```
+
+Append these two cases to the same test file:
+
+```cpp
+TEST(StoreSummaryTest, FillsEnvironmentFromTheMachine) {
+  RunEnvironment environment;
+  FillEnvironment(&environment);
+  EXPECT_FALSE(environment.os.empty());
+  EXPECT_FALSE(environment.arch.empty());
+  EXPECT_GT(environment.cores, 0u);
+  EXPECT_GT(environment.ram_bytes, 0u);
+  EXPECT_FALSE(environment.host_compiler.empty());
+  // A version string with no dot would mean the fields were never filled.
+  EXPECT_NE(environment.veritas_version.find('.'), std::string::npos);
+}
+
+TEST(StoreSummaryTest, FillsInputInventoryFromTheManifest) {
+  // The manifest is built by the same ingestion the analyzer uses, so this
+  // asserts the copy, not the ingestion.
+  const auto project = testing::FixtureProject("multiple_tus");
+  auto input = veritas::build::ResolveProjectInput(
+      veritas::analysis::ProjectAnalysisRequest{
+          .project_root = project,
+          .output_root = FreshDir("inventory")});
+  ASSERT_TRUE(input.ok()) << input.status().message();
+  auto manifest = veritas::build::LoadProjectManifest(*input);
+  ASSERT_TRUE(manifest.ok()) << manifest.status().message();
+
+  RunInputInventory inventory;
+  FillInventoryFromManifest(*manifest, &inventory);
+  EXPECT_EQ(inventory.translation_units, manifest->translation_units.size());
+  EXPECT_FALSE(inventory.compiler_id.empty());
+  EXPECT_FALSE(inventory.target_triple.empty());
+}
+```
+
+That last test needs `veritas_build` and `veritas_analysis` on the link line plus the fixture support, which makes it heavier than a unit test. If the link line grows awkwardly, keep `FillsInputInventoryFromTheManifest` and add the three libraries; do not drop the test, since an unfilled input block is the kind of zero that reads as a measurement.
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
