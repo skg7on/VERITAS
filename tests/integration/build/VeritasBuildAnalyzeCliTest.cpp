@@ -97,8 +97,7 @@ TEST(VeritasBuildAnalyzeCliTest, AcceptsProjectLevelSourceInput) {
   EXPECT_NE(result.stdout_text.find("Repository: repo:sha256:"),
             std::string::npos)
       << result.stdout_text;
-  EXPECT_TRUE(
-      fs::is_regular_file(project / "veritas-metrics" / "manifest.json"));
+  EXPECT_TRUE(fs::is_regular_file(project / ".veritas" / "manifest.json"));
 }
 
 TEST(VeritasBuildAnalyzeCliTest, HonorsExplicitOutputDirectory) {
@@ -110,7 +109,7 @@ TEST(VeritasBuildAnalyzeCliTest, HonorsExplicitOutputDirectory) {
       {"analyze", "--project", project.string(), "--output", output.string()});
   EXPECT_EQ(result.exit_code, 0) << result.stdout_text;
   EXPECT_TRUE(fs::is_regular_file(output / "manifest.json"));
-  EXPECT_FALSE(fs::exists(project / "veritas-metrics"));
+  EXPECT_FALSE(fs::exists(project / ".veritas"));
 }
 
 TEST(VeritasBuildAnalyzeCliTest, RejectsMissingProjectFlag) {

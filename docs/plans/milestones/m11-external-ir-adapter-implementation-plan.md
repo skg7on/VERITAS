@@ -22,7 +22,7 @@ filesystem atomic rename, CMake/Ninja, GoogleTest, Python 3 benchmark tooling.
 ## Global Constraints
 
 - Exactly one of `--project` and `--bitcode` is required.
-- Project output defaults to `<project>/veritas-metrics`; external IR requires
+- Project output defaults to `<project>/.veritas`; external IR requires
   `--output`, and every resolved output path is absolute and normalized.
 - `--jobs` defaults to `auto`, where
   `max(1, min(input_unit_count, hardware_concurrency, 8))` is used; zero

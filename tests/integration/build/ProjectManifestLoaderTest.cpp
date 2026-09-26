@@ -180,23 +180,20 @@ TEST(ProjectManifestLoaderTest, ArgumentContainingProjectRootIsSubstituted) {
 
 TEST(ProjectManifestLoaderTest, SourceTreeHashIgnoresVeritasOutputDirectory) {
   // Design spec §10 required assertion: creating diagnostic-output artifacts
-  // under the project (the `veritas-metrics/` store root, temporary output
-  // dirs) must not shift source_tree_hash. The hash is computed from
-  // compile_commands.json entries, so files that never appear there should
-  // never enter the hash — this test guards against a future refactor that
-  // accidentally globs the tree.
+  // under the project (`.veritas/`, temporary output dirs) must not shift
+  // source_tree_hash. The hash is computed from compile_commands.json entries,
+  // so files that never appear there should never enter the hash — this test
+  // guards against a future refactor that accidentally globs the tree.
   auto input = ResolveFixture("multiple_tus");
   ASSERT_TRUE(input.ok()) << input.status().message();
   auto before = LoadProjectManifest(*input);
   ASSERT_TRUE(before.ok()) << before.status().message();
 
-  // `veritas-metrics` is the directory a real run with no `--output` creates
-  // under the project root.
-  const auto veritas_metrics = input->project_root / "veritas-metrics";
+  const auto dot_veritas = input->project_root / ".veritas";
   std::error_code error;
-  std::filesystem::create_directories(veritas_metrics, error);
+  std::filesystem::create_directories(dot_veritas, error);
   ASSERT_FALSE(error) << error.message();
-  std::ofstream(veritas_metrics / "manifest.json") << "{\"stub\": true}";
+  std::ofstream(dot_veritas / "manifest.json") << "{\"stub\": true}";
   std::ofstream(input->project_root / "tmp_output.o") << "stray artifact";
 
   auto after = LoadProjectManifest(*input);

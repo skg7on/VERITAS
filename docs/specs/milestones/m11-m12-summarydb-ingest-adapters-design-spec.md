@@ -175,9 +175,9 @@ Rules:
   Regular direct children ending in `.bc` or `.ll` are enumerated in normalized
   relative-path order. An empty directory is rejected. Recursive discovery and
   archive expansion are deferred.
-- Project input keeps its current default output of `<project>/veritas-metrics`
-  when `--output` is omitted. External IR has no safe project-relative default,
-  so `--output` is required.
+- Project input keeps its current default output of `<project>/.veritas` when
+  `--output` is omitted. External IR has no safe project-relative default, so
+  `--output` is required.
 - The output path is resolved to an absolute normalized path before any
   artifact or run record is written.
 - `--jobs` accepts `auto` or an integer greater than zero. It defaults to

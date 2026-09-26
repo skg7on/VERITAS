@@ -1659,9 +1659,8 @@ veritas-build analyze --project <project-directory>
 `<project-directory>/compile_commands.json` is mandatory. Build Intelligence,
 Clang AST extraction, LLVM IR generation/linking, required in-process SVF
 analysis, and summary publication execute as internal stages of this command.
-A diagnostic manifest or cached IR may be emitted under the project-local
-`veritas-metrics/` store root, but neither is a public input to a later
-command.
+A diagnostic manifest or cached IR may be emitted under `.veritas`, but neither
+is a public input to a later command.
 
 M11 adds the mutually exclusive module-input form:
 
