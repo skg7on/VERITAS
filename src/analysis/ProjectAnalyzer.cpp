@@ -16,6 +16,7 @@
 
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -181,7 +182,8 @@ Status RunWpa(const std::filesystem::path &output_root,
               const AnalysisConfig &config,
               const std::vector<summary::v2::FunctionSummary> &summaries,
               const build::AnalysisManifest &manifest,
-              ProjectAnalysisResult *result) {
+              ProjectAnalysisResult *result,
+              core::RunMetrics *metrics) {
   auto revision = core::ParseStableId(manifest.context.revision_id);
   if (!revision.ok())
     return revision.status();
@@ -256,6 +258,7 @@ Status RunWpa(const std::filesystem::path &output_root,
   wpa_request.summaries = artifacts;
   wpa_request.components = components;
   wpa_request.limits = limits;
+  wpa_request.metrics = metrics;
 
   StatusOr<wpa::WpaRunResult> wpa_result = [&]() -> StatusOr<wpa::WpaRunResult> {
     if (config.wpa_engine == WpaEngineMode::kSouffle) {
@@ -282,6 +285,13 @@ Status RunWpa(const std::filesystem::path &output_root,
     return wpa_result.status();
   }
   result->wpa_run_id = core::ToString(wpa_result->run.run_id);
+  // The identity inputs this stage already holds. Nothing here is recomputed:
+  // `descriptor` and `toolchain_identity` are what produced `run_id`, so a
+  // caller reporting them reports the run that actually happened rather than a
+  // re-derivation of it.
+  result->svf_configuration_hash = descriptor.svf_configuration_hash;
+  result->wpa_configuration_hash = descriptor.wpa_configuration_hash;
+  result->engine_toolchain_identity = descriptor.engine_toolchain_identity;
 
   // Optional C++ conformance oracle: run a second, separately identified
   // kCppConformance execution over the same logical inputs and require the
@@ -306,6 +316,9 @@ Status RunWpa(const std::filesystem::path &output_root,
 
     wpa::WpaRunRequest conformance_request = wpa_request;
     conformance_request.run = *conformance_run;
+    // The oracle re-runs the same components. Sharing the recorder would double
+    // every per-component count and blend two runs into one top-N list.
+    conformance_request.metrics = nullptr;
     wpa::WpaOrchestrator conformance_orchestrator(*conformance_executor, *repo,
                                                   &scc_state);
     auto conformance_result =
@@ -329,14 +342,38 @@ Status RunWpa(const std::filesystem::path &output_root,
   // Build the canonical batch and publish it through the fact bus to a fact
   // store sink on the shared metadata database, so the run's facts become
   // explainable (design §3).
-  auto batch = facts::MakeAnalysisFactBatch(std::move(*wpa_result));
-  auto fact_store = facts::FactStore::Open(output_root);
+  auto batch = [&] {
+    core::PhaseSpan span(metrics, "facts.batch_assemble",
+                         core::SpanMode::kBearing);
+    return facts::MakeAnalysisFactBatch(std::move(*wpa_result));
+  }();
+  // The batch's own scale, counted where it is known: the assembly site holds
+  // both numbers, and a second read of the batch elsewhere would be a second
+  // plumbing path to the same figure.
+  if (metrics != nullptr) {
+    metrics->AddCounter("facts.rooted_input",
+                        batch.rooted_input_fact_ids.size(), "count");
+    metrics->AddCounter("facts.canonical", batch.facts.size(), "count");
+  }
+  // The batch id is part of the run's identity and is minted here, so it is
+  // surfaced from here rather than re-derived by a caller.
+  result->batch_id = core::ToString(batch.batch_id);
+  auto fact_store = [&] {
+    core::PhaseSpan span(metrics, "facts.store_open",
+                         core::SpanMode::kBearing);
+    return facts::FactStore::Open(output_root);
+  }();
   if (!fact_store.ok()) {
     return fact_store.status();
   }
   facts::AnalysisFactBus bus(*repo);
+  bus.SetMetrics(metrics);
   bus.AddSink("fact-store", *fact_store);
-  if (Status published = bus.Publish(batch); !published.ok()) {
+  const Status published = [&] {
+    core::PhaseSpan span(metrics, "facts.publish", core::SpanMode::kBearing);
+    return bus.Publish(batch);
+  }();
+  if (!published.ok()) {
     result->wpa_diagnostics = std::string(published.message());
     return published;
   }
@@ -357,17 +394,28 @@ public:
 
   StatusOr<ProjectAnalysisResult>
   AnalyzeProject(const ProjectAnalysisRequest &request,
-                 const AnalysisConfig &config) {
+                 const AnalysisConfig &config, core::RunMetrics *metrics) {
     // M1: resolve and load the project manifest.
-    auto input = build::ResolveProjectInput(request);
-    if (!input.ok())
-      return input.status();
-    auto manifest = build::LoadProjectManifest(*input);
-    if (!manifest.ok())
-      return manifest.status();
+    std::optional<build::ProjectInput> input;
+    std::optional<build::AnalysisManifest> manifest;
+    {
+      core::PhaseSpan span(metrics, "m1.ingest", core::SpanMode::kBearing);
+      auto resolved = build::ResolveProjectInput(request);
+      if (!resolved.ok())
+        return resolved.status();
+      input = std::move(*resolved);
+      auto loaded = build::LoadProjectManifest(*input);
+      if (!loaded.ok())
+        return loaded.status();
+      manifest = std::move(*loaded);
+    }
 
     // M4: build linked IR and extract local summary drafts.
-    auto local = pipeline::RunLocalAnalysis(*manifest);
+    auto local = [&] {
+      core::PhaseSpan span(metrics, "m4.local_analysis",
+                           core::SpanMode::kBearing);
+      return pipeline::RunLocalAnalysis(*manifest);
+    }();
     if (!local.ok())
       return local.status();
 
@@ -377,23 +425,36 @@ public:
         .llvm_toolchain_identity = "llvm",
         .program_module_hash = std::string(local->program_ir.module_hash()),
     };
-    auto svf_result = svf_stage_->Analyze(local->program_ir, run_context,
-                                          ToSvfConfig(config));
+    auto svf_result = [&] {
+      core::PhaseSpan span(metrics, "m5.svf", core::SpanMode::kBearing);
+      // The recorder reaches the session here or not at all: the session's own
+      // five steps are spans under `m5.svf`.
+      return svf_stage_->Analyze(local->program_ir, run_context,
+                                 ToSvfConfig(config), metrics);
+    }();
     if (!svf_result.ok())
       return svf_result.status();
 
     // Load the versioned external-model bundle; its hash and rows feed the
     // whole-program analysis, and modeled-function effects attach to the
     // modeled function's summary.
-    auto model_bundle = semantic::ModelBundle::Load(kModelBundleRows,
-                                                    kModelBundleManifest);
+    auto model_bundle = [&] {
+      core::PhaseSpan span(metrics, "m5.model_bundle_load",
+                           core::SpanMode::kBearing);
+      return semantic::ModelBundle::Load(kModelBundleRows,
+                                         kModelBundleManifest);
+    }();
     if (!model_bundle.ok()) {
       return model_bundle.status();
     }
 
     // Merge SVF facts by stable owning function ID into the summary.v2 drafts.
-    auto merged = svf::MergeSvfFactsV2(std::move(local->summary_drafts),
-                                       svf_result->facts, *model_bundle);
+    auto merged = [&] {
+      core::PhaseSpan span(metrics, "m5.merge_svf_facts",
+                           core::SpanMode::kBearing);
+      return svf::MergeSvfFactsV2(std::move(local->summary_drafts),
+                                  svf_result->facts, *model_bundle);
+    }();
     if (!merged.ok()) {
       return merged.status();
     }
@@ -406,12 +467,16 @@ public:
       return revision_id.status();
     if (!build_variant_id.ok())
       return build_variant_id.status();
-    auto graph = cpg::BuildThinCpg(cpg::CpgProjectionInput{
-        .program_ir = local->program_ir,
-        .completed_summaries = *merged,
-        .revision_id = *revision_id,
-        .build_variant_id = *build_variant_id,
-    });
+    auto graph = [&] {
+      core::PhaseSpan span(metrics, "m6.cpg_projection",
+                           core::SpanMode::kBearing);
+      return cpg::BuildThinCpg(cpg::CpgProjectionInput{
+          .program_ir = local->program_ir,
+          .completed_summaries = *merged,
+          .revision_id = *revision_id,
+          .build_variant_id = *build_variant_id,
+      });
+    }();
     if (!graph.ok())
       return graph.status();
 
@@ -421,20 +486,27 @@ public:
     const std::size_t edge_count = graph->edges().size();
 
     // M2 + M3 + M6: persist the context and publish summaries + CPG atomically.
-    auto coordinator =
-        ProjectPublicationCoordinator::Open(input->output_root.string());
-    if (!coordinator.ok())
-      return coordinator.status();
-    auto persist = (*coordinator)->PersistManifestContext(*manifest);
-    if (!persist.ok())
-      return persist;
-    const std::vector<summary::v2::FunctionSummary> summaries = *merged;
-    auto published =
-        (*coordinator)
-            ->Publish(CompletedProjectAnalysis{std::move(*merged),
-                                               std::move(*graph)});
-    if (!published.ok())
-      return published.status();
+    std::vector<summary::v2::FunctionSummary> summaries;
+    std::vector<core::StableId> published;
+    {
+      core::PhaseSpan span(metrics, "m2m3.publish_summaries",
+                           core::SpanMode::kBearing);
+      auto coordinator =
+          ProjectPublicationCoordinator::Open(input->output_root.string());
+      if (!coordinator.ok())
+        return coordinator.status();
+      auto persist = (*coordinator)->PersistManifestContext(*manifest);
+      if (!persist.ok())
+        return persist;
+      summaries = *merged;
+      auto published_result =
+          (*coordinator)
+              ->Publish(CompletedProjectAnalysis{std::move(*merged),
+                                                 std::move(*graph)});
+      if (!published_result.ok())
+        return published_result.status();
+      published = std::move(*published_result);
+    }
 
     ProjectAnalysisResult result;
     result.projection_id = projection_id_str;
@@ -447,8 +519,8 @@ public:
     result.program_context_id = manifest->context.revision_id;
     result.revision_id = manifest->context.revision_id;
     result.build_variant_id = manifest->context.build_variant_id;
-    result.published_summary_ids.reserve(published->size());
-    for (const auto &id : *published) {
+    result.published_summary_ids.reserve(published.size());
+    for (const auto &id : published) {
       result.published_summary_ids.push_back(core::ToString(id));
     }
     result.unknowns.reserve(svf_result->facts.unknowns.size());
@@ -458,8 +530,8 @@ public:
     }
 
     // Run the recursive WPA over the just-published summaries.
-    auto wpa_status =
-        RunWpa(input->output_root, config, summaries, *manifest, &result);
+    auto wpa_status = RunWpa(input->output_root, config, summaries, *manifest,
+                             &result, metrics);
     if (!wpa_status.ok()) {
       result.wpa_diagnostics = std::string(wpa_status.message());
       return wpa_status;
@@ -487,8 +559,9 @@ ProjectAnalyzer::operator=(ProjectAnalyzer &&) noexcept = default;
 
 StatusOr<ProjectAnalysisResult>
 ProjectAnalyzer::AnalyzeProject(const ProjectAnalysisRequest &request,
-                                const AnalysisConfig &config) {
-  return impl_->AnalyzeProject(request, config);
+                                const AnalysisConfig &config,
+                                core::RunMetrics *metrics) {
+  return impl_->AnalyzeProject(request, config, metrics);
 }
 
 // Private constructor for test factory

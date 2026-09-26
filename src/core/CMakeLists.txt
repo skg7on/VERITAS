@@ -50,6 +50,7 @@ add_library(veritas_core
   Hash.cpp
   Ids.cpp
   CanonicalValue.cpp
+  RunMetrics.cpp
   "${CMAKE_CURRENT_BINARY_DIR}/Version.cpp"
 )
 
@@ -61,5 +62,10 @@ target_include_directories(veritas_core PUBLIC
 target_compile_features(veritas_core PUBLIC cxx_std_20)
 
 veritas_add_warnings(veritas_core)
+
+# The recorder's optional sampler thread is a later milestone's concern, but
+# the link contract is fixed here so no downstream target has to grow it.
+find_package(Threads REQUIRED)
+target_link_libraries(veritas_core PRIVATE Threads::Threads)
 
 add_library(veritas::core ALIAS veritas_core)

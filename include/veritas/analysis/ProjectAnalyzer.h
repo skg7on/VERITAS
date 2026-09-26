@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "veritas/analysis/ProjectAnalysisRequest.h"
+#include "veritas/core/RunMetrics.h"
 #include "veritas/core/Status.h"
 
 namespace veritas::analysis {
@@ -89,6 +90,31 @@ struct ProjectAnalysisResult {
   std::string wpa_run_id;
   WpaEngineMode wpa_engine = WpaEngineMode::kSouffle;
   std::string wpa_diagnostics;
+  // The run's coordinates and configuration identity, surfaced so the
+  // reporting layer can record what the run actually ran under without
+  // reaching into the store. Between them the two configuration hashes cover
+  // every AnalysisConfig field, the toolchain identity names the engine the run
+  // executed, and the batch id names the fact batch it published. Two runs with
+  // different `--wpa-engine`, `--field-sensitive`, or `--max-alias-pairs`
+  // values differ in these strings, and in nothing else a caller can see.
+  //
+  // They are not `run_id`'s input list. `run_id` hashes ten descriptor fields
+  // (the revision and build-variant ids, the summary, relation, rule-bundle and
+  // model-bundle versions, the two configuration hashes, the engine tag and the
+  // toolchain identity), of which three are here — the two configuration hashes
+  // and the toolchain identity. The fourth field introduced below, `batch_id`,
+  // is not among them: it is derived from the assembled fact batch, and
+  // `DeriveBatchId` hashes that batch's `run_id` as its first field. The other
+  // coordinates are already on this result beside them. An earlier revision of
+  // this comment claimed these were "exactly the fields that move `run_id`";
+  // they are the subset the reporting layer has no other source for.
+  //
+  // Empty only when the run did not reach the stage that mints them; the
+  // reporting layer omits an empty field's key rather than writing "".
+  std::string svf_configuration_hash;
+  std::string wpa_configuration_hash;
+  std::string engine_toolchain_identity;
+  std::string batch_id;
 };
 
 // ProjectAnalyzer orchestrates the full M1→M4→M5→M3 analysis pipeline.
@@ -121,8 +147,14 @@ class ProjectAnalyzer {
   //
   // Does NOT fail on budget limits or unmapped SVF nodes; those return
   // kCompleteWithUnknowns with explanatory unknowns.
+  //
+  // When `metrics` is non-null the pipeline records per-phase spans into it.
+  // The recorder is caller-owned so that a run which fails part-way still
+  // yields its partial timeline. Metrics are non-semantic: they never enter
+  // any content-addressed identity (design section 5.2).
   StatusOr<ProjectAnalysisResult> AnalyzeProject(
-      const ProjectAnalysisRequest& request, const AnalysisConfig& config);
+      const ProjectAnalysisRequest& request, const AnalysisConfig& config,
+      core::RunMetrics* metrics = nullptr);
 
  private:
   class Impl;
