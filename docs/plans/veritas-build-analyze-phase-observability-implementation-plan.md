@@ -2522,7 +2522,9 @@ Then pass the recorder to the analyzer:
   auto result = analyzer.AnalyzeProject(request, config, recorder);
 ```
 
-`run` closes after the artifact is written, so its wall time is the command's wall time — which is the number the report's `total` row shows.
+**`run` must close immediately BEFORE `TakeStats`, not after the artifact is written.** An earlier draft of this plan said the latter, and it is impossible: a span is folded into its accumulator only in `EndSpan` (`src/core/RunMetrics.cpp:438`), so a root still open when `TakeStats` runs reports `count == 0` and `wall_inclusive == 0` — the report's total row would read `0ns` while every child showed a real duration.
+
+The consequence to state plainly rather than hide: rendering the report and writing the artifact fall **outside** `run`, so the total row is the *analysis* wall time, not the command's full wall time. They differ by the render and write, which is small but nonzero. If a future change wants the command's true wall time, the place for it is a separate span that closes last and is not part of the tree's total — not an open root.
 
 After the existing `Analysis complete` block, when `parsed->metrics`, build the `RunReport`, print `RenderRunReportText`, write `RenderRunReportJson` to the artifact path, and print any recorder diagnostics to **stderr** prefixed `veritas-build: metrics degraded: `. The analysis exit code is unaffected by any metrics failure (spec section 7.1); a write failure prints a diagnostic and returns `Status::Ok()`.
 
