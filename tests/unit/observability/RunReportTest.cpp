@@ -1,0 +1,246 @@
+// Copyright 2026 VERITAS Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The renderer contract of spec section 8.3: rendering the same report twice is
+// byte-identical, the artifact carries no floats and no absolute paths, and it
+// parses against the versioned schema. The fixture's numbers are arbitrary —
+// these cases pin the format rules, not the measurements.
+
+#include "veritas/observability/RunReport.h"
+
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+
+#include <gtest/gtest.h>
+#include <llvm/Support/JSON.h>
+
+namespace veritas::observability {
+namespace {
+
+RunReport MakeFixtureReport() {
+  RunReport report;
+  report.metrics_options.top_n = 10;
+  report.identity.run_id = "run:sha256:0000";
+  report.environment.os = "test";
+  report.inventory.output.cpg_nodes = 12;
+  // Reversed on purpose: "z" precedes "a" here, and "reachability" precedes
+  // "effects". A renderer that emits insertion order fails the sort test.
+  report.metrics.counters = {
+      core::Counter{"z.counter", 3, "count"},
+      core::Counter{"a.counter", 1, "count"},
+  };
+  report.inventory.output.components_by_kind = {{"reachability", 2},
+                                                {"effects", 1}};
+  report.store.tables = {{"analysis_facts", 1249792}};
+
+  core::SpanStats parent;
+  parent.name = "run";
+  parent.count = 1;
+  parent.wall_inclusive = std::chrono::seconds(2);
+  parent.wall_self = std::chrono::seconds(1);
+
+  core::SpanStats child;
+  child.name = "m5.svf";
+  child.count = 1;
+  child.wall_inclusive = std::chrono::seconds(1);
+  child.wall_self = std::chrono::seconds(1);
+  parent.children.push_back(child);
+
+  core::SpanStats distributed;
+  distributed.name = "wpa.component.execute";
+  distributed.count = 3;
+  core::Distribution distribution;
+  distribution.p50 = std::chrono::milliseconds(2);
+  distribution.p95 = std::chrono::milliseconds(9);
+  distribution.p99 = std::chrono::milliseconds(9);
+  distribution.max = std::chrono::milliseconds(9);
+  distributed.distribution = distribution;
+  distributed.top_n.push_back(
+      core::TopEntry{"flow/scc:sha256:aaaa", std::chrono::milliseconds(9)});
+  parent.children.push_back(distributed);
+
+  report.metrics.root = parent;
+  report.metrics.series = {{std::chrono::milliseconds(0), 100, 90},
+                           {std::chrono::milliseconds(100), 200, 180}};
+  return report;
+}
+
+TEST(RunReportTest, RendersSameBytesTwice) {
+  RunReport report = MakeFixtureReport();
+  EXPECT_EQ(RenderRunReportJson(report), RenderRunReportJson(report));
+}
+
+TEST(RunReportTest, EmitsOnlyIntegerNumbersOutsideStrings) {
+  const std::string json = RenderRunReportJson(MakeFixtureReport());
+  bool in_string = false;
+  bool escaped = false;
+  for (std::size_t i = 0; i < json.size(); ++i) {
+    const char c = json[i];
+    if (in_string) {
+      if (escaped) {
+        escaped = false;
+      } else if (c == '\\') {
+        escaped = true;
+      } else if (c == '"') {
+        in_string = false;
+      }
+      continue;
+    }
+    if (c == '"') {
+      in_string = true;
+      continue;
+    }
+    ASSERT_NE(c, '.') << "float token near offset " << i << ": "
+                      << json.substr(i > 12 ? i - 12 : 0, 25);
+  }
+}
+
+TEST(RunReportTest, ContainsNoAbsolutePath) {
+  const std::string json = RenderRunReportJson(MakeFixtureReport());
+  EXPECT_EQ(json.find("/tmp/"), std::string::npos);
+  EXPECT_EQ(json.find("/Users/"), std::string::npos);
+}
+
+TEST(RunReportTest, SortsCountersAndComponentKindsByName) {
+  // The fixture supplies these out of order on purpose, so a renderer that
+  // emits insertion order fails here. Spec section 6.5 rule 1.
+  const std::string json = RenderRunReportJson(MakeFixtureReport());
+  const std::size_t first = json.find("a.counter");
+  const std::size_t last = json.find("z.counter");
+  ASSERT_NE(first, std::string::npos);
+  ASSERT_NE(last, std::string::npos);
+  EXPECT_LT(first, last);
+
+  const std::size_t effects = json.find("effects");
+  const std::size_t reachability = json.find("reachability");
+  ASSERT_NE(effects, std::string::npos);
+  ASSERT_NE(reachability, std::string::npos);
+  EXPECT_LT(effects, reachability);
+}
+
+TEST(RunReportTest, JsonParsesAndCarriesTheSchemaVersion) {
+  const std::string json = RenderRunReportJson(MakeFixtureReport());
+  auto parsed = llvm::json::parse(json);
+  ASSERT_TRUE(static_cast<bool>(parsed));
+  const llvm::json::Object* root = parsed->getAsObject();
+  ASSERT_NE(root, nullptr);
+  EXPECT_EQ(*root->getString("schema"), "veritas.run-metrics.v1");
+}
+
+TEST(RunReportTest, JsonCarriesEverySchemaBlockWithItsExpectedType) {
+  // The versioned-schema contract of spec section 8.3: a reader that asks for a
+  // block by name and type must find it. A missing block is the failure this
+  // case exists for.
+  const std::string json = RenderRunReportJson(MakeFixtureReport());
+  auto parsed = llvm::json::parse(json);
+  ASSERT_TRUE(static_cast<bool>(parsed));
+  const llvm::json::Object* root = parsed->getAsObject();
+  ASSERT_NE(root, nullptr);
+
+  EXPECT_TRUE(root->getBoolean("complete").has_value());
+  EXPECT_NE(root->getArray("counters"), nullptr);
+  EXPECT_NE(root->getArray("diagnostics"), nullptr);
+  EXPECT_NE(root->getArray("phases"), nullptr);
+  EXPECT_NE(root->getObject("config"), nullptr);
+  EXPECT_NE(root->getObject("environment"), nullptr);
+  EXPECT_NE(root->getObject("identity"), nullptr);
+  EXPECT_NE(root->getObject("memory"), nullptr);
+  EXPECT_NE(root->getObject("store"), nullptr);
+
+  const llvm::json::Object* inventory = root->getObject("inventory");
+  ASSERT_NE(inventory, nullptr);
+  EXPECT_NE(inventory->getObject("input"), nullptr);
+  EXPECT_NE(inventory->getObject("output"), nullptr);
+  EXPECT_NE(inventory->getObject("incrementality"), nullptr);
+
+  // The tree is emitted as a one-element forest, and `counters` carries both
+  // counters the fixture supplied, sorted by name.
+  ASSERT_EQ(root->getArray("phases")->size(), 1u);
+  ASSERT_EQ(root->getArray("counters")->size(), 2u);
+  const llvm::json::Value* first_counter = &root->getArray("counters")->front();
+  const llvm::json::Object* first_counter_object = first_counter->getAsObject();
+  ASSERT_NE(first_counter_object, nullptr);
+  EXPECT_EQ(*first_counter_object->getString("name"), "a.counter");
+
+  const llvm::json::Object* root_phase =
+      root->getArray("phases")->front().getAsObject();
+  ASSERT_NE(root_phase, nullptr);
+  EXPECT_EQ(*root_phase->getString("name"), "run");
+  EXPECT_EQ(*root_phase->getInteger("wall_inclusive_ns"), 2000000000);
+}
+
+TEST(RunReportTest, FormatDurationRendersTheDocumentedUnits) {
+  EXPECT_EQ(FormatDuration(std::chrono::nanoseconds(0)), "0ns");
+  EXPECT_EQ(FormatDuration(std::chrono::nanoseconds(1234567890)), "1.235s");
+  EXPECT_EQ(FormatDuration(std::chrono::nanoseconds(1000000000)), "1.000s");
+  // Below one second the unit switches to milliseconds, still three decimals.
+  EXPECT_EQ(FormatDuration(std::chrono::nanoseconds(1500000)), "1.500ms");
+  EXPECT_EQ(FormatDuration(std::chrono::nanoseconds(999999)), "1.000ms");
+}
+
+TEST(RunReportTest, FormatBytesRendersTheDocumentedUnits) {
+  EXPECT_EQ(FormatBytes(9223372036), "8.59 GiB");
+  EXPECT_EQ(FormatBytes(1073741824), "1.00 GiB");
+  // Below one GiB the unit switches to MiB, still two decimals.
+  EXPECT_EQ(FormatBytes(1048576), "1.00 MiB");
+}
+
+TEST(RunReportTest, TextReportIsPristineAndNamesThePhases) {
+  const std::string text = RenderRunReportText(MakeFixtureReport());
+  EXPECT_NE(text.find("Analysis phase report"), std::string::npos);
+  EXPECT_NE(text.find("run"), std::string::npos);
+  EXPECT_NE(text.find("m5.svf"), std::string::npos);
+  EXPECT_NE(text.find("wpa.component.execute"), std::string::npos);
+  EXPECT_NE(text.find("analysis_facts"), std::string::npos);
+  EXPECT_EQ(text.find("/tmp/"), std::string::npos);
+  EXPECT_EQ(text.find("/Users/"), std::string::npos);
+
+  // A trailing newline, and no line padded with trailing whitespace: the report
+  // is pasted into terminals and diffs, where both are visible.
+  ASSERT_FALSE(text.empty());
+  EXPECT_EQ(text.back(), '\n');
+  std::size_t line_start = 0;
+  for (std::size_t i = 0; i < text.size(); ++i) {
+    if (text[i] != '\n') continue;
+    if (i > line_start) {
+      EXPECT_NE(text[i - 1], ' ') << "trailing space at offset " << i - 1;
+    }
+    line_start = i + 1;
+  }
+}
+
+TEST(RunReportTest, RenderersDoNotMutateTheReportTheyAreGiven) {
+  RunReport report = MakeFixtureReport();
+  const std::string json_first = RenderRunReportJson(report);
+  const std::string text_first = RenderRunReportText(report);
+
+  // The renderers sort name-keyed lists on a copy. A renderer that sorted in
+  // place would leave the fixture's deliberate insertion order gone — the only
+  // observable form of the mutation the design forbids, since a caller renders
+  // the same report twice and an in-place sort is idempotent.
+  ASSERT_EQ(report.metrics.counters.size(), 2u);
+  EXPECT_EQ(report.metrics.counters.front().name, "z.counter");
+  ASSERT_EQ(report.inventory.output.components_by_kind.size(), 2u);
+  EXPECT_EQ(report.inventory.output.components_by_kind.front().first,
+            "reachability");
+  EXPECT_EQ(report.metrics.series.size(), 2u);
+
+  EXPECT_EQ(json_first, RenderRunReportJson(report));
+  EXPECT_EQ(text_first, RenderRunReportText(report));
+}
+
+}  // namespace
+}  // namespace veritas::observability
