@@ -377,7 +377,7 @@ well-formed spelling.
 | `--metrics true\|false` | `true` | record and report; `false` restores pre-change behaviour exactly, with no thread |
 | `--metrics-interval-ms N` | `250` | sampler period; `0` disables the series entirely — no sampler thread and no samples |
 | `--metrics-top-n K` | `10` | slowest occurrences retained per distributed span |
-| `--metrics-series true\|false` | `true` | emit the memory series |
+| `--metrics-series true\|false` | `true` | emit the memory series array. It suppresses **only** `memory.series`; `memory.peak` and `series_decimation` remain, because the peak is the report's headline memory figure and suppressing the curve is not a reason to withhold it |
 | `--metrics-path <path>` | `<output>/run-metrics.json` | override the artifact location |
 
 The library default stays `metrics == nullptr`: no thread, no clock reads, no
@@ -424,6 +424,22 @@ are named in section 9.2. The sampler thread exists only when recording is on.
 
 `identity` is the block that moves run to run, and it is separated precisely so
 that a comparison script can ignore it.
+
+**Two keys in the shape above are conditional, and the example shows their
+populated form only.** `memory` is absent entirely when nothing was measured —
+see section 4.5's presence rule — so `"peak": {}` above means "present and
+populated when measured", not "always emitted, zero when not". Within a present
+`memory`, `series` is absent when `--metrics-series false` suppresses it while
+`peak` and `series_decimation` remain. An artifact produced with no sampler at
+all therefore carries no `memory` key, and one produced with the series
+suppressed carries `memory.peak` with no `series`.
+
+**The presence test is "was it measured", never "was it emitted".** Those are
+different questions — `emit_series` decides whether the samples are *published*,
+not whether they were *collected* — and keying presence on the published copy
+makes the artifact contradict itself: under `--metrics-series false` the
+per-span blocks still carry real measured figures, so a run level that claimed no
+measurement would be false next to them, and the peak would be silently lost.
 
 **Why `config` echoes the analysis configuration only as a hash and one flag.**
 The effective `AnalysisConfig` is already recoverable from the two configuration
