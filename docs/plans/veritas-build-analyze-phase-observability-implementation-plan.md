@@ -84,7 +84,7 @@ The foundation. Everything else consumes this API, so it is specified in full he
   - `struct SpanMemory { std::uint64_t rss_start, rss_end, peak_within, footprint_peak; std::int64_t rss_delta; };`
   - `struct SpanStats { std::string name; std::uint64_t count; std::chrono::nanoseconds wall_inclusive, wall_self, cpu_inclusive, min, max; bool cpu_measured; std::optional<Distribution> distribution; std::vector<TopEntry> top_n; std::optional<SpanMemory> memory; std::vector<SpanStats> children; };`
   - `struct MemorySample { std::chrono::milliseconds t{}; std::uint64_t rss_bytes, footprint_bytes; };`
-  - `struct RunMetricsStats { SpanStats root; std::vector<Counter> counters; std::vector<MemorySample> series; std::uint64_t series_decimation; std::uint64_t peak_rss_bytes, peak_footprint_bytes; std::chrono::milliseconds peak_at{}; std::vector<std::string> diagnostics; bool complete; };`
+  - `struct RunMetricsStats { SpanStats root; std::vector<Counter> counters; std::vector<MemorySample> series; bool memory_measured; std::uint64_t series_decimation; std::uint64_t peak_rss_bytes, peak_footprint_bytes; std::chrono::milliseconds peak_at{}; std::vector<std::string> diagnostics; bool complete; };` — `memory_measured` is the run-level half of the two-level presence rule (spec §6.3): it is true when the buffer held at least one sample, **whether or not those samples were published**, so `series` empty with `memory_measured` true is "measured, series suppressed" and `series` empty with it false is "no measurement". The presence of the `memory` block keys on this flag and never on `series`.
   - `class RunMetrics` with `RunMetrics(RunMetricsOptions = {}, WallClock = std::chrono::steady_clock::now, CpuClock = &ProcessCpuNow)`, `std::size_t BeginSpan(std::string_view, SpanMode = SpanMode::kPlain)`, `void EndSpan(std::size_t)`, `void SetLabel(std::size_t, std::string)`, `void AddCounter(std::string_view, std::uint64_t, std::string_view)`, `void AddDiagnostic(std::string)`, `RunMetricsStats TakeStats()`. Non-copyable.
   - `class PhaseSpan` with `PhaseSpan(RunMetrics*, std::string_view, SpanMode = SpanMode::kPlain)`, `~PhaseSpan()`, `void SetLabel(std::string)`, `void AddCounter(std::string_view, std::uint64_t, std::string_view)`. A `nullptr` recorder makes every method a no-op that reads no clock.
 
@@ -196,6 +196,11 @@ struct RunMetricsStats {
   SpanStats root;
   std::vector<Counter> counters;
   std::vector<MemorySample> series;
+  // True when the buffer held at least one sample, whether or not those
+  // samples were published. `series` empty and `memory_measured` false is "no
+  // measurement"; `series` empty and true is "measured, series suppressed".
+  // The presence of a memory block keys on this, never on `series`.
+  bool memory_measured = false;
   std::uint64_t series_decimation = 1;
   std::uint64_t peak_rss_bytes = 0;
   std::uint64_t peak_footprint_bytes = 0;
@@ -1012,9 +1017,14 @@ Create `include/veritas/observability/RunReport.h` with the license header and t
 
 namespace veritas::observability {
 
-// The identity block is separated because it is the part that MUST move
-// between runs. A comparison script can exclude it wholesale without parsing
-// the rest of the artifact.
+// The identity block is separated so a comparison script can exclude its
+// run-scoped coordinates without parsing the rest — SELECTIVELY, not wholesale:
+// only `run_id` and `batch_id` move between two runs of one fixture. The other
+// seven — `repository_id`, `revision_id`, `build_variant_id`, `projection_id`,
+// `svf_config_hash`, `wpa_config_hash` and `engine_toolchain_identity` — are
+// content- and config-derived and therefore stable, and they are the comparison
+// the block exists to enable. See design section 6.5 rule 6, which corrects the
+// earlier wording that read "exclude it wholesale".
 struct RunIdentity {
   std::string run_id;
   std::string batch_id;
@@ -1545,6 +1555,12 @@ In `src/analysis/ProjectAnalyzer.cpp`, thread the parameter and add spans at exa
 | `facts.store_open` | around `facts::FactStore::Open` (`:333-336`) |
 | `facts.publish` | around `bus.Publish` (`:339`) |
 
+The **symbol is the contract**; the parenthesised line ranges were read from the
+source when this plan was written and are now stale, because the task itself
+inserted spans above them. Do not treat a range as a requirement to insert at a
+line number — the requirement is the named call. The spec's normative inventory
+(section 4.6) and the reader's guide cite file and symbol for this reason.
+
 `RunWpa` gains the parameter and passes it into the request:
 
 ```cpp
@@ -1847,7 +1863,7 @@ Rules to implement exactly:
 - `pthread_create` failure: `Diagnose("sampler thread unavailable: ...")`, set `boundary_only = true`, and from then on append one sample in `BeginSpan` and one in `EndSpan`, but only while a **bearing** span is open, so the boundary series stays sparse rather than one sample per component.
 - The destructor sets `stop`, then `pthread_join`s if started. Join before reading the buffer.
 - No lock on the analysis path: only the sampler thread appends during the run, and only `TakeStats` reads, after the join. When `boundary_only` is set there is no sampler thread at all, and the appends happen on the analysis thread.
-- `TakeStats` converts each bearing accumulator's `first_start`/`last_end` to millisecond offsets from `run_start` and applies the join, with the boundary rule **start-inclusive, end-inclusive**. For a bearing span that occurred more than once, the window is the union `[first_start, last_end]`, and that is what the memory figures describe — not a per-occurrence average; say so in a comment. It also computes `peak_rss_bytes`, `peak_footprint_bytes` and `peak_at` over the whole series, and copies the used series into `stats.series` (or leaves it empty when `emit_series` is false), setting `series_decimation` from the buffer. It **copies** rather than moves: the pinned interface exposes only a `const` view of the buffer, so a move is not available without widening it, and the copy is once per run.
+- `TakeStats` converts each bearing accumulator's `first_start`/`last_end` to millisecond offsets from `run_start` and applies the join, with the boundary rule **start-inclusive, end-inclusive**. For a bearing span that occurred more than once, the window is the union `[first_start, last_end]`, and that is what the memory figures describe — not a per-occurrence average; say so in a comment. It also computes `peak_rss_bytes`, `peak_footprint_bytes` and `peak_at` over the whole series, and copies the used series into `stats.series` (or leaves it empty when `emit_series` is false), setting `series_decimation` from the buffer. **It also sets `stats.memory_measured` from whether the buffer held any sample — not from whether the series was copied into the stats.** That distinction is the run-level half of the two-level presence rule (spec §6.3), and it is load-bearing: an implementation that set the flag from `stats.series` would make `--metrics-series false` report a run that measured nothing, while the per-span blocks beside it still carried real measured figures. It **copies** rather than moves: the pinned interface exposes only a `const` view of the buffer, so a move is not available without widening it, and the copy is once per run.
 
 **`SpanStats::memory` is engaged only when a sample actually falls inside the span's window.** `JoinMemory` returns `std::nullopt` when the series is empty and also when no sample lies in `[first_start, last_end]`. A populated block therefore means "measured". An all-zero block is indistinguishable from a measured zero, and the renderer's own contract — and the memory column's reason for existing — is that an absent measurement is visibly absent. This is a spec correction made after Task 4 was first reviewed; the artifact bytes change as a result, so any test asserting a zeroed `memory` block must expect absence instead.
 
@@ -2590,7 +2606,7 @@ So this task carries a **small authorized cross-task change**: add four fields t
 
 `RunWpa` already computes all four — `descriptor.svf_configuration_hash` and `descriptor.wpa_configuration_hash` at the point it builds the descriptor, `toolchain_identity` just after, and `batch.batch_id` from the batch it publishes. Set them on `*result` before returning, and populate the identity block from them here.
 
-**And make absence visible rather than plausible.** If any identity field still has no value, **omit the key** rather than emitting `""`. The rule is the same one the memory block follows: an absent value must not be representable as a value, because `""` compares equal across runs that differ.
+**And make absence visible rather than plausible.** If any identity field still has no value, **omit the key** rather than emitting `""`. The rule is the same one the memory block follows: an absent value must not be representable as a value, because `""` compares equal across runs that differ. Apply the note to **all nine** identity coordinates, not only the four this task adds: the other five are populated on every successful run today, so naming only four would leave them to be omitted in silence the day one of them goes empty — which is exactly the failure the note exists to catch.
 | `metrics_options`, `metrics` | the recorder: `metrics.TakeStats()` and the options you constructed |
 | `conformance_oracle` | `config.run_cpp_conformance_oracle` — the one AnalysisConfig knob neither configuration hash covers (design section 6.3) |
 | `environment` | `observability::FillEnvironment` |
@@ -2932,7 +2948,7 @@ git commit -m "docs(analyze): record phase-observability overhead and add the re
 
 ## Self-Review
 
-**Spec coverage.** Every numbered spec section maps to a task. Section 4.2/4.3/4.4 (recorder, distributions, counters) → T1. Section 4.5 (sampler and join) → T4. Section 4.6 (span inventory) → T3 and T7. Section 4.7 (store read-back) → T5. Section 5.2 (five identity rules) → T3's test for Rules 1–2, T6 for Rule 3, T1's null-recorder test for Rule 4, and the not-a-budget constraint is a Global Constraint. Sections 6.1–6.5 → T2 and T6. Section 7.1–7.4 → T4 and T6. Section 8.1–8.6 → distributed across every task's test steps, with 8.5 landing in T8. Sections 9.1–9.2 → the task list. Section 10 (the duplicated ingest) is measured by T3's `cli.ingest`/`m1.ingest` spans and reported in T8.
+**Spec coverage.** Every numbered spec section maps to a task. Section 4.2/4.3/4.4 (recorder, distributions, counters) → T1. Section 4.5 (sampler and join) → T4. Section 4.6 (span inventory) → T3 and T7. Section 4.7 (store read-back) → T5. Section 5.2 (five identity rules) → T3's test for Rules 1–2, T6 for Rule 3, T1's null-recorder test for Rule 4, and the not-a-budget constraint is a Global Constraint. Sections 6.1–6.5 → T2 and T6. Section 7.1–7.4 → T4 and T6. Section 8.1–8.6 → distributed across every task's test steps, with 8.5 landing in T8. Sections 9.1–9.2 → the task list. Section 10 (the duplicated ingest) is measured by two spans that come from two different tasks — `m1.ingest`, which is T3's, and `cli.ingest`, which is **T6's** alongside the `run` root it opens around them — and reported in T8. An earlier revision of this line attributed both to T3, which is wrong for exactly the span the duplication turns on: T3's site table begins at `m1.ingest` and never reaches the CLI, so the pair that makes the double ingest visible is only complete once T6 lands. The paragraph below records how that gap was found.
 
 **Gaps found and closed.** §8.3's schema contract needed `llvm::json::Parse`, so `RunReportTest` links `LLVM` directly rather than relying on the library's `PRIVATE` link. §6.3's `"complete"` and `"diagnostics"` needed a producer: T1 records them, T2 emits them, T6 surfaces them on stderr.
 

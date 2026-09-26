@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <ctime>
 #include <functional>
+#include <limits>
 #include <map>
 #include <string>
 #include <utility>
@@ -145,7 +146,18 @@ void SeriesBuffer::Append(MemorySample sample) {
   // is exact, where comparing timestamps would also match a duplicate.
   if ((samples_.size() - 1) % 2 != 0) kept.back() = samples_.back();
   samples_.swap(kept);
-  decimation_ *= 2;
+  // Saturating, not wrapping. The factor doubles on every overflow, so an
+  // unclamped multiply wraps to 0 after 64 doublings — roughly six days of
+  // continuous sampling at the CLI's interval — and the artifact would then
+  // carry `series_decimation: 0`, which the reader's guide defines as "the
+  // series was never thinned". A zero there is not merely wrong: it is a
+  // plausible value for a different measurement, which is the failure mode the
+  // presence rules exist to prevent. At the clamp the series is thinned as far
+  // as this counter can say, and the count stays monotone.
+  constexpr std::uint64_t kMaxDecimation =
+      std::numeric_limits<std::uint64_t>::max();
+  decimation_ = decimation_ > kMaxDecimation / 2 ? kMaxDecimation
+                                                : decimation_ * 2;
 }
 
 struct RunMetrics::Impl {
@@ -456,6 +468,22 @@ void RunMetrics::EndSpan(std::size_t token) {
     if (accum.samples.size() < impl_->options.span_sample_cap) {
       accum.samples.push_back(wall);
     } else {
+      // Recorded once per span, not once per dropped occurrence: the first
+      // truncation is the whole of the news, and a diagnostic per occurrence
+      // would bury it under the count that caused it. Design section 7.1 lists
+      // this alongside the other degradations, and its preamble makes every one
+      // of them loud — so it is a Diagnose (which clears `complete`) and not a
+      // silent flag. A truncated distribution reported inside an artifact that
+      // still claims to be complete is the partial-summary failure this design
+      // exists to prevent.
+      if (!accum.samples_truncated) {
+        impl_->Diagnose(
+            "span '" + accum.name + "' reached the per-span sample cap (" +
+            std::to_string(impl_->options.span_sample_cap) +
+            "); its percentiles cover a truncated sample set, and "
+            "distribution.max is the max of the retained samples while "
+            "SpanStats.max is the true max over every occurrence");
+      }
       accum.samples_truncated = true;
     }
     accum.top.push_back(TopEntry{span.label, wall});

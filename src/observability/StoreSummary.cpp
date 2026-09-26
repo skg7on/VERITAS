@@ -56,8 +56,11 @@ constexpr std::string_view kCountedTables[] = {
     "run_fact_bindings", "wpa_component_states_v2"};
 
 // Groups on-disk bytes by the first path component under output_root, so the
-// artifact names stores (cas, metadata.db, ...) rather than individual files,
-// and never contains an absolute path.
+// artifact names stores (objects, metadata.db, ...) rather than individual
+// files, and never contains an absolute path. `objects` is the name the shipped
+// root actually has: `SummaryRepository::Open(db_path)` puts the RocksDB object
+// store at `<db_path>/objects` and the SQLite metadata store beside it at
+// `<db_path>/metadata.db`, and `db_path` is the output root.
 StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
     const std::filesystem::path& output_root) {
   std::map<std::string, std::uint64_t> totals;

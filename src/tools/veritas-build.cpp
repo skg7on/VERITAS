@@ -438,19 +438,27 @@ std::vector<std::size_t> FillReport(
 
   // An identity coordinate with no value has its key omitted (RunReport), and
   // is named here: an absent key is visibly absent, but only to a reader who
-  // knows the schema expects it.
-  const auto note_if_empty = [&builder](std::string_view field,
-                                        const std::string& value) {
-    if (value.empty()) {
+  // knows the schema expects it. Every one of the nine is checked, not just the
+  // four this run added — a field left out of this list would be omitted
+  // silently, which is the failure the note exists to prevent. The names are
+  // the artifact's key names, so a note and the key it is about agree.
+  const std::pair<std::string_view, const std::string*> kIdentityFields[] = {
+      {"batch_id", &report->identity.batch_id},
+      {"build_variant_id", &report->identity.build_variant_id},
+      {"engine_toolchain_identity", &report->identity.engine_toolchain_identity},
+      {"projection_id", &report->identity.projection_id},
+      {"repository_id", &report->identity.repository_id},
+      {"revision_id", &report->identity.revision_id},
+      {"run_id", &report->identity.run_id},
+      {"svf_config_hash", &report->identity.svf_config_hash},
+      {"wpa_config_hash", &report->identity.wpa_config_hash},
+  };
+  for (const auto& [field, value] : kIdentityFields) {
+    if (value->empty()) {
       builder.Note("identity field " + std::string(field) +
                    " has no value; its key is omitted from the artifact");
     }
-  };
-  note_if_empty("batch_id", report->identity.batch_id);
-  note_if_empty("engine_toolchain_identity",
-                report->identity.engine_toolchain_identity);
-  note_if_empty("svf_config_hash", report->identity.svf_config_hash);
-  note_if_empty("wpa_config_hash", report->identity.wpa_config_hash);
+  }
   veritas::observability::RunOutputInventory& output = report->inventory.output;
 
   output.summaries_published = result.published_summary_ids.size();

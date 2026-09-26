@@ -14,22 +14,150 @@
 
 #include "veritas/analysis/ProjectAnalyzer.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <span>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include <unistd.h>
 
 #include "ProjectFixture.h"
+#include "veritas/core/Hash.h"
+#include "veritas/summarydb/MetadataStore.h"
 
 namespace veritas::analysis {
 namespace {
 
 namespace fs = std::filesystem;
+
+// ---------------------------------------------------------------------------
+// Published-table fingerprints
+// ---------------------------------------------------------------------------
+
+// Spec section 8.2's second requirement: the four published table digests must
+// match between the recording run and the non-recording one. A digest over the
+// whole table is the strongest form of that claim, because it is sensitive to
+// every cell that a count or a schema check would sail past.
+//
+// Two boundaries are deliberate.
+//
+// The ORDER BY is the table's PRIMARY KEY, never `rowid`. A rowid-ordered dump
+// has already differed across builds in this repository, so a comparison built
+// on one would fail for a reason that is not the thing under test. Where a
+// table's declared primary key contains a run-scoped column, the ordering uses
+// the primary key restricted to the dumped columns, which within a single
+// store is the same order.
+//
+// `run_id` is the only column excluded, from the three tables that carry it
+// (`run_fact_bindings`, `provenance_nodes`, `provenance_edges`) and from
+// nothing else. It is excluded because it is the one column a second run of the
+// same fixture could legitimately disagree on and still be the same published
+// content — and because its own stability is pinned separately, by the
+// `EXPECT_EQ` cases in `RecordingDoesNotMoveAnyIdentity`. Excluding a whole
+// table would make this comparison a statement about the tables that were left.
+// `analysis_facts` carries no run-scoped column at all, so its dump is the
+// table.
+//
+// `run_fact_bindings.binding_id` is excluded too, and for a different reason:
+// it is declared `INTEGER PRIMARY KEY AUTOINCREMENT`, which in SQLite is the
+// rowid under another name. Dumping it would make the comparison rowid-ordered
+// by construction. The columns that remain are a total order.
+struct TableDump {
+  const char* table;
+  const char* sql;
+};
+
+constexpr TableDump kPublishedTableDumps[] = {
+    {"analysis_facts",
+     "SELECT fact_id, relation_name, cells_hex FROM analysis_facts "
+     "ORDER BY fact_id"},
+    {"run_fact_bindings",
+     "SELECT fact_id, confidence, producer_kind, analyzer_run_id, scope_kind, "
+     "scope_id, selected_witness_id, is_current FROM run_fact_bindings "
+     "ORDER BY fact_id, is_current, producer_kind, analyzer_run_id, scope_kind, "
+     "scope_id, selected_witness_id, confidence"},
+    {"provenance_nodes",
+     "SELECT output_fact_id, witness_id, selected, producer_kind, producer_id, "
+     "rule_id, rule_version, analyzer_run_id, source_anchor_id, summary_id, "
+     "description FROM provenance_nodes "
+     "ORDER BY output_fact_id, witness_id"},
+    {"provenance_edges",
+     "SELECT output_fact_id, witness_id, input_kind, input_id, input_ordinal "
+     "FROM provenance_edges "
+     "ORDER BY output_fact_id, witness_id, input_ordinal, input_kind, input_id"},
+};
+
+// One row's fields joined, and rows terminated, by separator bytes, so a value
+// that happens to contain a separator character cannot forge a field boundary
+// and make two different tables dump alike.
+std::string CanonicalDump(const std::vector<std::vector<std::string>>& rows) {
+  std::string text;
+  for (const std::vector<std::string>& row : rows) {
+    for (const std::string& field : row) {
+      text.append(field);
+      text.push_back('\x1f');
+    }
+    text.push_back('\x1e');
+  }
+  return text;
+}
+
+std::string DigestOf(std::string_view text) {
+  const auto* bytes = reinterpret_cast<const std::byte*>(text.data());
+  return core::DigestToHex(
+      core::ComputeSHA256(std::span<const std::byte>(bytes, text.size())));
+}
+
+struct TableFingerprint {
+  std::string table;
+  std::size_t rows = 0;
+  std::string digest;
+};
+
+// Opens the store under `output_root` and fingerprints each published table.
+// Propagates a failed open or query rather than returning an empty digest: an
+// unreadable store must not compare equal to a readable one.
+StatusOr<std::vector<TableFingerprint>> FingerprintPublishedTables(
+    const fs::path& output_root) {
+  auto store = summarydb::MetadataStore::Open(output_root / "metadata.db");
+  if (!store.ok()) return store.status();
+
+  std::vector<TableFingerprint> fingerprints;
+  for (const TableDump& dump : kPublishedTableDumps) {
+    auto rows = store->Query(dump.sql, {});
+    if (!rows.ok()) return rows.status();
+    TableFingerprint fingerprint;
+    fingerprint.table = dump.table;
+    fingerprint.rows = rows->size();
+    fingerprint.digest = DigestOf(CanonicalDump(*rows));
+    fingerprints.push_back(std::move(fingerprint));
+  }
+  return fingerprints;
+}
+
+// A per-process-unique output root, as `RecordsTheExpectedSpanTree` explains:
+// the component-result cache is keyed on the output root, so a root left behind
+// by an earlier run would turn the per-component execute span into a cache hit
+// and the two runs under comparison would not be the same shape of run.
+fs::path UniqueOutputRoot(const std::string& label) {
+  std::string output_template =
+      (fs::temp_directory_path() / ("veritas-" + label + "-XXXXXX")).string();
+  char* created = ::mkdtemp(output_template.data());
+  if (created == nullptr) {
+    ADD_FAILURE() << "cannot create an output root under "
+                  << fs::temp_directory_path();
+    return {};
+  }
+  return fs::path(created);
+}
 
 TEST(PhaseObservabilityIdentityTest, RecordingDoesNotMoveAnyIdentity) {
   const auto project = testing::FixtureProject("multiple_tus");
@@ -63,8 +191,87 @@ TEST(PhaseObservabilityIdentityTest, RecordingDoesNotMoveAnyIdentity) {
   EXPECT_EQ(result_a->cpg_node_count, result_b->cpg_node_count);
   EXPECT_EQ(result_a->cpg_edge_count, result_b->cpg_edge_count);
   EXPECT_EQ(result_a->unknowns.size(), result_b->unknowns.size());
+  // The four identity fields spec section 8.2's first requirement covers, all
+  // public on `ProjectAnalysisResult` and all read into the artifact's identity
+  // block. `batch_id` is named there in the byte-equality list; the two
+  // configuration hashes and the toolchain identity are the coordinates a
+  // reader is told to compare *instead of* excluding the block, so a recording
+  // run that moved either would break the comparison the block exists to
+  // enable. They are compared here because the field set grew after this case
+  // was first written, not because they were judged stable.
+  EXPECT_EQ(result_a->batch_id, result_b->batch_id);
+  EXPECT_EQ(result_a->svf_configuration_hash, result_b->svf_configuration_hash);
+  EXPECT_EQ(result_a->wpa_configuration_hash, result_b->wpa_configuration_hash);
+  EXPECT_EQ(result_a->engine_toolchain_identity,
+            result_b->engine_toolchain_identity);
   // The recorder actually ran, so an empty tree cannot make this vacuous.
   EXPECT_FALSE(metrics.TakeStats().root.children.empty());
+}
+
+// Spec section 8.2's second requirement, which no case covered: the four
+// published table digests must be equal between the same two runs. Identity
+// equality above is a statement about nine strings; this is a statement about
+// the published content they key, and it is the strongest guard the design has
+// — a digest moves for any cell in any row.
+TEST(PhaseObservabilityIdentityTest,
+     PublishesTheSameTableContentWithAndWithoutRecording) {
+  const auto project = testing::FixtureProject("multiple_tus");
+  const fs::path output_a = UniqueOutputRoot("table-digest-off");
+  const fs::path output_b = UniqueOutputRoot("table-digest-on");
+  ASSERT_FALSE(output_a.empty());
+  ASSERT_FALSE(output_b.empty());
+
+  const auto config = veritas::analysis::AnalysisConfig::Default();
+
+  auto result_a = ProjectAnalyzer{}.AnalyzeProject(
+      ProjectAnalysisRequest{.project_root = project, .output_root = output_a},
+      config);
+  ASSERT_TRUE(result_a.ok()) << result_a.status().message();
+
+  core::RunMetricsOptions options;
+  core::RunMetrics metrics(options);
+  auto result_b = ProjectAnalyzer{}.AnalyzeProject(
+      ProjectAnalysisRequest{.project_root = project, .output_root = output_b},
+      config, &metrics);
+  ASSERT_TRUE(result_b.ok()) << result_b.status().message();
+
+  auto fingerprints_a = FingerprintPublishedTables(output_a);
+  ASSERT_TRUE(fingerprints_a.ok()) << fingerprints_a.status().message();
+  auto fingerprints_b = FingerprintPublishedTables(output_b);
+  ASSERT_TRUE(fingerprints_b.ok()) << fingerprints_b.status().message();
+  ASSERT_EQ(fingerprints_a->size(), 4u);
+  ASSERT_EQ(fingerprints_b->size(), 4u);
+
+  for (std::size_t i = 0; i < fingerprints_a->size(); ++i) {
+    const TableFingerprint& a = (*fingerprints_a)[i];
+    const TableFingerprint& b = (*fingerprints_b)[i];
+    ASSERT_EQ(a.table, b.table);
+    // A non-empty row count, so a digest comparison cannot pass by comparing
+    // two empty tables: `DigestOf("")` is a digest, and it is the same one
+    // whatever went wrong.
+    EXPECT_GT(a.rows, 0u) << a.table << " published no rows";
+    EXPECT_EQ(a.rows, b.rows) << a.table << " row count moved";
+    EXPECT_EQ(a.digest, b.digest)
+        << a.table
+        << " content digest moved between the recording and non-recording run";
+  }
+
+  // And the four digests must differ from one another. Two of these tables hold
+  // exactly the same number of rows in this fixture (24, measured), so a digest
+  // that had collapsed to a row count — or to any constant, which a broken
+  // `CanonicalDump` would produce — would satisfy every assertion above while
+  // comparing nothing. Distinctness is what says the dump carries column
+  // content, and it is the assertion that fails first if the digest stops being
+  // a function of the rows.
+  for (std::size_t i = 0; i < fingerprints_a->size(); ++i) {
+    for (std::size_t j = i + 1; j < fingerprints_a->size(); ++j) {
+      EXPECT_NE((*fingerprints_a)[i].digest, (*fingerprints_a)[j].digest)
+          << (*fingerprints_a)[i].table << " and "
+          << (*fingerprints_a)[j].table << " dumped alike ("
+          << (*fingerprints_a)[i].rows << " and "
+          << (*fingerprints_a)[j].rows << " rows)";
+    }
+  }
 }
 
 // Instrumentation can compile, run, and record nothing: a wrong null check, a

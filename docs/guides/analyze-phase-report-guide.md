@@ -225,7 +225,9 @@ Two bounds on the series are worth knowing when you read it:
   timeline at coarser resolution rather than losing its start. The first and
   newest samples survive each thinning. The factor is written into the artifact;
   a decimation above 1 means the series is thinner than the sample interval
-  suggests.
+  suggests. It doubles until it saturates at the largest value the field holds,
+  never wrapping to 0: `series_decimation: 0` would read as "never thinned",
+  which is the opposite of what it would mean.
 - **The `run` row excludes the report's own rendering and writing.** The
   `run` span closes before either the report or the artifact is produced, so
   the number the whole report is anchored to is the analysis command's time and

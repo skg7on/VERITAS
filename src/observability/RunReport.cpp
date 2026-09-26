@@ -411,6 +411,21 @@ std::string FormatSignedBytes(std::int64_t bytes) {
   return std::string(negative ? "-" : "+") + FormatBytes(magnitude);
 }
 
+// The two memory columns are sized to the widest string the byte tiers produce.
+// That is not the top of the last tier: "%.2f" carries, so the largest value in
+// the MiB tier — FormatBytes(1073741823) — renders as "1024.00 MiB", and that
+// eleven-column string is what pins the peak column. The delta beside it
+// carries an explicit sign, so it needs one more. Neither value is arbitrary;
+// they are the lengths of the two literals below, so a change to either must
+// change the other.
+//
+// A footprint above 10000 GiB would gain a fifth integer digit in the GiB tier
+// and go ragged, since PadLeft pads but does not truncate. No run reaches that,
+// and the alternative — sizing for FormatBytes(UINT64_MAX), 18 columns — would
+// widen every row for a value no machine produces.
+constexpr std::size_t kPeakColumnWidth = sizeof("1024.00 MiB") - 1;    // 11
+constexpr std::size_t kDeltaColumnWidth = sizeof("-1024.00 MiB") - 1;  // 12
+
 std::string FormatPhaseRow(const PhaseRow& row, std::size_t width) {
   const core::SpanStats& span = *row.span;
   // "-" rather than zero wherever the producer recorded no measurement: an
@@ -423,8 +438,6 @@ std::string FormatPhaseRow(const PhaseRow& row, std::size_t width) {
                                : std::string("-");
   // The delta carries its own unit, like the peak beside it, so the reader can
   // compare the two columns and tell a MiB-scale release from a GiB-scale one.
-  // The column is as wide as the widest value the tiers can produce
-  // ("-1024.00 MiB"): a longer string would push the row's columns out of line.
   const std::string delta = span.memory.has_value()
                                 ? FormatSignedBytes(span.memory->rss_delta)
                                 : std::string("-");
@@ -437,9 +450,9 @@ std::string FormatPhaseRow(const PhaseRow& row, std::size_t width) {
   line.append("  ");
   line.append(PadLeft(cpu, 10));
   line.append("  ");
-  line.append(PadLeft(peak, 10));
+  line.append(PadLeft(peak, kPeakColumnWidth));
   line.append("  ");
-  line.append(PadLeft(delta, 11));
+  line.append(PadLeft(delta, kDeltaColumnWidth));
   line.push_back('\n');
   return line;
 }
@@ -542,7 +555,16 @@ std::string RenderRunReportJson(const RunReport& report) {
 
     j.attribute("schema", "veritas.run-metrics.v1");
 
-    EmitStore(j, report.store);
+    // The same gate the text renderer applies to its store line. A failed
+    // read-back leaves the block empty and the caller records a diagnostic
+    // saying the block is omitted, so emitting it unconditionally would put
+    // `"tables": []` in the artifact — which reads as *the store published no
+    // tables*, a plausible zero for a block of measurements and exactly the
+    // reading this design exists to prevent, reached through a failure path.
+    // Present means measured, here as everywhere else.
+    if (!report.store.tables.empty() || !report.store.bytes.empty()) {
+      EmitStore(j, report.store);
+    }
   });
 
   os.flush();

@@ -176,12 +176,16 @@ if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   )
 endif()
 
+# `veritas_summarydb` is named explicitly because the published-table digest
+# case opens `<output_root>/metadata.db` itself to dump the four published
+# tables; `veritas_analysis` links it PRIVATE, so it is not reachable through it.
 add_executable(phase_observability_identity_integration_test
   PhaseObservabilityIdentityTest.cpp
 )
 target_link_libraries(phase_observability_identity_integration_test
   PRIVATE
     veritas_analysis
+    veritas_summarydb
     veritas_test_support
     veritas_unit_test_support
 )

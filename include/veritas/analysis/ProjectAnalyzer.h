@@ -90,13 +90,22 @@ struct ProjectAnalysisResult {
   std::string wpa_run_id;
   WpaEngineMode wpa_engine = WpaEngineMode::kSouffle;
   std::string wpa_diagnostics;
-  // The run's identity inputs, surfaced so a caller can record what the run
-  // actually ran under without reaching into the store. They are exactly the
-  // fields that move `run_id`: the two configuration hashes that cover every
-  // AnalysisConfig field between them, the engine's toolchain identity, and the
-  // batch id the facts were published under. Two runs with different
-  // `--wpa-engine`, `--field-sensitive`, or `--max-alias-pairs` values differ
-  // in these strings, and in nothing else a caller can see.
+  // The run's coordinates and configuration identity, surfaced so the
+  // reporting layer can record what the run actually ran under without
+  // reaching into the store. Between them the two configuration hashes cover
+  // every AnalysisConfig field, the toolchain identity names the engine the run
+  // executed, and the batch id names the fact batch it published. Two runs with
+  // different `--wpa-engine`, `--field-sensitive`, or `--max-alias-pairs`
+  // values differ in these strings, and in nothing else a caller can see.
+  //
+  // They are not `run_id`'s input list. `run_id` hashes ten descriptor fields
+  // (the revision and build-variant ids, the summary, relation, rule-bundle and
+  // model-bundle versions, the two configuration hashes, the engine tag and the
+  // toolchain identity), of which four are here, and `batch_id` is derived from
+  // the assembled fact batch rather than from `run_id` at all. The other
+  // coordinates are already on this result beside them. An earlier revision of
+  // this comment claimed these were "exactly the fields that move `run_id`";
+  // they are the subset the reporting layer has no other source for.
   //
   // Empty only when the run did not reach the stage that mints them; the
   // reporting layer omits an empty field's key rather than writing "".

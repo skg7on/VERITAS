@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -215,6 +216,46 @@ TEST(RunMetricsTest, CapsSamplesAndFlagsTruncation) {
   // SpanStats.max is the true max over every occurrence, which is a different
   // quantity once truncation has occurred: 5ms.
   EXPECT_EQ(d.max, milliseconds(5));
+
+  // Truncation is a degradation, and design section 7.1's preamble makes every
+  // degradation loud: a diagnostic and `complete: false`, not just a flag in
+  // the artifact. The flag alone would leave the document asserting a
+  // completeness it does not have — the partial-summary failure this design
+  // exists to prevent — and the writer must be able to see it on stderr.
+  EXPECT_FALSE(stats.complete);
+  ASSERT_EQ(stats.diagnostics.size(), 1u) << "one diagnostic per span, not one "
+                                             "per dropped occurrence";
+  EXPECT_NE(stats.diagnostics.front().find("per-span sample cap"),
+            std::string::npos)
+      << stats.diagnostics.front();
+  EXPECT_NE(stats.diagnostics.front().find("'d'"), std::string::npos)
+      << "the diagnostic names the span it is about: "
+      << stats.diagnostics.front();
+}
+
+TEST(RunMetricsTest, DoesNotDiagnoseASpanThatStaysUnderTheSampleCap) {
+  // The direction the case above leaves unpinned. A degradation that fires
+  // whenever a distributed span is used at all would put `complete: false` and
+  // a diagnostic on every healthy run, which devalues both for the case that
+  // matters. Five occurrences against a cap of five is the boundary the
+  // comparison is written on.
+  RunMetricsOptions options;
+  options.span_sample_cap = 5;
+  ScriptedRecorder r(options);
+  for (int i = 0; i < 5; ++i) {
+    r.wall_tick = milliseconds(0);
+    const std::size_t token =
+        r.metrics->BeginSpan("d", SpanMode::kDistributed);
+    r.wall_tick = milliseconds(i + 1);
+    r.metrics->EndSpan(token);
+  }
+
+  const RunMetricsStats stats = r.metrics->TakeStats();
+  const SpanStats& d = stats.root.children.front();
+  ASSERT_TRUE(d.distribution.has_value());
+  EXPECT_FALSE(d.distribution->samples_truncated);
+  EXPECT_TRUE(stats.complete);
+  EXPECT_TRUE(stats.diagnostics.empty()) << stats.diagnostics.front();
 }
 
 TEST(RunMetricsTest, SortsCountersByNameOnTake) {
@@ -459,6 +500,31 @@ TEST(RunMetricsTest, SeriesBufferThinningDoublesDecimationKeepingFirstAndNewest)
   ASSERT_LE(buffer.samples().size(), 4u);
   EXPECT_EQ(buffer.samples().front().t, milliseconds(0));  // the first survives
   EXPECT_EQ(buffer.samples().back().t, milliseconds(40));  // the newest survives
+}
+
+TEST(RunMetricsTest, SeriesDecimationSaturatesRatherThanWrapping) {
+  // The factor doubles on every overflow, so the 64th doubling reaches 2^64 and
+  // wraps to 0. Unclamped, the artifact would carry `series_decimation: 0` —
+  // which the reader's guide defines as "the series was never thinned", the
+  // exact opposite of the truth, and a plausible value for a different
+  // measurement. Reaching 64 overflows by thinning takes about six days of
+  // continuous sampling at the CLI's interval; a capacity of one overflows on
+  // every append after the first, so 65 appends reach it here. (Measured, not
+  // reasoned: 64 appends leave the factor at 2^63, because the first append
+  // fills the buffer rather than overflowing it.)
+  SeriesBuffer buffer(1);
+  for (int i = 0; i < 65; ++i) {
+    buffer.Append(MemorySample{milliseconds(i), 100u, 10u});
+  }
+  EXPECT_EQ(buffer.decimation(), std::numeric_limits<std::uint64_t>::max());
+  EXPECT_NE(buffer.decimation(), 0u);
+
+  // And it stays clamped rather than wrapping on a later overflow.
+  for (int i = 65; i < 256; ++i) {
+    buffer.Append(MemorySample{milliseconds(i), 100u, 10u});
+  }
+  EXPECT_EQ(buffer.decimation(), std::numeric_limits<std::uint64_t>::max());
+  EXPECT_NE(buffer.decimation(), 0u);
 }
 
 TEST(RunMetricsTest, PeakIsTheMaximumOfTheWholeSeries) {

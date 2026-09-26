@@ -35,9 +35,17 @@
 
 namespace veritas::observability {
 
-// The identity block is separated because it is the part that MUST move
-// between runs. A comparison script can exclude it wholesale without parsing
-// the rest of the artifact.
+// The identity block is separated so a comparison script can exclude its
+// run-scoped coordinates without parsing the rest — SELECTIVELY, not wholesale:
+// only `run_id` and `batch_id` move between two runs of one fixture. The other
+// seven — `repository_id`, `revision_id`, `build_variant_id`, `projection_id`,
+// `svf_config_hash`, `wpa_config_hash` and `engine_toolchain_identity` — are
+// content- and config-derived and therefore stable, and they are the comparison
+// the block exists to enable: two runs whose configuration hashes disagree did
+// not have the same effective configuration. Excluding the whole block would
+// discard exactly that evidence while believing it had excluded noise. See
+// design section 6.5 rule 6, which corrects the earlier wording that read
+// "exclude it wholesale".
 struct RunIdentity {
   std::string run_id;
   std::string batch_id;

@@ -268,41 +268,51 @@ resolution. The decimation factor is written into the artifact.
 
 Every site below was read from the source. `[D]` marks a distributed span.
 
+**Sites are cited by file and symbol, not by line number.** This is the
+normative inventory, and its purpose is to let a reader confirm that a span
+exists at a named place. A line range cannot serve that purpose for long: an
+earlier revision of this table carried ranges that had already drifted by the
+time the branch was reviewed, because every task that inserted a span above a
+cited site moved it. A file and a symbol remain checkable. The reader's guide
+(`docs/guides/analyze-phase-report-guide.md`, section 4) keeps the same list in
+the same form.
+
 | Span | Site |
 | --- | --- |
 | `run` | root, opened by the CLI |
-| `cli.ingest` | `src/tools/veritas-build.cpp:211-220` — resolve, load manifest, write `manifest.json` |
-| `m1.ingest` | `src/analysis/ProjectAnalyzer.cpp:362-367` — the analyzer re-resolves and re-loads |
-| `m4.local_analysis` | `:370` `RunLocalAnalysis` |
-| `m5.svf` | `:380` `SvfAnalysisStage::Analyze` |
-| `m5.svf.module_set` | `src/analysis/svf/SvfSession.cpp:103` `buildSVFModule` |
-| `m5.svf.svfi` | `:112-113` `SVFIRBuilder::build` |
-| `m5.svf.andersen` | `:120-121` `createAndersenWaveDiff` |
-| `m5.svf.svfg` | `:128-129` `buildFullSVFG` |
-| `m5.svf.map_facts` | `:136` the callback into `MapSvfFacts` |
-| `m5.model_bundle_load` | `ProjectAnalyzer.cpp:388-392` |
-| `m5.merge_svf_facts` | `:395-396` `MergeSvfFactsV2` |
-| `m6.cpg_projection` | `:409-414` `BuildThinCpg` |
-| `m2m3.publish_summaries` | `:424-437` `PersistManifestContext` + `Publish` |
-| `wpa.orchestrate` | `src/wpa/WpaOrchestrator.cpp` `Run` |
-| `wpa.graph_build` | `:150-170` call/SCC graph and the frozen expected set |
-| `wpa.component.materialize` `[D]` | `:176-194` `WpaInputMaterializer::Build`, plus root collection `:203-210` |
-| `wpa.component.cache_lookup` `[D]` | `:212-214` `LoadReusableComponent` |
-| `wpa.component.execute` `[D]` | `:227` `executor_.Execute` |
-| `wpa.component.canonicalize` `[D]` | `:234-238` `ResultCanonicalizer::Canonicalize` |
-| `wpa.scc_state_flush` | `:292` `SccStateRepository::FlushStateCache` |
-| `facts.batch_assemble` | `ProjectAnalyzer.cpp:332` `MakeAnalysisFactBatch` |
-| `facts.store_open` | `:333-336` `FactStore::Open` |
-| `facts.publish` | `:337-342` `AnalysisFactBus::Publish` |
-| `facts.publish.validate` | `AnalysisFactBus::Validate` |
-| `facts.publish.sink.fact-store` | `FactStore::Publish` |
+| `cli.ingest` | `src/tools/veritas-build.cpp` — resolve, load manifest, write `manifest.json` |
+| `m1.ingest` | `src/analysis/ProjectAnalyzer.cpp` — the analyzer re-resolves and re-loads |
+| `m4.local_analysis` | `ProjectAnalyzer.cpp` — `RunLocalAnalysis` |
+| `m5.svf` | `ProjectAnalyzer.cpp` — `SvfAnalysisStage::Analyze` |
+| `m5.svf.module_set` | `src/analysis/svf/SvfSession.cpp` — `buildSVFModule` |
+| `m5.svf.svfi` | `SvfSession.cpp` — `SVFIRBuilder::build` |
+| `m5.svf.andersen` | `SvfSession.cpp` — `createAndersenWaveDiff` |
+| `m5.svf.svfg` | `SvfSession.cpp` — `buildFullSVFG` |
+| `m5.svf.map_facts` | `SvfSession.cpp` — the callback into `MapSvfFacts` |
+| `m5.model_bundle_load` | `ProjectAnalyzer.cpp` |
+| `m5.merge_svf_facts` | `ProjectAnalyzer.cpp` — `MergeSvfFactsV2` |
+| `m6.cpg_projection` | `ProjectAnalyzer.cpp` — `BuildThinCpg` |
+| `m2m3.publish_summaries` | `ProjectAnalyzer.cpp` — persist context + publish summaries and CPG |
+| `wpa.orchestrate` | `src/wpa/WpaOrchestrator.cpp` — `Run`, the component loop, children included |
+| `wpa.graph_build` | `WpaOrchestrator.cpp` — call/SCC graph and the frozen expected set |
+| `wpa.component.materialize` `[D]` | `WpaOrchestrator.cpp` — `WpaInputMaterializer::Build`, plus root collection |
+| `wpa.component.cache_lookup` `[D]` | `WpaOrchestrator.cpp` — `LoadReusableComponent` |
+| `wpa.component.execute` `[D]` | `WpaOrchestrator.cpp` — `executor_.Execute` |
+| `wpa.component.canonicalize` `[D]` | `WpaOrchestrator.cpp` — `ResultCanonicalizer::Canonicalize` |
+| `wpa.scc_state_flush` | `WpaOrchestrator.cpp` — `SccStateRepository::FlushStateCache` |
+| `facts.batch_assemble` | `ProjectAnalyzer.cpp` — `MakeAnalysisFactBatch` |
+| `facts.store_open` | `ProjectAnalyzer.cpp` — `FactStore::Open` |
+| `facts.publish` | `ProjectAnalyzer.cpp` — `AnalysisFactBus::Publish` |
+| `facts.publish.validate` | `src/facts/AnalysisFactBus.cpp` — `Validate` |
+| `facts.publish.sink.fact-store` | `src/facts/AnalysisFactBus.cpp` — `FactStore::Publish`, named for its sink id |
 
 **A note on `m5.svf.andersen`.** Round 3's section 2.2 cites "SVF self-reports
 20.30 s Andersen and 32.61 s MemorySSA". Those are SVF's own figures. No SVF
 timing is currently captured into a VERITAS type — `SvfAnalysisStage.h` has no
-timing field — so the span wraps the call at `SvfSession.cpp:120-121` and
-measures it directly. The two numbers should agree in magnitude and may not
-agree exactly; where they diverge, this span is the measured one.
+timing field — so the span wraps the `createAndersenWaveDiff` call in
+`SvfSession.cpp` and measures it directly. The two numbers should agree in
+magnitude and may not agree exactly; where they diverge, this span is the
+measured one.
 
 ### 4.7 The store read-back
 
@@ -525,9 +535,11 @@ measurement would be false next to them, and the peak would be silently lost.
 The effective `AnalysisConfig` is already recoverable from the two configuration
 hashes in `identity`: `wpa_configuration_hash` covers the component timeout,
 memory cap, thread count, and the rule and model bundle versions
-(`src/analysis/ProjectAnalyzer.cpp:106-122`), and `svf_configuration_hash`
-covers the pointer-analysis kind, soft budget, graph-node, emitted-fact, and
-alias-pair limits and field sensitivity (`:99-101` via `ToSvfConfig`, `:82-91`).
+(`WpaConfigurationHash` in `src/analysis/ProjectAnalyzer.cpp`), and
+`svf_configuration_hash` covers the pointer-analysis kind, soft budget,
+graph-node, emitted-fact, and alias-pair limits and field sensitivity
+(`SvfConfigurationHash` in the same file, over `ToSvfConfig`'s canonical
+analyzer-config string).
 A change to any of those fields moves the corresponding hash, so two runs whose
 hashes agree had the same effective configuration. Echoing the fields
 individually would duplicate that and force this library to depend on the
@@ -637,7 +649,7 @@ self-describing: a stderr line, `"complete": false`, and an entry in
 | Negative span duration (reachable only via a misbehaving injected clock) | clamp to 0 and count a diagnostic, **unconditionally** |
 | `EndSpan` token not the innermost open span | record a diagnostic and return without folding; never abort |
 | Series capacity reached | adaptive thinning; `series_decimation` incremented |
-| Per-span sample cap reached | `samples_truncated: true`; diagnostic |
+| Per-span sample cap reached | `samples_truncated: true` on that span; `complete: false`; **one** diagnostic per span, not one per dropped occurrence |
 
 **The rejected alternative for an unwritable artifact.** Failing the command
 would be defensible if the artifact were a product. It is not: by the time the
@@ -687,11 +699,20 @@ half met, the memory half exceeded and unresolvable at three runs per series.
 
 ### 7.4 The sampler is the codebase's first thread
 
-Verified: `grep` for `std::thread`, `std::async`, `std::jthread`,
+Before this change, `grep` for `std::thread`, `std::async`, `std::jthread`,
 `pthread_create`, and thread pools across all first-party `src/` and `include/`
-returns nothing. The sampler would be the first concurrency in a deliberately
-single-threaded codebase, and that is a design decision rather than an
-implementation detail.
+returned nothing, and the sampler therefore introduced the first concurrency
+into a deliberately single-threaded codebase — which is why it is a design
+decision rather than an implementation detail.
+
+That is a statement about the tree this design was written against, and the
+tree the design produces falsifies it if read in the present tense: the claim to
+check now is not "there are none" but "there is exactly one, and it is this
+one". `pthread_create` appears once, in the sampler's constructor
+(`src/core/RunMetrics.cpp`), and `std::thread` appears twice in comments in the
+same file explaining why it is not used. Nothing else in `src/` or `include/`
+starts a thread, so the codebase is still single-threaded at the component
+level; the budget in section 7.3 depends on that and is re-checked there.
 
 **`std::thread` is not available.** Its constructor throws `std::system_error`
 on failure, which under `-fno-exceptions`
@@ -830,9 +851,9 @@ Stages 1–2 are independently useful: even the flat report alone retires the
 ## 10. Expected first finding
 
 `veritas-build analyze` currently ingests the project twice. `Analyze()`
-(`src/tools/veritas-build.cpp:211-220`) calls `ResolveProjectInput` and
+(`src/tools/veritas-build.cpp`) calls `ResolveProjectInput` and
 `LoadProjectManifest` and writes the diagnostic manifest; then
-`ProjectAnalyzer::Impl::AnalyzeProject` (`src/analysis/ProjectAnalyzer.cpp:362-367`)
+`ProjectAnalyzer::Impl::AnalyzeProject` (`src/analysis/ProjectAnalyzer.cpp`)
 calls `ResolveProjectInput` and `LoadProjectManifest` again.
 
 This design **measures** that duplication (`cli.ingest` versus `m1.ingest`) and
@@ -903,11 +924,22 @@ against LLVM 24.x libraries, `VERITAS_WPA_ENGINE=souffle`. Apple M5, arm64,
 Darwin 27.0.0, 10 cores, 32 GiB. The six runs used **one binary**, built once
 before the first run and unchanged across the series, so the two series differ
 by the flag and by nothing else. That binary carries the branch's source: its
-diagnostics quote the sub-span and span-coverage fixes, and the only source
-commit the branch gained after the build (`64d7f44`) changes comments alone in
-`src/tools/veritas-build.cpp`. The artifact's own `environment.git_revision`
-reads `91f8dc5`, which is **not** a source revision at all: it is stamped at
-CMake configure time (`src/core/Version.cpp.in`) and is stale by design, so the
+diagnostics quote the sub-span and span-coverage fixes.
+
+**The measurement binary is not the branch tip, and the difference is bounded.**
+The series was taken at a tree that has since gained at least two commits:
+`64d7f44`, which changes comments alone in `src/tools/veritas-build.cpp`, and
+the artifact-format change recorded in the last subsection below (`a6907e1`,
+landing the omission of three unproduced inventory keys). An earlier revision of
+this paragraph claimed `64d7f44` was the only post-build source change, which the
+later commit made false as an absolute; the true statement is the one the last
+subsection already makes — that change moves no span, no counter and no
+duration, so the figures here describe the measured binary and are unaffected by
+it. Both halves are stated together so a reader who finds the second need not
+conclude the first was hidden, and so that "the numbers describe the tip" is not
+read into the record. The artifact's own `environment.git_revision` reads
+`91f8dc5`, which is **not** a source revision at all: it is stamped at CMake
+configure time (`src/core/Version.cpp.in`) and is stale by design, so the
 artifact of a run on this branch reports the revision the build tree was last
 configured at. Recorded here so that a reader diffing an artifact against
 `git log` is not misled by it.

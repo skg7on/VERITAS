@@ -341,6 +341,97 @@ TEST(RunReportTest, JsonCarriesEverySchemaBlockWithItsExpectedType) {
   EXPECT_EQ(*root_phase->getInteger("wall_inclusive_ns"), 2000000000);
 }
 
+TEST(RunReportTest, OmitsTheStoreBlockWhenNothingWasReadBack) {
+  // A failed store read-back leaves `report.store` at its default and the CLI
+  // records "the store block is omitted: ..." as a diagnostic, so the artifact
+  // must not carry the block anyway. `"tables": []` is the sharp part: it reads
+  // as *the store published no tables* — a plausible zero for a block of
+  // measurements, and exactly the reading this design exists to prevent,
+  // reached through a failure path. The artifact would also contradict its own
+  // diagnostic, which is the contradiction the presence rules are for.
+  //
+  // The JSON gate mirrors the text renderer's, so the two renderings omit the
+  // block together rather than one of them asserting a measurement the other
+  // declines to make.
+  RunReport report = MakeFixtureReport();
+  report.store = StoreSummary{};
+
+  const std::string json = RenderRunReportJson(report);
+  auto parsed = llvm::json::parse(json);
+  ASSERT_TRUE(static_cast<bool>(parsed));
+  const llvm::json::Object* root = parsed->getAsObject();
+  ASSERT_NE(root, nullptr);
+  EXPECT_EQ(root->getObject("store"), nullptr) << json;
+  EXPECT_EQ(json.find("\"store\""), std::string::npos) << json;
+  // The rest of the document survives: this is an omitted block, not a
+  // truncated artifact.
+  EXPECT_NE(root->getObject("identity"), nullptr);
+  EXPECT_NE(root->getObject("inventory"), nullptr);
+
+  const std::string text = RenderRunReportText(report);
+  EXPECT_EQ(text.find("Store: "), std::string::npos) << text;
+
+  // The positive control. Without it the three assertions above would pass for
+  // a fixture that never carried a store block, and a renderer that dropped
+  // the block unconditionally would look correct. `MakeFixtureReport` sets one
+  // table, so the same reads find the block present and populated.
+  const std::string present_json = RenderRunReportJson(MakeFixtureReport());
+  auto present = llvm::json::parse(present_json);
+  ASSERT_TRUE(static_cast<bool>(present));
+  const llvm::json::Object* present_store =
+      present->getAsObject()->getObject("store");
+  ASSERT_NE(present_store, nullptr) << present_json;
+  const llvm::json::Array* present_tables = present_store->getArray("tables");
+  ASSERT_NE(present_tables, nullptr);
+  ASSERT_EQ(present_tables->size(), 1u);
+  EXPECT_EQ(*present_tables->front().getAsObject()->getString("table"),
+            "analysis_facts");
+  EXPECT_NE(RenderRunReportText(MakeFixtureReport()).find("Store: "),
+            std::string::npos);
+}
+
+TEST(RunReportTest, MemoryColumnWidthsFitTheWidestRenderedMeasurement) {
+  // The two memory columns are sized from literals that name the widest string
+  // the byte tiers produce, so the widths and the bound they claim cannot drift
+  // apart. `%.2f` carries, which makes the top of a tier one digit wider than
+  // the tier's own unit suggests: the largest value below 1 GiB renders as
+  // "1024.00 MiB", not "1023.99 MiB" — the assertion two cases below is that
+  // pinning value, and it is what sizes both columns.
+  //
+  // This case pins the consequence rather than the constants themselves, which
+  // are file-local: a row whose peak and delta are both at that bound must
+  // still line up with its siblings. A column one wide too narrow leaves the
+  // value untruncated — PadLeft pads, it does not clip — and the row goes
+  // ragged.
+  RunReport report;
+  report.metrics.root.name = "run";
+  report.metrics.root.count = 1;
+  core::SpanStats peak;
+  peak.name = "m5.svf";
+  peak.count = 1;
+  peak.cpu_measured = true;
+  peak.memory = core::SpanMemory{0, 1073741823, 1073741823, 0, 1073741823};
+  core::SpanStats release;
+  release.name = "wpa.orchestrate";
+  release.count = 1;
+  release.memory = core::SpanMemory{1073741823, 0, 0, 0, -1073741823};
+  report.metrics.root.children.push_back(peak);
+  report.metrics.root.children.push_back(release);
+
+  const std::vector<std::string> lines = SplitLines(RenderRunReportText(report));
+  ASSERT_EQ(lines.size(), 4u) << RenderRunReportText(report);
+  // Row 0 is the header, row 1 the root (which carries no memory block, so it
+  // prints the "-" placeholders), rows 2 and 3 the two children.
+  EXPECT_NE(lines[2].find("1024.00 MiB"), std::string::npos) << lines[2];
+  EXPECT_NE(lines[2].find("+1024.00 MiB"), std::string::npos) << lines[2];
+  EXPECT_NE(lines[3].find("-1024.00 MiB"), std::string::npos) << lines[3];
+  const std::size_t width = DisplayColumns(lines[1]);
+  for (std::size_t i = 1; i < lines.size(); ++i) {
+    EXPECT_EQ(DisplayColumns(lines[i]), width)
+        << "row " << i << " is ragged: " << lines[i];
+  }
+}
+
 TEST(RunReportTest, FormatDurationRendersTheDocumentedUnits) {
   EXPECT_EQ(FormatDuration(std::chrono::nanoseconds(0)), "0ns");
   EXPECT_EQ(FormatDuration(std::chrono::nanoseconds(1234567890)), "1.235s");
