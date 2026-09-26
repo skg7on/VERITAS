@@ -2086,6 +2086,20 @@ StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
       std::filesystem::directory_options::skip_permission_denied;
   std::filesystem::recursive_directory_iterator it(output_root, options, error);
   const std::filesystem::recursive_directory_iterator end;
+
+  // The error must be read in THREE places, not one, because the two that end
+  // the walk are exactly the ones a check inside the loop body cannot see. A
+  // constructor that fails sets the iterator to `end`, so the loop is never
+  // entered; and an `increment` that fails while advancing to `end` exits the
+  // loop with no further iteration. Either way a failed measurement would
+  // return OK with an empty or truncated byte list — the "plausible-looking
+  // partial summary" this design exists to prevent. Verified against the real
+  // iterator: a nonexistent root yields `it == end` with `ec = ENOENT`, and a
+  // file root yields `ec = ENOTDIR`.
+  if (error) {
+    return Status::Internal("cannot walk " + output_root.string() + ": " +
+                            error.message());
+  }
   for (; it != end; it.increment(error)) {
     if (error) {
       return Status::Internal("cannot walk " + output_root.string() + ": " +
@@ -2106,6 +2120,12 @@ StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
                               error.message());
     }
     totals[first->string()] += size;
+  }
+  // The third read: an `increment` that failed while advancing to `end` exits
+  // the loop above with `error` set and no iteration left to observe it.
+  if (error) {
+    return Status::Internal("cannot walk " + output_root.string() + ": " +
+                            error.message());
   }
   // std::map iterates in key order, so the vector is already sorted by name.
   std::vector<NamedBytes> bytes;
@@ -2174,10 +2194,16 @@ Add to the header:
 
 ```cpp
 // FillEnvironment reads the machine and build identity for the artifact's
-// environment block: uname for os/arch, sysctl on Darwin and sysconf/sysinfo
-// on Linux for cores, RAM and CPU model, and this library's own compile
-// definitions for the build identity. It deliberately does not reuse the
-// analysis library's build fingerprint, which is an identity input.
+// environment block: uname for os/arch, sysctlbyname on Darwin for cores, RAM
+// and CPU model, sysconf(_SC_NPROCESSORS_ONLN) and sysinfo on Linux for cores
+// and RAM, and this library's own compile definitions for the build identity.
+// It deliberately does not reuse the analysis library's build fingerprint,
+// which is an identity input.
+//
+// `cpu_model` is Darwin-only: the Linux branch fills `cores` and `ram_bytes`
+// and leaves it empty. An empty string is the honest rendering of "not
+// measured here" — do not fill it with a placeholder, and do not let a comment
+// claim the Linux branch provides it.
 void FillEnvironment(RunEnvironment* environment);
 
 // FillInventoryFromManifest copies the input-scale fields the manifest
