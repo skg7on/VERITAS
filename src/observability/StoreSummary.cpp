@@ -66,6 +66,20 @@ StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
       std::filesystem::directory_options::skip_permission_denied;
   std::filesystem::recursive_directory_iterator it(output_root, options, error);
   const std::filesystem::recursive_directory_iterator end;
+
+  // The error must be read in THREE places, not one, because the two that end
+  // the walk are exactly the ones a check inside the loop body cannot see. A
+  // constructor that fails sets the iterator to `end`, so the loop is never
+  // entered; and an `increment` that fails while advancing to `end` exits the
+  // loop with no further iteration. Either way a failed measurement would
+  // return OK with an empty or truncated byte list — the "plausible-looking
+  // partial summary" this design exists to prevent. Verified against the real
+  // iterator: a nonexistent root yields `it == end` with `ec = ENOENT`, and a
+  // file root yields `ec = ENOTDIR`.
+  if (error) {
+    return Status::Internal("cannot walk " + output_root.string() + ": " +
+                            error.message());
+  }
   for (; it != end; it.increment(error)) {
     if (error) {
       return Status::Internal("cannot walk " + output_root.string() + ": " +
@@ -86,6 +100,12 @@ StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
                               error.message());
     }
     totals[first->string()] += size;
+  }
+  // The third read: an `increment` that failed while advancing to `end` exits
+  // the loop above with `error` set and no iteration left to observe it.
+  if (error) {
+    return Status::Internal("cannot walk " + output_root.string() + ": " +
+                            error.message());
   }
   // std::map iterates in key order, so the vector is already sorted by name.
   std::vector<NamedBytes> bytes;

@@ -68,9 +68,15 @@ TEST(StoreSummaryTest, CountsEveryPublishedTableIncludingEmptyOnes) {
       [](const TableRowCount& left, const TableRowCount& right) {
         return left.table < right.table;
       }));
-  // A store that exists but has no rows is a success, not a failure.
-  EXPECT_TRUE(summary->cross_checks.empty() ||
-              !summary->cross_checks.front().agrees);
+  // An empty store is a success, not a failure. That is already asserted by
+  // reaching this line at all: CollectStoreSummary returns non-OK if any count
+  // query fails.
+  //
+  // Do NOT add an assertion about `cross_checks` here. This collector leaves
+  // that vector empty by design — comparing against the in-memory count is the
+  // caller's job — so any claim about its contents is vacuously true in this
+  // test and can never fail. The cross-check assertions belong where the vector
+  // is actually populated.
 }
 
 TEST(StoreSummaryTest, CountsInsertedRows) {
@@ -109,12 +115,11 @@ TEST(StoreSummaryTest, GroupsStoreBytesByTopLevelEntryWithoutAbsolutePaths) {
   const fs::path output_root = FreshDir("bytes");
   ASSERT_TRUE(fs::create_directories(output_root / "cas"));
   std::ofstream(output_root / "cas" / "one.bin") << "12345678";
-  // metadata.db has to be a real SQLite database, not a placeholder file that
-  // merely carries the name: CollectStoreSummary propagates a failed count
-  // query rather than reporting zero, so four bytes of text named "1234" make
-  // the collector fail and the byte assertions below never run. A schema-applied
-  // store is empty — which is a success — and still gives the walk both a
-  // top-level directory (cas) and a top-level file (metadata.db) to group.
+
+  // `metadata.db` must be a REAL store, not a placeholder file. The collector
+  // queries it, and it propagates a failed count query rather than reporting
+  // zero, so a four-byte text file makes it fail with SQLite's "file is not a
+  // database" and this test unsatisfiable. Create the schema instead.
   auto store = summarydb::MetadataStore::Open(output_root / "metadata.db");
   ASSERT_TRUE(store.ok()) << store.status().message();
   ASSERT_TRUE(store->ApplySchema().ok());

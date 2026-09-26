@@ -43,10 +43,16 @@ StatusOr<StoreSummary> CollectStoreSummary(
     const std::filesystem::path& output_root);
 
 // FillEnvironment reads the machine and build identity for the artifact's
-// environment block: uname for os/arch, sysctl on Darwin and sysconf/sysinfo
-// on Linux for cores, RAM and CPU model, and this library's own compile
-// definitions for the build identity. It deliberately does not reuse the
-// analysis library's build fingerprint, which is an identity input.
+// environment block: uname for os/arch, sysctlbyname on Darwin for cores, RAM
+// and CPU model, sysconf(_SC_NPROCESSORS_ONLN) and sysinfo on Linux for cores
+// and RAM, and this library's own compile definitions for the build identity.
+// It deliberately does not reuse the analysis library's build fingerprint,
+// which is an identity input.
+//
+// `cpu_model` is Darwin-only: the Linux branch fills `cores` and `ram_bytes`
+// and leaves it empty. An empty string is the honest rendering of "not
+// measured here" — do not fill it with a placeholder, and do not let a comment
+// claim the Linux branch provides it.
 void FillEnvironment(RunEnvironment* environment);
 
 // FillInventoryFromManifest copies the input-scale fields the manifest
