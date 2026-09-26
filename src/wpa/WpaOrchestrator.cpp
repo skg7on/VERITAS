@@ -15,12 +15,14 @@
 #include "veritas/wpa/WpaOrchestrator.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "veritas/core/RunMetrics.h"
 #include "veritas/facts/ResultCanonicalizer.h"
 #include "veritas/facts/Witness.h"
 #include "veritas/wpa/CallGraph.h"
@@ -115,6 +117,19 @@ SccResult ToSccResult(const WpaComponentResult& result) {
   return scc;
 }
 
+// The label a per-component span carries so a top-N entry names the component
+// it came from: `<component-kind>/<scc-id>`. Minted only when a recorder is
+// present, because a null recorder discards the label and the component loop
+// must not allocate a string per occurrence for nothing.
+std::string ComponentSpanLabel(core::RunMetrics* metrics,
+                               const WpaComponentKey& key) {
+  if (metrics == nullptr) {
+    return {};
+  }
+  return std::string(ComponentKindName(key.component)) + "/" +
+         core::ToString(key.scc_id);
+}
+
 }  // namespace
 
 WpaOrchestrator::WpaOrchestrator(WpaExecutor& executor,
@@ -123,6 +138,10 @@ WpaOrchestrator::WpaOrchestrator(WpaExecutor& executor,
     : executor_(executor), repository_(repository), scc_state_(scc_state) {}
 
 StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
+  // Read once: the recorder is optional, non-owning, and never read for control
+  // flow, so every span and counter below tests this one pointer.
+  core::RunMetrics* const metrics = request.metrics;
+
   Status begin = repository_.BeginRun(request.run);
   if (!begin.ok()) {
     return begin;
@@ -144,24 +163,32 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
     return summary_index.status();
   }
 
-  SccContext context;
-  context.revision_id = core::ToString(request.run.revision_id);
-  context.build_variant_id = core::ToString(request.run.build_variant_id);
-  if (scc_state_ != nullptr) {
-    Status published = scc_state_->PublishGraph(context, *call_graph, *scc_graph);
-    if (!published.ok()) {
-      repository_.MarkIncomplete(request.run);
-      return published;
-    }
-  }
-
   WpaRunResult result;
   result.run = request.run;
 
+  SccContext context;
+  context.revision_id = core::ToString(request.run.revision_id);
+  context.build_variant_id = core::ToString(request.run.build_variant_id);
   const auto scc_order = scc_graph->ReverseTopologicalOrder();
-  for (const auto& scc_id : scc_order) {
-    for (const auto component : request.components) {
-      result.expected_components.push_back({scc_id, component});
+
+  // The persisted call/SCC graph and the frozen expected set are one measured
+  // unit: the set is read off the same SCC order the graph state was built
+  // from, so the two cannot describe different decompositions.
+  {
+    core::PhaseSpan span(metrics, "wpa.graph_build", core::SpanMode::kBearing);
+    if (scc_state_ != nullptr) {
+      Status published =
+          scc_state_->PublishGraph(context, *call_graph, *scc_graph);
+      if (!published.ok()) {
+        repository_.MarkIncomplete(request.run);
+        return published;
+      }
+    }
+
+    for (const auto& scc_id : scc_order) {
+      for (const auto component : request.components) {
+        result.expected_components.push_back({scc_id, component});
+      }
     }
   }
 
@@ -169,117 +196,181 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
   // which is the single owner of every component's facts and witnesses.
   std::map<WpaComponentKey, std::size_t> completed_index;
 
-  for (const auto& scc_id : scc_order) {
-    for (const auto component : request.components) {
-      const WpaComponentKey key{scc_id, component};
+  // Per-component totals, accumulated here because AddCounter inside the loop
+  // would append one counter per occurrence -- 13,716 of them on a real corpus
+  // -- to a list the report reads back by name. They are added once, below.
+  std::uint64_t reused_count = 0;
+  std::uint64_t executed_count = 0;
+  const std::uint64_t expected_count = result.expected_components.size();
 
-      WpaMaterializationRequest materialization;
-      materialization.semantics =
-          static_cast<const facts::AnalysisRunSemanticDescriptor&>(request.run);
-      materialization.scc_id = scc_id;
-      materialization.component = component;
-      materialization.summaries = request.summaries;
-      // Reuse the whole-program SCC decomposition built once above, rather
-      // than rebuilding the call graph and SCC graph for every component.
-      materialization.scc_graph = &*scc_graph;
-      // Keep the successor support alive for the duration of Build: the span
-      // stored in the request points into this vector.
-      std::vector<facts::AnalysisFact> successor_support = SuccessorSupport(
-          *scc_graph, scc_id, component, result.completed_components,
-          completed_index);
-      materialization.successor_support = successor_support;
-      materialization.models = request.models;
+  {
+    core::PhaseSpan orchestrate_span(metrics, "wpa.orchestrate",
+                                     core::SpanMode::kBearing);
+    for (const auto& scc_id : scc_order) {
+      for (const auto component : request.components) {
+        const WpaComponentKey key{scc_id, component};
 
-      auto logical =
-          WpaInputMaterializer::Build(materialization, *summary_index);
-      if (!logical.ok()) {
-        repository_.RecordComponentFailure(request.run, key,
-                                           std::string(logical.status().message()));
-        repository_.MarkIncomplete(request.run);
-        return logical.status();
-      }
+        // Materialize covers both the request build and the rooted-input
+        // collection that reads its output, which is why the failure check
+        // sits outside the span rather than between the two halves.
+        auto logical = [&]() -> StatusOr<WpaLogicalComponentInput> {
+          core::PhaseSpan span(metrics, "wpa.component.materialize",
+                               core::SpanMode::kDistributed);
+          span.SetLabel(ComponentSpanLabel(metrics, key));
 
-      // Collect the rooted input fact IDs and their full evidence for the batch.
-      for (const auto& root : logical->local_roots) {
-        result.rooted_input_fact_ids.push_back(root.fact.fact_id);
-        result.rooted_input_facts.push_back(root);
-      }
-      for (const auto& root : logical->successor_roots) {
-        result.rooted_input_fact_ids.push_back(root.fact.fact_id);
-        result.rooted_input_facts.push_back(root);
-      }
+          WpaMaterializationRequest materialization;
+          materialization.semantics =
+              static_cast<const facts::AnalysisRunSemanticDescriptor&>(
+                  request.run);
+          materialization.scc_id = scc_id;
+          materialization.component = component;
+          materialization.summaries = request.summaries;
+          // Reuse the whole-program SCC decomposition built once above, rather
+          // than rebuilding the call graph and SCC graph for every component.
+          materialization.scc_graph = &*scc_graph;
+          // Keep the successor support alive for the duration of Build: the
+          // span stored in the request points into this vector.
+          std::vector<facts::AnalysisFact> successor_support = SuccessorSupport(
+              *scc_graph, scc_id, component, result.completed_components,
+              completed_index);
+          materialization.successor_support = successor_support;
+          materialization.models = request.models;
 
-      const ResultCacheDescriptor cache_descriptor = MakeResultCacheDescriptor(
-          request.run, key, logical->logical_input_hash);
-      auto reusable = repository_.LoadReusableComponent(cache_descriptor);
-      if (!reusable.ok()) {
-        repository_.RecordComponentFailure(request.run, key,
-                                           std::string(reusable.status().message()));
-        repository_.MarkIncomplete(request.run);
-        return reusable.status();
-      }
+          auto built =
+              WpaInputMaterializer::Build(materialization, *summary_index);
+          if (!built.ok()) {
+            return built.status();
+          }
 
-      WpaComponentResult component_result;
-      if (reusable->has_value()) {
-        component_result = std::move(**reusable);
-      } else {
-        WpaExecutionEnvelope envelope{request.run, std::move(*logical)};
-        auto raw = executor_.Execute(envelope, request.limits);
-        if (!raw.ok()) {
-          repository_.RecordComponentFailure(request.run, key,
-                                             std::string(raw.status().message()));
-          repository_.MarkIncomplete(request.run);
-          return raw.status();
-        }
-        facts::CanonicalizationRequest canonicalization;
-        canonicalization.local_roots = envelope.logical.local_roots;
-        canonicalization.successor_roots = envelope.logical.successor_roots;
-        canonicalization.evaluation = &*raw;
-        auto canonical = facts::ResultCanonicalizer::Canonicalize(canonicalization);
-        if (!canonical.ok()) {
+          // Collect the rooted input fact IDs and their full evidence for the
+          // batch.
+          for (const auto& root : built->local_roots) {
+            result.rooted_input_fact_ids.push_back(root.fact.fact_id);
+            result.rooted_input_facts.push_back(root);
+          }
+          for (const auto& root : built->successor_roots) {
+            result.rooted_input_fact_ids.push_back(root.fact.fact_id);
+            result.rooted_input_facts.push_back(root);
+          }
+          return built;
+        }();
+        if (!logical.ok()) {
           repository_.RecordComponentFailure(
-              request.run, key, std::string(canonical.status().message()));
+              request.run, key, std::string(logical.status().message()));
           repository_.MarkIncomplete(request.run);
-          return canonical.status();
+          return logical.status();
         }
-        component_result = MakeResult(envelope.logical, *canonical);
-      }
 
-      // The completion takes ownership of the payload, so the local result is
-      // moved rather than copied and read through the completion afterwards.
-      auto completion = repository_.StoreSuccessfulComponent(
-          request.run, key, std::move(component_result));
-      if (!completion.ok()) {
-        repository_.MarkIncomplete(request.run);
-        return completion.status();
-      }
-
-      // Incremental propagation: a changed externally visible hash schedules
-      // the component's predecessors through the M7 scheduler.
-      if (scc_state_ != nullptr) {
-        auto change =
-            scc_state_->StoreState(context, ToSccResult(completion->result));
-        if (!change.ok()) {
+        const ResultCacheDescriptor cache_descriptor = MakeResultCacheDescriptor(
+            request.run, key, logical->logical_input_hash);
+        auto reusable = [&] {
+          core::PhaseSpan span(metrics, "wpa.component.cache_lookup",
+                               core::SpanMode::kDistributed);
+          span.SetLabel(ComponentSpanLabel(metrics, key));
+          return repository_.LoadReusableComponent(cache_descriptor);
+        }();
+        if (!reusable.ok()) {
+          repository_.RecordComponentFailure(
+              request.run, key, std::string(reusable.status().message()));
           repository_.MarkIncomplete(request.run);
-          return change.status();
+          return reusable.status();
         }
-        if (*change == ExternalChange::kChanged) {
-          runtime::WorklistScheduler scheduler;
-          auto enqueue = WpaCoordinator::EnqueuePredecessorsIfChanged(
-              *change, key.scc_id, V1Component(component), context, {},
-              *scc_graph, &scheduler);
-          if (!enqueue.ok()) {
+
+        WpaComponentResult component_result;
+        if (reusable->has_value()) {
+          component_result = std::move(**reusable);
+          ++reused_count;
+        } else {
+          WpaExecutionEnvelope envelope{request.run, std::move(*logical)};
+          auto raw = [&] {
+            core::PhaseSpan span(metrics, "wpa.component.execute",
+                                 core::SpanMode::kDistributed);
+            span.SetLabel(ComponentSpanLabel(metrics, key));
+            return executor_.Execute(envelope, request.limits);
+          }();
+          if (!raw.ok()) {
+            repository_.RecordComponentFailure(
+                request.run, key, std::string(raw.status().message()));
             repository_.MarkIncomplete(request.run);
-            return enqueue;
+            return raw.status();
           }
-          while (!scheduler.Empty()) {
-            result.scheduled_predecessors.push_back(*scheduler.PopNext());
+          facts::CanonicalizationRequest canonicalization;
+          canonicalization.local_roots = envelope.logical.local_roots;
+          canonicalization.successor_roots = envelope.logical.successor_roots;
+          canonicalization.evaluation = &*raw;
+          auto canonical = [&] {
+            core::PhaseSpan span(metrics, "wpa.component.canonicalize",
+                                 core::SpanMode::kDistributed);
+            span.SetLabel(ComponentSpanLabel(metrics, key));
+            return facts::ResultCanonicalizer::Canonicalize(canonicalization);
+          }();
+          if (!canonical.ok()) {
+            repository_.RecordComponentFailure(
+                request.run, key, std::string(canonical.status().message()));
+            repository_.MarkIncomplete(request.run);
+            return canonical.status();
+          }
+          component_result = MakeResult(envelope.logical, *canonical);
+          ++executed_count;
+        }
+
+        // The completion takes ownership of the payload, so the local result is
+        // moved rather than copied and read through the completion afterwards.
+        auto completion = repository_.StoreSuccessfulComponent(
+            request.run, key, std::move(component_result));
+        if (!completion.ok()) {
+          repository_.MarkIncomplete(request.run);
+          return completion.status();
+        }
+
+        // Incremental propagation: a changed externally visible hash schedules
+        // the component's predecessors through the M7 scheduler.
+        if (scc_state_ != nullptr) {
+          auto change =
+              scc_state_->StoreState(context, ToSccResult(completion->result));
+          if (!change.ok()) {
+            repository_.MarkIncomplete(request.run);
+            return change.status();
+          }
+          if (*change == ExternalChange::kChanged) {
+            runtime::WorklistScheduler scheduler;
+            auto enqueue = WpaCoordinator::EnqueuePredecessorsIfChanged(
+                *change, key.scc_id, V1Component(component), context, {},
+                *scc_graph, &scheduler);
+            if (!enqueue.ok()) {
+              repository_.MarkIncomplete(request.run);
+              return enqueue;
+            }
+            while (!scheduler.Empty()) {
+              result.scheduled_predecessors.push_back(*scheduler.PopNext());
+            }
           }
         }
-      }
 
-      completed_index[key] = result.completed_components.size();
-      result.completed_components.push_back(std::move(*completion));
+        completed_index[key] = result.completed_components.size();
+        result.completed_components.push_back(std::move(*completion));
+      }
+    }
+  }
+
+  // The per-component totals, added once now that the loop has finished. The
+  // frozen expected set is summed two ways -- as a total and per kind -- and
+  // both come from `result.expected_components`, so the report's two
+  // expected-component totals cannot describe different sets.
+  if (metrics != nullptr) {
+    metrics->AddCounter("wpa.components.expected", expected_count, "count");
+    metrics->AddCounter("wpa.components.reused", reused_count, "count");
+    metrics->AddCounter("wpa.components.executed", executed_count, "count");
+
+    std::map<WpaComponentKind, std::uint64_t> per_kind;
+    for (const WpaComponentKey& expected : result.expected_components) {
+      ++per_kind[expected.component];
+    }
+    for (const auto& entry : per_kind) {
+      metrics->AddCounter("wpa.component." +
+                              std::string(ComponentKindName(entry.first)) +
+                              ".expected",
+                          entry.second, "count");
     }
   }
 
@@ -289,6 +380,8 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
   // tail of the run queued would let it compare against a stale row. A failure
   // takes the same path as every other store error in this run.
   if (scc_state_ != nullptr) {
+    core::PhaseSpan span(metrics, "wpa.scc_state_flush",
+                         core::SpanMode::kBearing);
     Status flushed = scc_state_->FlushStateCache();
     if (!flushed.ok()) {
       repository_.MarkIncomplete(request.run);

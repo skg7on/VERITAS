@@ -32,6 +32,10 @@ namespace veritas::analysis::pipeline {
 class ProgramIr;
 }  // namespace veritas::analysis::pipeline
 
+namespace veritas::core {
+class RunMetrics;
+}  // namespace veritas::core
+
 namespace veritas::analysis::svf {
 
 using veritas::Status;
@@ -62,9 +66,17 @@ using SvfSessionCallback = std::function<Status(const SvfSessionView&)>;
 // independent contexts.
 //
 // The callback must not retain pointers to SVF objects after returning.
+//
+// `metrics` is an optional non-owning recorder; null (the default) makes every
+// span in the session a no-op. Each of the five construction steps is a
+// bearing span, because this is where the run's largest resident-set increase
+// happens and the report must be able to join the memory series to it. The
+// SVFG scale is recorded as counters from the map_facts scope, which is the
+// only scope in which the SVFG is live.
 Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
                          const SvfConfig& config,
-                         SvfSessionCallback callback);
+                         SvfSessionCallback callback,
+                         core::RunMetrics* metrics = nullptr);
 
 // Test-only: verify SVF global state is clean between runs. Declared and
 // defined unconditionally (rather than behind a macro) so the test target that

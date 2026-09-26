@@ -15,19 +15,22 @@
 #include "SvfAnalysisStage.h"
 
 #include "analysis/pipeline/ProgramIr.h"
+#include "veritas/core/RunMetrics.h"
 
 namespace veritas::analysis::svf {
 
 StatusOr<SvfMappingResult> SvfAnalysisStage::Analyze(
     pipeline::ProgramIr& program_ir,
     const AnalyzerRunContext& run_context,
-    const SvfConfig& config) {
+    const SvfConfig& config,
+    core::RunMetrics* metrics) {
   SvfMappingResult result;
   auto status = RunWithSvfSession(
       program_ir, config,
       [&](const SvfSessionView& view) {
         return MapSvfFacts(program_ir, view, run_context, config, &result);
-      });
+      },
+      metrics);
 
   if (!status.ok()) {
     return status;

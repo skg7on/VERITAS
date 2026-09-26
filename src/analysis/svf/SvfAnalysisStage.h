@@ -23,6 +23,10 @@ namespace veritas::analysis::pipeline {
 class ProgramIr;
 }  // namespace veritas::analysis::pipeline
 
+namespace veritas::core {
+class RunMetrics;
+}  // namespace veritas::core
+
 namespace veritas::analysis::svf {
 
 // SvfAnalysisStage is the required SVF pointer analysis stage in the M5 pipeline.
@@ -47,10 +51,15 @@ class SvfAnalysisStage {
   // Returns error if SVF construction fails (fatal).
   // Returns success with kCompleteWithUnknowns if budget limits were reached
   // or SVF nodes could not be mapped.
+  //
+  // `metrics` is an optional non-owning recorder for the session's own steps;
+  // null (the default) makes them no-ops. Its trailing default is what an
+  // existing caller that has no recorder relies on.
   virtual StatusOr<SvfMappingResult> Analyze(
       pipeline::ProgramIr& program_ir,
       const AnalyzerRunContext& run_context,
-      const SvfConfig& config);
+      const SvfConfig& config,
+      core::RunMetrics* metrics = nullptr);
 };
 
 }  // namespace veritas::analysis::svf

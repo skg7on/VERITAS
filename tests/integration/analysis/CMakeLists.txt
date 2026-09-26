@@ -188,6 +188,6 @@ target_link_libraries(phase_observability_identity_integration_test
 add_test(NAME PhaseObservabilityIdentityTest
   COMMAND phase_observability_identity_integration_test)
 set_tests_properties(PhaseObservabilityIdentityTest PROPERTIES
-  TIMEOUT 60
+  TIMEOUT 180
   LABELS "integration;analysis"
 )

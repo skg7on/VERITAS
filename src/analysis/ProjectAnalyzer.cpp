@@ -316,6 +316,9 @@ Status RunWpa(const std::filesystem::path &output_root,
 
     wpa::WpaRunRequest conformance_request = wpa_request;
     conformance_request.run = *conformance_run;
+    // The oracle re-runs the same components. Sharing the recorder would double
+    // every per-component count and blend two runs into one top-N list.
+    conformance_request.metrics = nullptr;
     wpa::WpaOrchestrator conformance_orchestrator(*conformance_executor, *repo,
                                                   &scc_state);
     auto conformance_result =
@@ -344,6 +347,14 @@ Status RunWpa(const std::filesystem::path &output_root,
                          core::SpanMode::kBearing);
     return facts::MakeAnalysisFactBatch(std::move(*wpa_result));
   }();
+  // The batch's own scale, counted where it is known: the assembly site holds
+  // both numbers, and a second read of the batch elsewhere would be a second
+  // plumbing path to the same figure.
+  if (metrics != nullptr) {
+    metrics->AddCounter("facts.rooted_input",
+                        batch.rooted_input_fact_ids.size(), "count");
+    metrics->AddCounter("facts.canonical", batch.facts.size(), "count");
+  }
   // The batch id is part of the run's identity and is minted here, so it is
   // surfaced from here rather than re-derived by a caller.
   result->batch_id = core::ToString(batch.batch_id);
@@ -356,6 +367,7 @@ Status RunWpa(const std::filesystem::path &output_root,
     return fact_store.status();
   }
   facts::AnalysisFactBus bus(*repo);
+  bus.SetMetrics(metrics);
   bus.AddSink("fact-store", *fact_store);
   const Status published = [&] {
     core::PhaseSpan span(metrics, "facts.publish", core::SpanMode::kBearing);
@@ -415,8 +427,10 @@ public:
     };
     auto svf_result = [&] {
       core::PhaseSpan span(metrics, "m5.svf", core::SpanMode::kBearing);
+      // The recorder reaches the session here or not at all: the session's own
+      // five steps are spans under `m5.svf`.
       return svf_stage_->Analyze(local->program_ir, run_context,
-                                 ToSvfConfig(config));
+                                 ToSvfConfig(config), metrics);
     }();
     if (!svf_result.ok())
       return svf_result.status();

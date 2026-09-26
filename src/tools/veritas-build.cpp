@@ -520,11 +520,14 @@ std::vector<std::size_t> FillReport(
       summed_components += kind.second;
     }
     if (summed_components != expected_components) {
-      builder.Note("components_by_kind sums to " +
-                   std::to_string(summed_components) +
-                   " but wpa.components.expected reads " +
-                   std::to_string(expected_components) +
-                   "; the artifact carries two expected-component totals");
+      // A degradation, not a note: two figures in this artifact both claim to
+      // be the expected component count and disagree, which makes the artifact
+      // internally inconsistent rather than merely under-populated.
+      builder.Degrade("components_by_kind sums to " +
+                      std::to_string(summed_components) +
+                      " but wpa.components.expected reads " +
+                      std::to_string(expected_components) +
+                      "; the artifact carries two expected-component totals");
     }
   }
 
