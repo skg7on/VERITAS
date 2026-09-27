@@ -189,6 +189,21 @@ Recent backbone work delivered:
   reporting, and large-project performance qualification are approved and
   pending implementation ([#114](https://github.com/skg7on/VERITAS/pull/114),
   [issue #20](https://github.com/skg7on/VERITAS/issues/20)).
+- **Large-project analysis performance:** PRs
+  [#135](https://github.com/skg7on/VERITAS/pull/135) and
+  [#137](https://github.com/skg7on/VERITAS/pull/137) reduced the measured
+  LevelDB workload's CPU time from 573.93 s to 421.67 s (26.5%) without
+  changing published analysis content. [Issue
+  #133](https://github.com/skg7on/VERITAS/issues/133) remains open because the
+  result still exceeds its 375 s wall-time and 4 GiB memory limits; measured
+  peak RSS was 8.5945 GiB.
+- **Portable analysis identity:** [issue
+  #125](https://github.com/skg7on/VERITAS/issues/125) remains open because
+  `FunctionVariantID` still incorporates LLVM's host-derived
+  `target-features`. The architecture design defines a canonical
+  explicit-or-inferred analysis target, consistent injection into both Clang
+  paths, versioned identity domains, and additive SummaryDB migration, but the
+  implementation is still pending.
 
 M10B and M10C remain planned. M11 is approved and pending implementation;
 M12A–M12C are approved and pending implementation, while M12D still requires
@@ -200,7 +215,8 @@ status record.
 - Architecture: [platform](docs/architecture/01-platform-architecture.md),
   [whole-program analysis](docs/architecture/02-whole-program-analysis-architecture.md),
   [SummaryDB storage](docs/architecture/03-summarydb-storage-architecture.md),
-  and [Evidence IR](docs/architecture/04-evidence-ir-architecture.md).
+  [Evidence IR](docs/architecture/04-evidence-ir-architecture.md), and
+  [portable analysis target and identity](docs/architecture/05-portable-analysis-target-identity-architecture.md).
 - Specifications: [cross-cutting specs](docs/specs/README.md) and the
   [milestone specification matrix](docs/specs/milestones/README.md).
 - Plans: the [backbone milestone roadmap](docs/plans/veritas-backbone-milestone-roadmap.md)
