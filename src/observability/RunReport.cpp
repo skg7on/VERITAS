@@ -502,12 +502,16 @@ std::string RenderRunReportJson(const RunReport& report) {
   j.object([&] {
     j.attribute("complete", report.metrics.complete);
 
-    // The recorder options the run actually used, beside the one analysis knob
-    // the artifact has to carry: a second full WPA whose canonical results must
-    // agree changes what the run does and is invisible in either configuration
-    // hash. The rest of the analysis configuration is deliberately absent —
-    // RunReport does not depend on the analysis library, and svf_config_hash
-    // and wpa_config_hash cover every other AnalysisConfig field.
+    // The recorder options the run actually used, beside the only two analysis
+    // knobs the artifact has to carry. `conformance_oracle` executes a second
+    // full WPA whose canonical results must agree, which changes what the run
+    // does and is invisible in either configuration hash. `scale_profile` is
+    // uncovered deliberately and temporarily, so that introducing the field
+    // moves no identity; it is not emitted either, because only `baseline` is
+    // reachable at run time. The rest of the analysis configuration is
+    // deliberately absent — RunReport does not depend on the analysis library,
+    // and svf_config_hash and wpa_config_hash cover every other field.
+    // See design 6.3.
     const core::RunMetricsOptions& options = report.metrics_options;
     j.attributeObject("config", [&] {
       j.attribute("conformance_oracle", report.conformance_oracle);

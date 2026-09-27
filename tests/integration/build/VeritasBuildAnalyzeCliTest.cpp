@@ -42,6 +42,11 @@ namespace fs = std::filesystem;
 struct CliResult {
   int exit_code = -1;
   std::string stdout_text;
+  // Not a real split. The command appends `2>&1`, so a single merged stream is
+  // captured and both fields carry it. A caller that only cares that a message
+  // appeared can therefore check either field; a caller that needs to know
+  // which stream it came from cannot, and must not try.
+  std::string stderr_text;
 };
 
 std::string ShellQuote(std::string_view value) {
@@ -83,6 +88,8 @@ CliResult RunVeritasBuild(const std::vector<std::string>& arguments) {
   } else {
     result.exit_code = -1;
   }
+  // One merged `2>&1` stream; see the CliResult comment.
+  result.stderr_text = result.stdout_text;
   return result;
 }
 
@@ -366,6 +373,47 @@ TEST(VeritasBuildAnalyzeCliTest, EmitsNoAbsolutePathInTheArtifact) {
       << json.substr(0, 500);
   EXPECT_EQ(json.find(project.string()), std::string::npos)
       << json.substr(0, 500);
+}
+
+// The profile defaults to `baseline`, so a run that never mentions the flag is
+// byte-identical to a run that names it explicitly.
+TEST(VeritasBuildAnalyzeCliTest, ScaleProfileDefaultsToBaseline) {
+  const auto implicit = RunVeritasBuild(
+      {"analyze", "--project", testing::FixtureProject("store_load").string()});
+  const auto explicit_run = RunVeritasBuild(
+      {"analyze", "--project", testing::FixtureProject("store_load").string(),
+       "--scale-profile", "baseline"});
+  EXPECT_EQ(implicit.exit_code, 0) << implicit.stderr_text;
+  EXPECT_EQ(explicit_run.exit_code, 0) << explicit_run.stderr_text;
+}
+
+// `scaled` parses but is rejected at run time: no milestone has implemented any
+// structural change yet, so accepting it would claim an opt-in that does
+// nothing.
+TEST(VeritasBuildAnalyzeCliTest, ScaledProfileIsRejectedWithAReason) {
+  const auto result = RunVeritasBuild(
+      {"analyze", "--project", testing::FixtureProject("store_load").string(),
+       "--scale-profile", "scaled"});
+  EXPECT_NE(result.exit_code, 0);
+  EXPECT_NE(result.stderr_text.find("scaled"), std::string::npos)
+      << "the rejection must name the profile; got: " << result.stderr_text;
+  EXPECT_NE(result.stderr_text.find("veritas-scaling-milestone-roadmap"),
+            std::string::npos)
+      << "the rejection must point at the roadmap; got: " << result.stderr_text;
+}
+
+TEST(VeritasBuildAnalyzeCliTest, UnknownScaleProfileIsAUsageError) {
+  const auto result = RunVeritasBuild(
+      {"analyze", "--project", testing::FixtureProject("store_load").string(),
+       "--scale-profile", "turbo"});
+  EXPECT_NE(result.exit_code, 0);
+  EXPECT_NE(result.stderr_text.find("--scale-profile"), std::string::npos)
+      << result.stderr_text;
+  // Without this the case passes vacuously against the generic unknown-argument
+  // message, which already names the flag. The value has to appear for the
+  // rejection to be this flag's own.
+  EXPECT_NE(result.stderr_text.find("turbo"), std::string::npos)
+      << result.stderr_text;
 }
 
 }  // namespace
