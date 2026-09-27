@@ -152,28 +152,39 @@ TEST_F(StoreEquivalenceTest, RowCountsAreReported) {
   EXPECT_EQ(alpha_rows, 2u);
 }
 
-// The row stream joins values with '|' and terminates rows with '\n', so a
-// value carrying either byte would make two different stores dump alike. The
-// dump refuses such a value instead of escaping it: the stream is unambiguous
-// by construction, not by an assumption a caller has to check.
-TEST_F(StoreEquivalenceTest, ValuesTheRowStreamCannotRepresentAreRefused) {
+// A value carrying one of the stream's own bytes is escaped, not stripped and not
+// refused. Stripping is the failure these assertions exist to catch: a dump that
+// dropped the byte would render two genuinely different stores identical, which
+// is the one outcome the instrument must never produce.
+TEST_F(StoreEquivalenceTest, ValuesCarryingBoundaryBytesAreEscapedNotStripped) {
   MakeStore("has|pipe");
-  const auto piped = DumpStore(db_path_);
-  ASSERT_FALSE(piped.ok()) << "a value containing a pipe was dumped anyway";
-  EXPECT_EQ(piped.status().code(), StatusCode::kFailedPrecondition);
+  const auto with_pipe = DumpStore(db_path_);
+  ASSERT_TRUE(with_pipe.ok()) << with_pipe.status().message();
+
+  ASSERT_TRUE(fs::remove(db_path_));
+  MakeStore("haspipe");
+  const auto without_pipe = DumpStore(db_path_);
+  ASSERT_TRUE(without_pipe.ok()) << without_pipe.status().message();
+  EXPECT_NE(with_pipe->sha256, without_pipe->sha256)
+      << "the '|' was dropped from the stream rather than escaped";
 
   ASSERT_TRUE(fs::remove(db_path_));
   MakeStore("has\nnewline");
-  const auto newlined = DumpStore(db_path_);
-  ASSERT_FALSE(newlined.ok()) << "a value containing a newline was dumped anyway";
-  EXPECT_EQ(newlined.status().code(), StatusCode::kFailedPrecondition);
+  const auto with_newline = DumpStore(db_path_);
+  ASSERT_TRUE(with_newline.ok()) << with_newline.status().message();
 
-  // A tab is not the separator, so it is an ordinary byte and must survive the
-  // dump. Refusing it would be a silent narrowing of which stores are comparable.
+  ASSERT_TRUE(fs::remove(db_path_));
+  MakeStore("hasnewline");
+  const auto without_newline = DumpStore(db_path_);
+  ASSERT_TRUE(without_newline.ok()) << without_newline.status().message();
+  EXPECT_NE(with_newline->sha256, without_newline->sha256)
+      << "the newline was dropped from the stream rather than escaped";
+
+  // A tab is neither a separator nor escaped, so it survives verbatim and the
+  // dump stays total.
   ASSERT_TRUE(fs::remove(db_path_));
   MakeStore("has\ttab");
-  EXPECT_TRUE(DumpStore(db_path_).ok())
-      << "a tab was refused, though it is not the separator";
+  EXPECT_TRUE(DumpStore(db_path_).ok()) << "a tab was refused";
 }
 
 // The canonical form is a specification, not whatever the implementation
@@ -204,6 +215,47 @@ TEST_F(StoreEquivalenceTest, TheCanonicalFormIsPinnedByAKnownAnswer) {
 
   EXPECT_EQ(dump->sha256,
             "6102128f0c28b4b11fe81976d75b236ff015e308249077926029406d1fdaf5b6");
+}
+
+// The escape itself, pinned by known answers. The two cases above cannot pin it:
+// they would still pass under an escape that dropped a byte but stayed
+// self-consistent, and the backslash is the byte most likely to be forgotten.
+// Each expected value is the digest of one row of `beta` — id `b1`, the note
+// below — computed independently of this implementation with
+//   printf '%s\n' '<escaped row>' | shasum -a 256
+// over these three notes:
+//   'p|q'      -> b1|p\|q
+//   'm' LF 'n' -> b1|m\nn
+//   'x|y' LF 'z\w' -> b1|x\|y\nz\\w
+// and the store digest as
+//   printf '%s\n' "alpha:2:<alpha-digest>" "beta:1:<beta-digest>" | shasum -a 256
+// where <alpha-digest> is the unescaped fixture's 6f20be56…, unchanged here
+// because alpha's values carry nothing to escape.
+TEST_F(StoreEquivalenceTest, TheEscapeIsPinnedByKnownAnswers) {
+  MakeStore("p|q");
+  const auto piped = DumpStore(db_path_);
+  ASSERT_TRUE(piped.ok()) << piped.status().message();
+  ASSERT_EQ(piped->tables.size(), 2u);
+  EXPECT_EQ(piped->tables[1].sha256,
+            "9370b3dee6a807ad5b89bd83a6ba2ab25d494a31a2ddef818ce75bbb772c6139");
+
+  ASSERT_TRUE(fs::remove(db_path_));
+  MakeStore("m\nn");
+  const auto newlined = DumpStore(db_path_);
+  ASSERT_TRUE(newlined.ok()) << newlined.status().message();
+  ASSERT_EQ(newlined->tables.size(), 2u);
+  EXPECT_EQ(newlined->tables[1].sha256,
+            "589041ca8ad82cef9526d13828b2a4000d13c8b4200cd25a2c27935ea345dd66");
+
+  ASSERT_TRUE(fs::remove(db_path_));
+  MakeStore("x|y\nz\\w");
+  const auto mixed = DumpStore(db_path_);
+  ASSERT_TRUE(mixed.ok()) << mixed.status().message();
+  ASSERT_EQ(mixed->tables.size(), 2u);
+  EXPECT_EQ(mixed->tables[1].sha256,
+            "2034bdd31aa302a48ff4203be37277a94a1ca09a69d1f4e0e461822978697258");
+  EXPECT_EQ(mixed->sha256,
+            "b142516db8c87cc0fa07cf803625e337f230815d1fc39d61115ea0bdc2ea420f");
 }
 
 // A recorded exclusion that names a column the table does not have is stale:

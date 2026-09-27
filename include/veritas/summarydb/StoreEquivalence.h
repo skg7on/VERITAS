@@ -64,15 +64,29 @@ struct TableDump {
   std::string order_by;
   std::vector<std::string> excluded_columns;
   std::size_t row_count = 0;
-  // SHA-256 over the canonical row stream: for each row in `order_by` order,
-  // the retained column values joined by '|', each row terminated by '\n'. That
-  // is `sqlite3`'s own list mode, so this digest is the one
-  // `sqlite3 … "SELECT …" | shasum -a 256` produces for the same rows and can be
-  // checked against section 9.1's recorded literals by hand.
+  // SHA-256 over the canonical row stream: for each row in `order_by` order, the
+  // retained column values joined by '|', each row terminated by '\n'.
   //
-  // The stream is unambiguous by construction: `DumpStore` refuses, with
-  // FailedPrecondition, any value that contains a literal '|' or newline, so no
-  // caller has to assert that requirement on the data before trusting a digest.
+  // A value carrying one of the stream's own bytes is escaped rather than passed
+  // through: `\` becomes `\\`, `|` becomes `\|`, and a newline becomes `\n`. The
+  // escape is prefix-free and invertible, so column and row boundaries are
+  // unambiguous by construction and the dump is total — no value is refused.
+  //
+  // An earlier design refused such values with FailedPrecondition, on the theory
+  // that escaping is a second thing that can be wrong. Real stores refuted it:
+  // the round-3 baseline stores hold embedded newlines in
+  // `cpg_edge_support.provenance_ref` (17,963 rows) and in two `cpg_projections`
+  // columns, so refusal made the dump partial and a whole-store sweep impossible.
+  // Do not re-derive refusal as the obvious design.
+  //
+  // For a table whose values carry none of the three escaped bytes — which
+  // includes `analysis_facts`, the milestone's anchor — escaping is a no-op and
+  // this digest is exactly the one `sqlite3 … "SELECT …" | shasum -a 256`
+  // produces, so section 9.1's recorded literals are checkable by hand. For a
+  // table that does carry a newline there is no section 9.1 digest to reproduce:
+  // that instrument cannot distinguish a newline inside a value from a row
+  // boundary, so it is ambiguous there by construction. Escaping is what closes
+  // the gap the earlier instrument left, not a departure from it.
   std::string sha256;
 };
 
@@ -80,7 +94,10 @@ struct TableDump {
 struct StoreDump {
   std::vector<TableDump> tables;  // sorted by table name
   // SHA-256 over the concatenation of each table's name, row count, and digest,
-  // in `tables` order.
+  // in `tables` order, each entry newline-terminated. Cell values are escaped as
+  // `TableDump::sha256` describes; table names are not, so this outer stream
+  // assumes names are plain SQLite identifiers, as every schema in this
+  // repository produces.
   std::string sha256;
 
   // Limitation, inherited from `MetadataStore::Query`: SQL NULL is returned as
@@ -96,11 +113,13 @@ struct StoreDump {
 // `sqlite_sequence` records AUTOINCREMENT high-water marks that differ between
 // runs and a caller should see that rather than have it hidden.
 //
+// Cell values carrying the stream's own bytes are escaped, never refused, so
+// the dump is total: any store this can open it can dump.
+//
 // Failures, none of which are silent:
 //   * NotFound — no store exists at the path;
 //   * FailedPrecondition — a table's determined projection names a column the
-//     table does not have, every one of a table's columns is excluded, or a cell
-//     holds a '|' or a newline the row stream cannot represent;
+//     table does not have, or every one of a table's columns is excluded;
 //   * whatever the first query reports — `OpenReadOnly` succeeds for a path that
 //     exists but is not a SQLite database, because SQLite defers validation, so
 //     a file that is not a store is diagnosed here rather than at open time.

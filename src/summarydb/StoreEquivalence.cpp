@@ -80,20 +80,38 @@ StatusOr<std::vector<std::string>> ListColumns(MetadataStore* store,
   return columns;
 }
 
-// The value's bytes are joined into the row stream verbatim, so a '|' or a
-// newline inside one would move a boundary and let two different stores dump
-// alike. Refusing is the only option that keeps the stream unambiguous: an
-// escaping scheme is a second thing that can be wrong, and it would make a
-// digest depend on the escaper's version.
-Status RequireJoinable(std::string_view value, const std::string& table,
-                       const std::string& column) {
-  if (value.find_first_of("|\n") == std::string_view::npos) {
-    return Status::Ok();
+// The row stream's separators are '|' between columns and '\n' between rows, so
+// no value may carry either byte raw. Escaping is applied per value before the
+// join, and the backslash is escaped first: without that, a value holding the
+// two characters `\` and `|` would forge the escape sequence that stands for a
+// literal '|', and the encoding would not be invertible. With all three mapped,
+// the transform is a prefix-free escape, so column and row boundaries are
+// unambiguous by construction and nothing has to be refused.
+//
+// An earlier design did refuse such values. Real stores carry them — the round-3
+// baseline stores hold newlines in `cpg_edge_support.provenance_ref` (17,963
+// rows) and in two `cpg_projections` columns — so refusal made the dump partial
+// and a whole-store sweep impossible.
+std::string EscapeValue(std::string_view value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char byte : value) {
+    switch (byte) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '|':
+        escaped += "\\|";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      default:
+        escaped.push_back(byte);
+        break;
+    }
   }
-  return Status::FailedPrecondition(
-      "table " + table + " column " + column +
-      " holds a '|' or a newline, which the canonical row stream cannot join "
-      "unambiguously");
+  return escaped;
 }
 
 }  // namespace
@@ -165,10 +183,8 @@ StatusOr<StoreDump> DumpStore(const std::filesystem::path& metadata_db_path) {
                                 std::to_string(retained.size()) + " columns");
       }
       for (std::size_t i = 0; i < row.size(); ++i) {
-        Status joinable = RequireJoinable(row[i], table, retained[i]);
-        if (!joinable.ok()) return joinable;
         if (i != 0) stream.push_back('|');
-        stream.append(row[i]);
+        stream.append(EscapeValue(row[i]));
       }
       stream.push_back('\n');
     }
