@@ -152,21 +152,58 @@ TEST_F(StoreEquivalenceTest, RowCountsAreReported) {
   EXPECT_EQ(alpha_rows, 2u);
 }
 
-// The row stream joins values with '\t' and terminates rows with '\n', so a
+// The row stream joins values with '|' and terminates rows with '\n', so a
 // value carrying either byte would make two different stores dump alike. The
 // dump refuses such a value instead of escaping it: the stream is unambiguous
 // by construction, not by an assumption a caller has to check.
 TEST_F(StoreEquivalenceTest, ValuesTheRowStreamCannotRepresentAreRefused) {
-  MakeStore("has\ttab");
-  const auto tabbed = DumpStore(db_path_);
-  ASSERT_FALSE(tabbed.ok()) << "a value containing a tab was dumped anyway";
-  EXPECT_EQ(tabbed.status().code(), StatusCode::kFailedPrecondition);
+  MakeStore("has|pipe");
+  const auto piped = DumpStore(db_path_);
+  ASSERT_FALSE(piped.ok()) << "a value containing a pipe was dumped anyway";
+  EXPECT_EQ(piped.status().code(), StatusCode::kFailedPrecondition);
 
   ASSERT_TRUE(fs::remove(db_path_));
   MakeStore("has\nnewline");
   const auto newlined = DumpStore(db_path_);
   ASSERT_FALSE(newlined.ok()) << "a value containing a newline was dumped anyway";
   EXPECT_EQ(newlined.status().code(), StatusCode::kFailedPrecondition);
+
+  // A tab is not the separator, so it is an ordinary byte and must survive the
+  // dump. Refusing it would be a silent narrowing of which stores are comparable.
+  ASSERT_TRUE(fs::remove(db_path_));
+  MakeStore("has\ttab");
+  EXPECT_TRUE(DumpStore(db_path_).ok())
+      << "a tab was refused, though it is not the separator";
+}
+
+// The canonical form is a specification, not whatever the implementation
+// happens to print: without a known-answer case, any self-consistent separator,
+// column order, or combined-stream layout stays green, and this format is what
+// the milestone's acceptance argument quotes.
+//
+// The three literals were computed independently of this implementation, over
+// the same rows `MakeStore` writes, with:
+//   sqlite3 fixture.db "SELECT id, payload FROM alpha ORDER BY rowid" | shasum -a 256
+//   sqlite3 fixture.db "SELECT id, note FROM beta ORDER BY rowid" | shasum -a 256
+//   printf '%s\n' "alpha:2:<alpha-digest>" "beta:1:<beta-digest>" | shasum -a 256
+// so they pin the separator, the retained column order (declaration order), the
+// table order (name order), and the combined stream's `name:rows:digest` layout.
+TEST_F(StoreEquivalenceTest, TheCanonicalFormIsPinnedByAKnownAnswer) {
+  MakeStore("n1");
+  const auto dump = DumpStore(db_path_);
+  ASSERT_TRUE(dump.ok()) << dump.status().message();
+  ASSERT_EQ(dump->tables.size(), 2u);
+
+  ASSERT_EQ(dump->tables[0].table, "alpha");
+  EXPECT_EQ(dump->tables[0].sha256,
+            "6f20be56595a5c45f0bf79b1380e789c4324d49a937d630a819369f7b0dc244d");
+
+  ASSERT_EQ(dump->tables[1].table, "beta");
+  EXPECT_EQ(dump->tables[1].sha256,
+            "9fadbe8ef94a40455ebc35ee4841e71796d6b6ecbf441be10c256a47ce425b95");
+
+  EXPECT_EQ(dump->sha256,
+            "6102128f0c28b4b11fe81976d75b236ff015e308249077926029406d1fdaf5b6");
 }
 
 // A recorded exclusion that names a column the table does not have is stale:

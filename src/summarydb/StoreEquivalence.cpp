@@ -80,19 +80,19 @@ StatusOr<std::vector<std::string>> ListColumns(MetadataStore* store,
   return columns;
 }
 
-// The value's bytes are joined into the row stream verbatim, so a tab or a
+// The value's bytes are joined into the row stream verbatim, so a '|' or a
 // newline inside one would move a boundary and let two different stores dump
 // alike. Refusing is the only option that keeps the stream unambiguous: an
 // escaping scheme is a second thing that can be wrong, and it would make a
 // digest depend on the escaper's version.
 Status RequireJoinable(std::string_view value, const std::string& table,
                        const std::string& column) {
-  if (value.find_first_of("\t\n") == std::string_view::npos) {
+  if (value.find_first_of("|\n") == std::string_view::npos) {
     return Status::Ok();
   }
   return Status::FailedPrecondition(
       "table " + table + " column " + column +
-      " holds a tab or newline, which the canonical row stream cannot join "
+      " holds a '|' or a newline, which the canonical row stream cannot join "
       "unambiguously");
 }
 
@@ -167,7 +167,7 @@ StatusOr<StoreDump> DumpStore(const std::filesystem::path& metadata_db_path) {
       for (std::size_t i = 0; i < row.size(); ++i) {
         Status joinable = RequireJoinable(row[i], table, retained[i]);
         if (!joinable.ok()) return joinable;
-        if (i != 0) stream.push_back('\t');
+        if (i != 0) stream.push_back('|');
         stream.append(row[i]);
       }
       stream.push_back('\n');

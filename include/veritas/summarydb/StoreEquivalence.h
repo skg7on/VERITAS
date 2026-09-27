@@ -65,9 +65,13 @@ struct TableDump {
   std::vector<std::string> excluded_columns;
   std::size_t row_count = 0;
   // SHA-256 over the canonical row stream: for each row in `order_by` order,
-  // the retained column values joined by '\t', each row terminated by '\n'.
+  // the retained column values joined by '|', each row terminated by '\n'. That
+  // is `sqlite3`'s own list mode, so this digest is the one
+  // `sqlite3 … "SELECT …" | shasum -a 256` produces for the same rows and can be
+  // checked against section 9.1's recorded literals by hand.
+  //
   // The stream is unambiguous by construction: `DumpStore` refuses, with
-  // FailedPrecondition, any value that contains a literal tab or newline, so no
+  // FailedPrecondition, any value that contains a literal '|' or newline, so no
   // caller has to assert that requirement on the data before trusting a digest.
   std::string sha256;
 };
@@ -96,7 +100,7 @@ struct StoreDump {
 //   * NotFound — no store exists at the path;
 //   * FailedPrecondition — a table's determined projection names a column the
 //     table does not have, every one of a table's columns is excluded, or a cell
-//     holds a tab or newline the row stream cannot represent;
+//     holds a '|' or a newline the row stream cannot represent;
 //   * whatever the first query reports — `OpenReadOnly` succeeds for a path that
 //     exists but is not a SQLite database, because SQLite defers validation, so
 //     a file that is not a store is diagnosed here rather than at open time.
