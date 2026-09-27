@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "ProjectFixture.h"
 
@@ -375,16 +376,78 @@ TEST(VeritasBuildAnalyzeCliTest, EmitsNoAbsolutePathInTheArtifact) {
       << json.substr(0, 500);
 }
 
-// The profile defaults to `baseline`, so a run that never mentions the flag is
-// byte-identical to a run that names it explicitly.
+// Read one top-level block of a run's artifact. The artifact lands at
+// `<project>/.veritas/run-metrics.json` when `--output` is omitted, because
+// ResolveProjectInput roots the output at `<root>/.veritas` for an empty
+// request (src/build/ProjectInput.cpp:57-59).
+//
+// A missing file, unparseable JSON, or absent block all yield a null Value. The
+// caller must assert the block is present, or two missing blocks would compare
+// equal and the equivalence would pass for the wrong reason.
+llvm::json::Value ReadReportBlock(const fs::path& project,
+                                  llvm::StringRef block) {
+  std::ifstream artifact(project / ".veritas" / "run-metrics.json");
+  if (!artifact.good()) return llvm::json::Value(nullptr);
+  std::stringstream buffer;
+  buffer << artifact.rdbuf();
+  auto parsed = llvm::json::parse(buffer.str());
+  if (!parsed) return llvm::json::Value(nullptr);
+  const llvm::json::Object* root = parsed->getAsObject();
+  if (root == nullptr) return llvm::json::Value(nullptr);
+  const llvm::json::Value* found = root->get(block);
+  if (found == nullptr) return llvm::json::Value(nullptr);
+  return *found;
+}
+
+// Render a block for a failure message. llvm::json::Value streams to a
+// raw_ostream, not to a std::ostream, so gtest cannot print it on its own.
+std::string RenderForMessage(const llvm::json::Value& value) {
+  std::string text;
+  llvm::raw_string_ostream os(text);
+  value.print(os);
+  os.flush();
+  return text;
+}
+
+// The profile defaults to `baseline`, so the default path is unchanged: a run
+// that never mentions the flag is indistinguishable from one that names
+// `baseline` explicitly.
 TEST(VeritasBuildAnalyzeCliTest, ScaleProfileDefaultsToBaseline) {
+  const auto implicit_project = testing::FixtureProject("store_load");
+  const auto explicit_project = testing::FixtureProject("store_load");
   const auto implicit = RunVeritasBuild(
-      {"analyze", "--project", testing::FixtureProject("store_load").string()});
+      {"analyze", "--project", implicit_project.string()});
   const auto explicit_run = RunVeritasBuild(
-      {"analyze", "--project", testing::FixtureProject("store_load").string(),
-       "--scale-profile", "baseline"});
-  EXPECT_EQ(implicit.exit_code, 0) << implicit.stderr_text;
-  EXPECT_EQ(explicit_run.exit_code, 0) << explicit_run.stderr_text;
+      {"analyze", "--project", explicit_project.string(), "--scale-profile",
+       "baseline"});
+  ASSERT_EQ(implicit.exit_code, 0) << implicit.stderr_text;
+  ASSERT_EQ(explicit_run.exit_code, 0) << explicit_run.stderr_text;
+
+  // Equal exit codes only prove the flag is accepted. The invariant is that the
+  // default path is unchanged, which shows up in the run's identity and its
+  // configuration: a knob that leaked into a canonical config encoding, or into
+  // a run id derived from one, would diverge here.
+  //
+  // `memory` and `phases` are deliberately excluded: their durations and byte
+  // counts differ between any two runs whether or not a flag was passed, so
+  // comparing them would make this case flaky and prove nothing.
+  for (const llvm::StringRef block : {"identity", "config"}) {
+    const auto implicit_block = ReadReportBlock(implicit_project, block);
+    const auto explicit_block = ReadReportBlock(explicit_project, block);
+    ASSERT_NE(implicit_block.getAsObject(), nullptr)
+        << "no `" << block.str() << "` block in the implicit run's artifact at "
+        << (implicit_project / ".veritas" / "run-metrics.json").string();
+    ASSERT_NE(explicit_block.getAsObject(), nullptr)
+        << "no `" << block.str() << "` block in the explicit run's artifact at "
+        << (explicit_project / ".veritas" / "run-metrics.json").string();
+
+    EXPECT_TRUE(implicit_block == explicit_block)
+        << "the `" << block.str()
+        << "` block differs between a run that omits --scale-profile and one "
+        << "that names `baseline`: the flag is not inert.\n  implicit: "
+        << RenderForMessage(implicit_block)
+        << "\n  explicit: " << RenderForMessage(explicit_block);
+  }
 }
 
 // `scaled` parses but is rejected at run time: no milestone has implemented any
