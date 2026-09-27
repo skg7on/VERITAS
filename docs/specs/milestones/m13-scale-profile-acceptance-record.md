@@ -133,12 +133,24 @@ be seen to move:
 The LevelDB runs were required to close that gap, and they closed it in the
 opposite direction from the one feared: the same ten tables are empty under
 LevelDB too. `analyzer_runs`, the three `function_*` tables, `summary_deltas`
-and `summary_dependencies` are not written by the pipeline at all in this
-implementation — they are schema ahead of the code that will fill them — so
-their wall-clock columns cannot move in any run this build can produce. The
+and `summary_dependencies` are not written by either measured input, which is
+consistent with their being schema ahead of the code that will fill them. The
 LevelDB measurement is therefore not redundant: it is what turned "the fixture
-leaves these ten tables empty" into "these tables are empty for every input".
-No entry is recorded for any of them, and none is needed.
+leaves these ten tables empty" into "the two inputs leave them empty", and the
+two differ by three orders of magnitude — 3,193 facts against 1,249,792 — so
+the emptiness is a property of the pipeline and not of the fixture's size.
+
+That is two inputs, not every input, and the limit is worth stating rather than
+papered over: a wall-clock column in a table this build never writes cannot be
+*seen* to move, so the honest reading of "no entry is recorded for any of them"
+is that no entry is *needed for them as measured*. An entry would become
+necessary the day one of them is populated, and no guard would say so: the
+`DumpStore` stale-exclusion check catches an exclusion whose column has
+*disappeared*, and a table with no entry has no exclusions to go stale — it has
+the opposite problem. What catches it is running the column-by-column step above
+again on a pair of stores whose tables are no longer empty, which is a step
+M14's corpus will re-run with a larger input. That is why this section records
+the method alongside the result.
 
 ## 3. The measured projection
 
@@ -296,9 +308,12 @@ measures: `run_id` is
 `run:sha256:a75a950c01963d81ca86e1b4998269a452ebfdfaf8cc98353cf9c080622c30a6` in
 both `semantic_zoo` stores. It is not that `run_id` is stable; it is that this
 pair cannot move it. Two *builds* of one input do move it, and section 9.1 says
-so directly: "`run_id` and `engine_toolchain_identity` move between any two
-revisions built in this Debug configuration — no projection that keeps those
-columns can match across them". That is the comparison the instrument exists
+so directly
+(`docs/specs/veritas-build-analyze-round3-performance-design-spec.md:914-921`;
+the sentence quoted below is at `:918-920`): "`run_id` and
+`engine_toolchain_identity` move between any two revisions built in this Debug
+configuration — no projection that keeps those columns can match across them".
+That is the comparison the instrument exists
 for: the roadmap's section 6.2 makes `baseline` "the differential conformance
 oracle" against `scaled`, and section 6.1 states that `scaled` "opts into the
 structural changes of Stages 2–6" whose "structural stages change *how* identity
@@ -308,21 +323,21 @@ and M14's harness would have to ignore it.
 
 #### The eleven are pinned by a reproduction that is itself cross-build
 
-The reproductions of section 3.1 run on **this build's** store; round 3 supplies
-the digest *literal*. What the reproduction pins is round 3's **exclusion set**:
-`93c3aef6…` and `bf38b362…` are not reproduced without the columns above, so
-round 3's literals were computed with them excluded. The source is the literal;
-the object is this store, and the earlier draft of this paragraph had that
-backwards.
+The reproductions of section 3.1 run on the reference LevelDB store this record
+measured; round 3 supplies the digest *literal*. What the reproduction pins is
+round 3's **exclusion set**: `93c3aef6…` and `bf38b362…` are not reproduced
+without the columns above, so round 3's literals were computed with them
+excluded. The source is the literal, the object is this store, and the earlier
+draft of this paragraph had that backwards.
 
 The reproduction is stronger than "the same content, measured twice", and the
 reason is worth stating because it is the property M14's oracle depends on:
 
-> **This store's `engine_toolchain_identity` is
-> `souffle-14d108c0cf82e133b216cabafaa288d16d1a8a5b5e18374ab740d0e826e6d38c`.
+> **The store this record measured carries
+> `souffle-14d108c0cf82e133b216cabafaa288d16d1a8a5b5e18374ab740d0e826e6d38c`.**
 > Round 3's recorded value is `souffle-0ef51c2207f7a5aa…`, with
 > `souffle-e4135d90a5f5d329…` before it. They are different toolchain
-> identities.**
+> identities.
 
 So round 3's digests for `run_fact_bindings`, `provenance_nodes`,
 `provenance_edges`, `wpa_component_states_v2` and
@@ -333,32 +348,127 @@ functions of the identity that moved; these five do survive it. That is genuine
 cross-build evidence, taken from two different revisions of the toolchain rather
 than from two runs of one binary, and it is exactly the comparison the M14
 harness will make. It is also the reason the same-tree pair of section 2 could
-never have decided this question: `--scale-profile` is deliberately kept out of
-every canonical encoding, so even a baseline-versus-scaled pair in one build tree
-has one shared identity, and only a toolchain change can move it.
+never have decided this question. `--scale-profile` is deliberately kept out of
+every canonical encoding, and `run_id` is
+`MakeStableId(kAnalysisRun, Canonicalize(descriptor))` — a fixed id kind and a
+fixed `veritas.wpa-run.v1` domain tag over ten descriptor fields, none of them
+the profile. So a baseline-versus-scaled pair in one build tree shares one
+`run_id`, and moving it takes a change to one of those ten. The last subsection
+shows how small such a change can be.
 
-#### The limit this leaves, stated rather than discovered later
+The identity value above is a per-build artefact and not a constant — see the
+last subsection here for why, and for what that means for M14.
 
-`wpa_analysis_runs` also carries `run_id` and `engine_toolchain_identity`, and
-**neither is excluded** — the table's entry excludes only the two wall-clock
-columns measured in section 2. Section 9.1 recorded no exclusion for it either.
-So on a pair whose toolchain identity moved, `veritas-store-diff` will report
-`wpa_analysis_runs` as `differ`: one table out of 37 where the report is identity
-rather than content.
+#### The three tables that report `differ` across a build boundary, measured
 
-This one is **reasoned from the encoding, not observed**, and the distinction
-matters in a record that grades its other claims by how they were measured:
-`Canonicalize(AnalysisRunDescriptor)` in `src/facts/AnalysisRun.cpp` appends
-`engine_toolchain_identity` as its last field, `MakeAnalysisRun` sets
-`run_id = MakeStableId(kAnalysisRun, Canonicalize(descriptor))`, and neither
-column is in the table's exclusion set — so the table's digest must move
-whenever the toolchain identity does. No pair with a moved toolchain identity was
-available to observe it on; that is the same single-build-tree limit this whole
-section is about.
+An earlier draft of this subsection named `wpa_analysis_runs` as "one table out
+of 37 where the report is identity rather than content", generalised from the
+encoding argument earlier in this section. **That completeness claim was false.**
+It is replaced here by an enumeration and two observations rather than by a third
+generalisation from one member.
 
-It is left as measured rather than quietly widened, because excluding those two
-columns would be an exclusion neither method measured — the exact thing this
-section exists to refuse. M14's harness should expect it.
+*Enumerated.* Every column of all 37 tables, in **both** reference stores, was
+searched for the store's own `run_id`, its `engine_toolchain_identity`, and the
+`batch_id` derived from the former — by substring, so an embedded value counts,
+and over recorded tables as well as unrecorded ones, because a recorded table can
+carry an identity value in a column its projection does not exclude. A name-based
+filter would have missed `fact_batch_receipts`' own `wpa_run_id`, which is why
+the search is by value. Both stores return the same rows: **twelve columns in
+eight tables hold one of the three values; the projection excludes five of those
+columns, and the remaining seven — in three tables — reach the digest.**
+
+| Table | Identity columns reaching the digest | Excluded by the projection |
+| --- | --- | --- |
+| `wpa_analysis_runs` | `run_id`, `engine_toolchain_identity` | no (only `started_at`, `completed_at` are) |
+| `fact_batch_receipts` | `run_id`, `batch_id`, `wpa_run_id` | no — not recorded, so nothing is excluded |
+| `wpa_fact_bus_deliveries` | `run_id`, `batch_id` | no — not recorded, so nothing is excluded |
+| `provenance_edges` | `run_id` | yes |
+| `provenance_nodes` | `run_id` | yes |
+| `run_fact_bindings` | `run_id` | yes |
+| `wpa_component_result_cache_v2` | `engine_toolchain_identity` | yes |
+| `wpa_component_states_v2` | `run_id` | yes |
+
+`fact_batch_receipts` and `wpa_fact_bus_deliveries` are absent from `kRecorded`,
+so `ResolveTableProjection` gives both `{"rowid", {}}` and their identity values
+reach their digests. The five excluded columns are the reason the three
+identity-bearing published/WPA tables do **not** appear in the cross-build
+`differs` list below — which is the projection doing its job, and the
+discriminating control that shows the list is not merely "every table with a
+run id in it".
+
+Two further notes so a reader running a *name* filter lands in the same place.
+`wpa_analysis_runs` also has `stale_base_run_id`, of the same identity type; it is
+NULL in both measured stores, so the value search yields no hit for it, and it is
+in a table already listed, so it changes no count. And `analyzer_runs` and
+`analysis_configurations` match a name filter on `analyzer_run_id` — a local
+AUTOINCREMENT, not a run- or toolchain-derived value, in tables that are empty,
+so mutating it on the measured pair leaves the pair equivalent. They are named
+because the answer is "not in the class", not "in the class but quiet".
+
+*Observed.* The enumeration was then checked against real build boundaries rather
+than argued from them. Relinking the compiled Soufflé functor library moves
+`engine_toolchain_identity`, which moves `run_id` — the case this subsection is
+about. Two independent such pairs were compared, and both report the identical
+three tables:
+
+```
+$ ./build/bin/veritas-store-diff /tmp/m13-a/store /tmp/m13-crossbuild/store
+stores differ
+  differs: fact_batch_receipts (left 1 rows, right 1 rows)
+  differs: wpa_analysis_runs (left 1 rows, right 1 rows)
+  differs: wpa_fact_bus_deliveries (left 1 rows, right 1 rows)
+```
+
+So **three tables out of 37**, not one. The other **34 compare equal across a
+genuine toolchain-identity change** — every published table among them, and
+fourteen of the fifteen tables the projection records, `wpa_analysis_runs` being
+the exception. That is the property M14's oracle needs, and it is now measured
+rather than asserted. M14's harness should expect exactly these three.
+
+*Why the seven are left un-excluded rather than added to the projection.* Not
+oversight, and not deference to section 9.1: exclusion cannot express what two of
+the three tables need. `fact_batch_receipts` has exactly three columns — `run_id`,
+`batch_id`, `wpa_run_id` — and all three are identity, so excluding the identity
+would exclude every column, which `DumpStore` refuses by design
+(`FailedPrecondition`, "every column of <table> is excluded"). Its digest has no
+content in it to compare. `wpa_fact_bus_deliveries` is nearly the same shape:
+`run_id`, `batch_id`, and a constant `sink_id`. Only `wpa_analysis_runs` could
+carry a meaningful reduced projection, and excluding for it alone would buy an
+asymmetric instrument that hides the run identity for one table while its two
+neighbours report it — a reader would have to know which table was special and
+why. Reporting all three is the disposition that needs no such knowledge, and
+this subsection is what makes the report actionable.
+
+#### Rebuilds move the identity too, which makes this the everyday case
+
+Section 9.1 says "an edit moves it only if it changes one of the inputs
+`cmake/WriteSouffleProvenance.cmake` hashes". That is a necessary condition and
+it is not wrong, but it is silent on *rebuilds*, and a rebuild is enough:
+`functor_library_sha256` is `file(SHA256 …)` over the **compiled library**, and
+on this platform the linker stamps a fresh UUID into every link, so the file's
+digest changes even when every input byte is identical. Measured:
+
+```
+$ touch src/facts/SemanticKeyCodec.cpp      # no content change; git status empty
+$ cmake --build --preset default
+$ shasum -a 256 build/lib/libveritas-souffle-functors.dylib
+262a02dbe85f19539e2a5c694d5801f7ec1ee29cb845b4812b4fdbde04928485   # before
+8dad39eaa1cf05f3a780dc36dfacbcd4374e88cbc95362a850f17b2ce711ea84   # after
+```
+
+and the identity moved with it, `souffle-c9b98d05…` → `souffle-be74ba86…`. The
+practical consequence for M14 is that its baseline-versus-scaled pair will cross
+this boundary whether or not any source change is intended — an ordinary rebuild
+is sufficient — so the three tables above are the everyday case, not an edge
+case, and a harness that treats a non-empty `differs` list as a failure needs to
+know them by name.
+
+None of the three is excluded, and that is a disposition rather than an
+omission: exclusion cannot express what `fact_batch_receipts` and
+`wpa_fact_bus_deliveries` need, because almost all of their columns *are* the
+identity, and adding one for `wpa_analysis_runs` alone would hide the run
+identity for one table and not its two neighbours. The reasons are given in full
+above.
 
 ## 4. The comparison, and its exit code
 

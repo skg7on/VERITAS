@@ -61,8 +61,13 @@ bool RemoveFile(const fs::path& path) {
 // like, and a binary that aborts reports nothing about which case tripped.
 //
 // `ADD_FAILURE()` rather than `ASSERT_`, because this is called from `SetUp` as
-// well as from a test body and has to return a path either way. The empty path
-// a failure produces then fails the case at the point that uses it.
+// well as from a test body and has to return a path either way. On a failure the
+// caller appends a filename to the empty path and gets a *relative* one, so the
+// store would land in the process's working directory rather than failing at
+// first use; the case is still failed, by the `ADD_FAILURE` alone. Returning a
+// path rather than a `StatusOr` is a deliberate trade: this helper exists to
+// remove a `std::terminate`, and a test that reports which case tripped and then
+// also fails is better than one that cannot report at all.
 fs::path TempDirectory() {
   std::error_code error;
   const auto path = fs::temp_directory_path(error);
