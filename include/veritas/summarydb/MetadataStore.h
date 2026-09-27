@@ -93,6 +93,19 @@ class MetadataStore {
   // if the path is invalid, Internal if SQLite fails.
   static StatusOr<MetadataStore> Open(const std::filesystem::path& db_path);
 
+  // Open an existing metadata database for reading only. Unlike `Open`, this
+  // never creates the file and never applies the schema: it sets
+  // SQLITE_OPEN_READONLY, so a write attempt fails at the SQLite layer rather
+  // than silently mutating the store. Returns NotFound when no store exists at
+  // db_path. (`Open` creates one at whatever path it is given, and its callers
+  // apply the schema afterwards.)
+  //
+  // An inspection tool must use this. `Open` would create an empty store at a
+  // mistyped path, and an empty store compares equal to nothing while looking
+  // like a successful comparison.
+  static StatusOr<MetadataStore> OpenReadOnly(
+      const std::filesystem::path& db_path);
+
   // Apply the V1 schema to a fresh database. Idempotent; safe to call on an
   // already-initialized database. Returns FailedPrecondition if the database
   // has a schema version newer than V1.

@@ -17,6 +17,12 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <span>
+#include <string>
+
+#include "veritas/core/Hash.h"
 
 namespace veritas::summarydb {
 
@@ -51,6 +57,16 @@ namespace {
 std::filesystem::path TempDbPath() {
   return std::filesystem::temp_directory_path() /
          ("veritas_metadata_test_" + std::to_string(::getpid()) + ".db");
+}
+
+// SHA-256 of a file's bytes, for "did this change?" checks. Uses the same
+// hashing the project already depends on so no new dependency appears.
+std::string FileDigest(const std::filesystem::path& path) {
+  std::ifstream in(path, std::ios::binary);
+  std::string bytes((std::istreambuf_iterator<char>(in)),
+                    std::istreambuf_iterator<char>());
+  return veritas::core::DigestToHex(veritas::core::ComputeSHA256(
+      std::as_bytes(std::span(bytes.data(), bytes.size()))));
 }
 
 class MetadataStoreTest : public ::testing::Test {
@@ -457,4 +473,53 @@ TEST_F(MetadataStoreTest, BulkInsertFlushOnAnEmptyBatchIsANoOp) {
   auto counted = store->Query("SELECT COUNT(*) FROM bulk_probe", {});
   ASSERT_TRUE(counted.ok());
   EXPECT_EQ((*counted)[0][0], "0");
+}
+
+// An inspection tool must not create a store as a side effect of looking for
+// one, or a typo in a path silently produces an empty store that compares equal
+// to nothing and reports success.
+TEST_F(MetadataStoreTest, OpenReadOnlyDoesNotCreateAMissingStore) {
+  const auto path = db_path_;
+  std::filesystem::remove(path);
+  const auto store = MetadataStore::OpenReadOnly(path);
+  EXPECT_FALSE(store.ok());
+  EXPECT_EQ(store.status().code(), veritas::StatusCode::kNotFound);
+  EXPECT_FALSE(std::filesystem::exists(path))
+      << "OpenReadOnly created the file it was asked to read";
+}
+
+// Opening a real store for reading must leave every byte alone. Comparing a
+// digest of the file before and after is the only check that catches a schema
+// migration that happens to be idempotent in content but writes anyway.
+TEST_F(MetadataStoreTest, OpenReadOnlyLeavesTheStoreByteIdentical) {
+  const auto path = db_path_;
+  {
+    auto store = MetadataStore::Open(path);
+    ASSERT_TRUE(store.ok()) << store.status().message();
+    ASSERT_TRUE(store->Execute("CREATE TABLE probe (a TEXT)", {}).ok());
+    ASSERT_TRUE(store->Execute("INSERT INTO probe (a) VALUES ('x')", {}).ok());
+  }
+
+  const auto before = FileDigest(path);
+  // A digest helper that ignored its input would make the check below vacuous:
+  // a path that does not exist reads as zero bytes.
+  EXPECT_NE(before,
+            FileDigest(std::filesystem::path(path.string() + ".absent")));
+  {
+    // Not `const`: StatusOr's const operator-> yields a `const T*`, and both
+    // Query and Execute are non-const members (Query caches its statements).
+    auto ro = MetadataStore::OpenReadOnly(path);
+    ASSERT_TRUE(ro.ok()) << ro.status().message();
+    const auto rows = ro->Query("SELECT a FROM probe", {});
+    ASSERT_TRUE(rows.ok()) << rows.status().message();
+    ASSERT_EQ(rows->size(), 1u);
+    EXPECT_EQ((*rows)[0][0], "x");
+
+    // A store opened "read only" that accepts a write is not an instrument, so
+    // the flag must be enforced by SQLite rather than merely documented. This
+    // probe also tells the digest comparison below what to blame when it fails.
+    EXPECT_FALSE(ro->Execute("INSERT INTO probe (a) VALUES ('y')", {}).ok())
+        << "a read-only store accepted a write";
+  }
+  EXPECT_EQ(FileDigest(path), before) << "OpenReadOnly wrote to the store";
 }
