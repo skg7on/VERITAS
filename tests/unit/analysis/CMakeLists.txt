@@ -29,5 +29,13 @@ target_link_libraries(ModelBundleTest PRIVATE
 )
 gtest_discover_tests(ModelBundleTest DISCOVERY_TIMEOUT 60)
 
+add_executable(AnalysisConfigTest AnalysisConfigTest.cpp)
+target_link_libraries(AnalysisConfigTest PRIVATE
+  veritas_analysis
+  GTest::gtest_main
+)
+veritas_add_warnings(AnalysisConfigTest)
+gtest_discover_tests(AnalysisConfigTest DISCOVERY_TIMEOUT 60)
+
 add_subdirectory(llvm)
 add_subdirectory(svf)

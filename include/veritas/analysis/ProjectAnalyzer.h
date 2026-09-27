@@ -45,6 +45,20 @@ enum class WpaEngineMode : std::uint8_t {
   kCppEmergency,
 };
 
+// The scale profile selects which structural implementation of the analysis
+// pipeline a run uses. `kBaseline` is today's implementation and the default.
+// `kScaled` is reserved for the M15-M19 changes specified in
+// docs/plans/veritas-scaling-milestone-roadmap.md; until those land,
+// `veritas-build analyze` rejects it rather than silently doing nothing.
+//
+// This value is deliberately absent from WpaConfigurationHash and every other
+// canonical config encoding: it must not move any identity until the milestone
+// that gives it meaning also versions the identity it changes.
+enum class ScaleProfile : std::uint8_t {
+  kBaseline = 0,
+  kScaled = 1,
+};
+
 // AnalysisConfig provides budget and tuning parameters for project analysis
 struct AnalysisConfig {
   std::chrono::seconds svf_soft_analysis_budget;
@@ -54,6 +68,7 @@ struct AnalysisConfig {
   bool svf_field_sensitive;
 
   WpaEngineMode wpa_engine;
+  ScaleProfile scale_profile;
   std::chrono::milliseconds wpa_component_timeout;
   std::uint64_t wpa_component_memory_mb;
   std::uint32_t wpa_threads;
