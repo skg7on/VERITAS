@@ -123,3 +123,11 @@ target_link_libraries(AnalysisFactBusTest PRIVATE
 veritas_add_warnings(AnalysisFactBusTest)
 gtest_discover_tests(AnalysisFactBusTest DISCOVERY_TIMEOUT 60)
 veritas_m9_entry_test(AnalysisFactBusTest witness-closure)
+
+add_executable(RowArenaTest RowArenaTest.cpp)
+target_link_libraries(RowArenaTest PRIVATE
+  veritas::facts
+  GTest::gtest_main
+)
+veritas_add_warnings(RowArenaTest)
+gtest_discover_tests(RowArenaTest DISCOVERY_TIMEOUT 60)
