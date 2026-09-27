@@ -11,3 +11,6 @@ analysis, storage, and the evidence representation consumed by review agents.
    — defines the physical storage layers and pluggable backend contracts.
 4. [04 Evidence IR architecture](04-evidence-ir-architecture.md) — defines the
    typed, provenance-preserving evidence language and its semantics.
+5. [05 Portable analysis target and identity architecture](05-portable-analysis-target-identity-architecture.md)
+   — defines canonical target resolution, compiler injection, portable identity,
+   and non-destructive migration from host-scoped identities.
