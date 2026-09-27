@@ -756,12 +756,16 @@ StatusOr<WpaComponentResult> MakeResult(const WpaLogicalComponentInput& logical,
   result.fixpoint_hash = canonical.fixpoint_hash;
   result.external_hash = canonical.external_hash;
   for (const auto& fact : canonical.facts) {
-    auto appended = result.facts.Append(fact.row);
+    // A fact entry, not a bare row: the fact id is stored with the row, because
+    // SerializeResult writes it there and SuccessorSupport collects
+    // AnalysisFacts. AnalysisFactRange is a range of fact entries, so a bare
+    // Append here would leave the range unable to yield a fact.
+    auto appended = result.facts.AppendFact(fact);
     if (!appended.ok()) return appended.status();
   }
   for (const auto& edge : canonical.witnesses) {
-    // A witness edge is three rows in one entry: the result row, the input
-    // row, and the rule and ordinal between them.
+    // A witness entry: the result row, the rule and derivation keys, the input
+    // row and the ordinal.
     auto appended = result.witnesses.AppendWitness(edge);
     if (!appended.ok()) return appended.status();
   }
