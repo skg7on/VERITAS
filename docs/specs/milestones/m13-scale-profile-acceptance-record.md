@@ -390,7 +390,7 @@ columns, and the remaining seven — in three tables — reach the digest.**
 
 `fact_batch_receipts` and `wpa_fact_bus_deliveries` are absent from `kRecorded`,
 so `ResolveTableProjection` gives both `{"rowid", {}}` and their identity values
-reach their digests. The five excluded columns are the reason the three
+reach their digests. The five excluded columns are the reason the five
 identity-bearing published/WPA tables do **not** appear in the cross-build
 `differs` list below — which is the projection doing its job, and the
 discriminating control that shows the list is not merely "every table with a
@@ -533,6 +533,65 @@ shape the instrument must report and not suppress: the rows are the same, the
 run-scoped column in them is not. The exit code is the deliverable, and the
 `differs` list is what it is for.
 
+### 4.3 The third exit code
+
+The two subsections above record two of the contract's three codes. The third —
+2, "could not compare" — is the one a caller must not mistake for either of the
+others, and it belongs here because a contract quoted in two thirds is a
+contract a reader will fill in from expectation.
+
+A store root that holds no store:
+
+```
+$ ./build/bin/veritas-store-diff /tmp/m13-a/store /tmp/m13-a/absent
+veritas-store-diff: no metadata store at /tmp/m13-a/absent/metadata.db
+$ echo $?
+2
+```
+
+and an argument count that is not two store roots:
+
+```
+$ ./build/bin/veritas-store-diff
+usage:
+  veritas-store-diff --version
+  veritas-store-diff <left-store-root> <right-store-root>
+
+Compares the metadata.db of two store roots table by table, using the
+determined projection recorded in
+docs/specs/milestones/m13-scale-profile-acceptance-record.md:
+run-scoped columns are excluded, rows are ordered deterministically, and
+each table is digested. Exits 0 when the stores are equivalent, 1 when
+they differ, and 2 on error.
+$ echo $?
+2
+```
+
+A missing store is "could not compare" rather than "different" because the two
+call for opposite responses: one is a path to fix, the other is a finding. The
+message names the path it stat-ed rather than the store root it was given, so
+the reader sees which file was absent; and when *both* stores are unreadable it
+names the **left** one, because the comparison dumps and checks the left store
+before it opens the right, so an unreadable left store is never silently
+reported as a comparison of the right store against nothing.
+
+The first line of that usage block is the fifth CLI's `--version`, which exits
+0 like its four siblings'. It is answered before the argument-count check
+because a differential conformance harness is the most likely thing in this
+repository to record a tool's version, and without that branch `--version` is an
+argument count that is not two store roots, so a probe reads the usage error as
+a comparison error.
+
+These two are not measurements of the tree the rest of this record measured —
+they are properties of the argument handling and the read path, and they do not
+depend on the projection or on the input. They are asserted, on real
+invocations of the built binary, by
+`tests/integration/summarydb/VeritasStoreDiffTest.cpp`, which pins all three
+codes: 0 for two identical stores, 1 after one cell in one store is changed, and
+2 for both of the cases above — plus the left-before-right ordering, which is
+asserted by pointing both arguments at different missing roots and requiring the
+left one to be named.
+
 ## 5. The LevelDB anchor
 
 Plan Step 6 asks whether the published digests match section 9.1's
@@ -645,9 +704,13 @@ being shown to pass.
   (the loop half) and adding a `summary_components` entry (the size half, which
   the assertion reports as 15 against 16).
 - `StoreEquivalenceTest.UnrecordedTablesCarryTheDefaultProjection` asserts the
-  other half: eighteen real tables that the measurement found no moving column
-  in must resolve to `{"rowid", {}}`. Without it an entry added for a table the
-  instrument cannot determine would be invisible.
+  other half: **18 of the 22** unrecorded tables — the store has 37 and the
+  projection records 15 — must resolve to `{"rowid", {}}`. The four it does not
+  name are `analyzer_runs`, `component_deltas`, `function_bodies` and
+  `function_variants`; they are covered indirectly rather than not at all, by
+  the size and name assertions of the case above, which fail if a sixteenth
+  entry appears. Without this half, an entry added for a table the instrument
+  cannot determine would be invisible.
 - `StoreEquivalenceEndToEndTest.TwoRunsOfOneFixtureAreEquivalent` runs two full
   M1→M4→M5→M3 analyses of `semantic_zoo` in-process, against one materialized
   fixture and two store roots, and requires the two stores to compare
@@ -681,16 +744,34 @@ being shown to pass.
 
 ## 10. Where this record is indexed
 
-`docs/specs/milestones/README.md` indexes **approved design specifications**,
-one per milestone, with the milestone's implementation plan and issue beside
-them. It lists no measurement or acceptance record, and M13 has no row in it at
-all — M13 appears only in the plan matrix, `docs/plans/README.md`. There is
-therefore no convention of listing records of this class, and no index entry was
-added: putting a measurement record in a column headed "Design specification"
-would mislabel it, and inventing a column for one document is a repository
-decision rather than a task decision.
+The record is listed under the M13 row of
+[the plan matrix](../../plans/README.md), the table that already carries M13,
+rather than in `docs/specs/milestones/README.md`. That index holds **approved
+design specifications**, one per milestone, with the milestone's implementation
+plan and issue beside them; it lists no measurement or acceptance record, and
+M13 has no row in it at all. Putting this document in a column headed "Design
+specification" would mislabel it, and inventing a column for one document is a
+repository decision rather than a milestone decision. The docs-layout policy has
+no pattern for a record of this class either, so there was nothing to conform to.
 
-The record is instead referenced from the two places the projection is read:
-the comment above `kRecorded` in `src/summarydb/StoreEquivalence.cpp` and the
+An earlier version of this section drew the wrong conclusion from those correct
+facts: it treated "no convention exists" as a reason to add nothing, and said so.
+That is the defect the rest of this record exists to catch, in miniature — the
+observation was accurate and the consequence drawn from it was not. An artefact
+nobody knows how to place is a problem to solve, and leaving it unsolved is paid
+for by the next milestone: M14's plan has to cite this record (section 3.3 names
+the three tables its harness must expect), and a document reachable only by
+grepping for its filename is one the next plan author will paraphrase from
+memory instead — which is how this record's own corrections to round 3's prose
+would get re-introduced.
+
+In the source tree the record is cited from four places: the comment above
+`kRecorded` in `src/summarydb/StoreEquivalence.cpp`, the
 `ResolveTableProjection` declaration in
-`include/veritas/summarydb/StoreEquivalence.h`.
+`include/veritas/summarydb/StoreEquivalence.h`, the literal projection asserted
+by `StoreEquivalenceTest.TheRecordedProjectionIsExactlyTheMeasuredOne`, and the
+usage text of `src/tools/veritas-store-diff.cpp`. The last of those is the one
+this round changed: it used to name round 3's section 9.1 as the home of the
+projection, which is the list `wpa_component_states_v2`'s correction in section
+3.2 above supersedes — so the tool a reader consults to find the projection was
+pointing them at the version of it that is one column short.

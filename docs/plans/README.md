@@ -47,6 +47,14 @@ orchestration and M8R.5 mixed C/C++ qualification.
 | M14 | Planned | [plan](milestones/m14-scaling-corpus-regime-determination-implementation-plan.md) | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §7 | [#142](https://github.com/skg7on/VERITAS/issues/142) |
 | M15–M19 | Not yet planned | — | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §5 | [#140](https://github.com/skg7on/VERITAS/issues/140) (umbrella) |
 
+The M13 row has one artefact the other rows do not: the
+[store-equivalence acceptance record](../specs/milestones/m13-scale-profile-acceptance-record.md).
+It is the measurement that determines the projection `veritas-store-diff`
+compares with, the corrections it makes to round 3's section 9.1, and the two
+deviations M13's plan left superseded. It is a measurement record rather than a
+design specification, which is why it is listed here and not in the
+specification index. M14 and later milestones cite it from here.
+
 ## Execution Rule
 
 Implement one milestone per branch or PR. Do not start the next milestone until
