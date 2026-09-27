@@ -23,6 +23,8 @@
 #include <string>
 #include <system_error>
 
+#include <unistd.h>
+
 #include "veritas/core/Hash.h"
 #include "veritas/summarydb/MetadataStore.h"
 
@@ -52,6 +54,34 @@ bool RemoveFile(const fs::path& path) {
   return removed;
 }
 
+// `fs::temp_directory_path()` has the throwing overload too, and it is the same
+// `std::terminate` hazard as `fs::remove` above. With the two call sites below,
+// it was the last throwing filesystem call in this file. The failure it guards
+// against is not hypothetical: it is what a lost or unreadable `TMPDIR` looks
+// like, and a binary that aborts reports nothing about which case tripped.
+//
+// `ADD_FAILURE()` rather than `ASSERT_`, because this is called from `SetUp` as
+// well as from a test body and has to return a path either way. The empty path
+// a failure produces then fails the case at the point that uses it.
+fs::path TempDirectory() {
+  std::error_code error;
+  const auto path = fs::temp_directory_path(error);
+  if (error) {
+    ADD_FAILURE() << "cannot resolve the temporary directory: "
+                  << error.message();
+  }
+  return path;
+}
+
+// A per-process token for the temporary names below. A test name alone does not
+// distinguish two suites, and this repository runs several worktrees at once, so
+// two processes running this binary would otherwise share one fixture path —
+// and `SetUp` removes the path before use, which makes that not a stale file but
+// one process deleting another's store mid-test.
+std::string ProcessToken() {
+  return std::to_string(static_cast<unsigned long long>(::getpid()));
+}
+
 // SHA-256 of a file's bytes, for "did this change?" checks. Uses the same
 // hashing the project already depends on so no new dependency appears.
 std::string FileDigest(const fs::path& path) {
@@ -67,8 +97,8 @@ class StoreEquivalenceTest : public ::testing::Test {
   void SetUp() override {
     const auto* info =
         ::testing::UnitTest::GetInstance()->current_test_info();
-    db_path_ = fs::temp_directory_path() /
-               ("veritas_store_equiv_" + std::string(info->name()) + ".db");
+    db_path_ = TempDirectory() / ("veritas_store_equiv_" + ProcessToken() +
+                                  "_" + std::string(info->name()) + ".db");
     RemoveFile(db_path_);
   }
 
@@ -584,7 +614,11 @@ TEST_F(StoreEquivalenceTest, ExcludedColumnsAreRemovedFromTheDigest) {
 TEST_F(StoreEquivalenceTest, CompareStoreFilesAgreesWithCompareDumps) {
   MakeStore("n1");
   const auto path = db_path_;
-  const auto right_path = fs::temp_directory_path() / "veritas_store_equiv_right.db";
+  // Per-process for the reason `ProcessToken` gives: this path is a fixed name
+  // in a shared directory, and two suites running at once would otherwise
+  // compare one process's store against another's.
+  const auto right_path =
+      TempDirectory() / ("veritas_store_equiv_right_" + ProcessToken() + ".db");
   RemoveFile(right_path);
   // The two-argument `fs::copy_file` throws on failure, which under
   // `-fno-exceptions` is `std::terminate`: a failed copy would abort this binary

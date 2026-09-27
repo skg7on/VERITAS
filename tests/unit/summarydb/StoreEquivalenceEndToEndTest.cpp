@@ -16,6 +16,12 @@
 // same input publish equivalent content, asserted as a test rather than as a
 // shell transcript.
 //
+// "Content" is half the claim, so it is asserted and not assumed: two schema-
+// identical empty stores compare equal under any projection, so the case
+// asserts the fixture actually published facts and provenance *before* it
+// asserts the two runs agree. Without that half the test is satisfiable by a
+// pipeline that publishes nothing.
+//
 // It lives in its own translation unit because it links `veritas_analysis` as
 // well as `veritas_summarydb`, and because it is an integration test with a
 // per-test timeout — `StoreEquivalenceTest` links only the second and is
@@ -29,9 +35,12 @@
 
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <system_error>
+
+#include <unistd.h>
 
 #include "ProjectFixture.h"
 
@@ -54,12 +63,20 @@ TEST(StoreEquivalenceEndToEndTest, TwoRunsOfOneFixtureAreEquivalent) {
   ASSERT_FALSE(temp_error)
       << "cannot resolve the temporary directory: " << temp_error.message();
 
-  // Fixed paths, deliberately: a run that left a store behind must be measured
-  // against a fresh one or the comparison is against stale content, so the
-  // reset is asserted rather than hoped for. Each call gets its own error code,
-  // because one shared code would let the second call erase the first's.
-  const fs::path first_root = temp_root / "veritas_m13_e2e_first";
-  const fs::path second_root = temp_root / "veritas_m13_e2e_second";
+  // The names are per-process. A fixed name in the shared temporary directory
+  // is not safe here: this repository runs several worktrees at once, and two
+  // suites running this binary would otherwise clear each other's stores — which
+  // the reset below turns from a stale file into one process deleting another's
+  // store mid-analysis.
+  //
+  // The reset itself is still asserted rather than hoped for: a run that left a
+  // store behind must be measured against a fresh one, or the comparison is
+  // against stale content. Each call gets its own error code, because one shared
+  // code would let the second call erase the first's.
+  const std::string token =
+      std::to_string(static_cast<unsigned long long>(::getpid()));
+  const fs::path first_root = temp_root / ("veritas_m13_e2e_first_" + token);
+  const fs::path second_root = temp_root / ("veritas_m13_e2e_second_" + token);
   std::error_code first_clean_error;
   fs::remove_all(first_root, first_clean_error);
   ASSERT_FALSE(first_clean_error)
@@ -85,6 +102,37 @@ TEST(StoreEquivalenceEndToEndTest, TwoRunsOfOneFixtureAreEquivalent) {
                                        .output_root = second_root},
       analysis::AnalysisConfig::Default());
   ASSERT_TRUE(second.ok()) << second.status().message();
+
+  // Equality alone is satisfiable without publishing anything: two empty stores
+  // with the same schema take the same projection and compare equal, and this
+  // test would pass while proving nothing about content. So the claim is not
+  // "these two agree" but "these two agree *about published content*", and the
+  // content is asserted before the agreement is.
+  //
+  // The row counts are the fixture's, not literals, because what this test
+  // pins is that both runs published the same non-empty content — pinning the
+  // exact numbers would make it fail on an unrelated fixture edit and say
+  // nothing extra about equivalence. That the two stores carry the same *set* of
+  // tables is already asserted by the comparison's `left_only`/`right_only`
+  // being empty below.
+  const auto first_dump = summarydb::DumpStore(first_root / "metadata.db");
+  ASSERT_TRUE(first_dump.ok()) << first_dump.status().message();
+  const auto second_dump = summarydb::DumpStore(second_root / "metadata.db");
+  ASSERT_TRUE(second_dump.ok()) << second_dump.status().message();
+  EXPECT_GT(first_dump->tables.size(), 0u) << "the first store has no tables";
+  EXPECT_EQ(first_dump->tables.size(), second_dump->tables.size());
+
+  std::size_t fact_rows = 0;
+  std::size_t edge_rows = 0;
+  for (const auto& table : first_dump->tables) {
+    if (table.table == "analysis_facts") fact_rows = table.row_count;
+    if (table.table == "provenance_edges") edge_rows = table.row_count;
+  }
+  EXPECT_GT(fact_rows, 0u)
+      << "the first run published no facts, so the comparison below is vacuous";
+  EXPECT_GT(edge_rows, 0u)
+      << "the first run published no provenance, so the comparison below is "
+         "vacuous";
 
   const auto comparison =
       summarydb::CompareStoreFiles(first_root / "metadata.db",

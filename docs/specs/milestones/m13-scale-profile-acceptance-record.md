@@ -206,7 +206,7 @@ independent evidence that the published CPG content is unchanged.
 digest for these, so there was nothing to reproduce; each exclusion above is a
 wall-clock column measured to move in **both** pairs.
 
-### 3.2 The one correction to round 3's prose
+### 3.2 The correction to round 3's prose, and one correction withdrawn
 
 **Retraction: section 9.1's exclusion list for `wpa_component_states_v2` is
 incomplete, and the list it gives does not reproduce its own recorded digest.**
@@ -239,44 +239,126 @@ wall-clock `updated_at`", and the clause may have been meant to carry across —
 but the reconstruction is a guess and the measurement is not. The digest is the
 evidence, and it says four exclusions.
 
-A second, smaller discrepancy in the same sentence: section 9.1 attributes
-`engine_toolchain_identity` to `wpa_component_states_v2`. That table has no such
-column. It is a column of `wpa_component_result_cache_v2`, which is where this
-record places it, and where section 9.1's own digest for that table
-(`bf38b362…`) requires it.
+The `updated_at` finding is the only correction to section 9.1's exclusion lists.
+A first draft of this record also claimed that section 9.1 misassigns
+`engine_toolchain_identity` to `wpa_component_states_v2`. **That claim was false
+and is withdrawn.** Section 9.1
+(`docs/specs/veritas-build-analyze-round3-performance-design-spec.md:877-881`)
+assigns `run_id`, `result_cache_key` and `result_object_key` to
+`wpa_component_states_v2`, and `engine_toolchain_identity` plus those same two
+keys to `wpa_component_result_cache_v2` — which is where this record keeps it,
+following section 9.1. The column is carried by exactly two tables,
+`wpa_component_result_cache_v2` and `wpa_analysis_runs` (checked against the
+store's own schema, all 37 tables), and section 9.1 places it on the right one.
+
+The error was mine, not round 3's: a `PRAGMA` probe of the wrong table returned
+"no such column", and that was read as round 3 being wrong rather than the probe
+being wrong. It is recorded here rather than quietly deleted because this section
+is where a reader audits the rest of the record, and a correction that silently
+loses a correction is worse than one that shows its own — a reader who checked
+only this paragraph and found round 3 right would be entitled to discount the
+`updated_at` finding beside it, which is the real one.
 
 ### 3.3 What the measurement does **not** decide
 
-Seven of the fifteen entries carry an exclusion this measurement cannot confirm
-by column comparison: `run_id` and its derivatives on the three identity-bearing
-published tables and on `wpa_component_states_v2`, and
-`engine_toolchain_identity` on `wpa_component_result_cache_v2`. Plan Step 2 says
-"every column it does not report must not [be excluded]", and by that rule alone
-those exclusions would be removed. This record keeps them, and the reason is
-that the rule was written for a measurement that cannot see the case they exist
-for.
+**Eleven exclusions across five entries** cannot be confirmed by the
+column-by-column comparison of section 2. Named in full, because this is the
+list a reader audits the claim "no exclusion was added that no method measured"
+against, and a short list would make that claim look stronger than it is:
+
+| Entry | Exclusions section 2 cannot confirm |
+| --- | --- |
+| `run_fact_bindings` | `run_id`, `analyzer_run_id`, `binding_id` |
+| `provenance_nodes` | `run_id` |
+| `provenance_edges` | `run_id` |
+| `wpa_component_states_v2` | `run_id`, `result_cache_key`, `result_object_key` |
+| `wpa_component_result_cache_v2` | `engine_toolchain_identity`, `result_cache_key`, `result_object_key` |
+
+Eleven columns, five entries — not seven of anything. `result_cache_key` and
+`result_object_key` appear on two of those entries each and are easy to lose when
+the list is summarised as "`run_id` and its derivatives"; `analyzer_run_id` and
+`binding_id` are derived identities on the same footing as `run_id`. None of the
+eleven appears in section 2's `MOVES` output, so by Step 2's rule alone all
+eleven would be removed.
+
+Plan Step 2 says "every column it does not report must not [be excluded]", and
+the reason this record keeps them anyway is that the rule was written for a
+measurement that cannot see the case they exist for.
 
 `run_id` is a hash of the revision and build-variant ids, the summary, relation,
 rule-bundle and model-bundle versions, the two configuration hashes, the engine
 tag, and the **engine toolchain identity** — which binds the provenance digest of
-the compiled Soufflé runner and functor libraries. Two runs of one input in one
-build tree therefore have the *same* `run_id`, which is exactly what section 2
-measures: `run_id` is `run:a75a950c01963d81…` in both `semantic_zoo` stores. It
-is not that `run_id` is stable; it is that this pair cannot move it. Two
-*builds* of one input do move it, and that is the comparison the instrument
-exists for: the roadmap's section 6.2 makes `baseline` "the differential
-conformance oracle" against `scaled`, and section 6.1 states that `scaled` "opts
-into the structural changes of Stages 2–6" whose "structural stages change *how*
-identity is computed". A projection that kept `run_id` would report `differ` on
-the baseline-versus-scaled pair — the instrument would fail on its primary use
-case, and M14's harness would have to ignore it.
+the compiled Soufflé runner and functor libraries. The canonical encoding is
+`Canonicalize(AnalysisRunDescriptor)` in `src/facts/AnalysisRun.cpp`, whose last
+appended field is `engine_toolchain_identity`. Two runs of one input in one build
+tree therefore have the *same* `run_id`, which is exactly what section 2
+measures: `run_id` is
+`run:sha256:a75a950c01963d81ca86e1b4998269a452ebfdfaf8cc98353cf9c080622c30a6` in
+both `semantic_zoo` stores. It is not that `run_id` is stable; it is that this
+pair cannot move it. Two *builds* of one input do move it, and section 9.1 says
+so directly: "`run_id` and `engine_toolchain_identity` move between any two
+revisions built in this Debug configuration — no projection that keeps those
+columns can match across them". That is the comparison the instrument exists
+for: the roadmap's section 6.2 makes `baseline` "the differential conformance
+oracle" against `scaled`, and section 6.1 states that `scaled` "opts into the
+structural changes of Stages 2–6" whose "structural stages change *how* identity
+is computed". A projection that kept these columns would report `differ` on the
+baseline-versus-scaled pair — the instrument would fail on its primary use case,
+and M14's harness would have to ignore it.
 
-So these seven exclusions are *measured*, but by the digest-reproduction of
-section 3.1 rather than by section 2's column comparison: removing `run_id` from
-`run_fact_bindings`, or `engine_toolchain_identity` from
-`wpa_component_result_cache_v2`, does not reproduce section 9.1's recorded
-digests. That is a measurement, from round 3's stores, and it is the only
-evidence available on a machine that has one build tree.
+#### The eleven are pinned by a reproduction that is itself cross-build
+
+The reproductions of section 3.1 run on **this build's** store; round 3 supplies
+the digest *literal*. What the reproduction pins is round 3's **exclusion set**:
+`93c3aef6…` and `bf38b362…` are not reproduced without the columns above, so
+round 3's literals were computed with them excluded. The source is the literal;
+the object is this store, and the earlier draft of this paragraph had that
+backwards.
+
+The reproduction is stronger than "the same content, measured twice", and the
+reason is worth stating because it is the property M14's oracle depends on:
+
+> **This store's `engine_toolchain_identity` is
+> `souffle-14d108c0cf82e133b216cabafaa288d16d1a8a5b5e18374ab740d0e826e6d38c`.
+> Round 3's recorded value is `souffle-0ef51c2207f7a5aa…`, with
+> `souffle-e4135d90a5f5d329…` before it. They are different toolchain
+> identities.**
+
+So round 3's digests for `run_fact_bindings`, `provenance_nodes`,
+`provenance_edges`, `wpa_component_states_v2` and
+`wpa_component_result_cache_v2` reproduce byte for byte on a store built under a
+**different toolchain identity**. A digest that retained `run_id` or
+`engine_toolchain_identity` could not survive that gap, because both are
+functions of the identity that moved; these five do survive it. That is genuine
+cross-build evidence, taken from two different revisions of the toolchain rather
+than from two runs of one binary, and it is exactly the comparison the M14
+harness will make. It is also the reason the same-tree pair of section 2 could
+never have decided this question: `--scale-profile` is deliberately kept out of
+every canonical encoding, so even a baseline-versus-scaled pair in one build tree
+has one shared identity, and only a toolchain change can move it.
+
+#### The limit this leaves, stated rather than discovered later
+
+`wpa_analysis_runs` also carries `run_id` and `engine_toolchain_identity`, and
+**neither is excluded** — the table's entry excludes only the two wall-clock
+columns measured in section 2. Section 9.1 recorded no exclusion for it either.
+So on a pair whose toolchain identity moved, `veritas-store-diff` will report
+`wpa_analysis_runs` as `differ`: one table out of 37 where the report is identity
+rather than content.
+
+This one is **reasoned from the encoding, not observed**, and the distinction
+matters in a record that grades its other claims by how they were measured:
+`Canonicalize(AnalysisRunDescriptor)` in `src/facts/AnalysisRun.cpp` appends
+`engine_toolchain_identity` as its last field, `MakeAnalysisRun` sets
+`run_id = MakeStableId(kAnalysisRun, Canonicalize(descriptor))`, and neither
+column is in the table's exclusion set — so the table's digest must move
+whenever the toolchain identity does. No pair with a moved toolchain identity was
+available to observe it on; that is the same single-build-tree limit this whole
+section is about.
+
+It is left as measured rather than quietly widened, because excluding those two
+columns would be an exclusion neither method measured — the exact thing this
+section exists to refuse. M14's harness should expect it.
 
 ## 4. The comparison, and its exit code
 
@@ -459,11 +541,33 @@ being shown to pass.
 - `StoreEquivalenceEndToEndTest.TwoRunsOfOneFixtureAreEquivalent` runs two full
   M1→M4→M5→M3 analyses of `semantic_zoo` in-process, against one materialized
   fixture and two store roots, and requires the two stores to compare
-  equivalent. It passes in 8.3 s. With `revisions`' exclusion set to `{}` it
-  fails and names the table: `two runs of one fixture published different
-  content:` / `  differs: revisions (left 1 rows, right 1 rows)`. It is
-  registered with an explicit `add_test` and `TIMEOUT 300`, not with
-  `gtest_discover_tests`, which offers no per-test timeout.
+  equivalent. With `revisions`' exclusion set to `{}` it fails and names the
+  table: `two runs of one fixture published different content:` /
+  `  differs: revisions (left 1 rows, right 1 rows)`. It is registered with an
+  explicit `add_test` and `TIMEOUT 300`, not with `gtest_discover_tests`, which
+  offers no per-test timeout.
+
+  Two things it needs beyond a bare equality assertion, both because the claim
+  is about *published content*:
+
+  - **It asserts the content before it asserts the agreement.** Two
+    schema-identical empty stores take the same projection and compare equal, so
+    equality alone is satisfiable by a pipeline that publishes nothing. The case
+    dumps both stores and requires `analysis_facts` and `provenance_edges` to be
+    non-empty in the first. Applied as a control — pointing the row tally at a
+    name no table has — it fails with
+    `the first run published no facts, so the comparison below is vacuous`.
+  - **Its store roots are per-process.** The roots are fixed names in the shared
+    temporary directory otherwise, and this repository runs several worktrees at
+    once. The control is decisive: with the names shared, two concurrent runs of
+    the binary cannot both pass — one dies with
+    `Failed to open RocksDB: IO error: While lock file:
+    …/veritas_m13_e2e_first/objects/LOCK: Resource temporarily unavailable` in
+    under a second. With the names keyed to the process, two concurrent runs both
+    pass.
+
+  `StoreEquivalenceTest`'s own temporary paths are keyed the same way for the
+  same reason.
 
 ## 10. Where this record is indexed
 
