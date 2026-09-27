@@ -559,13 +559,29 @@ hashes agree had the same effective configuration. Echoing the fields
 individually would duplicate that and force this library to depend on the
 analysis library's config type.
 
-The one exception is `run_cpp_conformance_oracle`: no hash covers it, and it
-changes what the run *does* by executing a second full WPA and requiring the two
-canonical results to agree. It is therefore emitted explicitly as
+There are two exceptions, for reasons that are different in kind.
+`run_cpp_conformance_oracle` changes what the run *does* — it executes a second
+full WPA and requires the two canonical results to agree — and no hash covers it:
+that cannot be recovered from `svf_configuration_hash` or
+`wpa_configuration_hash`. It is therefore emitted explicitly as
 `config.conformance_oracle`. This is why the block carries
 `{ "metrics": {}, "conformance_oracle": false }` rather than the
-`{ "analysis": {}, "metrics": {} }` an earlier draft showed. **Durations are integer nanoseconds and
-never floating point.** A float's text form is a diff-noise and portability
+`{ "analysis": {}, "metrics": {} }` an earlier draft showed.
+
+`scale_profile` (`veritas::analysis::ScaleProfile`, default `baseline`) is
+uncovered **deliberately and temporarily**, and for the opposite reason: it is
+excluded so that introducing the field moves no identity, since appending it to
+`WpaConfigurationHash` would move `wpa_config_hash` for every existing run, and
+M13's contract is that no identity moves. It is not emitted either, because it
+cannot vary: M13 makes only `baseline` reachable at run time — `scaled` is
+rejected rather than silently doing nothing — so two runs can never differ in
+this knob alone, and the like-for-like hazard this section guards against does
+not arise. **M15 must append `scale_profile` to `WpaConfigurationHash` when it
+gives the value meaning.** Nothing in code enforces that, so it is recorded here
+and in the M13 acceptance record.
+
+**Durations are integer nanoseconds and never floating point.** A float's text
+form is a diff-noise and portability
 hazard, and byte-diffing is this file's purpose; the text report performs the
 human conversion.
 

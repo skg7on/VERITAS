@@ -17,6 +17,12 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <span>
+#include <string>
+
+#include "veritas/core/Hash.h"
 
 namespace veritas::summarydb {
 
@@ -48,19 +54,79 @@ using namespace veritas::summarydb;
 
 namespace {
 
+// This binary is built `-fno-exceptions`, so a throwing filesystem overload is
+// a `std::terminate` on failure that aborts the whole binary and takes every
+// other case's result with it, instead of reporting one failure. Every
+// filesystem call below uses the `std::error_code` overload the compilation
+// policy allows. `StoreEquivalenceTest` in this directory was swept for the
+// same class; this file was left behind.
+//
+// A missing path is not an error for `fs::remove`'s error_code overload — it
+// returns false and leaves the code clear — so `RemoveFile`'s `EXPECT_FALSE`
+// only fires on a real failure (a permission problem, or a directory passed by
+// mistake), which is a different event from "there was nothing to remove".
+// `EXPECT_` rather than `ASSERT_` because the assertion belongs to the caller,
+// and this helper is also called from `SetUp` and `TearDown`.
+bool RemoveFile(const std::filesystem::path& path) {
+  std::error_code error;
+  const bool removed = std::filesystem::remove(path, error);
+  EXPECT_FALSE(error) << "cannot remove " << path.string() << ": "
+                      << error.message();
+  return removed;
+}
+
+// `ADD_FAILURE()` rather than `ASSERT_`, because this is also called from
+// `SetUp` and has to return a path either way. On a failure the caller appends
+// a filename to the empty path and gets a *relative* one, so the store would
+// land in the process's working directory rather than failing at first use; the
+// case is still failed, by the `ADD_FAILURE` alone.
+std::filesystem::path TempDirectory() {
+  std::error_code error;
+  const auto path = std::filesystem::temp_directory_path(error);
+  if (error) {
+    ADD_FAILURE() << "cannot resolve the temporary directory: "
+                  << error.message();
+  }
+  return path;
+}
+
+// Whether `path` exists, with a stat failure reported rather than thrown. The
+// failure is the point: a bare `exists(p)` that cannot stat `p` reports "no
+// such file", which is exactly the answer a caller asking "did this create a
+// file?" must not be handed silently.
+bool PathExists(const std::filesystem::path& path) {
+  std::error_code error;
+  const bool present = std::filesystem::exists(path, error);
+  if (error) {
+    ADD_FAILURE() << "cannot stat " << path.string() << ": "
+                  << error.message();
+  }
+  return present;
+}
+
 std::filesystem::path TempDbPath() {
-  return std::filesystem::temp_directory_path() /
+  return TempDirectory() /
          ("veritas_metadata_test_" + std::to_string(::getpid()) + ".db");
+}
+
+// SHA-256 of a file's bytes, for "did this change?" checks. Uses the same
+// hashing the project already depends on so no new dependency appears.
+std::string FileDigest(const std::filesystem::path& path) {
+  std::ifstream in(path, std::ios::binary);
+  std::string bytes((std::istreambuf_iterator<char>(in)),
+                    std::istreambuf_iterator<char>());
+  return veritas::core::DigestToHex(veritas::core::ComputeSHA256(
+      std::as_bytes(std::span(bytes.data(), bytes.size()))));
 }
 
 class MetadataStoreTest : public ::testing::Test {
 protected:
   void SetUp() override {
     db_path_ = TempDbPath();
-    std::filesystem::remove(db_path_);
+    RemoveFile(db_path_);
   }
 
-  void TearDown() override { std::filesystem::remove(db_path_); }
+  void TearDown() override { RemoveFile(db_path_); }
 
   std::filesystem::path db_path_;
 };
@@ -287,7 +353,7 @@ TEST_F(MetadataStoreTest, MoveTransfersCachedStatementsAndEmptiesSource) {
 
   const std::filesystem::path replacement_path =
       db_path_.string() + ".replacement";
-  std::filesystem::remove(replacement_path);
+  RemoveFile(replacement_path);
   auto replacement = MetadataStore::Open(replacement_path);
   ASSERT_TRUE(replacement.ok()) << replacement.status().message();
   ASSERT_TRUE(replacement->Execute("CREATE TABLE discarded(value TEXT)", {})
@@ -303,7 +369,7 @@ TEST_F(MetadataStoreTest, MoveTransfersCachedStatementsAndEmptiesSource) {
   EXPECT_EQ(*rows, (std::vector<std::vector<std::string>>{
                        {"alpha"}, {"beta"}, {"gamma"}}));
 
-  std::filesystem::remove(replacement_path);
+  RemoveFile(replacement_path);
 }
 
 TEST_F(MetadataStoreTest, FailedCommitKeepsTransactionActiveUntilRollback) {
@@ -457,4 +523,53 @@ TEST_F(MetadataStoreTest, BulkInsertFlushOnAnEmptyBatchIsANoOp) {
   auto counted = store->Query("SELECT COUNT(*) FROM bulk_probe", {});
   ASSERT_TRUE(counted.ok());
   EXPECT_EQ((*counted)[0][0], "0");
+}
+
+// An inspection tool must not create a store as a side effect of looking for
+// one, or a typo in a path silently produces an empty store that compares equal
+// to nothing and reports success.
+TEST_F(MetadataStoreTest, OpenReadOnlyDoesNotCreateAMissingStore) {
+  const auto path = db_path_;
+  RemoveFile(path);
+  const auto store = MetadataStore::OpenReadOnly(path);
+  EXPECT_FALSE(store.ok());
+  EXPECT_EQ(store.status().code(), veritas::StatusCode::kNotFound);
+  EXPECT_FALSE(PathExists(path))
+      << "OpenReadOnly created the file it was asked to read";
+}
+
+// Opening a real store for reading must leave every byte alone. Comparing a
+// digest of the file before and after is the only check that catches a schema
+// migration that happens to be idempotent in content but writes anyway.
+TEST_F(MetadataStoreTest, OpenReadOnlyLeavesTheStoreByteIdentical) {
+  const auto path = db_path_;
+  {
+    auto store = MetadataStore::Open(path);
+    ASSERT_TRUE(store.ok()) << store.status().message();
+    ASSERT_TRUE(store->Execute("CREATE TABLE probe (a TEXT)", {}).ok());
+    ASSERT_TRUE(store->Execute("INSERT INTO probe (a) VALUES ('x')", {}).ok());
+  }
+
+  const auto before = FileDigest(path);
+  // A digest helper that ignored its input would make the check below vacuous:
+  // a path that does not exist reads as zero bytes.
+  EXPECT_NE(before,
+            FileDigest(std::filesystem::path(path.string() + ".absent")));
+  {
+    // Not `const`: StatusOr's const operator-> yields a `const T*`, and both
+    // Query and Execute are non-const members (Query caches its statements).
+    auto ro = MetadataStore::OpenReadOnly(path);
+    ASSERT_TRUE(ro.ok()) << ro.status().message();
+    const auto rows = ro->Query("SELECT a FROM probe", {});
+    ASSERT_TRUE(rows.ok()) << rows.status().message();
+    ASSERT_EQ(rows->size(), 1u);
+    EXPECT_EQ((*rows)[0][0], "x");
+
+    // A store opened "read only" that accepts a write is not an instrument, so
+    // the flag must be enforced by SQLite rather than merely documented. This
+    // probe also tells the digest comparison below what to blame when it fails.
+    EXPECT_FALSE(ro->Execute("INSERT INTO probe (a) VALUES ('y')", {}).ok())
+        << "a read-only store accepted a write";
+  }
+  EXPECT_EQ(FileDigest(path), before) << "OpenReadOnly wrote to the store";
 }

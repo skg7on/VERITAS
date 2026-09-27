@@ -58,3 +58,32 @@ target_link_libraries(DependencyIndexTest PRIVATE
 )
 veritas_add_warnings(DependencyIndexTest)
 gtest_discover_tests(DependencyIndexTest DISCOVERY_TIMEOUT 60)
+
+add_executable(StoreEquivalenceTest StoreEquivalenceTest.cpp)
+target_link_libraries(StoreEquivalenceTest PRIVATE
+  veritas_summarydb
+  GTest::gtest_main
+)
+veritas_add_warnings(StoreEquivalenceTest)
+gtest_discover_tests(StoreEquivalenceTest DISCOVERY_TIMEOUT 60)
+
+# The end-to-end case runs two full M1->M4->M5->M3 analyses in-process, so it
+# links `veritas_analysis` as well and needs a per-test timeout.
+# `gtest_discover_tests` cannot give one — it registers its cases with the
+# default timeout — hence the explicit `add_test` + `set_tests_properties`
+# form. The two together would double-register, so only one of them is used.
+add_executable(StoreEquivalenceEndToEndTest StoreEquivalenceEndToEndTest.cpp)
+target_link_libraries(StoreEquivalenceEndToEndTest PRIVATE
+  veritas_analysis
+  veritas_summarydb
+  veritas_test_support
+  GTest::gtest_main
+)
+veritas_add_warnings(StoreEquivalenceEndToEndTest)
+add_test(NAME StoreEquivalenceEndToEndTest
+  COMMAND StoreEquivalenceEndToEndTest
+)
+set_tests_properties(StoreEquivalenceEndToEndTest PROPERTIES
+  TIMEOUT 300
+  LABELS "integration;analysis;summarydb"
+)

@@ -17,6 +17,8 @@
 #include <sqlite3.h>
 
 #include <cstddef>
+#include <string>
+#include <system_error>
 #include <utility>
 
 #include "schema_v1.h"
@@ -134,6 +136,49 @@ MetadataStore::Open(const std::filesystem::path &db_path) {
     return status;
   }
 
+  return MetadataStore(db);
+}
+
+StatusOr<MetadataStore>
+MetadataStore::OpenReadOnly(const std::filesystem::path &db_path) {
+  // Check the path before SQLite sees it. SQLITE_OPEN_READONLY already refuses
+  // to create a database, but it reports that as "unable to open database
+  // file", which names neither the file nor the reason.
+  //
+  // "Cannot stat the path" is reported separately from "nothing is there",
+  // because they are different events and only one of them is about the store.
+  // Collapsing them (`!exists(path, error) || error`) told a caller that a
+  // present-but-unreadable store — `EACCES`, `ENOTDIR` — did not exist, which
+  // is the wrong diagnosis even though every caller here maps both to a
+  // failure.
+  std::error_code error;
+  const bool present = std::filesystem::exists(db_path, error);
+  if (error) {
+    return Status::Internal("cannot stat " + db_path.string() + ": " +
+                            error.message());
+  }
+  if (!present) {
+    return Status::NotFound("no metadata store at " + db_path.string());
+  }
+
+  sqlite3 *db = nullptr;
+  int rc = sqlite3_open_v2(db_path.string().c_str(), &db, SQLITE_OPEN_READONLY,
+                           nullptr);
+  if (rc != SQLITE_OK) {
+    std::string reason = db ? sqlite3_errmsg(db) : "out of memory";
+    if (db) {
+      sqlite3_close(db);
+    }
+    return Status::Internal("Failed to open SQLite database read-only: " +
+                            reason);
+  }
+
+  // Deliberately no ApplySchema() and no `PRAGMA foreign_keys = ON`: an
+  // instrument that migrates the artifact it measures is not an instrument.
+  // `Open` leaves the schema to its callers, so a read-only connection has
+  // nothing to migrate; a store older than the current schema version is read
+  // as it is and reports what it actually contains rather than being upgraded
+  // as a side effect of being inspected.
   return MetadataStore(db);
 }
 

@@ -45,6 +45,20 @@ enum class WpaEngineMode : std::uint8_t {
   kCppEmergency,
 };
 
+// The scale profile selects which structural implementation of the analysis
+// pipeline a run uses. `kBaseline` is today's implementation and the default.
+// `kScaled` is reserved for the M15-M19 changes specified in
+// docs/plans/veritas-scaling-milestone-roadmap.md; until those land,
+// `veritas-build analyze` rejects it rather than silently doing nothing.
+//
+// This value is deliberately absent from WpaConfigurationHash and every other
+// canonical config encoding: it must not move any identity until the milestone
+// that gives it meaning also versions the identity it changes.
+enum class ScaleProfile : std::uint8_t {
+  kBaseline = 0,
+  kScaled = 1,
+};
+
 // AnalysisConfig provides budget and tuning parameters for project analysis
 struct AnalysisConfig {
   std::chrono::seconds svf_soft_analysis_budget;
@@ -54,6 +68,7 @@ struct AnalysisConfig {
   bool svf_field_sensitive;
 
   WpaEngineMode wpa_engine;
+  ScaleProfile scale_profile;
   std::chrono::milliseconds wpa_component_timeout;
   std::uint64_t wpa_component_memory_mb;
   std::uint32_t wpa_threads;
@@ -93,10 +108,15 @@ struct ProjectAnalysisResult {
   // The run's coordinates and configuration identity, surfaced so the
   // reporting layer can record what the run actually ran under without
   // reaching into the store. Between them the two configuration hashes cover
-  // every AnalysisConfig field, the toolchain identity names the engine the run
-  // executed, and the batch id names the fact batch it published. Two runs with
-  // different `--wpa-engine`, `--field-sensitive`, or `--max-alias-pairs`
-  // values differ in these strings, and in nothing else a caller can see.
+  // every AnalysisConfig field except two, for different reasons:
+  // `run_cpp_conformance_oracle` changes what the run does — a second full WPA
+  // whose canonical results must agree — and is recoverable from neither hash,
+  // and `scale_profile` is deliberately kept out of every canonical encoding so
+  // that introducing the field moves no identity. The toolchain identity names
+  // the engine the run executed, and the batch id names the fact batch it
+  // published. Two runs with different `--wpa-engine`, `--field-sensitive`, or
+  // `--max-alias-pairs` values differ in these strings, and in nothing else a
+  // caller can see.
   //
   // They are not `run_id`'s input list. `run_id` hashes ten descriptor fields
   // (the revision and build-variant ids, the summary, relation, rule-bundle and

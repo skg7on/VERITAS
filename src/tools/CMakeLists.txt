@@ -14,11 +14,13 @@
 
 # src/tools/CMakeLists.txt
 #
-# Four VERITAS CLI binaries. At M0 each one only implements `--version`; the
-# real ingest / query / diff / explain flows arrive with later milestones.
-# Every CLI links veritas_core and picks up the shared warning contract.
+# Five VERITAS CLI binaries. At M0 each one only implemented `--version`; the
+# real ingest / query / diff / explain flows arrived with later milestones, and
+# veritas-store-diff with M13's store-equivalence instrument. Every CLI links
+# veritas_core and picks up the shared warning contract.
 
-foreach(_veritas_cli veritas-build veritas-query veritas-diff veritas-explain)
+foreach(_veritas_cli veritas-build veritas-query veritas-diff veritas-explain
+        veritas-store-diff)
   add_executable(${_veritas_cli} "${_veritas_cli}.cpp")
   target_link_libraries(${_veritas_cli} PRIVATE veritas_core)
   veritas_add_warnings(${_veritas_cli})
@@ -39,6 +41,10 @@ target_link_libraries(veritas-query PRIVATE veritas_cpg veritas_summarydb
 # veritas-diff diffs two summaries and reports the impacted consumers through
 # the reverse dependency index.
 target_link_libraries(veritas-diff PRIVATE veritas_summarydb)
+
+# veritas-store-diff compares two store roots table by table, using the
+# determined projection M13 recorded for baseline-equivalence checks.
+target_link_libraries(veritas-store-diff PRIVATE veritas_summarydb)
 
 # veritas-explain explains a fact's provenance from the M9 fact store.
 target_link_libraries(veritas-explain PRIVATE veritas_facts)

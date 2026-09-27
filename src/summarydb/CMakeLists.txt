@@ -35,6 +35,7 @@ add_library(veritas_summarydb
   SummaryRepository.cpp
   SummaryDelta.cpp
   DependencyIndex.cpp
+  StoreEquivalence.cpp
 )
 
 # Embed schema/v1.sql and schema/v2.sql as compile-time strings so ApplySchema

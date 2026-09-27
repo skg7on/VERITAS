@@ -47,6 +47,7 @@ constexpr std::string_view kUsage =
     "  veritas-build --version\n"
     "  veritas-build analyze --project <directory> [--output <directory>]\n"
     "      [--wpa-engine souffle|cpp-emergency]\n"
+    "      [--scale-profile baseline|scaled]\n"
     "      [--field-sensitive true|false] [--max-alias-pairs <n>]\n"
     "      [--metrics true|false] [--metrics-interval-ms <n>]\n"
     "      [--metrics-top-n <k>] [--metrics-series true|false]\n"
@@ -54,12 +55,18 @@ constexpr std::string_view kUsage =
     "\n"
     "`analyze` is the only source-input command. No `--compile-db`,\n"
     "`--manifest`, `--bitcode`, `--llvm-module`, or `--svf-input` alternative\n"
-    "is accepted; the project directory is the sole public source-input.\n";
+    "is accepted; the project directory is the sole public source-input.\n"
+    "\n"
+    "`--scale-profile` defaults to `baseline`, which is the current\n"
+    "implementation. `scaled` is reserved for the scaling milestones and is\n"
+    "rejected until one lands; see\n"
+    "docs/plans/veritas-scaling-milestone-roadmap.md.\n";
 
 struct AnalyzeArguments {
   fs::path project;
   fs::path output;
   std::string wpa_engine = "souffle";
+  std::string scale_profile = "baseline";
   bool field_sensitive = true;
   std::size_t max_alias_pairs = 0;  // 0 = keep the AnalysisConfig default
   bool metrics = true;
@@ -190,6 +197,14 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
             "--wpa-engine must be souffle or cpp-emergency");
       }
       parsed.wpa_engine = *value;
+    } else if (arg == "--scale-profile") {
+      auto value = take_value(i, "--scale-profile");
+      if (!value.ok()) return value.status();
+      if (*value != "baseline" && *value != "scaled") {
+        return veritas::Status::InvalidArgument(
+            "--scale-profile must be baseline or scaled, got: " + *value);
+      }
+      parsed.scale_profile = *value;
     } else if (arg == "--field-sensitive") {
       auto value = take_value(i, "--field-sensitive");
       if (!value.ok()) return value.status();
@@ -427,9 +442,13 @@ std::vector<std::size_t> FillReport(
   report->identity.engine_toolchain_identity = result.engine_toolchain_identity;
   report->identity.batch_id = result.batch_id;
 
-  // The one analysis knob no configuration hash covers: it changes what the run
-  // does by executing a second full WPA whose canonical results must agree, and
-  // neither svf_config_hash nor wpa_config_hash moves for it (design 6.3).
+  // Two analysis knobs no configuration hash covers, for different reasons.
+  // `conformance_oracle` changes what the run does by executing a second full
+  // WPA whose canonical results must agree, and neither svf_config_hash nor
+  // wpa_config_hash moves for it. `scale_profile` is uncovered deliberately and
+  // temporarily, so that introducing the field moves no identity; only
+  // `baseline` is reachable at run time until a scaling milestone lands. Both
+  // are recorded in design 6.3.
   report->conformance_oracle = config.run_cpp_conformance_oracle;
 
   veritas::observability::FillEnvironment(&report->environment);
@@ -617,6 +636,21 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
   if (parsed->max_alias_pairs != 0) {
     config.svf_max_alias_pairs = parsed->max_alias_pairs;
   }
+  if (parsed->scale_profile == "scaled") {
+    return veritas::Status::FailedPrecondition(
+        "--scale-profile=scaled has no implemented changes yet, so this run "
+        "would silently do nothing different from baseline. The scaled profile "
+        "is specified in docs/plans/veritas-scaling-milestone-roadmap.md and "
+        "becomes usable when its first structural milestone lands.");
+  }
+  // Unreachable for `scaled` while the rejection above stands. It is kept so
+  // the field is wired to the flag rather than merely declared: the milestone
+  // that implements `scaled` deletes the rejection and needs no other change
+  // here. `scale_profile` is deliberately in no configuration hash, so this
+  // assignment moves no identity.
+  config.scale_profile =
+      parsed->scale_profile == "scaled" ? veritas::analysis::ScaleProfile::kScaled
+                                        : veritas::analysis::ScaleProfile::kBaseline;
 
   // The recorder is built before any ingest, and the "run" root opens
   // immediately after it, so that root encloses the whole command — including

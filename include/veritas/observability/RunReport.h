@@ -141,11 +141,15 @@ struct RunReport {
   RunInventory inventory;
   StoreSummary store;
   core::RunMetricsOptions metrics_options;
-  // The one analysis-config knob no configuration hash covers. It changes what
-  // the run does — a second full WPA whose canonical results must agree — so a
-  // reader comparing two artifacts needs it, and cannot recover it from
-  // svf_config_hash or wpa_config_hash. Every other AnalysisConfig field IS
-  // covered by one of those two hashes; see design section 6.3.
+  // Two knobs here are not covered by any configuration hash, for different
+  // reasons. `conformance_oracle` changes what the run does — a second full WPA
+  // whose canonical results must agree — and cannot be recovered from
+  // svf_config_hash or wpa_config_hash. `scale_profile` is uncovered
+  // *deliberately and temporarily*, so that introducing the field moves no
+  // identity; the milestone that gives its value meaning must append it to
+  // WpaConfigurationHash. Until then, only `baseline` is reachable at run time,
+  // so the knob cannot vary and two runs can never differ in it alone. See
+  // design section 6.3.
   bool conformance_oracle = false;
   core::RunMetricsStats metrics;
 };

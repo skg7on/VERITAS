@@ -69,6 +69,7 @@ AnalysisConfig AnalysisConfig::Default() {
       .svf_max_alias_pairs = svf_config.max_alias_pairs,
       .svf_field_sensitive = svf_config.field_sensitive,
       .wpa_engine = WpaEngineMode::kSouffle,
+      .scale_profile = ScaleProfile::kBaseline,
       .wpa_component_timeout = std::chrono::seconds(30),
       .wpa_component_memory_mb = 0,
       .wpa_threads = 1,

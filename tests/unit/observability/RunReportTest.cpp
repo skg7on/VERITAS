@@ -585,8 +585,12 @@ TEST(RunReportTest, EmitsTheConformanceOracleFlag) {
 
 TEST(RunReportTest, ConfigBlockCarriesNoAnalysisObject) {
   // RunReport does not depend on the analysis library, so the analysis
-  // configuration cannot be emitted; the two configuration hashes cover every
-  // AnalysisConfig field but `conformance_oracle`, which sits beside them.
+  // configuration cannot be emitted. Two AnalysisConfig fields sit beside the
+  // hashes instead, for different reasons: `conformance_oracle` because it
+  // changes what the run does (a second full WPA whose canonical results must
+  // agree) and is recoverable from neither hash, and `scale_profile` because it
+  // is deliberately kept out of every hash so that introducing the field moves
+  // no identity.
   auto parsed = llvm::json::parse(RenderRunReportJson(MakeFixtureReport()));
   ASSERT_TRUE(static_cast<bool>(parsed));
   const llvm::json::Object* root = parsed->getAsObject();
