@@ -100,6 +100,23 @@ CMake/Ninja, GoogleTest. No RTTI, no exceptions.
   - `RowArena::AppendKey(RowHandle, std::string*) const -> Status`
   - `RowArena::RowEquals(RowHandle, RowHandle) const -> bool`
   - `RowArena::size() const -> std::size_t`, `bytes() const -> std::size_t`
+  - `facts::FactHandles` and `facts::WitnessHandles` — the sub-ranges one
+    appended entry occupies, so a reader can address a row rather than the entry
+    around it.
+  - Payload-level forms, so a fact id and a whole witness edge are stored and
+    recovered as one unit: `AppendFact(const AnalysisFact&) -> StatusOr<FactHandles>`,
+    `DecodeFact(RowHandle entry) const -> StatusOr<AnalysisFact>`,
+    `AppendWitness(const WitnessEdge&) -> StatusOr<WitnessHandles>`,
+    `DecodeWitness(RowHandle entry) const -> StatusOr<WitnessEdge>`.
+  - `RowArena::handle_at(std::size_t index) const -> StatusOr<RowHandle>`.
+  - `RowArena::RowsEqual(const RowArena&, RowHandle, const RowArena&, RowHandle) -> bool`
+    — the cross-arena row comparison Task 4 needs, since a published fact's row
+    and a witness's result row live in different arenas.
+  - `facts::AnalysisFactRange` and `facts::WitnessRange` — decoded views with
+    `begin()`, `end()`, `size()`, `empty()`, yielding one entry per step. Each
+    iterator also exposes `handle()` (the entry) and the row handles its entry
+    carries, so a caller that needs only identity (Task 4) never decodes. Task 2
+    and Task 3 consume these and define no second pair.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -141,10 +158,10 @@ std::vector<SemanticRow> Corpus() {
       {fn, analysis::semantic::DispatchKind::kDirect}});
   rows.push_back(SemanticRow{
       RelationId::kReachableCall,
-      {fn, analysis::semantic::AliasKind::kMay}});
+      {fn, analysis::semantic::AliasKind::kMayAlias}});
   rows.push_back(SemanticRow{
       RelationId::kReachableCall,
-      {fn, analysis::semantic::ByteRangeKind::kBounded}});
+      {fn, analysis::semantic::ByteRangeKind::kKnown}});
   rows.push_back(SemanticRow{
       RelationId::kReachableCall,
       {fn, analysis::semantic::EpistemicState::kMust}});
@@ -213,6 +230,61 @@ TEST(RowArenaTest, HandlesSurviveReallocation) {
   EXPECT_EQ(*decoded, Corpus().front());
 }
 
+TEST(RowArenaTest, PayloadFormsRoundTripAFactAndAWitness) {
+  auto fact = MakeFact(Corpus().front());
+  ASSERT_TRUE(fact.ok()) << fact.status().message();
+
+  RowArena facts;
+  auto fact_handles = facts.AppendFact(*fact);
+  ASSERT_TRUE(fact_handles.ok()) << fact_handles.status().message();
+  auto decoded_fact = facts.DecodeFact(fact_handles->entry);
+  ASSERT_TRUE(decoded_fact.ok()) << decoded_fact.status().message();
+  EXPECT_EQ(decoded_fact->fact_id, fact->fact_id);
+  EXPECT_EQ(decoded_fact->row, fact->row);
+
+  // The row sub-range must name the row, not the entry: Task 4 compares a
+  // published fact's row against a witness's result row, and only a row
+  // spelling decodes as a row.
+  auto row_only = facts.Decode(fact_handles->row);
+  ASSERT_TRUE(row_only.ok()) << row_only.status().message();
+  EXPECT_EQ(*row_only, fact->row);
+
+  const WitnessEdge edge{.result = SemanticKey{Corpus()[0]},
+                         .rule_id = "direct",
+                         .derivation_key = "d",
+                         .input = SemanticKey{Corpus()[1]},
+                         .input_ordinal = 2};
+  RowArena witnesses;
+  auto edge_handles = witnesses.AppendWitness(edge);
+  ASSERT_TRUE(edge_handles.ok()) << edge_handles.status().message();
+  auto decoded_edge = witnesses.DecodeWitness(edge_handles->entry);
+  ASSERT_TRUE(decoded_edge.ok()) << decoded_edge.status().message();
+  EXPECT_EQ(*decoded_edge, edge);
+
+  // Cross-arena comparison, which is the shape validation uses: the witness's
+  // result row equals the fact's row when both name the same row, and differs
+  // when they do not.
+  EXPECT_TRUE(RowArena::RowsEqual(witnesses, edge_handles->result_row, facts,
+                                  fact_handles->row));
+  EXPECT_FALSE(RowArena::RowsEqual(witnesses, edge_handles->input_row, facts,
+                                   fact_handles->row));
+}
+
+TEST(RowArenaTest, HandleAtAddressesAnEntryByPosition) {
+  RowArena arena;
+  for (const SemanticRow& row : Corpus()) {
+    ASSERT_TRUE(arena.Append(row).ok());
+  }
+  for (std::size_t i = 0; i < Corpus().size(); ++i) {
+    auto handle = arena.handle_at(i);
+    ASSERT_TRUE(handle.ok()) << handle.status().message();
+    auto decoded = arena.Decode(*handle);
+    ASSERT_TRUE(decoded.ok());
+    EXPECT_EQ(*decoded, Corpus()[i]);
+  }
+  EXPECT_FALSE(arena.handle_at(Corpus().size()).ok());
+}
+
 }  // namespace
 }  // namespace veritas::facts
 ```
@@ -275,6 +347,22 @@ struct RowHandle {
   std::uint64_t size = 0;
 };
 
+// The sub-ranges one appended fact occupies. `entry` spans the id and the row;
+// `row` spans only the row, which is what a comparison addresses.
+struct FactHandles {
+  RowHandle entry;
+  RowHandle row;
+};
+
+// The sub-ranges one appended witness occupies. A witness stores three rows'
+// worth of content in one entry, so a reader that needs the result row or the
+// input row addresses it directly rather than decoding the edge.
+struct WitnessHandles {
+  RowHandle entry;
+  RowHandle result_row;
+  RowHandle input_row;
+};
+
 class RowArena {
  public:
   // Appends one row and returns its handle. Fails with InvalidArgument when a
@@ -297,12 +385,54 @@ class RowArena {
   // give without a third state on its interface.
   bool RowEquals(RowHandle left, RowHandle right) const;
 
-  std::size_t size() const { return handles_.size(); }
+  // Payload-level forms. A fact entry stores its id and then its row; a witness
+  // entry stores its result row, rule id, input row and ordinal. Each returns
+  // the sub-range of every row it stored, because a reader that compares rows
+  // must address a row and not the entry around it.
+  StatusOr<FactHandles> AppendFact(const AnalysisFact& fact);
+  StatusOr<WitnessHandles> AppendWitness(const WitnessEdge& edge);
+  StatusOr<AnalysisFact> DecodeFact(RowHandle entry) const;
+  StatusOr<WitnessEdge> DecodeWitness(RowHandle entry) const;
+
+  // The entry handle of the index-th stored entry, so a caller can address an
+  // entry without decoding it. Fails with InvalidArgument past the end.
+  StatusOr<RowHandle> handle_at(std::size_t index) const;
+
+  // Row sub-ranges by position, for the payload kinds whose entries hold more
+  // than one row. A caller that compares rows uses these instead of decoding.
+  // Each fails with InvalidArgument past the end or when the entry was appended
+  // as a different payload kind.
+  StatusOr<RowHandle> fact_row_handle_at(std::size_t index) const;
+  StatusOr<RowHandle> witness_result_row_handle_at(std::size_t index) const;
+  StatusOr<RowHandle> witness_input_row_handle_at(std::size_t index) const;
+
+  // Compares two rows that may live in different arenas, which `RowEquals`
+  // cannot: a batch compares a published fact's row against a witness's result
+  // row, and those are stored in the facts arena and the witnesses arena
+  // respectively. Valid because both arenas encode rows identically.
+  static bool RowsEqual(const RowArena& left, RowHandle left_row,
+                        const RowArena& right, RowHandle right_row);
+
+  std::size_t size() const { return entries_.size(); }
   std::size_t bytes() const { return buffer_.size(); }
 
  private:
+  // One record per appended entry. `kind` distinguishes a bare row from a fact
+  // or witness payload, so a row-only accessor rejects the wrong entry kind
+  // instead of reading bytes that mean something else.
+  enum class EntryKind : std::uint8_t { kRow, kFact, kWitness };
+
+  struct Entry {
+    RowHandle entry;
+    EntryKind kind = EntryKind::kRow;
+    // The row itself; for a witness, its result row.
+    RowHandle first_row;
+    // The witness's input row. Unset for kRow and kFact.
+    RowHandle second_row;
+  };
+
   std::string buffer_;
-  std::vector<RowHandle> handles_;
+  std::vector<Entry> entries_;
 };
 
 }  // namespace veritas::facts
@@ -321,7 +451,9 @@ to this file; the tag order mirrors the `SemanticCellValue` alternative order.
 #include "veritas/facts/RowArena.h"
 
 #include <array>
+#include <cstddef>
 #include <cstring>
+#include <string_view>
 #include <variant>
 
 #include "veritas/core/Hash.h"
@@ -484,7 +616,7 @@ cmake --build --preset default --target RowArenaTest
 ./build/bin/RowArenaTest
 ```
 
-Expected: 5 tests pass. Then confirm the encoders the arena shares still pass,
+Expected: 7 tests pass. Then confirm the encoders the arena shares still pass,
 because `RowArena.cpp` includes `SemanticKeyCodec.h` and `Witness.cpp`'s key
 encoder is the oracle `AppendKey` is tested against:
 
@@ -569,8 +701,10 @@ no `begin()`/`end()` iterator pair of the required shape.
 
 - [ ] **Step 3: Change `WpaComponentResult`**
 
-In `include/veritas/wpa/WpaComponent.h`, replace the two payload members and add
-the range type:
+`AnalysisFactRange` and `WitnessRange` are already declared in
+`include/veritas/facts/RowArena.h` by Task 1, which is the only place either is
+defined; this task consumes them and does not redeclare them. In
+`include/veritas/wpa/WpaComponent.h`, replace the two payload members:
 
 ```cpp
 // A decoded view over an arena-backed payload. Yields one row per step and
@@ -599,8 +733,10 @@ struct WpaComponentResult {
 };
 ```
 
-`WitnessRange` is the same shape over `WitnessEdge`; define both in `RowArena.h`
-so Task 3's batch reuses them rather than declaring a second pair.
+Both range types, and the four payload-level arena methods this task calls
+(`AppendFact`, `DecodeFact`, `AppendWitness`, `DecodeWitness`), are Task 1's
+deliverables — see its Steps 3-4. If the implementer finds them missing, the
+correct move is to check Task 1 landed rather than to add a second copy here.
 
 - [ ] **Step 4: Update the canonicalizer's return path**
 
@@ -634,11 +770,11 @@ StatusOr<WpaComponentResult> MakeResult(const WpaLogicalComponentInput& logical,
 }
 ```
 
-Add `RowArena::AppendWitness(const WitnessEdge&) -> Status` and
-`AppendFact(const AnalysisFact&) -> Status` to Task 1's arena so both payloads
-encode ids alongside rows; `AppendFact` writes the fact id then the row,
-`AppendWitness` writes the result row, the rule id, the input row, and the
-ordinal. Decoding is symmetric (`DecodeFact`, `DecodeWitness`).
+`AppendFact`, `AppendWitness`, `DecodeFact` and `DecodeWitness` are Task 1's,
+tested there; this step only calls them. `AppendFact` stores the fact id
+alongside the row, and `AppendWitness` stores the result row, the rule id, the
+input row, and the ordinal, so a decoded value carries every field the rich
+types carry.
 
 - [ ] **Step 5: Update `SuccessorSupport` and the repository**
 
@@ -757,6 +893,27 @@ struct AnalysisFactBatch {
   WitnessRange witnesses() const { return WitnessRange(&witnesses_); }
   std::size_t fact_count() const { return facts_.size(); }
   std::size_t witness_count() const { return witnesses_.size(); }
+
+  // Row-level handles by position, forwarded to the owning arena. Each
+  // accessor names its arena, so the returned handles are unambiguous and a
+  // comparison needs no arena argument. Validation uses these to compare stored
+  // bytes instead of decoding rows.
+  StatusOr<RowHandle> fact_row_handle_at(std::size_t index) const {
+    return facts_.fact_row_handle_at(index);
+  }
+  StatusOr<RowHandle> witness_result_row_handle_at(std::size_t index) const {
+    return witnesses_.witness_result_row_handle_at(index);
+  }
+  StatusOr<RowHandle> witness_input_row_handle_at(std::size_t index) const {
+    return witnesses_.witness_input_row_handle_at(index);
+  }
+
+  // Compares a published fact's row against a witness's result or input row.
+  // The argument order is the arena order, so a caller cannot silently compare
+  // two rows of the same kind.
+  bool RowsEqual(RowHandle fact_row, RowHandle witness_row) const {
+    return RowArena::RowsEqual(facts_, fact_row, witnesses_, witness_row);
+  }
 
   // Builder side. The arena is append-only, so these replace the whole payload.
   void SetFacts(const std::vector<AnalysisFact>& facts);
@@ -961,9 +1118,23 @@ and must produce the same `processed` count, hence the same cycle rejection.
 
 - [ ] **Step 5: Compare rows through the arena**
 
-The two row comparisons that today decode both sides become
-`arena.RowEquals(handle_a, handle_b)` on the handles the fact index stored, so
-no row is decoded during validation.
+The two row comparisons that today compare decoded rows —
+`batch.facts[result_it->second].row != edge.result.row` and its input twin —
+become handle comparisons, so no row is decoded during validation. The index
+stores fact positions, and the batch resolves a position to a handle:
+
+```cpp
+// The published row at this position, and the witness endpoint's own row,
+// compared as encoded bytes rather than as materialised rows.
+auto published = batch.fact_row_handle_at(result_it->second);
+if (!published.ok()) return published.status();
+if (!batch.RowsEqual(*published, endpoint_row)) { /* as today */ }
+```
+
+`endpoint_row` is the witness's result row handle, taken from the range
+iterator (`result_row_handle()`), so the edge is never decoded. `RowsEqual`
+routes each handle to its own arena, so `Validate` never reaches into the
+batch's private arenas or has to know which arena holds which side.
 
 - [ ] **Step 6: Run the validation tests**
 
