@@ -268,6 +268,10 @@ StoreComparison CompareDumps(const StoreDump& left, const StoreDump& right) {
   // as sorted, but this is also called on dumps a caller assembled, and a
   // comparison that silently mis-paired tables would be worse than a slow one.
   // The std::map also makes the three output vectors come out in name order.
+  //
+  // `tables_compared` counts the names present on both sides, which is the count
+  // the loop below digests. It is incremented before the digest comparison, not
+  // after, so a table that differs is still counted as compared.
   std::map<std::string, const TableDump*> left_tables;
   std::map<std::string, const TableDump*> right_tables;
   for (const auto& table : left.tables) left_tables[table.table] = &table;
@@ -280,6 +284,7 @@ StoreComparison CompareDumps(const StoreDump& left, const StoreDump& right) {
       comparison.left_only.push_back(name);
       continue;
     }
+    ++comparison.tables_compared;
     const TableDump& right_table = *found->second;
     if (left_table->sha256 == right_table.sha256 &&
         left_table->row_count == right_table.row_count) {

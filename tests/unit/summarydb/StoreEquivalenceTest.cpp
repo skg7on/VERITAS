@@ -472,6 +472,12 @@ TEST_F(StoreEquivalenceTest, IdenticalStoresCompareEqual) {
   EXPECT_TRUE(comparison.differing.empty());
   EXPECT_TRUE(comparison.left_only.empty());
   EXPECT_TRUE(comparison.right_only.empty());
+  // The count is what `veritas-store-diff` prints on success, and it is the
+  // only thing that makes an "equivalent" verdict falsifiable: two stores that
+  // share no compared table also compare equal. `MakeStore` publishes `alpha`
+  // and `beta`, so two rather than something else — a literal, because a count
+  // derived from the dump under comparison would pass for any value.
+  EXPECT_EQ(comparison.tables_compared, 2u);
 }
 
 // A single changed cell in one row of one table, with the row count unchanged.
@@ -542,6 +548,56 @@ TEST_F(StoreEquivalenceTest, ATablePresentOnOneSideIsReportedSeparately) {
   ASSERT_EQ(comparison.right_only.size(), 1u);
   EXPECT_EQ(comparison.right_only[0], "gamma");
   EXPECT_TRUE(comparison.left_only.empty());
+  // `gamma` has no counterpart, so there was nothing to digest it against: the
+  // count is the tables present on *both* sides. The right dump holds three
+  // tables where the left holds two, which makes this half discriminating
+  // against a count taken from the *right* dump's size; the mirror case below
+  // is the half that rules out the left dump's.
+  EXPECT_EQ(comparison.tables_compared, 2u);
+}
+
+// The mirror of the case above, and not decoration: it is what makes the pair
+// of counts discriminating. Here the extra table is on the *left*, so a count
+// taken from the left dump's size gives three where the answer is two. Together
+// the two cases rule out a count taken from either dump's size alone, leaving
+// the intersection — the tables actually digested — as the only population that
+// satisfies both.
+//
+// It is also the only case in this file that produces a non-empty `left_only`.
+// Everywhere else `left_only` appears it is asserted empty, so without this the
+// left-hand branch of the comparison would be covered only by cases that skip
+// it.
+TEST_F(StoreEquivalenceTest, ATablePresentOnTheLeftOnlyIsReportedSeparately) {
+  MakeStore("n1");
+  {
+    auto store = MetadataStore::Open(db_path_);
+    ASSERT_TRUE(store.ok());
+    ASSERT_TRUE(store->Execute("CREATE TABLE gamma (x TEXT)", {}).ok());
+  }
+  const auto left = DumpStore(db_path_);
+  ASSERT_TRUE(left.ok()) << left.status().message();
+  // Asserted rather than assumed: the case discriminates only while the left
+  // dump really does hold the extra table, and a fixture that silently stopped
+  // producing one would leave the count assertion below passing for the wrong
+  // reason.
+  ASSERT_EQ(left->tables.size(), 3u);
+
+  {
+    auto store = MetadataStore::Open(db_path_);
+    ASSERT_TRUE(store.ok());
+    ASSERT_TRUE(store->Execute("DROP TABLE gamma", {}).ok());
+  }
+  const auto right = DumpStore(db_path_);
+  ASSERT_TRUE(right.ok()) << right.status().message();
+  ASSERT_EQ(right->tables.size(), 2u);
+
+  const auto comparison = CompareDumps(*left, *right);
+  EXPECT_FALSE(comparison.equal);
+  EXPECT_TRUE(comparison.differing.empty());
+  ASSERT_EQ(comparison.left_only.size(), 1u);
+  EXPECT_EQ(comparison.left_only[0], "gamma");
+  EXPECT_TRUE(comparison.right_only.empty());
+  EXPECT_EQ(comparison.tables_compared, 2u);
 }
 
 // Reordering must be *visible*, and it is one of the four perturbations issue

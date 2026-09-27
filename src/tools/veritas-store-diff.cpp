@@ -61,38 +61,31 @@ int main(int argc, char* argv[]) {
   const fs::path left = fs::path(argv[1]) / "metadata.db";
   const fs::path right = fs::path(argv[2]) / "metadata.db";
 
-  // Dumped rather than handed straight to `CompareStoreFiles`, which is exactly
-  // these two calls plus `CompareDumps`. Going through the dumps is what lets
-  // the success line report how many tables were actually compared; a store
-  // that is empty, or that shares no table the instrument could digest, would
-  // otherwise print a bare "equivalent" that a reader cannot tell apart from a
-  // real pass.
-  auto left_dump = veritas::summarydb::DumpStore(left);
-  if (!left_dump.ok()) return ReportError(left_dump.status());
-  auto right_dump = veritas::summarydb::DumpStore(right);
-  if (!right_dump.ok()) return ReportError(right_dump.status());
+  // The library function, not a re-composition of it. Its documented ordering
+  // is preserved: it dumps the left store and reports a failure there before it
+  // ever opens the right one, so an unreadable left store is named as such
+  // rather than reported as a comparison of nothing.
+  const auto comparison = veritas::summarydb::CompareStoreFiles(left, right);
+  if (!comparison.ok()) return ReportError(comparison.status());
 
-  const veritas::summarydb::StoreComparison comparison =
-      veritas::summarydb::CompareDumps(*left_dump, *right_dump);
-
-  if (comparison.equal) {
+  if (comparison->equal) {
     // Keep the count: two stores that share no compared table compare equal,
     // and the number is the only thing that makes that vacuous pass visible.
     // Removing it as noise would restore a false green.
-    std::cout << "stores are equivalent (" << left_dump->tables.size()
+    std::cout << "stores are equivalent (" << comparison->tables_compared
               << " tables compared)\n";
     return 0;
   }
 
   std::cout << "stores differ\n";
-  for (const auto& table : comparison.differing) {
+  for (const auto& table : comparison->differing) {
     std::cout << "  differs: " << table.table << " (left " << table.left_rows
               << " rows, right " << table.right_rows << " rows)\n";
   }
-  for (const auto& table : comparison.left_only) {
+  for (const auto& table : comparison->left_only) {
     std::cout << "  left only: " << table << '\n';
   }
-  for (const auto& table : comparison.right_only) {
+  for (const auto& table : comparison->right_only) {
     std::cout << "  right only: " << table << '\n';
   }
   return 1;

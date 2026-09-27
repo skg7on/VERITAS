@@ -106,10 +106,9 @@ struct TableDump {
 struct StoreDump {
   std::vector<TableDump> tables;  // sorted by table name
   // SHA-256 over the concatenation of each table's name, row count, and digest,
-  // in `tables` order, each entry newline-terminated. Cell values are escaped as
-  // `TableDump::sha256` describes; table names are not, so this outer stream
-  // assumes names are plain SQLite identifiers, as every schema in this
-  // repository produces.
+  // in `tables` order, each entry newline-terminated. Table names are not
+  // escaped, so this outer stream assumes they are plain SQLite identifiers, as
+  // every schema in this repository produces.
   std::string sha256;
 
   // Limitation, inherited from `MetadataStore::Query`: SQL NULL is returned as
@@ -159,8 +158,17 @@ struct TableComparison {
 // All three vectors are in table-name order, because a caller's report should
 // be a function of the two stores and not of the order they were assembled in.
 // `equal` is true only when all three are empty.
+//
+// `tables_compared` is how many tables the comparison actually digested — the
+// tables present on both sides, so a table on one side only is excluded from
+// it. It exists so a caller can print the size of the comparison rather than
+// recomputing it from the dumps, and so that a *vacuous* agreement is visible:
+// two stores that share no table compare equal, and `equal` alone cannot be
+// told apart from a real pass. On the equal path it equals the size of either
+// dump, because `equal` forces both `left_only` and `right_only` empty.
 struct StoreComparison {
   bool equal = false;
+  std::size_t tables_compared = 0;
   std::vector<TableComparison> differing;
   std::vector<std::string> left_only;
   std::vector<std::string> right_only;
@@ -172,9 +180,16 @@ StoreComparison CompareDumps(const StoreDump& left, const StoreDump& right);
 
 // Dump and compare two stores. Returns the first dump's failure if either store
 // cannot be read, so a caller sees the path that failed rather than a comparison
-// of one store against nothing.
+// of one store against nothing: the left store is dumped and checked before the
+// right one is opened at all.
 //
 // Both stores are opened read-only by `DumpStore`; neither is created or written.
+//
+// This is the one implementation of "these two stores are equivalent". A caller
+// that needs the comparison's size should read `StoreComparison::tables_compared`
+// rather than dumping again — an earlier version of `veritas-store-diff`
+// re-composed this function's body to get at it, which left the exit code it
+// reports and the library function's verdict free to drift apart.
 StatusOr<StoreComparison> CompareStoreFiles(const std::filesystem::path& left,
                                             const std::filesystem::path& right);
 
