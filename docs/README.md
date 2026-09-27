@@ -20,7 +20,9 @@ confusing approved target interfaces with commands that exist today.
    — cross-cutting invariants and milestone dependencies.
 6. [Backbone milestone roadmap](plans/veritas-backbone-milestone-roadmap.md) —
    implementation sequence and current milestones.
-7. [Developer guides and tutorials](guides/README.md) — generating a SummaryDB,
+7. [Scaling milestone roadmap](plans/veritas-scaling-milestone-roadmap.md) —
+   the M13–M18 scale programme, its constraints, and its gates.
+8. [Developer guides and tutorials](guides/README.md) — generating a SummaryDB,
    extending SummaryDB and Evidence IR, and building analysis or Agent-facing
    tools.
 

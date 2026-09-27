@@ -2,7 +2,8 @@
 
 Plans are executable implementation guidance. Read the
 [backbone milestone roadmap](veritas-backbone-milestone-roadmap.md) for
-milestone sequencing and the [GitHub Actions CI build plan](github-actions-ci-build-implementation-plan.md)
+milestone sequencing, the [scaling milestone roadmap](veritas-scaling-milestone-roadmap.md)
+for the M13–M18 scale programme, and the [GitHub Actions CI build plan](github-actions-ci-build-implementation-plan.md)
 for the project tooling plan. The [documentation information architecture
 migration plan](documentation-information-architecture-migration-implementation-plan.md)
 records this hierarchy migration.
