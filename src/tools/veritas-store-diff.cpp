@@ -21,11 +21,13 @@
 // through `MetadataStore::OpenReadOnly`, so this tool never creates,
 // migrates, or writes anything.
 
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <string_view>
 
 #include "veritas/core/Status.h"
+#include "veritas/core/Version.h"
 #include "veritas/summarydb/StoreEquivalence.h"
 
 namespace {
@@ -34,11 +36,12 @@ namespace fs = std::filesystem;
 
 constexpr std::string_view kUsage =
     "usage:\n"
+    "  veritas-store-diff --version\n"
     "  veritas-store-diff <left-store-root> <right-store-root>\n"
     "\n"
     "Compares the metadata.db of two store roots table by table, using the\n"
-    "determined projection in\n"
-    "docs/specs/veritas-build-analyze-round3-performance-design-spec.md 9.1:\n"
+    "determined projection recorded in\n"
+    "docs/specs/milestones/m13-scale-profile-acceptance-record.md:\n"
     "run-scoped columns are excluded, rows are ordered deterministically, and\n"
     "each table is digested. Exits 0 when the stores are equivalent, 1 when\n"
     "they differ, and 2 on error.\n";
@@ -51,6 +54,10 @@ int ReportError(const veritas::Status& status) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  if (argc == 2 && std::strcmp(argv[1], "--version") == 0) {
+    std::cout << veritas::FormatVersion(veritas::GetVersion()) << '\n';
+    return 0;
+  }
   if (argc != 3) {
     std::cerr << kUsage;
     return 2;

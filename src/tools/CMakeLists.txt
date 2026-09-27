@@ -42,12 +42,12 @@ target_link_libraries(veritas-query PRIVATE veritas_cpg veritas_summarydb
 # the reverse dependency index.
 target_link_libraries(veritas-diff PRIVATE veritas_summarydb)
 
-# veritas-explain explains a fact's provenance from the M9 fact store.
-target_link_libraries(veritas-explain PRIVATE veritas_facts)
-
 # veritas-store-diff compares two store roots table by table, using the
 # determined projection M13 recorded for baseline-equivalence checks.
 target_link_libraries(veritas-store-diff PRIVATE veritas_summarydb)
+
+# veritas-explain explains a fact's provenance from the M9 fact store.
+target_link_libraries(veritas-explain PRIVATE veritas_facts)
 
 # Its --json path uses protobuf's json_util, which returns absl::Status under
 # protobuf 22+ (where Abseil is present) but protobuf's own Status under 3.x.

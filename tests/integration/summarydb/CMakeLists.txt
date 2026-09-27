@@ -41,6 +41,30 @@ add_dependencies(VeritasDiffTest veritas-diff)
 veritas_add_warnings(VeritasDiffTest)
 gtest_discover_tests(VeritasDiffTest DISCOVERY_TIMEOUT 60)
 
+# `veritas-store-diff`'s exit-code contract (0 equivalent / 1 different /
+# 2 could not compare) is what M14's harness branches on, so it is asserted
+# against the built binary rather than trusted to a transcript.
+#
+# An explicit `add_test` rather than `gtest_discover_tests`: the latter
+# registers each discovered case with the default timeout and offers no
+# per-test one, and this binary spawns subprocesses. The two registrations
+# would also double-register the binary, so only one of them is used.
+add_executable(VeritasStoreDiffTest VeritasStoreDiffTest.cpp)
+target_link_libraries(VeritasStoreDiffTest PRIVATE
+  veritas_summarydb
+  GTest::gtest_main
+)
+target_compile_definitions(VeritasStoreDiffTest PRIVATE
+  VERITAS_STORE_DIFF_BINARY="$<TARGET_FILE:veritas-store-diff>"
+)
+add_dependencies(VeritasStoreDiffTest veritas-store-diff)
+veritas_add_warnings(VeritasStoreDiffTest)
+add_test(NAME VeritasStoreDiffTest COMMAND VeritasStoreDiffTest)
+set_tests_properties(VeritasStoreDiffTest PROPERTIES
+  TIMEOUT 120
+  LABELS "integration;summarydb;store-diff-cli"
+)
+
 add_executable(SummaryVersionCompatibilityTest SummaryVersionCompatibilityTest.cpp)
 target_link_libraries(SummaryVersionCompatibilityTest PRIVATE
   veritas_summarydb

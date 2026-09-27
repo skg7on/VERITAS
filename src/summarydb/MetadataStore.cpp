@@ -144,8 +144,20 @@ MetadataStore::OpenReadOnly(const std::filesystem::path &db_path) {
   // Check the path before SQLite sees it. SQLITE_OPEN_READONLY already refuses
   // to create a database, but it reports that as "unable to open database
   // file", which names neither the file nor the reason.
+  //
+  // "Cannot stat the path" is reported separately from "nothing is there",
+  // because they are different events and only one of them is about the store.
+  // Collapsing them (`!exists(path, error) || error`) told a caller that a
+  // present-but-unreadable store — `EACCES`, `ENOTDIR` — did not exist, which
+  // is the wrong diagnosis even though every caller here maps both to a
+  // failure.
   std::error_code error;
-  if (!std::filesystem::exists(db_path, error) || error) {
+  const bool present = std::filesystem::exists(db_path, error);
+  if (error) {
+    return Status::Internal("cannot stat " + db_path.string() + ": " +
+                            error.message());
+  }
+  if (!present) {
     return Status::NotFound("no metadata store at " + db_path.string());
   }
 

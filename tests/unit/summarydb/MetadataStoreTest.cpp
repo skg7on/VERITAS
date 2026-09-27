@@ -54,8 +54,58 @@ using namespace veritas::summarydb;
 
 namespace {
 
+// This binary is built `-fno-exceptions`, so a throwing filesystem overload is
+// a `std::terminate` on failure that aborts the whole binary and takes every
+// other case's result with it, instead of reporting one failure. Every
+// filesystem call below uses the `std::error_code` overload the compilation
+// policy allows. `StoreEquivalenceTest` in this directory was swept for the
+// same class; this file was left behind.
+//
+// A missing path is not an error for `fs::remove`'s error_code overload — it
+// returns false and leaves the code clear — so `RemoveFile`'s `EXPECT_FALSE`
+// only fires on a real failure (a permission problem, or a directory passed by
+// mistake), which is a different event from "there was nothing to remove".
+// `EXPECT_` rather than `ASSERT_` because the assertion belongs to the caller,
+// and this helper is also called from `SetUp` and `TearDown`.
+bool RemoveFile(const std::filesystem::path& path) {
+  std::error_code error;
+  const bool removed = std::filesystem::remove(path, error);
+  EXPECT_FALSE(error) << "cannot remove " << path.string() << ": "
+                      << error.message();
+  return removed;
+}
+
+// `ADD_FAILURE()` rather than `ASSERT_`, because this is also called from
+// `SetUp` and has to return a path either way. On a failure the caller appends
+// a filename to the empty path and gets a *relative* one, so the store would
+// land in the process's working directory rather than failing at first use; the
+// case is still failed, by the `ADD_FAILURE` alone.
+std::filesystem::path TempDirectory() {
+  std::error_code error;
+  const auto path = std::filesystem::temp_directory_path(error);
+  if (error) {
+    ADD_FAILURE() << "cannot resolve the temporary directory: "
+                  << error.message();
+  }
+  return path;
+}
+
+// Whether `path` exists, with a stat failure reported rather than thrown. The
+// failure is the point: a bare `exists(p)` that cannot stat `p` reports "no
+// such file", which is exactly the answer a caller asking "did this create a
+// file?" must not be handed silently.
+bool PathExists(const std::filesystem::path& path) {
+  std::error_code error;
+  const bool present = std::filesystem::exists(path, error);
+  if (error) {
+    ADD_FAILURE() << "cannot stat " << path.string() << ": "
+                  << error.message();
+  }
+  return present;
+}
+
 std::filesystem::path TempDbPath() {
-  return std::filesystem::temp_directory_path() /
+  return TempDirectory() /
          ("veritas_metadata_test_" + std::to_string(::getpid()) + ".db");
 }
 
@@ -73,10 +123,10 @@ class MetadataStoreTest : public ::testing::Test {
 protected:
   void SetUp() override {
     db_path_ = TempDbPath();
-    std::filesystem::remove(db_path_);
+    RemoveFile(db_path_);
   }
 
-  void TearDown() override { std::filesystem::remove(db_path_); }
+  void TearDown() override { RemoveFile(db_path_); }
 
   std::filesystem::path db_path_;
 };
@@ -303,7 +353,7 @@ TEST_F(MetadataStoreTest, MoveTransfersCachedStatementsAndEmptiesSource) {
 
   const std::filesystem::path replacement_path =
       db_path_.string() + ".replacement";
-  std::filesystem::remove(replacement_path);
+  RemoveFile(replacement_path);
   auto replacement = MetadataStore::Open(replacement_path);
   ASSERT_TRUE(replacement.ok()) << replacement.status().message();
   ASSERT_TRUE(replacement->Execute("CREATE TABLE discarded(value TEXT)", {})
@@ -319,7 +369,7 @@ TEST_F(MetadataStoreTest, MoveTransfersCachedStatementsAndEmptiesSource) {
   EXPECT_EQ(*rows, (std::vector<std::vector<std::string>>{
                        {"alpha"}, {"beta"}, {"gamma"}}));
 
-  std::filesystem::remove(replacement_path);
+  RemoveFile(replacement_path);
 }
 
 TEST_F(MetadataStoreTest, FailedCommitKeepsTransactionActiveUntilRollback) {
@@ -480,11 +530,11 @@ TEST_F(MetadataStoreTest, BulkInsertFlushOnAnEmptyBatchIsANoOp) {
 // to nothing and reports success.
 TEST_F(MetadataStoreTest, OpenReadOnlyDoesNotCreateAMissingStore) {
   const auto path = db_path_;
-  std::filesystem::remove(path);
+  RemoveFile(path);
   const auto store = MetadataStore::OpenReadOnly(path);
   EXPECT_FALSE(store.ok());
   EXPECT_EQ(store.status().code(), veritas::StatusCode::kNotFound);
-  EXPECT_FALSE(std::filesystem::exists(path))
+  EXPECT_FALSE(PathExists(path))
       << "OpenReadOnly created the file it was asked to read";
 }
 
