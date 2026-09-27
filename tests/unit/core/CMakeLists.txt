@@ -65,3 +65,11 @@ target_link_libraries(AtomicFileTest PRIVATE
 )
 veritas_add_warnings(AtomicFileTest)
 gtest_discover_tests(AtomicFileTest DISCOVERY_TIMEOUT 60)
+
+add_executable(RunMetricsTest RunMetricsTest.cpp)
+target_link_libraries(RunMetricsTest PRIVATE
+  veritas_core
+  GTest::gtest_main
+)
+veritas_add_warnings(RunMetricsTest)
+gtest_discover_tests(RunMetricsTest DISCOVERY_TIMEOUT 60)

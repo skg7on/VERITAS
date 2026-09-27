@@ -39,6 +39,10 @@
 #include "veritas/wpa/WpaOrchestrator.h"
 #include "veritas/wpa/WpaRunRepository.h"
 
+namespace veritas::core {
+class RunMetrics;
+}  // namespace veritas::core
+
 namespace veritas::facts {
 
 // The immutable, canonical handoff of one successful WPA run.
@@ -89,6 +93,9 @@ public:
 
   void AddSink(std::string sink_id, AnalysisFactSink &sink);
 
+  // Optional recorder. Non-owning; never read for control flow.
+  void SetMetrics(core::RunMetrics *metrics) { metrics_ = metrics; }
+
   // Validates the batch, then delivers it to every pending sink. Returns
   // non-OK (FailedPrecondition for a malformed batch) without mutating any
   // component success when validation fails; on a sink failure, returns that
@@ -100,6 +107,7 @@ private:
 
   wpa::WpaRunRepository &delivery_state_;
   std::vector<std::pair<std::string, AnalysisFactSink *>> sinks_;
+  core::RunMetrics *metrics_ = nullptr;
 };
 
 } // namespace veritas::facts

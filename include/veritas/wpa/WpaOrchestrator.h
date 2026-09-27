@@ -26,6 +26,7 @@
 #include <span>
 #include <vector>
 
+#include "veritas/core/RunMetrics.h"
 #include "veritas/core/Status.h"
 #include "veritas/facts/AnalysisRun.h"
 #include "veritas/runtime/WorklistScheduler.h"
@@ -45,6 +46,9 @@ struct WpaRunRequest {
   const analysis::semantic::ModelBundle* models = nullptr;
   std::span<const WpaComponentKind> components;
   WpaExecutionLimits limits;
+  // Optional recorder. Non-owning, not hashed, and excluded from every
+  // identity derivation (design section 5.2, Rule 2).
+  core::RunMetrics* metrics = nullptr;
 };
 
 struct WpaRunResult {

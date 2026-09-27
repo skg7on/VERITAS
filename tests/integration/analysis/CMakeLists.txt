@@ -175,3 +175,23 @@ if(VERITAS_WPA_ENGINE STREQUAL "souffle")
     LABELS "integration;analysis;m9-entry;souffle-production"
   )
 endif()
+
+# `veritas_summarydb` is named explicitly because the published-table digest
+# case opens `<output_root>/metadata.db` itself to dump the four published
+# tables; `veritas_analysis` links it PRIVATE, so it is not reachable through it.
+add_executable(phase_observability_identity_integration_test
+  PhaseObservabilityIdentityTest.cpp
+)
+target_link_libraries(phase_observability_identity_integration_test
+  PRIVATE
+    veritas_analysis
+    veritas_summarydb
+    veritas_test_support
+    veritas_unit_test_support
+)
+add_test(NAME PhaseObservabilityIdentityTest
+  COMMAND phase_observability_identity_integration_test)
+set_tests_properties(PhaseObservabilityIdentityTest PROPERTIES
+  TIMEOUT 180
+  LABELS "integration;analysis"
+)

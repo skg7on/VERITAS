@@ -26,6 +26,7 @@
 #include <Util/Options.h>
 
 #include "analysis/pipeline/ProgramIr.h"
+#include "veritas/core/RunMetrics.h"
 
 namespace veritas::analysis::svf {
 namespace {
@@ -75,7 +76,8 @@ static int g_svf_session_count = 0;
 
 Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
                          const SvfConfig& config,
-                         SvfSessionCallback callback) {
+                         SvfSessionCallback callback,
+                         core::RunMetrics* metrics) {
   std::scoped_lock lock(ProcessWideSvfMutex());
 
   ++g_svf_session_count;
@@ -100,7 +102,11 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
     return Status::Internal("ProgramIr has no module");
   }
 
-  SVF::LLVMModuleSet::buildSVFModule(*llvm_module);
+  {
+    core::PhaseSpan span(metrics, "m5.svf.module_set",
+                         core::SpanMode::kBearing);
+    SVF::LLVMModuleSet::buildSVFModule(*llvm_module);
+  }
   cleanup.module_set_built = true;
 
   // Capture the session's module set so downstream mapping uses session-scoped
@@ -110,15 +116,20 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
 
   // Step 2: Build SVFIR
   SVF::SVFIRBuilder builder;
-  SVF::SVFIR* svf_ir = builder.build();
+  SVF::SVFIR* svf_ir = [&] {
+    core::PhaseSpan span(metrics, "m5.svf.svfi", core::SpanMode::kBearing);
+    return builder.build();
+  }();
   if (!svf_ir) {
     return Status::Internal("SVFIR construction failed");
   }
   cleanup.svf_ir_built = true;
 
   // Step 3: Run Andersen pointer analysis
-  SVF::AndersenWaveDiff* andersen =
-      SVF::AndersenWaveDiff::createAndersenWaveDiff(svf_ir);
+  SVF::AndersenWaveDiff* andersen = [&] {
+    core::PhaseSpan span(metrics, "m5.svf.andersen", core::SpanMode::kBearing);
+    return SVF::AndersenWaveDiff::createAndersenWaveDiff(svf_ir);
+  }();
   if (!andersen) {
     return Status::Internal("SVF Andersen failed");
   }
@@ -126,14 +137,32 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
 
   // Step 4: Build SVFG
   SVF::SVFGBuilder svfg_builder;
-  SVF::SVFG* svfg = svfg_builder.buildFullSVFG(andersen);
+  SVF::SVFG* svfg = [&] {
+    core::PhaseSpan span(metrics, "m5.svf.svfg", core::SpanMode::kBearing);
+    return svfg_builder.buildFullSVFG(andersen);
+  }();
   if (!svfg) {
     return Status::Internal("SVFG construction failed");
   }
 
   // Step 5: Invoke callback with live SVF state
   SvfSessionView view{svf_ir, andersen, svfg, module_set};
-  return callback(view);
+  return [&] {
+    core::PhaseSpan span(metrics, "m5.svf.map_facts", core::SpanMode::kBearing);
+    // The SVFG is live only inside this scope, so its scale is counted here or
+    // not at all -- and only its node count is: `getTotalEdgeNum()` returns
+    // GenericGraph::edgeNum, which nothing increments for a VFG or SVFG (only
+    // CDG and the SVFIR call incEdgeNum; VFG::addVFGEdge maintains the endpoint
+    // nodes' edge lists and never the counter), so it reads 0 for every SVFG
+    // ever built. An always-zero counter is indistinguishable from a measured
+    // zero, so no edge counter is emitted.
+    if (metrics != nullptr) {
+      metrics->AddCounter("svf.svfg_nodes",
+                          static_cast<std::uint64_t>(view.svfg->getSVFGNodeNum()),
+                          "count");
+    }
+    return callback(view);
+  }();
 
   // Step 6: Cleanup happens automatically via SvfCleanup destructor
 }
