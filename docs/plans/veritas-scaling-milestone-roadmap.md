@@ -452,6 +452,29 @@ phase; **store bytes on disk**; facts, witnesses, and rows per domain;
 `Σ_f |reach(f)|` versus `F` to fit the closure exponent; support-set fraction;
 the per-component cost distribution; and **release versus Debug**.
 
+**Much of this substrate already exists and must be extended, not rebuilt.** The
+analyze-phase-observability work (PR #139, `main` at `709f2d9`) shipped
+`veritas-build analyze --metrics*` and the byte-diffable versioned artifact
+`<output>/run-metrics.json` rendered by `RenderRunReportJson`, carrying a
+`RunIdentity` block, a `RunEnvironment` block (including `build_type`, which is
+what H-DEBUG needs), a `RunInventory` block (including
+`components_reused`/`components_executed` — Stage 3's measurement), a
+`StoreSummary` with per-table rows and on-disk bytes, and in-process memory
+sampling reporting **both** `peak_rss_bytes` and `peak_footprint_bytes`. That last
+pair matters: round 3 §3.6 measured a 1.42–1.45 GiB gap between the resident set
+and physical footprint, and the acceptance criterion counts the former, so
+sampling both in-process is strictly better evidence than `/usr/bin/time -lp`'s
+single maximum. M14 adds the corpus, the closure-shape probe, and the exponent
+fitter; it adds no C++ metric code.
+
+Its identity doctrine also bears on this roadmap: `RunReport.h:144-149` warns
+that a difference inside the identity block means two runs were not
+like-for-like. `scale_profile` is uncovered by any configuration hash in M13 so
+that adding it moves no identity, which makes two otherwise-identical runs share
+a `run_id` unless the value cannot vary. M13 keeps it from varying by rejecting
+`scaled`; **M15 must append it to `WpaConfigurationHash` when it gives the value
+meaning.**
+
 ## 7.3 Falsification criteria, fixed before running
 
 | Hypothesis | Falsified when | Consequence |
@@ -708,10 +731,18 @@ full of skips.
 
 ## 14.6 Metrics as a committed artefact
 
-Every fixture run emits a machine-readable measurement record into the
-repository, so this roadmap's exponent and per-KLOC claims are **re-derivable
-rather than quoted**. Round 3's headline lesson, made structural: magnitudes are
-hypotheses until a task measures its own target.
+Every fixture run emits a machine-readable record, so this roadmap's exponent and
+per-KLOC claims are **re-derivable rather than quoted**. Round 3's headline
+lesson, made structural: magnitudes are hypotheses until a task measures its own
+target.
+
+The per-run half is already shipped: `run-metrics.json` (PR #139) is versioned,
+writes object keys in sorted order, uses integer nanoseconds, and contains no
+absolute path, so two artifacts diff byte for byte. M14's corpus record
+**references** it rather than replacing it, and adds only the closure-shape
+quantities and the fixture label. An unmeasured quantity is **absent, not zero** —
+`RunOutputInventory.svfg_edges` (`RunReport.h:89-91`) is the precedent, and the
+reason is that a plausibly-zero value diffs as "unchanged" while proving nothing.
 
 ---
 

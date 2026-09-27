@@ -43,6 +43,8 @@ orchestration and M8R.5 mixed C/C++ qualification.
 | M12B | Approved / pending implementation | [Joern GraphSON/GraphML importer plan](milestones/m12b-joern-graphson-graphml-importer-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
 | M12C | Approved / pending implementation | [provider fusion/Evidence plan](milestones/m12c-provider-fusion-evidence-integration-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
 | M12D | Detailed design and plan required | — | PhASAR adapter is intentionally separate from the Joern graph importer | [#21](https://github.com/skg7on/VERITAS/issues/21) |
+| M13 | Planned | [plan](milestones/m13-scale-profile-store-equivalence-instrument-implementation-plan.md) | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §6 | — |
+| M14 | Planned | [plan](milestones/m14-scaling-corpus-regime-determination-implementation-plan.md) | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §7 | — |
 
 ## Execution Rule
 
