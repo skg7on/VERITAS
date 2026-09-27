@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "veritas/core/Hash.h"
+#include "veritas/core/RunMetrics.h"
 #include "veritas/facts/Witness.h"
 #include "veritas/summarydb/MetadataStore.h"
 
@@ -563,7 +564,11 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
 }
 
 Status AnalysisFactBus::Publish(const AnalysisFactBatch &batch) const {
-  Status valid = Validate(batch);
+  Status valid = [&] {
+    core::PhaseSpan span(metrics_, "facts.publish.validate",
+                         core::SpanMode::kBearing);
+    return Validate(batch);
+  }();
   if (!valid.ok()) {
     return valid;
   }
@@ -585,7 +590,11 @@ Status AnalysisFactBus::Publish(const AnalysisFactBatch &batch) const {
     if (*delivered) {
       continue;
     }
-    Status publish = sink->Publish(batch);
+    Status publish = [&] {
+      core::PhaseSpan span(metrics_, "facts.publish.sink." + sink_id,
+                           core::SpanMode::kBearing);
+      return sink->Publish(batch);
+    }();
     if (!publish.ok()) {
       return publish;
     }

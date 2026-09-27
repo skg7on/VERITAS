@@ -56,6 +56,10 @@ range/capacity budgets and all alias states.
    maps the current extension points and the contracts new native analyses,
    WPA relations, external providers, Evidence producers, and Agent tools must
    preserve.
+3. [Reading the `veritas-build analyze` phase report](analyze-phase-report-guide.md)
+   explains the stdout phase report and its `run-metrics.json` sibling: the
+   columns, the span inventory, the memory join, the `--metrics` flags, and the
+   rules that make a missing measurement read as missing rather than as zero.
 
 ## Tutorials
 

@@ -252,6 +252,7 @@ add_subdirectory(src/cpg)
 add_subdirectory(src/frontend)
 add_subdirectory(src/analysis)
 add_subdirectory(src/evidence)
+add_subdirectory(src/observability)
 
 if(VERITAS_BUILD_TOOLS)
   add_subdirectory(src/tools)

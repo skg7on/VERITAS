@@ -13,6 +13,7 @@ Additional project/tooling plans:
 - [Claude Code Evidence IR review plugin](veritas-claude-code-evidence-review-plugin-implementation-plan.md)
 - [`veritas-build analyze` performance](veritas-build-analyze-performance-implementation-plan.md)
 - [`veritas-build analyze` round 3 performance](veritas-build-analyze-round3-performance-implementation-plan.md)
+- [`veritas-build analyze` phase observability](veritas-build-analyze-phase-observability-implementation-plan.md)
 - [WPA and SummaryDB qualification corpus](wpa-summarydb-qualification-corpus-implementation-plan.md)
 
 The [WPA and SummaryDB qualification corpus plan](wpa-summarydb-qualification-corpus-implementation-plan.md)
