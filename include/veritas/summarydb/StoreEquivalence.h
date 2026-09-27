@@ -48,15 +48,27 @@ struct TableProjection {
 };
 
 // The determined projection for `table`. Tables with no recorded entry get
-// `{"rowid", {}}`. The entries for the published tables are the projection
-// documented in
-// docs/specs/veritas-build-analyze-round3-performance-design-spec.md section
-// 9.1, which round 3 determined by measurement rather than assumed.
+// `{"rowid", {}}`. The recorded entries are the projection measured in
+// docs/specs/milestones/m13-scale-profile-acceptance-record.md, which took round
+// 3's section 9.1 as its starting point, reproduced its recorded digests, and
+// corrected it where they did not reproduce.
 //
 // A column named in an entry that does not exist in the table is an error at
 // dump time, not silently ignored: a stale exclusion would otherwise widen the
 // comparison without anyone noticing.
 TableProjection ResolveTableProjection(std::string_view table);
+
+// The names of every table carrying a recorded projection, in the order the
+// table records them.
+//
+// This exists so a test can assert the recorded table as a whole rather than a
+// sample of it. The recorded projection is the instrument's one hand-written
+// input, and an entry silently added, removed, or edited is exactly what the
+// assertions around it must fail on — which a test that names only the entries
+// someone remembered to list cannot do. Reading it from the library is what
+// makes "the test covers every recorded entry" a property of the build rather
+// than of a reviewer's diligence.
+std::vector<std::string> RecordedProjectionTables();
 
 // One table's canonical dump.
 struct TableDump {

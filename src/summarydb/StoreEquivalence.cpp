@@ -15,6 +15,7 @@
 #include "veritas/summarydb/StoreEquivalence.h"
 
 #include <algorithm>
+#include <iterator>
 #include <map>
 #include <span>
 #include <string_view>
@@ -26,10 +27,30 @@
 namespace veritas::summarydb {
 namespace {
 
-// The determined projection. Entries are recorded from
-// docs/specs/veritas-build-analyze-round3-performance-design-spec.md section
-// 9.1 and re-derived by the M13 acceptance task. An empty `order_by` never
-// appears: missing entries fall through to the default below.
+// The determined projection. The measurement behind it, and the corrections it
+// makes to round 3's prose, are in
+// docs/specs/milestones/m13-scale-profile-acceptance-record.md. An empty
+// `order_by` never appears: missing entries fall through to the default below.
+//
+// Two kinds of column are excluded, and they were determined two different
+// ways, so the distinction is worth keeping:
+//
+//   * wall-clock columns (`created_at`, `updated_at`, `started_at`,
+//     `completed_at`, `publication_epoch`), determined by comparing two runs of
+//     one input column by column. Every one of them is a SQLite
+//     `DEFAULT (strftime('%s', 'now'))` or an equivalent, so it records when the
+//     row was written and not what was written.
+//   * toolchain-bound identities (`run_id` and what is derived from it,
+//     `engine_toolchain_identity`), determined by reproducing round 3 section
+//     9.1's recorded digests. These do NOT move between two runs of one input
+//     in one build tree, so the column-by-column comparison cannot see them —
+//     it would report every one of them as stable. They move between two
+//     *builds* of one input, because `run_id` binds the provenance digest of
+//     the linked Souffle libraries. Round 3 section 9.1 determined them and
+//     this task re-derived them by reproducing its literals; dropping them
+//     because a same-tree pair cannot see the motion would make the instrument
+//     report `differ` on the baseline-versus-scaled comparison it exists for
+//     (docs/plans/veritas-scaling-milestone-roadmap.md 6.2).
 struct RecordedProjection {
   std::string_view table;
   std::string_view order_by;
@@ -37,10 +58,37 @@ struct RecordedProjection {
 };
 
 const RecordedProjection kRecorded[] = {
+    // Published tables. Round 3 section 9.1 determined all four, and the
+    // measurement reproduced every one of its recorded digests exactly:
+    // 452a850e… (analysis_facts, fact_id), d732ec43… (run_fact_bindings),
+    // d8410e27… (provenance_nodes), 6691f96f… (provenance_edges).
     {"analysis_facts", "fact_id", {}},
     {"run_fact_bindings", "rowid", {"run_id", "analyzer_run_id", "binding_id"}},
     {"provenance_nodes", "rowid", {"run_id"}},
     {"provenance_edges", "rowid", {"run_id"}},
+    // WPA bookkeeping. Round 3 section 9.1 determined the first and the third
+    // and both reproduced (bc3a24c4…, bf38b362…). The second did not: section
+    // 9.1's prose lists three exclusions for it, and its recorded digest
+    // 93c3aef6… is only reproduced with `updated_at` excluded as well, so
+    // `updated_at` is the correction this task made to that entry.
+    {"wpa_component_states", "rowid", {"updated_at"}},
+    {"wpa_component_states_v2",
+     "rowid",
+     {"run_id", "result_cache_key", "result_object_key", "updated_at"}},
+    {"wpa_component_result_cache_v2",
+     "rowid",
+     {"engine_toolchain_identity", "result_cache_key", "result_object_key"}},
+    // Tables round 3 section 9.1 recorded no digest for. Each was determined by
+    // comparing the two measured pairs column by column, and each exclusion
+    // below is a wall-clock column measured to move in both pairs.
+    {"build_variants", "rowid", {"created_at"}},
+    {"repositories", "rowid", {"created_at"}},
+    {"revisions", "rowid", {"created_at"}},
+    {"summary_bindings", "rowid", {"publication_epoch"}},
+    {"summary_objects", "rowid", {"created_at"}},
+    {"translation_units", "rowid", {"created_at"}},
+    {"wpa_analysis_runs", "rowid", {"started_at", "completed_at"}},
+    {"wpa_sccs", "rowid", {"created_at"}},
 };
 
 // SHA-256 of `bytes`, hex-encoded. `Hash.h` offers no one-shot hex helper, so
@@ -117,6 +165,15 @@ std::string EscapeValue(std::string_view value) {
 }
 
 }  // namespace
+
+std::vector<std::string> RecordedProjectionTables() {
+  std::vector<std::string> tables;
+  tables.reserve(std::size(kRecorded));
+  for (const auto& recorded : kRecorded) {
+    tables.emplace_back(recorded.table);
+  }
+  return tables;
+}
 
 TableProjection ResolveTableProjection(std::string_view table) {
   for (const auto& recorded : kRecorded) {

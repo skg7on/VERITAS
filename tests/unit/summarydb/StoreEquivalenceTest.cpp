@@ -31,6 +31,27 @@ namespace {
 
 namespace fs = std::filesystem;
 
+// `fs::remove` has a throwing overload, and this binary is built
+// `-fno-exceptions`: a failure inside that overload is a `std::terminate` that
+// aborts the whole binary and takes every other case's result with it, instead
+// of reporting one failure. This wrapper uses the `std::error_code` overload
+// the compilation policy allows, so each call site keeps the shape
+// `ASSERT_TRUE(RemoveFile(p))` and still asserts that a file was removed.
+//
+// A missing file is not an error for `fs::remove`'s error_code overload — it
+// returns false and leaves the code clear — so the `EXPECT_FALSE(error)` here
+// only fires on a real failure (a permission problem, or a directory passed by
+// mistake), which is a different event from "there was nothing to remove".
+// `EXPECT_` rather than `ASSERT_` because the assertion belongs to the caller,
+// and this helper is also called from `SetUp` and `TearDown`.
+bool RemoveFile(const fs::path& path) {
+  std::error_code error;
+  const bool removed = fs::remove(path, error);
+  EXPECT_FALSE(error) << "cannot remove " << path.string() << ": "
+                      << error.message();
+  return removed;
+}
+
 // SHA-256 of a file's bytes, for "did this change?" checks. Uses the same
 // hashing the project already depends on so no new dependency appears.
 std::string FileDigest(const fs::path& path) {
@@ -48,10 +69,10 @@ class StoreEquivalenceTest : public ::testing::Test {
         ::testing::UnitTest::GetInstance()->current_test_info();
     db_path_ = fs::temp_directory_path() /
                ("veritas_store_equiv_" + std::string(info->name()) + ".db");
-    fs::remove(db_path_);
+    RemoveFile(db_path_);
   }
 
-  void TearDown() override { fs::remove(db_path_); }
+  void TearDown() override { RemoveFile(db_path_); }
 
   // A minimal two-table store, small enough to reason about by hand.
   void MakeStore(const std::string& second_row) {
@@ -97,26 +118,116 @@ TEST_F(StoreEquivalenceTest, UndeterminedTablesUseTheDefaultProjection) {
   EXPECT_TRUE(projection.excluded_columns.empty());
 }
 
-// The four published tables carry the projection round 3 determined. These
-// entries are the reason the instrument is trustworthy: they are recorded
-// rather than guessed, and Task 6 re-derives them.
-TEST_F(StoreEquivalenceTest, PublishedTablesCarryTheDeterminedProjection) {
-  const auto facts = ResolveTableProjection("analysis_facts");
-  EXPECT_EQ(facts.order_by, "fact_id");
-  EXPECT_TRUE(facts.excluded_columns.empty());
+// The recorded projection, asserted in full.
+//
+// This is the only hand-written input the instrument has, so an entry silently
+// added, removed, or edited is the one error a test must detect, and a test that
+// names only the entries someone remembered to list cannot detect it for the
+// rest. `RecordedProjectionTables()` is read from the library and compared
+// against the literal below, and then every name in it is asserted: between
+// them the two halves are exhaustive over the recorded table, so a new entry
+// fails the first and a changed one fails the second.
+//
+// The literals are the measured projection from
+// docs/specs/milestones/m13-scale-profile-acceptance-record.md, not a
+// restatement of the implementation. Seven of the fifteen entries reproduce a
+// digest round 3 section 9.1 recorded by hand, recomputed on two LevelDB runs
+// of one input; the other eight carry a wall-clock exclusion measured to move
+// in two such runs of `semantic_zoo` and two of LevelDB.
+TEST_F(StoreEquivalenceTest, TheRecordedProjectionIsExactlyTheMeasuredOne) {
+  EXPECT_EQ(RecordedProjectionTables(),
+            (std::vector<std::string>{
+                "analysis_facts",
+                "run_fact_bindings",
+                "provenance_nodes",
+                "provenance_edges",
+                "wpa_component_states",
+                "wpa_component_states_v2",
+                "wpa_component_result_cache_v2",
+                "build_variants",
+                "repositories",
+                "revisions",
+                "summary_bindings",
+                "summary_objects",
+                "translation_units",
+                "wpa_analysis_runs",
+                "wpa_sccs",
+            }));
 
-  const auto bindings = ResolveTableProjection("run_fact_bindings");
-  EXPECT_EQ(bindings.order_by, "rowid");
-  EXPECT_EQ(bindings.excluded_columns,
-            (std::vector<std::string>{"run_id", "analyzer_run_id", "binding_id"}));
+  struct Expected {
+    const char* table;
+    const char* order_by;
+    std::vector<std::string> excluded;
+  };
+  const std::vector<Expected> expected = {
+      // Published tables: round 3 section 9.1's determination, re-derived here
+      // by reproducing its recorded digests.
+      {"analysis_facts", "fact_id", {}},
+      {"run_fact_bindings",
+       "rowid",
+       {"run_id", "analyzer_run_id", "binding_id"}},
+      {"provenance_nodes", "rowid", {"run_id"}},
+      {"provenance_edges", "rowid", {"run_id"}},
+      // WPA bookkeeping: section 9.1's determination for the first and third,
+      // and for the second section 9.1's prose list plus the `updated_at` its
+      // own recorded digest silently requires.
+      {"wpa_component_states", "rowid", {"updated_at"}},
+      {"wpa_component_states_v2",
+       "rowid",
+       {"run_id", "result_cache_key", "result_object_key", "updated_at"}},
+      {"wpa_component_result_cache_v2",
+       "rowid",
+       {"engine_toolchain_identity", "result_cache_key", "result_object_key"}},
+      // Measured wall-clock columns, which section 9.1 recorded no digest for.
+      {"build_variants", "rowid", {"created_at"}},
+      {"repositories", "rowid", {"created_at"}},
+      {"revisions", "rowid", {"created_at"}},
+      {"summary_bindings", "rowid", {"publication_epoch"}},
+      {"summary_objects", "rowid", {"created_at"}},
+      {"translation_units", "rowid", {"created_at"}},
+      {"wpa_analysis_runs", "rowid", {"started_at", "completed_at"}},
+      {"wpa_sccs", "rowid", {"created_at"}},
+  };
 
-  const auto nodes = ResolveTableProjection("provenance_nodes");
-  EXPECT_EQ(nodes.order_by, "rowid");
-  EXPECT_EQ(nodes.excluded_columns, (std::vector<std::string>{"run_id"}));
+  ASSERT_EQ(expected.size(), RecordedProjectionTables().size())
+      << "the literal above and the recorded table have different sizes, so the "
+         "loop below would not cover every recorded entry";
+  for (const auto& want : expected) {
+    const auto got = ResolveTableProjection(want.table);
+    EXPECT_EQ(got.order_by, want.order_by) << want.table;
+    EXPECT_EQ(got.excluded_columns, want.excluded) << want.table;
+  }
+}
 
-  const auto edges = ResolveTableProjection("provenance_edges");
-  EXPECT_EQ(edges.order_by, "rowid");
-  EXPECT_EQ(edges.excluded_columns, (std::vector<std::string>{"run_id"}));
+// The other half of the assertion above: a table with no recorded entry must
+// carry the default. Without this, an entry accidentally added for a table the
+// instrument cannot determine would be invisible — the loop above would still
+// pass, and every comparison would silently widen.
+//
+// The names are real tables of this store that the measurement found no moving
+// column in, sampled across the store's subsystems so the claim is not about one
+// of them. They have to be real: `ResolveTableProjection` answers for any name,
+// so a misspelt one would pass this loop while asserting nothing.
+//
+// Four of them — `function_symbols`, `source_anchors`,
+// `reverse_dependency_index`, `analysis_configurations` — are tables the
+// pipeline does not write yet, so they are empty in both measured pairs and no
+// moving column could have been observed in them. They belong in this list
+// anyway, and for the reason above: an entry recorded for one of them would be
+// an entry recorded on no evidence.
+TEST_F(StoreEquivalenceTest, UnrecordedTablesCarryTheDefaultProjection) {
+  for (const char* table :
+       {"cpg_nodes", "cpg_edges", "cpg_edge_support", "cpg_projections",
+        "current_cpg_projections", "summary_components", "summary_deltas",
+        "summary_dependencies", "fact_batch_receipts", "wpa_scc_edges",
+        "wpa_scc_members", "wpa_fact_bus_deliveries", "schema_version",
+        "sqlite_sequence", "function_symbols", "source_anchors",
+        "reverse_dependency_index", "analysis_configurations"}) {
+    const auto projection = ResolveTableProjection(table);
+    EXPECT_EQ(projection.order_by, "rowid") << table;
+    EXPECT_TRUE(projection.excluded_columns.empty())
+        << table << " has a recorded exclusion the measurement did not find";
+  }
 }
 
 // A dump is a function of content, not of the file's incidental state.
@@ -151,7 +262,7 @@ TEST_F(StoreEquivalenceTest, ADifferentCellChangesTheDigest) {
   const auto first = DumpStore(db_path_);
   ASSERT_TRUE(first.ok()) << first.status().message();
 
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeStore("n2");
   const auto second = DumpStore(db_path_);
   ASSERT_TRUE(second.ok()) << second.status().message();
@@ -181,19 +292,19 @@ TEST_F(StoreEquivalenceTest, ValuesCarryingBoundaryBytesAreEscapedNotStripped) {
   const auto with_pipe = DumpStore(db_path_);
   ASSERT_TRUE(with_pipe.ok()) << with_pipe.status().message();
 
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeStore("haspipe");
   const auto without_pipe = DumpStore(db_path_);
   ASSERT_TRUE(without_pipe.ok()) << without_pipe.status().message();
   EXPECT_NE(with_pipe->sha256, without_pipe->sha256)
       << "the '|' was dropped from the stream rather than escaped";
 
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeStore("has\nnewline");
   const auto with_newline = DumpStore(db_path_);
   ASSERT_TRUE(with_newline.ok()) << with_newline.status().message();
 
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeStore("hasnewline");
   const auto without_newline = DumpStore(db_path_);
   ASSERT_TRUE(without_newline.ok()) << without_newline.status().message();
@@ -202,7 +313,7 @@ TEST_F(StoreEquivalenceTest, ValuesCarryingBoundaryBytesAreEscapedNotStripped) {
 
   // A tab is neither a separator nor escaped, so it survives verbatim and the
   // dump stays total.
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeStore("has\ttab");
   EXPECT_TRUE(DumpStore(db_path_).ok()) << "a tab was refused";
 }
@@ -259,7 +370,7 @@ TEST_F(StoreEquivalenceTest, TheEscapeIsPinnedByKnownAnswers) {
   EXPECT_EQ(piped->tables[1].sha256,
             "9370b3dee6a807ad5b89bd83a6ba2ab25d494a31a2ddef818ce75bbb772c6139");
 
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeStore("m\nn");
   const auto newlined = DumpStore(db_path_);
   ASSERT_TRUE(newlined.ok()) << newlined.status().message();
@@ -267,7 +378,7 @@ TEST_F(StoreEquivalenceTest, TheEscapeIsPinnedByKnownAnswers) {
   EXPECT_EQ(newlined->tables[1].sha256,
             "589041ca8ad82cef9526d13828b2a4000d13c8b4200cd25a2c27935ea345dd66");
 
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeStore("x|y\nz\\w");
   const auto mixed = DumpStore(db_path_);
   ASSERT_TRUE(mixed.ok()) << mixed.status().message();
@@ -336,7 +447,7 @@ TEST_F(StoreEquivalenceTest, ASingleChangedCellIsDetected) {
   const auto left = DumpStore(db_path_);
   ASSERT_TRUE(left.ok()) << left.status().message();
 
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeStore("n2");
   const auto right = DumpStore(db_path_);
   ASSERT_TRUE(right.ok()) << right.status().message();
@@ -448,7 +559,7 @@ TEST_F(StoreEquivalenceTest, ExcludedColumnsAreRemovedFromTheDigest) {
   const auto left = DumpStore(db_path_);
   ASSERT_TRUE(left.ok()) << left.status().message();
 
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeProvenanceStore("run-b", "n1");
   const auto moved_run_id = DumpStore(db_path_);
   ASSERT_TRUE(moved_run_id.ok()) << moved_run_id.status().message();
@@ -456,7 +567,7 @@ TEST_F(StoreEquivalenceTest, ExcludedColumnsAreRemovedFromTheDigest) {
       << "run_id is excluded from provenance_nodes, yet changing it changed the "
          "digest";
 
-  ASSERT_TRUE(fs::remove(db_path_));
+  ASSERT_TRUE(RemoveFile(db_path_));
   MakeProvenanceStore("run-a", "n2");
   const auto moved_content = DumpStore(db_path_);
   ASSERT_TRUE(moved_content.ok()) << moved_content.status().message();
@@ -474,7 +585,7 @@ TEST_F(StoreEquivalenceTest, CompareStoreFilesAgreesWithCompareDumps) {
   MakeStore("n1");
   const auto path = db_path_;
   const auto right_path = fs::temp_directory_path() / "veritas_store_equiv_right.db";
-  fs::remove(right_path);
+  RemoveFile(right_path);
   // The two-argument `fs::copy_file` throws on failure, which under
   // `-fno-exceptions` is `std::terminate`: a failed copy would abort this binary
   // and take the other cases' results with it instead of reporting a failure.
@@ -488,7 +599,7 @@ TEST_F(StoreEquivalenceTest, CompareStoreFilesAgreesWithCompareDumps) {
   ASSERT_TRUE(comparison.ok()) << comparison.status().message();
   EXPECT_TRUE(comparison->equal);
 
-  fs::remove(right_path);
+  RemoveFile(right_path);
 }
 
 }  // namespace
