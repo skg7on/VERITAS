@@ -113,8 +113,9 @@ struct StoreDump {
 // `sqlite_sequence` records AUTOINCREMENT high-water marks that differ between
 // runs and a caller should see that rather than have it hidden.
 //
-// Cell values carrying the stream's own bytes are escaped, never refused, so
-// the dump is total: any store this can open it can dump.
+// Cell values carrying the stream's own bytes are escaped, never refused, so the
+// dump is total over cell values: no value is ever refused. That is not a claim
+// of totality over stores — the failures listed below remain.
 //
 // Failures, none of which are silent:
 //   * NotFound — no store exists at the path;
@@ -124,6 +125,46 @@ struct StoreDump {
 //     exists but is not a SQLite database, because SQLite defers validation, so
 //     a file that is not a store is diagnosed here rather than at open time.
 StatusOr<StoreDump> DumpStore(const std::filesystem::path& metadata_db_path);
+
+// One table's comparison outcome. `equal` is false when the digests differ or
+// the row counts differ. `left_rows` and `right_rows` are always reported, so a
+// caller can tell "same content, fewer rows" from "different content" without
+// going back to the dumps.
+struct TableComparison {
+  std::string table;
+  std::size_t left_rows = 0;
+  std::size_t right_rows = 0;
+  bool equal = false;
+};
+
+// The outcome of comparing two dumps.
+//
+// `differing` holds only tables present on both sides whose digest or row count
+// disagrees. `left_only` and `right_only` hold tables present on exactly one
+// side, so a caller can tell a schema difference from a content difference
+// without inspecting the dumps.
+//
+// All three vectors are in table-name order, because a caller's report should
+// be a function of the two stores and not of the order they were assembled in.
+// `equal` is true only when all three are empty.
+struct StoreComparison {
+  bool equal = false;
+  std::vector<TableComparison> differing;
+  std::vector<std::string> left_only;
+  std::vector<std::string> right_only;
+};
+
+// Compare two dumps by table name. Neither argument is modified, and no store is
+// touched: this is a pure function over two already-taken dumps.
+StoreComparison CompareDumps(const StoreDump& left, const StoreDump& right);
+
+// Dump and compare two stores. Returns the first dump's failure if either store
+// cannot be read, so a caller sees the path that failed rather than a comparison
+// of one store against nothing.
+//
+// Both stores are opened read-only by `DumpStore`; neither is created or written.
+StatusOr<StoreComparison> CompareStoreFiles(const std::filesystem::path& left,
+                                            const std::filesystem::path& right);
 
 }  // namespace veritas::summarydb
 

@@ -15,8 +15,10 @@
 #include "veritas/summarydb/StoreEquivalence.h"
 
 #include <algorithm>
+#include <map>
 #include <span>
 #include <string_view>
+#include <utility>
 
 #include "veritas/core/Hash.h"
 #include "veritas/summarydb/MetadataStore.h"
@@ -202,6 +204,59 @@ StatusOr<StoreDump> DumpStore(const std::filesystem::path& metadata_db_path) {
 
   dump.sha256 = Sha256Hex(combined);
   return dump;
+}
+
+StoreComparison CompareDumps(const StoreDump& left, const StoreDump& right) {
+  // Keyed by name rather than walked in order: `StoreDump::tables` is documented
+  // as sorted, but this is also called on dumps a caller assembled, and a
+  // comparison that silently mis-paired tables would be worse than a slow one.
+  // The std::map also makes the three output vectors come out in name order.
+  std::map<std::string, const TableDump*> left_tables;
+  std::map<std::string, const TableDump*> right_tables;
+  for (const auto& table : left.tables) left_tables[table.table] = &table;
+  for (const auto& table : right.tables) right_tables[table.table] = &table;
+
+  StoreComparison comparison;
+  for (const auto& [name, left_table] : left_tables) {
+    const auto found = right_tables.find(name);
+    if (found == right_tables.end()) {
+      comparison.left_only.push_back(name);
+      continue;
+    }
+    const TableDump& right_table = *found->second;
+    if (left_table->sha256 == right_table.sha256 &&
+        left_table->row_count == right_table.row_count) {
+      continue;
+    }
+    TableComparison differing;
+    differing.table = name;
+    differing.left_rows = left_table->row_count;
+    differing.right_rows = right_table.row_count;
+    differing.equal = false;
+    comparison.differing.push_back(std::move(differing));
+  }
+  // A table only on the right is not "differing": it has no counterpart to
+  // disagree with, and folding it in would hide a schema change inside a list of
+  // content changes.
+  for (const auto& entry : right_tables) {
+    if (left_tables.find(entry.first) == left_tables.end()) {
+      comparison.right_only.push_back(entry.first);
+    }
+  }
+
+  comparison.equal = comparison.differing.empty() &&
+                     comparison.left_only.empty() &&
+                     comparison.right_only.empty();
+  return comparison;
+}
+
+StatusOr<StoreComparison> CompareStoreFiles(const std::filesystem::path& left,
+                                            const std::filesystem::path& right) {
+  auto left_dump = DumpStore(left);
+  if (!left_dump.ok()) return left_dump.status();
+  auto right_dump = DumpStore(right);
+  if (!right_dump.ok()) return right_dump.status();
+  return CompareDumps(*left_dump, *right_dump);
 }
 
 }  // namespace veritas::summarydb
