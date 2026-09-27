@@ -2,7 +2,8 @@
 
 Plans are executable implementation guidance. Read the
 [backbone milestone roadmap](veritas-backbone-milestone-roadmap.md) for
-milestone sequencing and the [GitHub Actions CI build plan](github-actions-ci-build-implementation-plan.md)
+milestone sequencing, the [scaling milestone roadmap](veritas-scaling-milestone-roadmap.md)
+for the M13–M18 scale programme, and the [GitHub Actions CI build plan](github-actions-ci-build-implementation-plan.md)
 for the project tooling plan. The [documentation information architecture
 migration plan](documentation-information-architecture-migration-implementation-plan.md)
 records this hierarchy migration.
@@ -42,6 +43,9 @@ orchestration and M8R.5 mixed C/C++ qualification.
 | M12B | Approved / pending implementation | [Joern GraphSON/GraphML importer plan](milestones/m12b-joern-graphson-graphml-importer-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
 | M12C | Approved / pending implementation | [provider fusion/Evidence plan](milestones/m12c-provider-fusion-evidence-integration-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
 | M12D | Detailed design and plan required | — | PhASAR adapter is intentionally separate from the Joern graph importer | [#21](https://github.com/skg7on/VERITAS/issues/21) |
+| M13 | Planned | [plan](milestones/m13-scale-profile-store-equivalence-instrument-implementation-plan.md) | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §6 | [#141](https://github.com/skg7on/VERITAS/issues/141) |
+| M14 | Planned | [plan](milestones/m14-scaling-corpus-regime-determination-implementation-plan.md) | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §7 | [#142](https://github.com/skg7on/VERITAS/issues/142) |
+| M15–M19 | Not yet planned | — | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §5 | [#140](https://github.com/skg7on/VERITAS/issues/140) (umbrella) |
 
 ## Execution Rule
 
