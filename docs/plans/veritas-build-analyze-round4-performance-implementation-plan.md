@@ -643,7 +643,6 @@ git commit -m "perf(facts): add a compact arena for semantic rows"
 - Modify: `include/veritas/wpa/WpaComponent.h:98-107`
 - Modify: `src/wpa/WpaOrchestrator.cpp:47-89, 326-360`
 - Modify: `src/wpa/WpaRunRepository.cpp:110-130, 311-390, 589-620`
-- Modify: `src/facts/ResultCanonicalizer.cpp` (return path only)
 - Modify: `src/facts/AnalysisFactBus.cpp` (compile site only — see Step 5)
 - Modify: `src/analysis/ProjectAnalyzer.cpp:145-178` (compile site only — see Step 5)
 - Verify: `tests/unit/wpa/WpaOrchestratorTest.cpp`
@@ -690,19 +689,33 @@ TEST(WpaOrchestratorTest, ComponentResultPayloadRoundTripsThroughTheArena) {
 ```
 
 `SingleComponentRun()` and `ExpectedSingleComponentFactId()` are named here to
-say what the fixture must supply. If this file already factors its setup, use
-that helper's name instead and keep one fixture rather than adding a second; if
-it does not, extract it from the existing case in this same step. Do not invent
-a second fixture that could drift from the first.
+say what the fixture must supply, not to assert they already exist. This file's
+existing `ChainProgram` fixture will not do: `completed_components.front()` over
+it is the leaf SCC, whose payload is empty, and no existing case in the file
+asserts a fact identity. Add one genuinely single-component fixture (a
+self-recursive program is the simplest) and read `front()` from it; do not
+borrow the chain fixture's `front()` and weaken the assertions to make it pass.
 
 - [ ] **Step 2: Run it and verify it fails to build**
+
+An iteration-based assertion is **not** a usable red here: `for (const
+AnalysisFact& fact : completion.result.facts)` compiles and passes against the
+old `std::vector<AnalysisFact>` just as it does against the new range, so it
+proves nothing about the change. Pin the type instead:
+
+```cpp
+static_assert(std::is_same_v<decltype(WpaComponentResult::facts),
+                             facts::RowArena>);
+static_assert(std::is_same_v<decltype(WpaComponentResult::witnesses),
+                             facts::RowArena>);
+```
 
 ```bash
 cmake --build --preset default --target WpaOrchestratorTest
 ```
 
-Expected: compilation fails — `WpaComponentResult::facts` is still a vector with
-no `begin()`/`end()` iterator pair of the required shape.
+Expected: compilation fails on the two `static_assert`s, because the payload
+fields are still the two rich vectors.
 
 - [ ] **Step 3: Change `WpaComponentResult`**
 
@@ -794,17 +807,21 @@ with `cmake --build --preset default 2>&1 | grep -E 'error:'` and work through
 them; the three known ones are below.
 
 **5a. `SuccessorSupport` (`WpaOrchestrator.cpp:47-71`)** iterates the successor's
-arena and materializes only rows whose relation is in the expected derived set:
+arena and materializes only rows whose relation is in the expected derived set.
+`RowArena` is deliberately **not** iterable — a single `begin()` cannot tell a
+facts arena from a witnesses arena — so every iteration site names its range
+type:
 
 ```cpp
-for (const auto& fact : completed[it->second].result.facts) {
+for (const AnalysisFact& fact :
+     AnalysisFactRange(&completed[it->second].result.facts)) {
   if (expected.contains(fact.row.relation)) {
     support.push_back(fact);
   }
 }
 ```
 
-The loop body is unchanged — `AnalysisFactRange` yields `AnalysisFact` by value —
+The loop body is otherwise unchanged — the range yields `AnalysisFact` by value —
 but the element is now decoded per step rather than borrowed from a vector.
 
 **5b. `SerializeResult` / `DeserializeResult` (`WpaRunRepository.cpp:110-130,
@@ -825,8 +842,8 @@ compare the two ranges row by row in order, and fail on the same message:
 if (p.facts.size() != c.facts.size()) {
   return Status::FailedPrecondition("conformance canonical facts differ");
 }
-auto primary_facts = p.facts.begin();
-for (const AnalysisFact& conformance_fact : c.facts) {
+auto primary_facts = AnalysisFactRange(&p.facts).begin();
+for (const AnalysisFact& conformance_fact : AnalysisFactRange(&c.facts)) {
   if (*primary_facts != conformance_fact) {
     return Status::FailedPrecondition("conformance canonical facts differ");
   }
@@ -839,7 +856,7 @@ rewrite, but it must compile here. Adapt it minimally in this step: iterate the
 range, and bind the owned fact by value rather than moving out of a vector:
 
 ```cpp
-for (const AnalysisFact& fact : completion.result.facts) {
+for (const AnalysisFact& fact : AnalysisFactRange(&completion.result.facts)) {
   fact_key.clear();
   AppendSemanticKey(&fact_key, fact.row);
   if (owned.insert(fact.fact_id).second) {
