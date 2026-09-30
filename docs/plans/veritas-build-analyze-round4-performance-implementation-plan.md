@@ -1179,9 +1179,10 @@ git commit -m "perf(facts): hold the assembled batch in arenas"
 against the arena-backed batch, so it converted the two row comparisons to
 `RowsEqual` over row handles and added the constant-hash seam's plumbing. Read
 what is in the tree before starting: this task's remaining work is the
-hash-keyed fact index (Step 3), the CSR dependency arrays (Step 4), and the
-collision test (Steps 1-2) — **not** the row comparison, which is already
-handles. Do not redo it, and do not revert it to decoded comparisons.
+hash-keyed fact index (Step 3), the CSR dependency arrays (Step 4), the collision
+test (Steps 1-2), and the `DeriveBatchId` decode removal (Step 5, ruling 15) —
+**not** the row comparison, which is already handles. Do not redo it, and do not
+revert it to decoded comparisons.
 
 **Files:**
 
@@ -1286,25 +1287,43 @@ std::vector<std::size_t> depend_target;
 The traversal in the current code becomes index arithmetic over the two arrays
 and must produce the same `processed` count, hence the same cycle rejection.
 
-- [ ] **Step 5: Compare rows through the arena**
+- [ ] **Step 5: Remove `DeriveBatchId`'s per-row decode (ruling 15)**
 
-The two row comparisons that today compare decoded rows —
-`batch.facts[result_it->second].row != edge.result.row` and its input twin —
-become handle comparisons, so no row is decoded during validation. The index
-stores fact positions, and the batch resolves a position to a handle:
+**The row comparison is already done** — Task 3 converted `Validate`'s two row
+comparisons to `RowsEqual` over row handles so its own commit would compile, and
+this task must not redo or revert that.
+
+What belongs here instead is a regression Task 3 introduced.
+`DeriveBatchId` (`AnalysisFactBus.cpp`) now iterates the arena range and decodes
+every row before calling `AppendSemanticKey` on it. The baseline read
+`AppendSemanticKey` straight off an already-rich row, so this is a *new* cost on
+one of the two spans the round exists to shrink, and the call runs twice over
+roughly 2.6M rows — once at assembly, once in `Validate`.
+
+`RowArena::AppendKey(handle, out)` computes the identical bytes with no decode;
+Task 1 tested that equality against `AppendSemanticKey` across every cell
+alternative precisely so it could be relied on here. Use it:
 
 ```cpp
-// The published row at this position, and the witness endpoint's own row,
-// compared as encoded bytes rather than as materialised rows.
-auto published = batch.fact_row_handle_at(result_it->second);
-if (!published.ok()) return published.status();
-if (!batch.RowsEqual(*published, endpoint_row)) { /* as today */ }
+// The batch id hashes exactly the bytes AppendSemanticKey produces, and
+// AppendKey renders those bytes from the stored cells, so nothing is decoded
+// and no digest is re-parsed.
+std::string key;
+for (std::size_t i = 0; i < batch.fact_count(); ++i) {
+  auto handle = batch.fact_handle_at(i);
+  if (!handle.ok()) return handle.status();
+  key.clear();
+  if (Status s = batch.AppendKey(*handle, &key); !s.ok()) return s;
+  AppendField(&canonical, key);
+}
 ```
 
-`endpoint_row` is the witness's result row handle, taken from the range
-iterator (`result_row_handle()`), so the edge is never decoded. `RowsEqual`
-routes each handle to its own arena, so `Validate` never reaches into the
-batch's private arenas or has to know which arena holds which side.
+The batch needs a small forwarding accessor for this (`AppendKey(RowHandle,
+std::string*) const` and the equivalent for witnesses), since the arenas are
+private. **The batch id is the guard**: `AnalysisFactBusTest`'
+`ArenaBatchKeepsTheCanonicalBatchIdAndOwnership` must still pass with the same
+`batch_id` value, and if it does not, the encoding diverged and the change is
+wrong — not the test.
 
 - [ ] **Step 6: Run the validation tests**
 
