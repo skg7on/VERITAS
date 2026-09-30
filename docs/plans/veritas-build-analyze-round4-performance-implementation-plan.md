@@ -1304,26 +1304,44 @@ roughly 2.6M rows — once at assembly, once in `Validate`.
 Task 1 tested that equality against `AppendSemanticKey` across every cell
 alternative precisely so it could be relied on here. Use it:
 
+The facts loop becomes, using accessors the batch already has:
+
 ```cpp
 // The batch id hashes exactly the bytes AppendSemanticKey produces, and
 // AppendKey renders those bytes from the stored cells, so nothing is decoded
 // and no digest is re-parsed.
 std::string key;
 for (std::size_t i = 0; i < batch.fact_count(); ++i) {
-  auto handle = batch.fact_handle_at(i);
-  if (!handle.ok()) return handle.status();
+  auto row = batch.fact_row_handle_at(i);
+  if (!row.ok()) return row.status();
   key.clear();
-  if (Status s = batch.AppendKey(*handle, &key); !s.ok()) return s;
+  if (Status s = batch.AppendKey(*row, &key); !s.ok()) return s;
   AppendField(&canonical, key);
 }
 ```
 
-The batch needs a small forwarding accessor for this (`AppendKey(RowHandle,
-std::string*) const` and the equivalent for witnesses), since the arenas are
-private. **The batch id is the guard**: `AnalysisFactBusTest`'
+Witnesses need three fields per edge — the result row's key, the rule id, and
+the input row's key. The batch already exposes
+`witness_result_row_handle_at(i)` and `witness_input_row_handle_at(i)`, so both
+rows render through `AppendKey`. The rule id is the one value with no accessor
+yet; add a narrow one that returns the stored string without decoding a row:
+
+```cpp
+// The rule id of the index-th witness entry, decoded from its own field.
+StatusOr<std::string> witness_rule_id_at(std::size_t index) const;
+```
+
+The ordinal comes from the existing `witness_at` ordinal field or a sibling
+accessor — whichever keeps the edge undecoded.
+
+`AppendKey` and `witness_rule_id_at` are forwarding accessors on the batch,
+because the arenas are private; `MakeAnalysisFactBatch`'s `friend` declaration
+does not reach `DeriveBatchId`'s callers.
+
+**The batch id is the guard.** `AnalysisFactBusTest`'
 `ArenaBatchKeepsTheCanonicalBatchIdAndOwnership` must still pass with the same
-`batch_id` value, and if it does not, the encoding diverged and the change is
-wrong — not the test.
+`batch_id` value. If it does not, the encoding diverged and this change is
+wrong — not the test. Do not adjust the expected id.
 
 - [ ] **Step 6: Run the validation tests**
 
