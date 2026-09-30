@@ -64,10 +64,7 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
     if (it == completed_index.end()) {
       continue;
     }
-    // The range decodes one entry per step and nothing else, so the only
-    // materialized facts are the ones this component's support relation keeps.
-    for (const auto& fact : facts::AnalysisFactRange(
-             &completed[it->second].result.facts)) {
+    for (const auto& fact : completed[it->second].result.facts) {
       if (expected.contains(fact.row.relation)) {
         support.push_back(fact);
       }
@@ -76,36 +73,17 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
   return support;
 }
 
-// Builds a WpaComponentResult from a canonicalized result and its input. The
-// payload is appended into the result's arenas rather than assigned from the
-// canonicalizer's vectors, so a component's compact payload is the only form
-// that outlives this call. Fails with the append's status when a row the
-// canonicalizer produced cannot be encoded.
-StatusOr<WpaComponentResult> MakeResult(
-    const WpaLogicalComponentInput& logical,
-    const facts::CanonicalizedResult& canonical) {
+// Builds a WpaComponentResult from a canonicalized result and its input.
+WpaComponentResult MakeResult(const WpaLogicalComponentInput& logical,
+                              const facts::CanonicalizedResult& canonical) {
   WpaComponentResult result;
   result.scc_id = logical.scc_id;
   result.component = logical.component;
   result.logical_input_hash = logical.logical_input_hash;
   result.fixpoint_hash = canonical.fixpoint_hash;
   result.external_hash = canonical.external_hash;
-  for (const auto& fact : canonical.facts) {
-    // A fact entry, not a bare row: the entry stores the fact id alongside the
-    // row, which is what makes the range over `facts` yield an AnalysisFact.
-    auto appended = result.facts.AppendFact(fact);
-    if (!appended.ok()) {
-      return appended.status();
-    }
-  }
-  for (const auto& edge : canonical.witnesses) {
-    // A witness entry: the result row, the rule and derivation keys, the input
-    // row, and the ordinal.
-    auto appended = result.witnesses.AppendWitness(edge);
-    if (!appended.ok()) {
-      return appended.status();
-    }
-  }
+  result.facts = canonical.facts;
+  result.witnesses = canonical.witnesses;
   result.diagnostics = canonical.diagnostics;
   return result;
 }
@@ -341,14 +319,7 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
             repository_.MarkIncomplete(request.run);
             return canonical.status();
           }
-          auto made = MakeResult(envelope.logical, *canonical);
-          if (!made.ok()) {
-            repository_.RecordComponentFailure(
-                request.run, key, std::string(made.status().message()));
-            repository_.MarkIncomplete(request.run);
-            return made.status();
-          }
-          component_result = std::move(*made);
+          component_result = MakeResult(envelope.logical, *canonical);
           ++executed_count;
         }
 

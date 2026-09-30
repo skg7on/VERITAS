@@ -27,9 +27,6 @@
 #ifndef VERITAS_FACTS_ANALYSIS_FACT_BUS_H_
 #define VERITAS_FACTS_ANALYSIS_FACT_BUS_H_
 
-#include <cstddef>
-#include <cstdint>
-#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,7 +35,6 @@
 #include "veritas/core/Status.h"
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/AnalysisRun.h"
-#include "veritas/facts/RowArena.h"
 #include "veritas/facts/Witness.h"
 #include "veritas/wpa/WpaOrchestrator.h"
 #include "veritas/wpa/WpaRunRepository.h"
@@ -60,102 +56,9 @@ struct AnalysisFactBatch {
   std::vector<core::StableId> rooted_input_fact_ids;
   // Full rooted-input evidence carried alongside the canonical ID set.
   std::vector<RootedInputFact> rooted_input_facts;
+  std::vector<AnalysisFact> facts;
+  std::vector<WitnessEdge> witnesses;
   std::vector<std::string> diagnostics;
-
-  // Canonical facts and witnesses, held compactly. Iterate, do not copy.
-  AnalysisFactRange facts() const { return AnalysisFactRange(&facts_); }
-  WitnessRange witnesses() const { return WitnessRange(&witnesses_); }
-  std::size_t fact_count() const { return facts_.size(); }
-  std::size_t witness_count() const { return witnesses_.size(); }
-
-  // Row-level handles by position, forwarded to the owning arena. Each
-  // accessor names its arena, so the returned handles are unambiguous and a
-  // comparison needs no arena argument. Validation uses these to compare stored
-  // bytes instead of decoding rows.
-  StatusOr<RowHandle> fact_row_handle_at(std::size_t index) const {
-    return facts_.fact_row_handle_at(index);
-  }
-  StatusOr<RowHandle> witness_result_row_handle_at(std::size_t index) const {
-    return witnesses_.witness_result_row_handle_at(index);
-  }
-  StatusOr<RowHandle> witness_input_row_handle_at(std::size_t index) const {
-    return witnesses_.witness_input_row_handle_at(index);
-  }
-
-  // The canonical key of a stored row, rendered from the cells its arena holds,
-  // in exactly the bytes `AppendSemanticKey` produces for the rich row. The
-  // arenas are private, so a caller outside the batch -- `DeriveBatchId` --
-  // reaches a row's key through these instead of decoding the row only to
-  // encode it again. Each names the arena its handle belongs to, like the
-  // row-handle accessors above, because a handle means nothing without one.
-  Status AppendFactKey(RowHandle fact_row, std::string *out) const {
-    return facts_.AppendKey(fact_row, out);
-  }
-  Status AppendWitnessRowKey(RowHandle witness_row, std::string *out) const {
-    return witnesses_.AppendKey(witness_row, out);
-  }
-
-  // The rule id of the index-th witness entry, read from its own field. It is
-  // the one value `DeriveBatchId` hashes that is neither a row nor the ordinal,
-  // which is why it is the only one that needs an accessor of its own. Fails
-  // with InvalidArgument past the end.
-  StatusOr<std::string> witness_rule_id_at(std::size_t index) const {
-    return witnesses_.rule_id_at(index);
-  }
-
-  // The input ordinal of the index-th witness entry, read from the entry's own
-  // bytes rather than from a decoded edge. Fails exactly as
-  // `witness_rule_id_at` does.
-  StatusOr<std::uint32_t> witness_ordinal_at(std::size_t index) const {
-    return witnesses_.ordinal_at(index);
-  }
-
-  // The index-th witness, decoded. A position in an append-only arena is a
-  // stable identity for a witness; the address of a decoded one is not, because
-  // the ranges yield values and a value dies at the end of the step that
-  // produced it. A consumer that groups witnesses and reaches them again after
-  // the grouping -- the fact store does -- therefore holds positions and asks
-  // for the rows back by position. Fails with InvalidArgument past the end.
-  StatusOr<WitnessEdge> witness_at(std::size_t index) const {
-    auto entry = witnesses_.handle_at(index);
-    if (!entry.ok()) {
-      return entry.status();
-    }
-    return witnesses_.DecodeWitness(*entry);
-  }
-
-  // Compares a published fact's row against a witness's result or input row.
-  // The argument order is the arena order, so a caller cannot silently compare
-  // two rows of the same kind.
-  bool RowsEqual(RowHandle fact_row, RowHandle witness_row) const {
-    return RowArena::RowsEqual(facts_, fact_row, witnesses_, witness_row);
-  }
-
-  // Compares two of the batch's own fact rows, both resolved against the facts
-  // arena. `RowsEqual` above is the cross-arena form the witness closure needs;
-  // this is the same exact byte comparison for the two rows the fact index puts
-  // in one bucket.
-  bool FactRowsEqual(RowHandle left, RowHandle right) const {
-    return facts_.RowEquals(left, right);
-  }
-
-  // Builder side. The arena is append-only, so these replace the whole payload,
-  // and a row the arena rejects is left out rather than stored half-encoded.
-  // Assembly fills the arenas directly instead: it appends in canonical order
-  // and never rebuilds a payload it has already published.
-  void SetFacts(const std::vector<AnalysisFact> &facts);
-  void SetWitnesses(const std::vector<WitnessEdge> &witnesses);
-  void ClearPayload();
-
-private:
-  RowArena facts_;
-  RowArena witnesses_;
-
-  // The assembler appends into both arenas in canonical order. It is a friend
-  // rather than a member because `MakeAnalysisFactBatch` is the pipeline's
-  // entry point and takes the run result by value; the builders above are for
-  // tests and small callers, which can afford to hand over a whole vector.
-  friend AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result);
 };
 
 // Reduces a successful WPA run to a canonical batch: flattens the completed
@@ -169,22 +72,6 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result);
 // Recomputes the canonical content-addressed batch id over every immutable
 // field. Exposed so the bus and its callers share one derivation.
 core::StableId DeriveBatchId(const AnalysisFactBatch &batch);
-
-// The 64-bit bucket hash a fact index keys a row's identity on.
-//
-// It is a bucket selector and not an identity: two distinct rows can reduce to
-// the same value, and the index resolves every bucket by comparing stored row
-// bytes, so a collision costs a comparison and never an answer. An id is
-// already a digest of its row's canonical preimage -- that is what makes it an
-// identity -- so reducing it to 64 bits is a pure function of the row and costs
-// nothing the row has not already paid.
-//
-// Taking the identity rather than the row is deliberate: a row would have to be
-// hashed from its own content on every occurrence, which is an encoding and a
-// mix per fact and per witness endpoint -- more per row than the string-keyed
-// index this replaces -- where the identity is derived once per distinct row by
-// the memo validation already keeps.
-std::uint64_t DefaultKeyHash(const core::StableId &id);
 
 // A named consumer of analysis fact batches. Repeated publication of the same
 // (run_id, batch_id) must be a successful no-op.
@@ -209,17 +96,6 @@ public:
   // Optional recorder. Non-owning; never read for control flow.
   void SetMetrics(core::RunMetrics *metrics) { metrics_ = metrics; }
 
-  // Optional override of the fact index's bucket hash, on the same terms as
-  // `SetMetrics`: a member the caller installs on the bus and not a global, and
-  // one that changes which bucket a lookup probes without changing which entry
-  // answers it -- the index still resolves every bucket by comparing stored
-  // rows. It exists so a test can force every row into one bucket, which is the
-  // only way to exercise that comparison from a unit test.
-  void SetKeyHashForTesting(
-      std::function<std::uint64_t(const core::StableId &)> hash) {
-    key_hash_ = std::move(hash);
-  }
-
   // Validates the batch, then delivers it to every pending sink. Returns
   // non-OK (FailedPrecondition for a malformed batch) without mutating any
   // component success when validation fails; on a sink failure, returns that
@@ -232,10 +108,6 @@ private:
   wpa::WpaRunRepository &delivery_state_;
   std::vector<std::pair<std::string, AnalysisFactSink *>> sinks_;
   core::RunMetrics *metrics_ = nullptr;
-  // Defaults to the canonical identity hash; a test installs a constant to
-  // force every row into one bucket.
-  std::function<std::uint64_t(const core::StableId &)> key_hash_ =
-      DefaultKeyHash;
 };
 
 } // namespace veritas::facts

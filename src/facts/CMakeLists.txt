@@ -53,7 +53,6 @@ add_library(veritas_facts
   RuleRegistry.cpp
   SemanticKeyCodec.cpp
   Witness.cpp
-  RowArena.cpp
   AnalysisFactBus.cpp
   Epistemic.cpp
   FactProto.cpp

@@ -170,20 +170,8 @@ Status CompareCanonicalResults(const wpa::WpaRunResult &primary,
           "conformance result hashes differ for component " +
           std::to_string(static_cast<int>(key.component)));
     }
-    // The two runs evaluated the same logical inputs, so their payloads must
-    // agree row for row in canonical order. An arena has no `operator==`, and a
-    // size difference is a mismatch too rather than a prefix of one.
-    if (p.facts.size() != c.facts.size()) {
+    if (p.facts != c.facts) {
       return Status::FailedPrecondition("conformance canonical facts differ");
-    }
-    const facts::AnalysisFactRange primary_facts(&p.facts);
-    auto primary_it = primary_facts.begin();
-    for (const facts::AnalysisFact& conformance_fact :
-         facts::AnalysisFactRange(&c.facts)) {
-      if (*primary_it != conformance_fact) {
-        return Status::FailedPrecondition("conformance canonical facts differ");
-      }
-      ++primary_it;
     }
   }
   return Status::Ok();
@@ -366,7 +354,7 @@ Status RunWpa(const std::filesystem::path &output_root,
   if (metrics != nullptr) {
     metrics->AddCounter("facts.rooted_input",
                         batch.rooted_input_fact_ids.size(), "count");
-    metrics->AddCounter("facts.canonical", batch.fact_count(), "count");
+    metrics->AddCounter("facts.canonical", batch.facts.size(), "count");
   }
   // The batch id is part of the run's identity and is minted here, so it is
   // surfaced from here rather than re-derived by a caller.

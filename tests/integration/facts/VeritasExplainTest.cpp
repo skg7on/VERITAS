@@ -156,9 +156,8 @@ Fixture PublishFixture(const fs::path& db_dir) {
   batch.batch_id = core::MakeStableId(
       core::IdKind::kFact, std::as_bytes(std::span("explain-batch", 13)));
   batch.rooted_input_fact_ids = {root.fact_id};
-  batch.SetFacts({derived});
-  batch.SetWitnesses(
-      {Edge(Reachable("f", "g"), "direct", DirectCall("f", "g"), 0)});
+  batch.facts = {derived};
+  batch.witnesses = {Edge(Reachable("f", "g"), "direct", DirectCall("f", "g"), 0)};
 
   auto store = FactStore::Open(db_dir);
   const bool ok = store.ok() && store->Publish(batch).ok();

@@ -52,10 +52,10 @@ core::StableId BatchId(std::string_view text) {
                             std::as_bytes(std::span(text.data(), text.size())));
 }
 
-SemanticRow Reachable(std::string_view from, std::string_view to,
-                      EpistemicState state = EpistemicState::kMay) {
+SemanticRow Reachable(std::string_view from, std::string_view to) {
   return SemanticRow{RelationId::kReachableCall,
-                     {FunctionId(from), FunctionId(to), state}};
+                     {FunctionId(from), FunctionId(to),
+                      EpistemicState::kMay}};
 }
 
 SemanticRow DirectCall(std::string_view from, std::string_view to) {
@@ -108,9 +108,8 @@ AnalysisFactBatch SuccessfulBatch(const AnalysisRunManifest& run) {
   batch.run = run;
   batch.batch_id = BatchId("batch");
   batch.rooted_input_fact_ids = {root.fact_id};
-  batch.SetFacts({derived});
-  batch.SetWitnesses(
-      {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)});
+  batch.facts = {derived};
+  batch.witnesses = {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)};
   return batch;
 }
 
@@ -147,14 +146,14 @@ AnalysisFactBatch PublicationRegressionBatch(const AnalysisRunManifest& run) {
                       .summary_id = "summary-gi",
                       .description = "direct g to i"},
   };
-  batch.SetFacts({reachable_fg, reachable_fh, reachable_fi});
-  batch.SetWitnesses({
+  batch.facts = {reachable_fg, reachable_fh, reachable_fi};
+  batch.witnesses = {
       Edge(Reachable("f", "h"), kTransitive, DirectCall("g", "h"), 1),
       Edge(Reachable("f", "i"), kTransitive, DirectCall("g", "i"), 1),
       Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0),
       Edge(Reachable("f", "h"), kTransitive, Reachable("f", "g"), 0),
       Edge(Reachable("f", "i"), kTransitive, DirectCall("f", "g"), 0),
-  });
+  };
   return batch;
 }
 
@@ -412,177 +411,6 @@ TEST(FactStoreTest,
   EXPECT_EQ(*binding_rows, before_redelivery_bindings);
   EXPECT_EQ(*node_rows, before_redelivery_nodes);
   EXPECT_EQ(*edge_rows, before_redelivery_edges);
-
-  std::filesystem::remove_all(db);
-}
-
-// Two results of one relation sharing every cell but the last, so their
-// encoded keys agree up to their final field, each derived by two edges. A
-// grouping keyed on anything coarser than the whole encoded result key -- a
-// prefix of it, the relation alone, or the two derivations of one result --
-// merges or splits these proofs. Every published row the grouping decides is
-// asserted: one node per result, carrying that result's own rule, its own
-// rooted input's evidence, and its own edges at their own ordinals.
-TEST(FactStoreTest, WitnessGroupingIsKeyedByRankNotByEncodedKey) {
-  const auto db = TempDbPath();
-  auto store = FactStore::Open(db);
-  ASSERT_TRUE(store.ok()) << store.status().message();
-
-  const auto run = TestRun("witness-grouping");
-  const auto direct_result = MakeFact(Reachable("f", "g")).value();
-  const auto inferred_result =
-      MakeFact(Reachable("f", "g", EpistemicState::kInferred)).value();
-
-  // The premise, asserted rather than assumed: the two keys differ only inside
-  // their last field, so they share all but the final few bytes and a grouping
-  // that reads less than the whole key merges them.
-  const std::string direct_key = EncodeSemanticKey(direct_result.row);
-  const std::string inferred_key = EncodeSemanticKey(inferred_result.row);
-  ASSERT_NE(direct_key, inferred_key);
-  std::size_t shared = 0;
-  while (shared < direct_key.size() && shared < inferred_key.size() &&
-         direct_key[shared] == inferred_key[shared]) {
-    ++shared;
-  }
-  EXPECT_GT(shared, direct_key.size() - 8u);
-
-  const auto root_direct = MakeFact(DirectCall("f", "g")).value();
-  const auto root_inferred = MakeFact(DirectCall("g", "h")).value();
-  const auto via_direct = MakeFact(Reachable("f", "h")).value();
-  const auto via_inferred = MakeFact(Reachable("g", "i")).value();
-
-  AnalysisFactBatch batch;
-  batch.run = run;
-  batch.batch_id = BatchId("witness-grouping");
-  batch.rooted_input_fact_ids = {root_direct.fact_id, root_inferred.fact_id};
-  batch.rooted_input_facts = {
-      RootedInputFact{.fact = root_direct,
-                      .provenance_ref = "root-direct",
-                      .producer_id = "producer-direct",
-                      .source_anchor_id = "anchor-direct",
-                      .summary_id = "summary-direct",
-                      .description = "direct root"},
-      RootedInputFact{.fact = root_inferred,
-                      .provenance_ref = "root-inferred",
-                      .producer_id = "producer-inferred",
-                      .source_anchor_id = "anchor-inferred",
-                      .summary_id = "summary-inferred",
-                      .description = "inferred root"},
-  };
-  batch.SetFacts({direct_result, inferred_result, via_direct, via_inferred});
-  // Interleaved, and each group's edges appended out of ordinal order: the
-  // group loop is the only thing that separates the two results' edges, and
-  // each group's front edge -- the one that names the rule and carries the
-  // rooted evidence -- is its ordinal-0 edge, not the first one appended.
-  batch.SetWitnesses({
-      Edge(Reachable("f", "g", EpistemicState::kInferred), kTransitive,
-           Reachable("g", "i"), 1),
-      Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0),
-      Edge(Reachable("f", "g", EpistemicState::kInferred), kTransitive,
-           DirectCall("g", "h"), 0),
-      Edge(Reachable("f", "g"), kDirect, Reachable("f", "h"), 1),
-  });
-  ASSERT_TRUE(store->Publish(batch).ok());
-
-  const std::string run_id = core::ToString(run.run_id);
-  auto counts = store->metadata_store().Query(
-      "SELECT (SELECT COUNT(*) FROM analysis_facts),"
-      " (SELECT COUNT(*) FROM run_fact_bindings),"
-      " (SELECT COUNT(*) FROM provenance_nodes),"
-      " (SELECT COUNT(*) FROM provenance_edges)",
-      {});
-  ASSERT_TRUE(counts.ok()) << counts.status().message();
-  // Four published facts plus two rooted inputs; one binding per published
-  // fact; one node and two edges per result. A grouping that merged the two
-  // results publishes one node instead of two.
-  EXPECT_EQ(*counts,
-            (std::vector<std::vector<std::string>>{{"6", "4", "2", "4"}}));
-
-  auto binding_rows = store->metadata_store().Query(
-      "SELECT fact_id, selected_witness_id FROM run_fact_bindings"
-      " WHERE run_id = ? ORDER BY fact_id",
-      {run_id});
-  ASSERT_TRUE(binding_rows.ok()) << binding_rows.status().message();
-  ASSERT_EQ(binding_rows->size(), 4u);
-  std::map<std::string, std::string> selected_witnesses;
-  for (const auto& row : *binding_rows) {
-    ASSERT_EQ(row.size(), 2u);
-    selected_witnesses.emplace(row[0], row[1]);
-  }
-  ASSERT_EQ(selected_witnesses.size(), 4u);
-  // Pinned derivation identities: each covers one result's own ordered edges.
-  // A merged group derives one identity for both results, and a group ordered
-  // by arrival rather than by ordinal derives a different one.
-  EXPECT_EQ(selected_witnesses[core::ToString(direct_result.fact_id)],
-            "57f195d4c9904d4d9f5bd1926d3edc1fe1a75a90e1faee8ab7deb928b142495e");
-  EXPECT_EQ(selected_witnesses[core::ToString(inferred_result.fact_id)],
-            "15ea53e4b8afa903bb9886295642db92c0fd5b76c57e016cbbfd5b2f92ac3428");
-  EXPECT_NE(selected_witnesses[core::ToString(direct_result.fact_id)],
-            selected_witnesses[core::ToString(inferred_result.fact_id)]);
-  // A published fact with no derivation of its own falls back to its semantic
-  // identity rather than borrowing another result's witness.
-  EXPECT_EQ(selected_witnesses[core::ToString(via_direct.fact_id)],
-            core::ToString(via_direct.fact_id));
-
-  auto node_rows = store->metadata_store().Query(
-      "SELECT output_fact_id, witness_id, selected, producer_kind,"
-      " producer_id, rule_id, source_anchor_id, summary_id, description"
-      " FROM provenance_nodes WHERE run_id = ? ORDER BY output_fact_id",
-      {run_id});
-  ASSERT_TRUE(node_rows.ok()) << node_rows.status().message();
-  EXPECT_EQ(
-      *node_rows,
-      SortedRows({
-          {core::ToString(direct_result.fact_id),
-           selected_witnesses[core::ToString(direct_result.fact_id)], "1", "0",
-           "producer-direct", std::string(kDirect), "anchor-direct",
-           "summary-direct", "direct root"},
-          {core::ToString(inferred_result.fact_id),
-           selected_witnesses[core::ToString(inferred_result.fact_id)], "1",
-           "0", "producer-inferred", std::string(kTransitive),
-           "anchor-inferred", "summary-inferred", "inferred root"},
-      }));
-
-  auto edge_rows = store->metadata_store().Query(
-      "SELECT output_fact_id, witness_id, input_kind, input_id, input_ordinal"
-      " FROM provenance_edges WHERE run_id = ?"
-      " ORDER BY output_fact_id, input_ordinal",
-      {run_id});
-  ASSERT_TRUE(edge_rows.ok()) << edge_rows.status().message();
-  EXPECT_EQ(
-      *edge_rows,
-      SortedEdgeRows({
-          {core::ToString(direct_result.fact_id),
-           selected_witnesses[core::ToString(direct_result.fact_id)], "rooted",
-           core::ToString(root_direct.fact_id), "0"},
-          {core::ToString(direct_result.fact_id),
-           selected_witnesses[core::ToString(direct_result.fact_id)], "derived",
-           core::ToString(via_direct.fact_id), "1"},
-          {core::ToString(inferred_result.fact_id),
-           selected_witnesses[core::ToString(inferred_result.fact_id)],
-           "rooted", core::ToString(root_inferred.fact_id), "0"},
-          {core::ToString(inferred_result.fact_id),
-           selected_witnesses[core::ToString(inferred_result.fact_id)],
-           "derived", core::ToString(via_inferred.fact_id), "1"},
-      }));
-
-  // The groups are visited in their encoded keys' own ascending order, which
-  // is the order the rows are inserted in. Both results have the same relation
-  // and shape, so this is a real ordering claim and not a restatement of the
-  // fact ids.
-  auto write_order = store->metadata_store().Query(
-      "SELECT output_fact_id FROM provenance_nodes WHERE run_id = ?"
-      " ORDER BY rowid",
-      {run_id});
-  ASSERT_TRUE(write_order.ok()) << write_order.status().message();
-  ASSERT_EQ(write_order->size(), 2u);
-  const bool direct_first = direct_key < inferred_key;
-  EXPECT_EQ((*write_order)[0][0],
-            core::ToString(direct_first ? direct_result.fact_id
-                                        : inferred_result.fact_id));
-  EXPECT_EQ((*write_order)[1][0],
-            core::ToString(direct_first ? inferred_result.fact_id
-                                        : direct_result.fact_id));
 
   std::filesystem::remove_all(db);
 }

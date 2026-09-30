@@ -15,10 +15,10 @@
 #include "veritas/facts/AnalysisFactBus.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <numeric>
 #include <set>
 #include <span>
@@ -77,43 +77,6 @@ std::string RenderRow(const SemanticRow &row) {
   return out;
 }
 
-// FNV-1a, 64-bit: the offset basis and the prime. A key hash is a bucket
-// selector rather than an identity -- the fact index resolves every bucket by
-// comparing stored rows, so a collision costs a comparison and never an answer
-// -- which is why a cheap, well-spread mix is the right tool here and a
-// cryptographic digest would cost more per row than the index it feeds saves.
-constexpr std::uint64_t kFnvOffsetBasis = 0xcbf29ce484222325ull;
-constexpr std::uint64_t kFnvPrime = 0x100000001b3ull;
-
-// Appends one stored row's canonical key to the batch-id stream, rendered from
-// the cells its arena holds. `render` is the arena-named accessor for that
-// arena, so a caller cannot render a fact row against the witness arena or the
-// reverse.
-//
-// The render cannot fail for a handle the batch's own index produced: the bytes
-// it names are bytes that arena wrote, and a row one arena accepted renders the
-// same way a second time. The assert states that, and a render that somehow
-// failed leaves an empty field, which no stored row renders -- so the derived
-// id moves and the batch-id gate rejects the batch rather than accepting an id
-// that covers a row the batch does not have. That is the same choice
-// `MakeAnalysisFactBatch` makes when an append it enumerated itself fails.
-void AppendStoredRowKey(core::SHA256Hasher *canonical, std::string *scratch,
-                        const AnalysisFactBatch &batch,
-                        const StatusOr<RowHandle> &handle,
-                        Status (AnalysisFactBatch::*render)(
-                            RowHandle, std::string *) const) {
-  scratch->clear();
-  assert(handle.ok());
-  if (handle.ok()) {
-    const Status rendered = (batch.*render)(*handle, scratch);
-    assert(rendered.ok());
-    if (!rendered.ok()) {
-      scratch->clear();
-    }
-  }
-  AppendField(canonical, *scratch);
-}
-
 constexpr std::string_view kDeliveryTableSql =
     "CREATE TABLE IF NOT EXISTS wpa_fact_bus_deliveries ("
     " run_id TEXT NOT NULL,"
@@ -146,21 +109,9 @@ StatusOr<bool> IsDelivered(summarydb::MetadataStore &store,
   return !(*rows).empty() && (*rows)[0][0] != "0";
 }
 
-// One entry of the canonical order the emit pass produces: the rank the sorts
-// order by, and where the entry itself still lives. Deliberately not a decoded
-// row. Assembly reads every owned row exactly once, in canonical order, into
-// the batch's own arena, so holding the row here as well would keep a second,
-// rich copy of the whole payload alive across both sorts for no reader to
-// consume -- which is what the batch's arena exists to delete.
-//
-// `source` borrows the completed component's arena. That is sound because the
-// completion vector is fully sorted before this pass and never resized during
-// it, and because round 4 releases no payload, so the arena outlives the
-// assembly that reads it.
 struct KeyedFact {
   std::uint32_t key_rank = 0;
-  const RowArena *source = nullptr;
-  RowHandle entry;
+  AnalysisFact fact;
 };
 
 struct KeyedWitness {
@@ -168,8 +119,7 @@ struct KeyedWitness {
   std::uint32_t rule_rank = 0;
   std::uint32_t input_rank = 0;
   std::uint32_t input_ordinal = 0;
-  const RowArena *source = nullptr;
-  RowHandle entry;
+  WitnessEdge edge;
 };
 
 // Dense ranks over the distinct encoded semantic keys of one assembly call,
@@ -273,20 +223,6 @@ private:
 
 } // namespace
 
-std::uint64_t DefaultKeyHash(const core::StableId &id) {
-  // An id is already a digest of the row's canonical preimage, so reducing it
-  // to 64 bits is a pure function of the row that costs nothing the row has not
-  // paid. FNV over the canonical text the id carries, which is one pass over 64
-  // characters and mixes the whole digest; parsing those characters into digest
-  // bytes to read a slice of them would cost more and spread no better.
-  std::uint64_t hash = kFnvOffsetBasis;
-  for (char c : id.digest_hex) {
-    hash ^= static_cast<std::uint8_t>(c);
-    hash *= kFnvPrime;
-  }
-  return hash;
-}
-
 core::StableId DeriveBatchId(const AnalysisFactBatch &batch) {
   core::SHA256Hasher canonical;
   // One scratch key for every row in the batch. The batch id covers a million
@@ -313,40 +249,20 @@ core::StableId DeriveBatchId(const AnalysisFactBatch &batch) {
   for (const auto &id : batch.rooted_input_fact_ids) {
     AppendField(&canonical, core::ToString(id));
   }
-  // The rows are rendered from the batch's own arenas, not decoded: `AppendKey`
-  // produces exactly the bytes `AppendSemanticKey` produces for the rich row,
-  // and this function runs twice per run over every fact and both endpoints of
-  // every witness, so a decode per row is precisely the cost the batch's arenas
-  // exist to remove.
-  for (std::size_t i = 0; i < batch.fact_count(); ++i) {
-    AppendStoredRowKey(&canonical, &key, batch, batch.fact_row_handle_at(i),
-                       &AnalysisFactBatch::AppendFactKey);
+  for (const auto &fact : batch.facts) {
+    key.clear();
+    AppendSemanticKey(&key, fact.row);
+    AppendField(&canonical, key);
   }
-  for (std::size_t i = 0; i < batch.witness_count(); ++i) {
-    AppendStoredRowKey(&canonical, &key, batch,
-                       batch.witness_result_row_handle_at(i),
-                       &AnalysisFactBatch::AppendWitnessRowKey);
-    // The rule id and the ordinal are the two witness fields that are not a
-    // row. Both are read from the entry's own bytes, so no edge is decoded for
-    // them either, and both fail exactly as the renders above do: asserted,
-    // with an empty field on the impossible failure.
-    const auto rule_id = batch.witness_rule_id_at(i);
-    assert(rule_id.ok());
-    std::string rule_id_text;
-    if (rule_id.ok()) {
-      rule_id_text = *rule_id;
-    }
-    AppendField(&canonical, rule_id_text);
-    AppendStoredRowKey(&canonical, &key, batch,
-                       batch.witness_input_row_handle_at(i),
-                       &AnalysisFactBatch::AppendWitnessRowKey);
-    const auto ordinal = batch.witness_ordinal_at(i);
-    assert(ordinal.ok());
-    std::string ordinal_text;
-    if (ordinal.ok()) {
-      ordinal_text = std::to_string(*ordinal);
-    }
-    AppendField(&canonical, ordinal_text);
+  for (const auto &edge : batch.witnesses) {
+    key.clear();
+    AppendSemanticKey(&key, edge.result.row);
+    AppendField(&canonical, key);
+    AppendField(&canonical, edge.rule_id);
+    key.clear();
+    AppendSemanticKey(&key, edge.input.row);
+    AppendField(&canonical, key);
+    AppendField(&canonical, std::to_string(edge.input_ordinal));
   }
   for (const auto &diagnostic : batch.diagnostics) {
     AppendField(&canonical, diagnostic);
@@ -401,31 +317,17 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   std::set<std::uint32_t> overridden;
   for (auto &completion : batch.completed_components) {
     overridden.clear();
-    // The payload is an arena, so this pass reads it through the range and
-    // records *where* each owned entry lives rather than a copy of it. The row
-    // is decoded once here, for its id and its sort key, and once more in the
-    // emit pass below -- in canonical order, where it is appended to the
-    // batch's own arena. The component's arena keeps its own copy, because
-    // round 4 releases no payload.
-    const AnalysisFactRange facts_range(&completion.result.facts);
-    for (auto it = facts_range.begin(); it != facts_range.end(); ++it) {
-      // The decode is the iterator's, and it is transient: the row it
-      // materialises is released at the end of this step, so no owned fact is
-      // ever held in the rich form across the two sorts below.
-      const AnalysisFact &fact = *it;
+    for (auto &fact : completion.result.facts) {
       fact_key.clear();
       AppendSemanticKey(&fact_key, fact.row);
       if (owned.insert(fact.fact_id).second) {
         keyed_facts.push_back(KeyedFact{.key_rank = ranks.Intern(fact_key),
-                                        .source = &completion.result.facts,
-                                        .entry = it.handle()});
+                                        .fact = std::move(fact)});
       } else {
         overridden.insert(ranks.Intern(fact_key));
       }
     }
-    const WitnessRange witnesses_range(&completion.result.witnesses);
-    for (auto it = witnesses_range.begin(); it != witnesses_range.end(); ++it) {
-      const WitnessEdge &edge = *it;
+    for (auto &edge : completion.result.witnesses) {
       result_key.clear();
       AppendSemanticKey(&result_key, edge.result.row);
       // The overridden set's member is the interned id, not the key bytes: the
@@ -444,17 +346,18 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
           .rule_rank = ranks.Intern(edge.rule_id),
           .input_rank = ranks.Intern(input_key),
           .input_ordinal = edge.input_ordinal,
-          .source = &completion.result.witnesses,
-          .entry = it.handle(),
+          .edge = std::move(edge),
       });
     }
     for (auto &diagnostic : completion.result.diagnostics) {
       batch.diagnostics.push_back(std::move(diagnostic));
     }
-    // The facts and witnesses need no release: their payload is a compact arena
-    // now, so there is no rich vector buffer left behind to reclaim. The
-    // diagnostics are still a rich vector, and moving each string out of one
-    // leaves its buffer behind exactly as before, so that release stays.
+    // Release the stripped payload vectors, not merely their elements. Moving
+    // each row out empties the row, but the vector keeps the buffer that held
+    // it; across thirteen thousand components that retained capacity is a
+    // second copy of the whole payload living until the batch is destroyed.
+    std::vector<AnalysisFact>().swap(completion.result.facts);
+    std::vector<WitnessEdge>().swap(completion.result.witnesses);
     std::vector<std::string>().swap(completion.result.diagnostics);
   }
 
@@ -476,46 +379,19 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   // established rather than merely checked: sorting puts equal entries
   // adjacent, so the set is collapsed here and Validate's identity checks
   // describe a property this assembler guarantees.
-  //
-  // The collapse is the `std::ranges::unique` this code used to run on the
-  // assembled vector, restated for an append-only arena: the arena cannot
-  // erase, so an entry the vector path would have removed is never appended.
-  // `unique` removes an element equal to the last element it *kept*, so both
-  // loops below compare against the last entry appended rather than against the
-  // previous candidate.
-  //
-  // Both loops decode and append. Neither step can fail for an entry this
-  // function enumerated from the source arena's own index: the bytes the handle
-  // names are bytes that arena wrote, and a row one arena accepted encodes the
-  // same way a second time. A failure is an internal invariant violation rather
-  // than input, so it asserts, and the fallback leaves the row out -- which
-  // leaves its witness unclosed, or its fact unproved, and makes `Validate`
-  // reject the batch rather than publish a row that was never stored.
   std::ranges::sort(keyed_facts, {}, &KeyedFact::key_rank);
-  bool kept_a_fact = false;
-  std::uint32_t last_fact_rank = 0;
-  for (const KeyedFact &keyed : keyed_facts) {
-    // Equal ranks are contiguous: the comparator orders by rank alone, so
-    // entries with equal keys are equivalent under the sort. Two such entries
-    // carry the same row and therefore the same fact id, which is why
-    // collapsing on the rank removes exactly what the old `fact_id` comparison
-    // removed.
-    if (kept_a_fact && keyed.key_rank == last_fact_rank) {
-      continue;
-    }
-    auto fact = keyed.source->DecodeFact(keyed.entry);
-    assert(fact.ok());
-    if (!fact.ok()) {
-      continue;
-    }
-    auto appended = batch.facts_.AppendFact(*fact);
-    assert(appended.ok());
-    if (!appended.ok()) {
-      continue;
-    }
-    last_fact_rank = keyed.key_rank;
-    kept_a_fact = true;
+  batch.facts.reserve(keyed_facts.size());
+  for (auto &keyed : keyed_facts) {
+    batch.facts.push_back(std::move(keyed.fact));
   }
+  std::vector<KeyedFact>().swap(keyed_facts);
+  batch.facts.erase(std::ranges::unique(batch.facts,
+                                        [](const AnalysisFact &left,
+                                           const AnalysisFact &right) {
+                                          return left.fact_id == right.fact_id;
+                                        })
+                        .begin(),
+                    batch.facts.end());
   // The same four fields, in the same order, as the comparator over the encoded
   // keys: ranks preserve the byte order of the values they stand for, so this
   // decides every pair exactly as the string comparison did, ties included.
@@ -526,69 +402,17 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
                              std::tie(right.result_rank, right.rule_rank,
                                       right.input_rank, right.input_ordinal);
                     });
-  bool kept_an_edge = false;
-  WitnessEdge last_edge;
-  for (const KeyedWitness &keyed : keyed_witnesses) {
-    auto edge = keyed.source->DecodeWitness(keyed.entry);
-    assert(edge.ok());
-    if (!edge.ok()) {
-      continue;
-    }
-    // A witness collapses on the whole edge, not on the four fields the sort
-    // orders by: `WitnessEdge::operator==` also compares `derivation_key`,
-    // which the ordering does not carry, so two edges the sort cannot separate
-    // are not necessarily one proof. Comparing the decoded edge against the
-    // last one appended is exactly the `std::ranges::unique` this replaces.
-    if (kept_an_edge && *edge == last_edge) {
-      continue;
-    }
-    auto appended = batch.witnesses_.AppendWitness(*edge);
-    assert(appended.ok());
-    if (!appended.ok()) {
-      continue;
-    }
-    last_edge = std::move(*edge);
-    kept_an_edge = true;
+  batch.witnesses.reserve(keyed_witnesses.size());
+  for (auto &keyed : keyed_witnesses) {
+    batch.witnesses.push_back(std::move(keyed.edge));
   }
+  std::vector<KeyedWitness>().swap(keyed_witnesses);
+  batch.witnesses.erase(std::ranges::unique(batch.witnesses).begin(),
+                        batch.witnesses.end());
   std::ranges::sort(batch.diagnostics);
 
   batch.batch_id = DeriveBatchId(batch);
   return batch;
-}
-
-void AnalysisFactBatch::SetFacts(const std::vector<AnalysisFact> &facts) {
-  facts_ = RowArena{};
-  for (const AnalysisFact &fact : facts) {
-    auto appended = facts_.AppendFact(fact);
-    if (!appended.ok()) {
-      // An append fails only for a row whose stable ID carries a digest that
-      // is not canonical hexadecimal, and this signature has no channel to
-      // report one: it replaces a payload a caller used to assign, which could
-      // not fail either. Leaving the row out keeps the two arenas consistent
-      // with each other -- `Validate` then rejects a batch whose witness no
-      // longer closes -- rather than storing a half-written entry, and debug
-      // builds assert because every other producer of a row in this pipeline
-      // cannot make one that reaches here.
-      assert(appended.ok());
-    }
-  }
-}
-
-void AnalysisFactBatch::SetWitnesses(
-    const std::vector<WitnessEdge> &witnesses) {
-  witnesses_ = RowArena{};
-  for (const WitnessEdge &edge : witnesses) {
-    auto appended = witnesses_.AppendWitness(edge);
-    if (!appended.ok()) {
-      // Fails exactly as `SetFacts` does, and for the same reason.
-      assert(appended.ok());
-    }
-  }
-}
-
-void AnalysisFactBatch::ClearPayload() {
-  facts_ = RowArena{};
-  witnesses_ = RowArena{};
 }
 
 AnalysisFactBus::AnalysisFactBus(wpa::WpaRunRepository &delivery_state)
@@ -624,9 +448,7 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
   }
 
   // Stable fact identity: every fact's ID matches its semantic row, and no two
-  // facts share an identity. The index below enforces the second by comparing
-  // rows rather than ids, which the first check makes the same statement: an id
-  // is a function of its row, so two facts sharing a row share an id.
+  // facts share an ID.
   //
   // One identity memo serves this loop and both endpoints of every witness
   // edge below: the witness rows are drawn from exactly the rows the fact list
@@ -635,23 +457,10 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
   // returns the value `DeriveFactId` returned for that same row -- and it
   // caches only successful derivations, so a row that fails validation fails
   // identically whether or not it has been seen before.
-  // The payload is an arena, so a fact is addressed by its position and read
-  // through the range. Every check below is the one this pass has always made,
-  // in the same order: the position a fact is indexed at is its position in the
-  // range, which was its index in the vector.
-  //
-  // The index is keyed on a 64-bit reduction of the row's identity and resolved
-  // by comparing stored rows, never on the identity itself. An identity is a
-  // 64-character string, so a container keyed on one allocates a string per
-  // fact and compares those strings on every lookup, and this pass indexes
-  // every fact and looks up both endpoints of every witness. The reduction
-  // decides nothing: two rows can reduce alike, and the bucket is resolved by
-  // the exact comparison the arenas support, which is what lets a test force
-  // every row into one bucket and still require these same answers.
   FactIdentityMemo identity;
-  std::unordered_map<std::uint64_t, std::vector<std::size_t>> fact_index;
-  std::size_t position = 0;
-  for (const auto &fact : batch.facts()) {
+  std::map<core::StableId, std::size_t> fact_index;
+  for (std::size_t i = 0; i < batch.facts.size(); ++i) {
+    const auto &fact = batch.facts[i];
     auto derived = identity.Identify(fact.row);
     if (!derived.ok()) {
       return derived.status();
@@ -659,29 +468,11 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
     if (*derived != fact.fact_id) {
       return Status::FailedPrecondition("fact_id does not match its row");
     }
-    auto row = batch.fact_row_handle_at(position);
-    if (!row.ok()) {
-      return row.status();
-    }
-    std::vector<std::size_t> &bucket = fact_index[key_hash_(*derived)];
-    bool duplicate = false;
-    for (std::size_t indexed : bucket) {
-      auto indexed_row = batch.fact_row_handle_at(indexed);
-      if (!indexed_row.ok()) {
-        return indexed_row.status();
-      }
-      if (batch.FactRowsEqual(*indexed_row, *row)) {
-        duplicate = true;
-        break;
-      }
-    }
-    if (duplicate) {
+    if (!fact_index.emplace(fact.fact_id, i).second) {
       return Status::FailedPrecondition("duplicate fact_id " +
                                         core::ToString(fact.fact_id) +
                                         " for row " + RenderRow(fact.row));
     }
-    bucket.push_back(position);
-    ++position;
   }
 
   // Rooted witness closure: every published fact has a derivation, and every
@@ -693,44 +484,12 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
     std::size_t result = kNoFact;
     std::size_t input = kNoFact;
   };
-  // The published fact a row names, or `kNoFact`. A derived id lands in a
-  // bucket, and the bucket is answered by comparing rows: the position a
-  // candidate names carries a stored row, and the entry that matches the
-  // witness's endpoint byte for byte is the one that answers. Both sides are
-  // addressed as rows rather than compared as decoded values -- the published
-  // row lives in the batch's fact arena and the endpoint row in its witness
-  // arena, and `RowsEqual` routes each handle to its own arena -- and the
-  // comparison decides exactly what the structural comparison decided, because
-  // a row is stored in its canonical, injective encoding. A bucket that holds
-  // no such entry, including a bucket two distinct rows reduced into, reports
-  // the same absence the identity lookup reported.
-  const auto published_fact = [&](const core::StableId &id,
-                                  RowHandle endpoint_row)
-      -> StatusOr<std::size_t> {
-    const auto bucket = fact_index.find(key_hash_(id));
-    if (bucket == fact_index.end()) {
-      return kNoFact;
-    }
-    for (std::size_t indexed : bucket->second) {
-      auto published = batch.fact_row_handle_at(indexed);
-      if (!published.ok()) {
-        return published.status();
-      }
-      if (batch.RowsEqual(*published, endpoint_row)) {
-        return indexed;
-      }
-    }
-    return kNoFact;
-  };
-
   std::vector<WitnessEndpoints> endpoints;
-  endpoints.reserve(batch.witness_count());
-  std::vector<bool> witnessed(batch.fact_count(), false);
+  endpoints.reserve(batch.witnesses.size());
+  std::vector<bool> witnessed(batch.facts.size(), false);
   bool input_outside_root_set = false;
   bool result_outside_published_set = false;
-  const WitnessRange witness_range = batch.witnesses();
-  for (auto it = witness_range.begin(); it != witness_range.end(); ++it) {
-    const WitnessEdge &edge = *it;
+  for (const auto &edge : batch.witnesses) {
     auto result = identity.Identify(edge.result.row);
     if (!result.ok()) {
       return result.status();
@@ -741,23 +500,19 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
     }
 
     WitnessEndpoints refs;
-    auto result_fact = published_fact(*result, it.result_row_handle());
-    if (!result_fact.ok()) {
-      return result_fact.status();
-    }
-    if (*result_fact == kNoFact) {
+    const auto result_it = fact_index.find(*result);
+    if (result_it == fact_index.end() ||
+        batch.facts[result_it->second].row != edge.result.row) {
       result_outside_published_set = true;
     } else {
-      refs.result = *result_fact;
+      refs.result = result_it->second;
       witnessed[refs.result] = true;
     }
 
-    auto input_fact = published_fact(*input, it.input_row_handle());
-    if (!input_fact.ok()) {
-      return input_fact.status();
-    }
-    if (*input_fact != kNoFact) {
-      refs.input = *input_fact;
+    const auto input_it = fact_index.find(*input);
+    if (input_it != fact_index.end() &&
+        batch.facts[input_it->second].row == edge.input.row) {
+      refs.input = input_it->second;
     } else if (!roots.contains(*input)) {
       input_outside_root_set = true;
     }
@@ -777,39 +532,16 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
 
   // The witness DAG must be acyclic: every published fact's proof is a finite
   // tree rooted in declared inputs. A cycle would let a fact justify itself.
-  //
-  // The edges are two flat arrays and an offset table rather than a vector per
-  // fact: a batch holds a position per derived row, so a vector of vectors
-  // allocates once per fact and most of those vectors are empty, where the
-  // targets and the offsets are one block each. The slice
-  // `depend_target[depend_offset[i] .. depend_offset[i + 1])` is exactly the
-  // list of results fact `i` proves, so the traversal below is the one this
-  // pass has always run, over index arithmetic instead of a nested vector.
-  std::vector<std::size_t> depend_offset(batch.fact_count() + 1, 0);
-  std::vector<std::size_t> depend_target;
-  std::vector<std::size_t> input_count(batch.fact_count(), 0);
+  std::vector<std::vector<std::size_t>> dependencies(batch.facts.size());
+  std::vector<std::size_t> input_count(batch.facts.size(), 0);
   for (const auto &edge : endpoints) {
     if (edge.input != kNoFact) {
-      ++depend_offset[edge.input + 1];
+      dependencies[edge.input].push_back(edge.result);
       ++input_count[edge.result];
     }
   }
-  for (std::size_t i = 0; i < batch.fact_count(); ++i) {
-    depend_offset[i + 1] += depend_offset[i];
-  }
-  depend_target.resize(depend_offset.back());
-  // The fill replays the pass that counted: `cursor` is a private copy of the
-  // offsets, so each input's slice fills from its own start and a slice keeps
-  // the order the edges were recorded in.
-  std::vector<std::size_t> cursor(depend_offset.begin(),
-                                  depend_offset.end() - 1);
-  for (const auto &edge : endpoints) {
-    if (edge.input != kNoFact) {
-      depend_target[cursor[edge.input]++] = edge.result;
-    }
-  }
   std::vector<std::size_t> ready;
-  ready.reserve(batch.fact_count());
+  ready.reserve(batch.facts.size());
   for (std::size_t i = 0; i < input_count.size(); ++i) {
     if (input_count[i] == 0) {
       ready.push_back(i);
@@ -818,10 +550,7 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
   std::size_t processed = 0;
   for (std::size_t i = 0; i < ready.size(); ++i) {
     ++processed;
-    const std::size_t fact = ready[i];
-    for (std::size_t at = depend_offset[fact]; at < depend_offset[fact + 1];
-         ++at) {
-      const std::size_t dependent = depend_target[at];
+    for (const auto &dependent : dependencies[ready[i]]) {
       if (--input_count[dependent] == 0) {
         ready.push_back(dependent);
       }

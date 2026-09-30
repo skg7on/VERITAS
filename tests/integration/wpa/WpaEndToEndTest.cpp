@@ -229,8 +229,8 @@ TEST(WpaFactBusHandoffTest, OrchestrationProducesValidFactBusBatch) {
 
   facts::AnalysisFactBatch batch =
       facts::MakeAnalysisFactBatch(std::move(*result));
-  EXPECT_NE(batch.fact_count(), 0u);
-  EXPECT_NE(batch.witness_count(), 0u);
+  EXPECT_FALSE(batch.facts.empty());
+  EXPECT_FALSE(batch.witnesses.empty());
   EXPECT_EQ(batch.expected_components.size(), batch.completed_components.size());
 
   struct RecordingSink : facts::AnalysisFactSink {
