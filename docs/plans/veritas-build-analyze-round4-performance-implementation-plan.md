@@ -1404,18 +1404,33 @@ Two cases carry the behaviour the rewrite must preserve, and each gets one
 addition:
 
 - `ResultCanonicalizerTest.SelectsShortestProofDeterministically` (line 181)
-  already pins proof selection. Add to it a result set whose encoded keys share
-  a long prefix and whose cells include a numeric value and a symbol that sort
-  differently as bytes than as values — for example a `kSigned` cell holding
-  `-7` and a `kSymbol` cell holding `"-7"` — so a rank sort that ranked by
-  anything but the encoded key would order them differently. Assert the same
-  canonical order the existing expectations in that case use.
-- `ResultCanonicalizerTest.RejectsCyclicUnrootedWitnesses` (line 162) already
-  pins the cycle rejection. Extend its fixture with a longer acyclic chain
-  rooted in a declared input — at least four derivations deep — so the worklist
-  must propagate through several levels rather than converging in one pass.
-  Assert the case still succeeds and that the selected proof is the shortest
-  one, which is what a worklist that terminates early would get wrong.
+  already pins proof selection. Add to it a result set whose encoded keys
+  discriminate a byte-order sort from a value-order sort.
+
+  **An earlier draft of this step proposed a `kSigned` cell holding `-7` against
+  a `kSymbol` cell holding `"-7"`, and that is not constructible**: no
+  result-side relation has an `kInt64` column, so a signed cell can only appear
+  in a root row, where it reaches nothing but the witness sort's unreachable
+  input-key tie-break. Use a relation that does exist — `SoundnessCoverage`
+  with its boolean cell — plus a symbol cell whose text discriminates under the
+  codec's length prefix. Note that the length prefix is what makes the property
+  real: `"7"` sorts before `"10"` because every field is length-framed, so a
+  naive byte comparison of the raw text would order them the other way. Assert
+  the same canonical order the existing expectations in that case use.
+- `ResultCanonicalizerTest.RejectsCyclicUnrootedWitnesses` (line 162) pins the
+  cycle rejection, and **that guard must survive**. An earlier draft of this
+  step told the implementer to extend that fixture with a rooted chain *and*
+  keep the case's rejection assertion *and* assert a successful shortest proof —
+  which is impossible in one call, because a single unproven result fails the
+  whole component. Do not resolve it by converting the case to a success case:
+  that would drop the only guard on the `kUnproven` rejection path.
+
+  Split it instead. Keep the rejection case exactly as it is, and add a
+  *separate* case whose fixture is a rooted chain at least four derivations
+  deep, so the worklist must propagate through several levels rather than
+  converging in one pass, and which asserts the shortest, tie-broken proof. A
+  worklist that terminates early gets that one wrong; the original case still
+  catches a `kUnproven` that stopped being rejected.
 
 Both extensions use the file's existing `Root`, `Edge`, `Derivation` and
 `RequestFor` helpers; do not introduce new fixture construction.
