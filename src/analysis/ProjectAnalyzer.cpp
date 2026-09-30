@@ -366,7 +366,7 @@ Status RunWpa(const std::filesystem::path &output_root,
   if (metrics != nullptr) {
     metrics->AddCounter("facts.rooted_input",
                         batch.rooted_input_fact_ids.size(), "count");
-    metrics->AddCounter("facts.canonical", batch.facts.size(), "count");
+    metrics->AddCounter("facts.canonical", batch.fact_count(), "count");
   }
   // The batch id is part of the run's identity and is minted here, so it is
   // surfaced from here rather than re-derived by a caller.

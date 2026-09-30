@@ -65,6 +65,12 @@ WitnessEdge FirstWitness(const wpa::WpaComponentResult &result) {
   return *WitnessRange(&result.witnesses).begin();
 }
 
+// The batch's first witness, decoded, for the cases that assemble a batch with
+// exactly one edge.
+WitnessEdge FirstBatchWitness(const AnalysisFactBatch &batch) {
+  return *batch.witnesses().begin();
+}
+
 static_assert(std::is_same_v<
               decltype(&AnalysisFactBus::Publish),
               Status (AnalysisFactBus::*)(const AnalysisFactBatch &) const>);
@@ -198,6 +204,27 @@ std::vector<std::string> RenderFactKeys(const std::vector<AnalysisFact> &facts) 
     rendered.push_back(EncodeSemanticKey(fact.row));
   }
   return rendered;
+}
+
+// The decoded rows of a range. The batch holds its payload in arenas, so a
+// caller that wants to index a row rather than stream it asks for the rows it
+// wants; nothing here retains a range past the call.
+std::vector<AnalysisFact> Materialize(const AnalysisFactRange &facts) {
+  std::vector<AnalysisFact> rows;
+  rows.reserve(facts.size());
+  for (const AnalysisFact &fact : facts) {
+    rows.push_back(fact);
+  }
+  return rows;
+}
+
+std::vector<WitnessEdge> Materialize(const WitnessRange &witnesses) {
+  std::vector<WitnessEdge> edges;
+  edges.reserve(witnesses.size());
+  for (const WitnessEdge &edge : witnesses) {
+    edges.push_back(edge);
+  }
+  return edges;
 }
 
 // The pre-change witness order, reimplemented here from the run's rows: encode
@@ -365,9 +392,9 @@ AnalysisFactBatch SuccessfulBatch() {
   const auto root = MakeFact(DirectCall("f", "g")).value();
   const auto derived = MakeFact(Reachable("f", "g")).value();
   batch.rooted_input_fact_ids = {root.fact_id};
-  batch.facts = {derived};
-  batch.witnesses = {
-      Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)};
+  batch.SetFacts({derived});
+  batch.SetWitnesses(
+      {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)});
   batch.batch_id = DeriveBatchId(batch);
   return batch;
 }
@@ -489,9 +516,9 @@ TEST(AnalysisFactBusTest, CoalescesAFactProvenByTwoComponents) {
                  : FirstWitness(completion_b.result).input.row;
 
   const AnalysisFactBatch batch = MakeAnalysisFactBatch(run);
-  ASSERT_EQ(batch.facts.size(), 1u);
-  ASSERT_EQ(batch.witnesses.size(), 1u);
-  EXPECT_EQ(batch.witnesses[0].input.row, surviving_root);
+  ASSERT_EQ(batch.fact_count(), 1u);
+  ASSERT_EQ(batch.witness_count(), 1u);
+  EXPECT_EQ(FirstBatchWitness(batch).input.row, surviving_root);
   EXPECT_TRUE(bus.Publish(batch).ok());
 
   // Ownership follows the sorted component keys, not the order the orchestrator
@@ -500,8 +527,8 @@ TEST(AnalysisFactBusTest, CoalescesAFactProvenByTwoComponents) {
   wpa::WpaRunResult reversed = run;
   reversed.completed_components = {completion_b, completion_a};
   const AnalysisFactBatch reversed_batch = MakeAnalysisFactBatch(reversed);
-  ASSERT_EQ(reversed_batch.witnesses.size(), 1u);
-  EXPECT_EQ(reversed_batch.witnesses[0].input.row, surviving_root);
+  ASSERT_EQ(reversed_batch.witness_count(), 1u);
+  EXPECT_EQ(FirstBatchWitness(reversed_batch).input.row, surviving_root);
   EXPECT_EQ(reversed_batch.batch_id, batch.batch_id);
   EXPECT_TRUE(bus.Publish(reversed_batch).ok());
 
@@ -539,8 +566,9 @@ TEST(AnalysisFactBusTest, PackedRanksPreserveStringOrderIncludingTies) {
 
   const AnalysisFactBatch packed = MakeAnalysisFactBatch(std::move(run));
 
-  EXPECT_EQ(RenderFactKeys(packed.facts), RenderFactKeys(canonical_facts));
-  EXPECT_EQ(RenderWitnessSortKeys(packed.witnesses),
+  EXPECT_EQ(RenderFactKeys(Materialize(packed.facts())),
+            RenderFactKeys(canonical_facts));
+  EXPECT_EQ(RenderWitnessSortKeys(Materialize(packed.witnesses())),
             RenderWitnessSortKeys(canonical_witnesses));
 
   // The same requirement restated in the domain where it bites: order is what
@@ -548,8 +576,8 @@ TEST(AnalysisFactBusTest, PackedRanksPreserveStringOrderIncludingTies) {
   // identified differently -- which is the silent failure this test exists to
   // prevent.
   AnalysisFactBatch relaid = packed;
-  relaid.facts = canonical_facts;
-  relaid.witnesses = canonical_witnesses;
+  relaid.SetFacts(canonical_facts);
+  relaid.SetWitnesses(canonical_witnesses);
   EXPECT_EQ(DeriveBatchId(relaid), packed.batch_id);
 }
 
@@ -573,9 +601,9 @@ TEST(AnalysisFactBusTest, PackedRanksKeepTheSameUniqueBoundary) {
 
   const AnalysisFactBatch packed = MakeAnalysisFactBatch(std::move(run));
 
-  EXPECT_EQ(packed.facts.size(), 3u);
-  EXPECT_EQ(packed.witnesses.size(), canonical_witnesses.size());
-  EXPECT_EQ(RenderWitnessSortKeys(packed.witnesses),
+  EXPECT_EQ(packed.fact_count(), 3u);
+  EXPECT_EQ(packed.witness_count(), canonical_witnesses.size());
+  EXPECT_EQ(RenderWitnessSortKeys(Materialize(packed.witnesses())),
             RenderWitnessSortKeys(canonical_witnesses));
 
   const auto db = TempDbPath();
@@ -586,23 +614,80 @@ TEST(AnalysisFactBusTest, PackedRanksKeepTheSameUniqueBoundary) {
   std::filesystem::remove_all(db);
 }
 
-TEST(AnalysisFactBusTest, ConsumesComponentPayloadIntoCanonicalBatchVectors) {
+// The batch holds its canonical facts and witnesses in arenas rather than rich
+// vectors, and the property that has to survive the change is the batch id: it
+// is a hash over the canonical rows, so an assembly that reproduces the rows in
+// the same order reproduces the id, and one that does not moves every fact
+// identity in every store without reporting an error. The second half of the
+// case pins the other half of the contract -- assembly consumes the component's
+// payload into the batch *without* emptying the component, which round 4
+// section 5 requires (nothing is released, evicted or reloaded).
+TEST(AnalysisFactBusTest, ArenaBatchKeepsTheCanonicalBatchIdAndOwnership) {
   auto run = DuplicateProofRun();
   const auto expected = MakeAnalysisFactBatch(run);
   auto consumed = MakeAnalysisFactBatch(std::move(run));
 
   EXPECT_EQ(consumed.batch_id, expected.batch_id);
-  EXPECT_EQ(consumed.facts, expected.facts);
-  EXPECT_EQ(consumed.witnesses, expected.witnesses);
-  ASSERT_FALSE(consumed.completed_components.empty());
+  ASSERT_EQ(consumed.fact_count(), expected.fact_count());
+  ASSERT_EQ(consumed.witness_count(), expected.witness_count());
+  // One fact and one witness, not two of each: `DuplicateProofRun` proves the
+  // same derived fact from two components and the ownership rule keeps one
+  // whole proof, which is the "ownership" half of this case's name.
+  ASSERT_EQ(consumed.fact_count(), 1u);
+  ASSERT_EQ(consumed.witness_count(), 1u);
+  const AnalysisFactRange expected_facts = expected.facts();
+  auto expected_fact = expected_facts.begin();
+  for (const AnalysisFact &fact : consumed.facts()) {
+    ASSERT_NE(expected_fact, expected_facts.end());
+    EXPECT_EQ(fact.fact_id, (*expected_fact).fact_id);
+    ++expected_fact;
+  }
+  EXPECT_EQ(expected_fact, expected_facts.end());
+
   for (const auto &completion : consumed.completed_components) {
-    // The payload stays whole. Assembly reads the arena and the batch keeps a
-    // decoded copy until Task 3 takes ownership of the selected derivation, so
-    // the component's own rows are still there -- nothing is released, which is
-    // the round's contract. The diagnostics are the exception: they are not
-    // payload and the assembly still moves them out.
+    // Retained and whole, not emptied by assembly: nothing is released, so the
+    // component's own arena still holds every row it held before.
     EXPECT_FALSE(AnalysisFactRange(&completion.result.facts).empty());
     EXPECT_FALSE(WitnessRange(&completion.result.witnesses).empty());
+    EXPECT_FALSE(completion.result.logical_input_hash.empty());
+  }
+}
+
+TEST(AnalysisFactBusTest, ConsumesComponentPayloadIntoCanonicalBatchVectors) {
+  auto run = DuplicateProofRun();
+  // Every row each component's arena holds, keyed by component and captured
+  // before assembly. Retention is asserted against these and not against a
+  // length: an assembly that dropped rows and left the rest in place would
+  // leave every arena as long as it was and pass a size check.
+  std::map<wpa::WpaComponentKey, std::vector<AnalysisFact>> facts_before;
+  std::map<wpa::WpaComponentKey, std::vector<WitnessEdge>> edges_before;
+  for (const auto &completion : run.completed_components) {
+    facts_before[completion.key] =
+        Materialize(AnalysisFactRange(&completion.result.facts));
+    edges_before[completion.key] =
+        Materialize(WitnessRange(&completion.result.witnesses));
+  }
+
+  const auto expected = MakeAnalysisFactBatch(run);
+  auto consumed = MakeAnalysisFactBatch(std::move(run));
+
+  EXPECT_EQ(consumed.batch_id, expected.batch_id);
+  EXPECT_EQ(Materialize(consumed.facts()), Materialize(expected.facts()));
+  EXPECT_EQ(Materialize(consumed.witnesses()),
+            Materialize(expected.witnesses()));
+  ASSERT_FALSE(consumed.completed_components.empty());
+  for (const auto &completion : consumed.completed_components) {
+    // The payload stays whole. Assembly reads the arena and the batch appends
+    // its own copy of the rows it selected, so the component's own rows are
+    // still there, unchanged -- nothing is released, which is the round's
+    // contract. The diagnostics are the exception: they are not payload and the
+    // assembly still moves them out.
+    const auto facts_it = facts_before.find(completion.key);
+    ASSERT_NE(facts_it, facts_before.end());
+    EXPECT_EQ(Materialize(AnalysisFactRange(&completion.result.facts)),
+              facts_it->second);
+    EXPECT_EQ(Materialize(WitnessRange(&completion.result.witnesses)),
+              edges_before[completion.key]);
     EXPECT_TRUE(completion.result.diagnostics.empty());
     EXPECT_FALSE(completion.result.logical_input_hash.empty());
     EXPECT_FALSE(completion.result.fixpoint_hash.empty());
@@ -622,8 +707,12 @@ TEST(AnalysisFactBusTest, RejectsIncompleteOrMixedRunBatch) {
   EXPECT_FALSE(bus.Publish(incomplete).ok());
 
   // A fact whose identity does not match its semantic row (mixed identity).
+  // The payload is an append-only arena, so the one row is replaced by
+  // rebuilding the facts from the rows the batch already holds.
   auto mixed = SuccessfulBatch();
-  mixed.facts[0].fact_id = FunctionId("not-the-fact");
+  std::vector<AnalysisFact> mixed_rows = Materialize(mixed.facts());
+  mixed_rows[0].fact_id = FunctionId("not-the-fact");
+  mixed.SetFacts(mixed_rows);
   EXPECT_FALSE(bus.Publish(mixed).ok());
 
   std::filesystem::remove_all(db);
@@ -636,7 +725,7 @@ TEST(AnalysisFactBusTest, RejectsFactWithoutClosedWitness) {
   AnalysisFactBus bus(*repo);
 
   auto orphan = SuccessfulBatch();
-  orphan.witnesses.clear();
+  orphan.SetWitnesses({});
   EXPECT_EQ(bus.Publish(std::move(orphan)).code(),
             StatusCode::kFailedPrecondition);
 
@@ -694,8 +783,8 @@ TEST(AnalysisFactBusTest, ValidateStillRejectsEachTamperedIdentity) {
   AnalysisFactBus bus(*repo);
 
   const AnalysisFactBatch batch = SuccessfulBatch();
-  ASSERT_EQ(batch.facts.size(), 1u);
-  ASSERT_EQ(batch.witnesses.size(), 1u);
+  ASSERT_EQ(batch.fact_count(), 1u);
+  ASSERT_EQ(batch.witness_count(), 1u);
 
   // Baseline: a well-formed batch validates.
   ASSERT_TRUE(bus.Publish(batch).ok());
@@ -714,17 +803,30 @@ TEST(AnalysisFactBusTest, ValidateStillRejectsEachTamperedIdentity) {
   ASSERT_TRUE(wrong_kind_function.ok()) << wrong_kind_function.status().message();
   ASSERT_TRUE(other_call_site.ok()) << other_call_site.status().message();
 
-  // A mutated fact id no longer matches its own row.
+  // Each mutation below rebuilds the batch from the rows it already holds with
+  // one row replaced: an arena is append-only, so a stored row cannot be
+  // mutated in place. Only one row per case is touched, so every other field --
+  // including the batch id, which is recomputed over the rebuilt payload -- is
+  // exactly what the untouched cases see.
+
+  // A mutated fact id no longer matches its own row. The row is unchanged, so
+  // this recomputes the id the batch already had; the identity check is what
+  // has to fire here, not the batch-id gate.
+  std::vector<AnalysisFact> fact_rows = Materialize(batch.facts());
+  fact_rows[0].fact_id = *zero_fact;
   AnalysisFactBatch bad_fact = batch;
-  bad_fact.facts[0].fact_id = *zero_fact;
+  bad_fact.SetFacts(fact_rows);
+  bad_fact.batch_id = DeriveBatchId(bad_fact);
   const Status fact_status = bus.Publish(bad_fact);
   EXPECT_EQ(fact_status.code(), StatusCode::kFailedPrecondition);
   EXPECT_EQ(fact_status.message(), "fact_id does not match its row");
 
   // A mutated witness result row is no longer a published fact, so it cannot
   // close the witness for the fact it claims to prove.
+  std::vector<WitnessEdge> result_rows = Materialize(batch.witnesses());
+  result_rows[0].result.row.cells[0] = *other_function;
   AnalysisFactBatch bad_result = batch;
-  bad_result.witnesses[0].result.row.cells[0] = *other_function;
+  bad_result.SetWitnesses(result_rows);
   bad_result.batch_id = DeriveBatchId(bad_result);
   const Status result_status = bus.Publish(bad_result);
   EXPECT_EQ(result_status.code(), StatusCode::kFailedPrecondition);
@@ -733,8 +835,10 @@ TEST(AnalysisFactBusTest, ValidateStillRejectsEachTamperedIdentity) {
   // A witness input row with a cell of the wrong domain is still rejected by
   // the per-cell schema check, which runs inside the identity derivation: a
   // memo hit must never stand in for a row that does not validate.
+  std::vector<WitnessEdge> wrong_kind_rows = Materialize(batch.witnesses());
+  wrong_kind_rows[0].input.row.cells[0] = *wrong_kind_function;
   AnalysisFactBatch wrong_kind_input = batch;
-  wrong_kind_input.witnesses[0].input.row.cells[0] = *wrong_kind_function;
+  wrong_kind_input.SetWitnesses(wrong_kind_rows);
   wrong_kind_input.batch_id = DeriveBatchId(wrong_kind_input);
   const Status kind_status = bus.Publish(wrong_kind_input);
   EXPECT_EQ(kind_status.code(), StatusCode::kInvalidArgument);
@@ -742,8 +846,10 @@ TEST(AnalysisFactBusTest, ValidateStillRejectsEachTamperedIdentity) {
 
   // A witness input row whose identity is well-formed but is neither a
   // published fact nor a declared rooted input is still rejected.
+  std::vector<WitnessEdge> bad_input_rows = Materialize(batch.witnesses());
+  bad_input_rows[0].input.row.cells[0] = *other_call_site;
   AnalysisFactBatch bad_input = batch;
-  bad_input.witnesses[0].input.row.cells[0] = *other_call_site;
+  bad_input.SetWitnesses(bad_input_rows);
   bad_input.batch_id = DeriveBatchId(bad_input);
   const Status input_status = bus.Publish(bad_input);
   EXPECT_EQ(input_status.code(), StatusCode::kFailedPrecondition);
@@ -764,10 +870,10 @@ TEST(AnalysisFactBusTest, RejectsCyclicWitnessDag) {
   auto cycle = SuccessfulBatch();
   const SemanticRow forward = Reachable("f", "g");
   const SemanticRow reverse = Reachable("g", "f");
-  cycle.facts = {MakeFact(forward).value(), MakeFact(reverse).value()};
+  cycle.SetFacts({MakeFact(forward).value(), MakeFact(reverse).value()});
   cycle.rooted_input_fact_ids.clear();
-  cycle.witnesses = {Edge(forward, kDirect, reverse, 0),
-                     Edge(reverse, kDirect, forward, 0)};
+  cycle.SetWitnesses({Edge(forward, kDirect, reverse, 0),
+                      Edge(reverse, kDirect, forward, 0)});
   cycle.batch_id = DeriveBatchId(cycle);
 
   const Status status = bus.Publish(cycle);

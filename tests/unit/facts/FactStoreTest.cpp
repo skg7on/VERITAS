@@ -108,8 +108,9 @@ AnalysisFactBatch SuccessfulBatch(const AnalysisRunManifest& run) {
   batch.run = run;
   batch.batch_id = BatchId("batch");
   batch.rooted_input_fact_ids = {root.fact_id};
-  batch.facts = {derived};
-  batch.witnesses = {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)};
+  batch.SetFacts({derived});
+  batch.SetWitnesses(
+      {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)});
   return batch;
 }
 
@@ -146,14 +147,14 @@ AnalysisFactBatch PublicationRegressionBatch(const AnalysisRunManifest& run) {
                       .summary_id = "summary-gi",
                       .description = "direct g to i"},
   };
-  batch.facts = {reachable_fg, reachable_fh, reachable_fi};
-  batch.witnesses = {
+  batch.SetFacts({reachable_fg, reachable_fh, reachable_fi});
+  batch.SetWitnesses({
       Edge(Reachable("f", "h"), kTransitive, DirectCall("g", "h"), 1),
       Edge(Reachable("f", "i"), kTransitive, DirectCall("g", "i"), 1),
       Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0),
       Edge(Reachable("f", "h"), kTransitive, Reachable("f", "g"), 0),
       Edge(Reachable("f", "i"), kTransitive, DirectCall("f", "g"), 0),
-  };
+  });
   return batch;
 }
 

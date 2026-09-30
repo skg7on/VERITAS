@@ -105,12 +105,12 @@ Chain MakeChain() {
   chain.batch.batch_id = core::MakeStableId(
       core::IdKind::kFact, std::as_bytes(std::span("chain-batch", 11)));
   chain.batch.rooted_input_fact_ids = {root.fact_id};
-  chain.batch.facts = {a, b, c};
-  chain.batch.witnesses = {
+  chain.batch.SetFacts({a, b, c});
+  chain.batch.SetWitnesses({
       Edge(Reachable("f", "g"), "direct", DirectCall("f", "g"), 0),
       Edge(Reachable("f", "h"), "transitive", Reachable("f", "g"), 0),
       Edge(Reachable("f", "i"), "transitive", Reachable("f", "h"), 0),
-  };
+  });
   return chain;
 }
 

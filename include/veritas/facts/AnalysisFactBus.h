@@ -27,6 +27,7 @@
 #ifndef VERITAS_FACTS_ANALYSIS_FACT_BUS_H_
 #define VERITAS_FACTS_ANALYSIS_FACT_BUS_H_
 
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -35,6 +36,7 @@
 #include "veritas/core/Status.h"
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/AnalysisRun.h"
+#include "veritas/facts/RowArena.h"
 #include "veritas/facts/Witness.h"
 #include "veritas/wpa/WpaOrchestrator.h"
 #include "veritas/wpa/WpaRunRepository.h"
@@ -56,9 +58,66 @@ struct AnalysisFactBatch {
   std::vector<core::StableId> rooted_input_fact_ids;
   // Full rooted-input evidence carried alongside the canonical ID set.
   std::vector<RootedInputFact> rooted_input_facts;
-  std::vector<AnalysisFact> facts;
-  std::vector<WitnessEdge> witnesses;
   std::vector<std::string> diagnostics;
+
+  // Canonical facts and witnesses, held compactly. Iterate, do not copy.
+  AnalysisFactRange facts() const { return AnalysisFactRange(&facts_); }
+  WitnessRange witnesses() const { return WitnessRange(&witnesses_); }
+  std::size_t fact_count() const { return facts_.size(); }
+  std::size_t witness_count() const { return witnesses_.size(); }
+
+  // Row-level handles by position, forwarded to the owning arena. Each
+  // accessor names its arena, so the returned handles are unambiguous and a
+  // comparison needs no arena argument. Validation uses these to compare stored
+  // bytes instead of decoding rows.
+  StatusOr<RowHandle> fact_row_handle_at(std::size_t index) const {
+    return facts_.fact_row_handle_at(index);
+  }
+  StatusOr<RowHandle> witness_result_row_handle_at(std::size_t index) const {
+    return witnesses_.witness_result_row_handle_at(index);
+  }
+  StatusOr<RowHandle> witness_input_row_handle_at(std::size_t index) const {
+    return witnesses_.witness_input_row_handle_at(index);
+  }
+
+  // The index-th witness, decoded. A position in an append-only arena is a
+  // stable identity for a witness; the address of a decoded one is not, because
+  // the ranges yield values and a value dies at the end of the step that
+  // produced it. A consumer that groups witnesses and reaches them again after
+  // the grouping -- the fact store does -- therefore holds positions and asks
+  // for the rows back by position. Fails with InvalidArgument past the end.
+  StatusOr<WitnessEdge> witness_at(std::size_t index) const {
+    auto entry = witnesses_.handle_at(index);
+    if (!entry.ok()) {
+      return entry.status();
+    }
+    return witnesses_.DecodeWitness(*entry);
+  }
+
+  // Compares a published fact's row against a witness's result or input row.
+  // The argument order is the arena order, so a caller cannot silently compare
+  // two rows of the same kind.
+  bool RowsEqual(RowHandle fact_row, RowHandle witness_row) const {
+    return RowArena::RowsEqual(facts_, fact_row, witnesses_, witness_row);
+  }
+
+  // Builder side. The arena is append-only, so these replace the whole payload,
+  // and a row the arena rejects is left out rather than stored half-encoded.
+  // Assembly fills the arenas directly instead: it appends in canonical order
+  // and never rebuilds a payload it has already published.
+  void SetFacts(const std::vector<AnalysisFact> &facts);
+  void SetWitnesses(const std::vector<WitnessEdge> &witnesses);
+  void ClearPayload();
+
+private:
+  RowArena facts_;
+  RowArena witnesses_;
+
+  // The assembler appends into both arenas in canonical order. It is a friend
+  // rather than a member because `MakeAnalysisFactBatch` is the pipeline's
+  // entry point and takes the run result by value; the builders above are for
+  // tests and small callers, which can afford to hand over a whole vector.
+  friend AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result);
 };
 
 // Reduces a successful WPA run to a canonical batch: flattens the completed

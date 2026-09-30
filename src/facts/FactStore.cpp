@@ -63,8 +63,19 @@ RunFactBinding ParseBinding(const std::vector<std::string>& row,
 // is derived once, where the edge is first seen, and then reused: it is needed
 // to find rooted evidence, to classify the edge's input, and no part of the
 // publication path needs to re-derive it.
+//
+// The edge itself is addressed by its *position* in the batch's witness arena,
+// not by a pointer to it. The batch holds its payload compactly and the range
+// that reads it yields one decoded edge per step, so the address of a witness
+// read in the grouping pass is the address of a temporary that dies at the end
+// of the step that produced it. A position in an append-only arena is stable
+// and `AnalysisFactBatch::witness_at` decodes it again, which is what lets the
+// grouping pass finish before the rows are read. The ordinal is retained
+// alongside because ordering a group's edges is the only use that needs it, and
+// it is four bytes where a row is hundreds.
 struct WitnessEdgeRef {
-  const WitnessEdge* edge;
+  std::size_t position = 0;
+  std::uint32_t input_ordinal = 0;
   core::StableId input_fact_id;
 };
 
@@ -76,7 +87,17 @@ struct WitnessEdgeRef {
 // The fields stream straight into the hash. Building the whole byte string
 // first cost one large allocation per derivation and, on the caller's side, a
 // copy of every input row just to reach the encoder.
-std::string DeriveWitnessId(const std::vector<WitnessEdgeRef>& ordered_edges) {
+//
+// Each edge is decoded here, one at a time: the input keys are what the hash is
+// computed over, and retaining them from the grouping pass would be a copy of
+// every input row, which is the representation this round removes.
+StatusOr<std::string>
+DeriveWitnessId(const AnalysisFactBatch& batch,
+                const std::vector<WitnessEdgeRef>& ordered_edges) {
+  auto front = batch.witness_at(ordered_edges.front().position);
+  if (!front.ok()) {
+    return front.status();
+  }
   core::SHA256Hasher hasher;
   auto update = [&hasher](std::string_view value) {
     hasher.Update(std::as_bytes(std::span(value.data(), value.size())));
@@ -88,12 +109,16 @@ std::string DeriveWitnessId(const std::vector<WitnessEdgeRef>& ordered_edges) {
   };
   std::string key;
   update("veritas.witness.derivation.v1");
-  AppendSemanticKey(&key, ordered_edges.front().edge->result.row);
+  AppendSemanticKey(&key, front->result.row);
   append_field(key);
-  append_field(ordered_edges.front().edge->rule_id);
+  append_field(front->rule_id);
   for (const WitnessEdgeRef& ref : ordered_edges) {
+    auto edge = batch.witness_at(ref.position);
+    if (!edge.ok()) {
+      return edge.status();
+    }
     key.clear();
-    AppendSemanticKey(&key, ref.edge->input.row);
+    AppendSemanticKey(&key, edge->input.row);
     append_field(key);
   }
   return core::DigestToHex(hasher.Finalize());
@@ -174,11 +199,11 @@ Status FactStore::AppendBinding(summarydb::BulkInsertBatcher& bindings,
 
 Status FactStore::Publish(const AnalysisFactBatch& batch) {
   // Collect every canonical fact: the published (derived) facts plus each
-  // witness input, which may be a rooted input absent from batch.facts. Any
+  // witness input, which may be a rooted input absent from batch.facts(). Any
   // validation failure here happens before a transaction opens, so no rollback
   // is needed.
   std::set<core::StableId> fact_ids;
-  for (const AnalysisFact& fact : batch.facts) {
+  for (const AnalysisFact& fact : batch.facts()) {
     fact_ids.insert(fact.fact_id);
   }
   std::vector<AnalysisFact> missing_input_facts;
@@ -187,6 +212,10 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
 
   struct ResultWitness {
     std::string witness_id;
+    // The rule of the group's first edge in canonical order, which is what both
+    // the derivation identity and the provenance node name. Read off the edge
+    // the group loop decodes once, so the write loop below decodes nothing.
+    std::string rule_id;
     // The result's semantic fact id, derived once where the group is first
     // filled in and reused by the provenance pass below, which needs the same
     // value for the node and every edge of this proof.
@@ -198,7 +227,11 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   // derives each distinct input row once instead of once per citing edge.
   FactIdentityMemo input_identity;
   std::map<std::string, ResultWitness> result_witnesses;
-  for (const WitnessEdge& edge : batch.witnesses) {
+  const WitnessRange batch_witnesses = batch.witnesses();
+  std::size_t position = 0;
+  for (auto it = batch_witnesses.begin(); it != batch_witnesses.end();
+       ++it, ++position) {
+    const WitnessEdge& edge = *it;
     auto input_fact_id = input_identity.Identify(edge.input.row);
     if (!input_fact_id.ok()) {
       return input_fact_id.status();
@@ -210,7 +243,9 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
           AnalysisFact{*input_fact_id, edge.input.row});
     }
     result_witnesses[EncodeSemanticKey(edge.result.row)].ordered_edges.push_back(
-        WitnessEdgeRef{.edge = &edge, .input_fact_id = std::move(*input_fact_id)});
+        WitnessEdgeRef{.position = position,
+                       .input_ordinal = edge.input_ordinal,
+                       .input_fact_id = std::move(*input_fact_id)});
   }
 
   // Group the canonical witnesses by result and derive each result's
@@ -220,14 +255,26 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   std::map<core::StableId, std::string> witness_id_by_fact;
   for (auto& [result_key, entry] : result_witnesses) {
     std::ranges::sort(entry.ordered_edges, [](const auto& a, const auto& b) {
-      return a.edge->input_ordinal < b.edge->input_ordinal;
+      return a.input_ordinal < b.input_ordinal;
     });
-    entry.witness_id = DeriveWitnessId(entry.ordered_edges);
-    auto fact_id = DeriveFactId(entry.ordered_edges.front().edge->result.row);
+    auto witness_id = DeriveWitnessId(batch, entry.ordered_edges);
+    if (!witness_id.ok()) {
+      return witness_id.status();
+    }
+    entry.witness_id = std::move(*witness_id);
+    // The group's result row is the same for every edge of the group -- that is
+    // what grouped them -- so the front edge names it, and one decode answers
+    // both the derived fact's identity and the rule the node carries.
+    auto front = batch.witness_at(entry.ordered_edges.front().position);
+    if (!front.ok()) {
+      return front.status();
+    }
+    auto fact_id = DeriveFactId(front->result.row);
     if (!fact_id.ok()) {
       return fact_id.status();
     }
     entry.fact_id = *fact_id;
+    entry.rule_id = std::move(front->rule_id);
     witness_id_by_fact[*fact_id] = entry.witness_id;
   }
 
@@ -276,7 +323,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
       " producer_kind, analyzer_run_id, scope_kind, scope_id,"
       " selected_witness_id, is_current) VALUES",
       9);
-  for (const AnalysisFact& fact : batch.facts) {
+  for (const AnalysisFact& fact : batch.facts()) {
     s = AppendFact(facts, fact);
     if (!s.ok()) {
       return rollback(s);
@@ -294,7 +341,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   if (!s.ok()) {
     return rollback(s);
   }
-  for (const AnalysisFact& fact : batch.facts) {
+  for (const AnalysisFact& fact : batch.facts()) {
     RunFactBinding binding;
     binding.run_id = batch.run.run_id;
     binding.fact_id = fact.fact_id;
@@ -321,7 +368,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     node.witness_id = entry.witness_id;
     node.selected = true;
     node.producer_kind = ProducerKindForEngine(batch.run.engine);
-    node.rule_id = entry.ordered_edges.front().edge->rule_id;
+    node.rule_id = entry.rule_id;
     // Populate provenance metadata from a rooted input's structured evidence,
     // so the explanation graph reports source anchors and summaries.
     for (const WitnessEdgeRef& edge_ref : entry.ordered_edges) {
@@ -340,7 +387,6 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     }
 
     for (const WitnessEdgeRef& edge_ref : entry.ordered_edges) {
-      const WitnessEdge& edge = *edge_ref.edge;
       FactWitnessEdge witness_edge;
       witness_edge.run_id = batch.run.run_id;
       witness_edge.output_fact_id = result_fact_id;
@@ -348,7 +394,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
       witness_edge.input_kind =
           rooted_inputs.count(edge_ref.input_fact_id) ? "rooted" : "derived";
       witness_edge.input_id = core::ToString(edge_ref.input_fact_id);
-      witness_edge.input_ordinal = edge.input_ordinal;
+      witness_edge.input_ordinal = edge_ref.input_ordinal;
       s = provenance.AddEdge(witness_edge);
       if (!s.ok()) {
         return rollback(s);
