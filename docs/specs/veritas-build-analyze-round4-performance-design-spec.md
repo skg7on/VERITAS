@@ -428,16 +428,17 @@ term that does not move is reported as not having moved.
 ### 9.5 Measured outcome (2026-10-01)
 
 **The round does not meet the acceptance framing of section 4.** CPU rose and the
-larger of the two payload-time terms rose with it; only the memory terms moved,
-and only one of them moved by more than this fixture's run-to-run spread. This
-section records the pair, the equivalence result, and every term, including the
-ones that did not move.
+larger of the two payload-time terms rose with it. On memory, two of the payload
+terms moved in the intended direction and one moved against it, but only
+`wpa.orchestrate`'s pair of readings clears this fixture's run-to-run spread, and
+it does so thinly; the process peaks do not move measurably at all. This section
+records the pair, the equivalence result, and every term, including the ones that
+did not move.
 
 #### 9.5.1 The pair and the protocol
 
-Both revisions were built **in one build tree**, the pre-change revision first,
-and each was run three times against a fresh, non-existent output directory with
-the phase recorder enabled:
+Both revisions were built **in one build tree**, each run three times against a
+fresh, non-existent output directory with the phase recorder enabled:
 
 ```bash
 # pre-change: 59198f5, the round's branch point, rebuilt in this tree
@@ -454,6 +455,36 @@ session at load 1.3-2.0 with 1,262 MiB of a 2,048 MiB swap file in use before,
 during and after. **Every figure below is worst-of-three within its revision**,
 round 3's convention for a fixture with a measured run-to-run spread.
 
+**The run order is post, pre, post, and that is the protocol's consequence, not
+an oversight.** One build tree has one `build/bin/veritas-build`, so measuring
+two revisions in it forces a blocked design: the runs cannot interleave, and a
+machine-state drift across the session lands entirely on one side. The blocks
+are, from each run's own records:
+
+| Block | Window (UTC) | Runs |
+| --- | --- | --- |
+| post, first block | 15:58:25 - 16:25:04 | post-1, post-2, post-3 |
+| pre | 16:28:22 - 16:52:08 | pre-1, pre-2, pre-3 |
+| post, profiled block | 17:06:00 - 17:39:04 | post-4, post-5, post-6 |
+
+**The profiled block is the reversal control.** It reruns the post revision
+*after* the pre block and reproduces the first block, so the CPU and instruction
+gaps are not a drift that accumulated while the pre block ran:
+
+| Block | `run` CPU | instructions retired |
+| --- | --- | --- |
+| post, first block | 490.382 / 488.329 / 488.211 s | 8.5239 / 8.5099 / 8.5045 e12 |
+| pre | 420.231 / 411.234 / 410.057 s | 7.3537 / 7.2868 / 7.2736 e12 |
+| post, profiled block | 491.015 / 495.581 / 488.633 s | 8.5325 / 8.5656 / 8.5104 e12 |
+
+Post is equally slow on both sides of the pre block: its worst-of-three CPU is
+1.06 % *higher* after the pre block than before it, so the drift, such as it is,
+runs against the finding rather than for it. Across all six post runs the CPU
+spread is **7.370 s** and the instruction spread is **0.061e12**, against a
+70.151 s CPU gap and a 1.170e12 instruction gap. **This is the strongest evidence
+in the task**: the sign of every CPU and instruction delta below is a property of
+the revision, not of when the run happened.
+
 The instruction count is Darwin's per-process hardware counter,
 `ri_instructions` from `proc_pid_rusage(pid, RUSAGE_INFO_V6)`, read by a wrapper
 that forks the analyzer and polls the child's rusage every 100 ms, reporting the
@@ -461,11 +492,23 @@ last reading taken before exit. The counter is real for this instrument: a
 10M/100M/1G-iteration busy loop reports 7.07e7 / 6.10e8 / 6.01e9 instructions,
 scaling linearly. It cannot be obtained without root through `powermetrics`, and
 the product execs no worker process on the production path, so a single-process
-count is the whole run's count. Two properties were checked rather than assumed:
-macOS propagates a grandchild's maximum resident set size through `wait4` (a
-211,435,520-byte direct run and a 211,419,136-byte wrapped run of the same
-probe), and the phase recorder's `memory.peak.rss_bytes` equals `/usr/bin/time`'s
-`maxrss` exactly in all six runs, so the two independent RSS instruments agree.
+count is the whole run's count. Two properties were checked rather than assumed.
+
+macOS propagates a grandchild's maximum resident set size through `wait4`: a
+direct run of a probe that touches 200 MiB reports 211,435,520 B and the same
+probe under the wrapper reports 211,419,136 B, so the wrapper does not hide the
+analyzer's peak.
+
+The phase recorder's `memory.peak.rss_bytes` and `/usr/bin/time`'s `maxrss` are
+two independent readings, and **they agree exactly in five of the six measured
+runs — and in all three profiled runs, so eight of nine**. The exception is
+post-1, where the recorder reports 7,376,060,416 B against `time`'s
+7,447,281,664 B, short by 71,221,248 B (0.066 GiB). The recorder samples every
+250 ms and the run's peak falls between its last sample and process exit, so the
+disagreement is the sampler's interval, not a disagreement about the value. It is
+recorded here rather than smoothed over because post-1 is *also* the one run whose
+memory behaves differently in section 9.5.4, and a reader is entitled to both
+facts together.
 
 #### 9.5.2 The pre-change member reproduces section 2.2
 
@@ -621,8 +664,8 @@ Memory, worst of three:
 
 | Term | pre | post | Δ | % | Moved? |
 | --- | ---: | ---: | ---: | ---: | --- |
-| Maximum resident set size (`/usr/bin/time`) | 8,548,581,376 B (7.961 GiB) | 8,368,816,128 B (7.794 GiB) | −179,765,248 B (−0.167 GiB) | −2.1 % | **No** — inside the spread |
-| Peak physical footprint (sampler) | 6,509,468,344 B (6.062 GiB) | 6,749,067,960 B (6.286 GiB) | +239,599,616 B (+0.223 GiB) | +3.7 % | **No** — it rose |
+| Maximum resident set size (`/usr/bin/time`) | 8,548,581,376 B (7.961 GiB) | 8,368,816,128 B (7.794 GiB) | −179,765,248 B (−0.167 GiB) | −2.1 % | **No** — inside the 0.858 GiB spread |
+| Peak physical footprint (sampler) | 6,509,468,344 B (6.062 GiB) | 6,749,067,960 B (6.286 GiB) | +239,599,616 B (+0.223 GiB) | +3.7 % | **No** — inside the 0.712 GiB spread, either way |
 | Peak RSS (sampler) | 7.961 GiB | 7.794 GiB | −0.167 GiB | −2.1 % | same as `maxrss` |
 
 The peak-RSS reduction is **not established**: −0.167 GiB is far inside the post
@@ -630,8 +673,14 @@ revision's own 0.858 GiB run-to-run spread, and this section does not claim it.
 The three pre runs cluster within 0.068 GiB (7.893-7.961) while the three post
 runs span 0.858 GiB (6.936-7.794); the post revision's best run is 0.96 GiB below
 the pre revision's best, and its worst is 0.17 GiB below the pre revision's
-worst. Peak footprint did not improve at all — worst-of-three it rose 0.223 GiB,
-and its spread also widened (0.126 GiB pre, 0.712 GiB post). Neither absolute
+worst. **Most of that post spread is post-1**, whose recorder reading is 0.066 GiB
+below its own `/usr/bin/time` reading (section 9.5.1) — and post-1 is also the run
+whose `facts.publish` delta is the outlier in the table below. Worst-of-three is
+what makes the process peak comparable at all, and it is also what hides these two
+facts; both are stated so a reader can weigh the trough rather than only the
+worst case. Peak footprint did not improve either: worst-of-three it is +0.223 GiB
+against a 0.712 GiB post spread, so under this section's criterion it did not move
+in either direction, while its spread widened from 0.126 GiB. Neither absolute
 threshold in section 4 is claimed here: the 375 s and 4 GiB criteria remain
 reopened.
 
@@ -663,41 +712,67 @@ not touch (`m5.svf`, `m4`, `m2m3`, `m6`, `graph_build`, `execute`, and the `run`
 span's own self time) are unchanged within 0.8 s, which is the control that makes
 the rest interpretable.
 
-Per-term resident deltas, from each span's `rss_start` / `rss_end`, worst of
-three. This is the section's central claim and it is why the process total is not
-the evidence:
+**The criterion, stated once and applied to every memory term below.** A term has
+moved only if its **worst-of-three** difference exceeds the **post revision's own
+run-to-run spread** for that term. Worst-of-three is round 3's convention, and
+the post spread is the right yardstick because it is the revision whose
+behaviour is in question; the pre spread is reported beside it so a reader can see
+when the two disagree. Nothing below is called a reduction on a difference that
+fails this test, and the peak-RSS term in the table above is dismissed by the
+same rule.
 
-| Span | Δ resident, pre | Δ resident, post | Δ | Moved? |
-| --- | ---: | ---: | ---: | --- |
-| `wpa.orchestrate` | +2.153 GiB | +1.738 GiB | **−0.415 GiB** | **Yes** |
-| `facts.publish` | +1.838 GiB | +1.172 GiB | **−0.666 GiB** | **Yes** |
-| `facts.batch_assemble` | +0.565 GiB | +1.150 GiB | **+0.585 GiB** | **Yes — it rose** |
-| `m5.svf` | +2.668 GiB | +2.654 GiB | −0.013 GiB | No |
-| `m4.local_analysis` | +0.298 GiB | +0.291 GiB | −0.007 GiB | No |
-| `m2m3.publish_summaries` | +0.345 GiB | +0.348 GiB | +0.004 GiB | No |
+Per-term resident deltas, from each span's `rss_start` / `rss_end`. This is the
+section's central claim and it is why the process total is not the evidence.
+Every run's delta is shown, because the spread is what decides:
 
-The payload terms did move where section 7.1 put the representation change — the
-retention term (`wpa.orchestrate`) by −0.415 GiB and the publish term by
-−0.666 GiB — but `facts.batch_assemble` **grew** by 0.585 GiB, because section 5
-forbids releasing component payloads, so the batch's own arena is a second copy
-of the payload living beside the component arenas rather than a re-homing of
-them. The net of the three is a reduction of about 0.5 GiB inside a process whose
-peak is set elsewhere, which is exactly the shape the peak-RSS term reports.
+| Span | Δ resident, pre (three runs) | pre spread | Δ resident, post (three runs) | post spread | worst-of-three Δ | Moved? |
+| --- | --- | ---: | --- | ---: | ---: | --- |
+| `wpa.orchestrate` | +2.039 / +2.110 / +2.153 | 0.113 | +1.738 / +1.399 / +1.436 | 0.338 | **−0.415 GiB** | **Yes, by 0.077 GiB** |
+| `facts.publish` | +1.759 / +1.838 / +1.697 | 0.141 | **−2.257** / +1.081 / +1.172 | **3.429** | −0.666 GiB | **Withdrawn — see below** |
+| `facts.batch_assemble` | +0.300 / +0.565 / +0.356 | 0.265 | +0.929 / +1.150 / +0.934 | 0.221 | **+0.585 GiB** | **Yes — it rose** |
+| `m5.svf` | +2.668 / +2.644 / +2.643 | 0.024 | +2.652 / +2.654 / +2.643 | 0.011 | −0.013 GiB | No |
+| `m4.local_analysis` | +0.287 / +0.298 / +0.296 | 0.011 | +0.285 / +0.291 / +0.291 | 0.006 | −0.007 GiB | No |
+| `m2m3.publish_summaries` | +0.345 / +0.344 / +0.248 | 0.097 | +0.348 / +0.345 / +0.243 | 0.105 | +0.004 GiB | No |
 
-Per-span peak resident, worst of three, which is the same claim from the other
-instrument:
+**`facts.publish`'s −0.666 GiB is withdrawn.** Its post spread is 3.429 GiB —
+the three deltas are −2.257, +1.081 and +1.172 GiB — so by the rule used above to
+dismiss peak RSS this difference is not established, and
+reporting it as one would be exactly the inconsistency the rule exists to
+prevent. `post-1` is the run that makes the spread: it is the only one of the six
+where `facts.publish` *released* memory, ending the span 2.257 GiB below where it
+started, and it is the only one where the recorder's peak and `/usr/bin/time`'s
+disagree. Worst-of-three hides both facts, which is why both are stated here.
 
-| Span | pre | post | Δ | pre spread | post spread |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `wpa.orchestrate` | 5.747 GiB | 5.345 GiB | **−0.402 GiB** | 0.046 GiB | 0.341 GiB |
-| `facts.batch_assemble` | 6.401 GiB | 6.275 GiB | −0.126 GiB | 0.159 GiB | 0.336 GiB |
-| `facts.publish` | 7.961 GiB | 7.794 GiB | −0.167 GiB | 0.068 GiB | 0.858 GiB |
-| `m5.svf` | 3.407 GiB | 3.400 GiB | −0.007 GiB | 0.016 GiB | 0.009 GiB |
+**`wpa.orchestrate`'s −0.415 GiB clears the rule, but thinly**, and it is the only
+one of the three payload deltas that does. Its margin is 0.077 GiB against a
+0.338 GiB post spread. Under the stricter reading — the pre revision's *best* run
+against the post revision's *worst* — it is 2.039 − 1.738 = 0.302 GiB against that
+same 0.338 GiB, and does not clear; so this claim rests on the worst-of-three
+convention alone and a reader who prefers the stricter test should treat it as
+unresolved rather than as refuted.
 
-`wpa.orchestrate`'s peak is the one payload term that moved by more than both
-revisions' spreads: −0.402 GiB against a 0.046 GiB pre spread and a 0.341 GiB
-post spread. That is the representation change, measured on the phase that holds
-the component results.
+**`facts.batch_assemble`'s +0.585 GiB is the one robust memory result in this
+table**: it is 2.2× the wider of the two spreads. It rose because section 5
+forbids releasing component payloads, so the batch's own arena is a second copy of
+the payload living beside the component arenas rather than a re-homing of them.
+
+The peak-resident instrument, from the same runs and by the same rule:
+
+| Span | pre (three runs) | pre spread | post (three runs) | post spread | worst-of-three Δ | Moved? |
+| --- | --- | ---: | --- | ---: | ---: | --- |
+| `wpa.orchestrate` | 5.701 / 5.721 / 5.747 | 0.046 | 5.345 / 5.049 / 5.004 | 0.341 | **−0.402 GiB** | **Yes, by 0.061 GiB** |
+| `facts.batch_assemble` | 6.242 / 6.287 / 6.401 | 0.159 | 6.275 / 6.202 / 5.939 | 0.336 | −0.126 GiB | No |
+| `facts.publish` | 7.918 / 7.893 / 7.961 | 0.068 | 6.869 / 7.794 / 7.420 | 0.925 | −0.167 GiB | No |
+| `m5.svf` | 3.407 / 3.393 / 3.391 | 0.016 | 3.391 / 3.400 / 3.390 | 0.010 | −0.007 GiB | No |
+
+`wpa.orchestrate`'s peak is the strongest single memory result in the round:
+−0.402 GiB worst-of-three, clearing the post spread by 0.061 GiB, on the phase
+that holds the component results, and pointing the same way as its resident delta
+(−0.415 GiB). Both are thin against a 0.341 GiB spread and a stricter
+min-pre-vs-max-post reading gives 5.701 − 5.345 = 0.356 GiB against that same
+0.341 GiB. **Two independent instruments on the same phase agree in sign and
+magnitude, which is worth more than either margin alone, but neither is a large
+effect on this fixture.**
 
 #### 9.5.5 Where the time went
 
@@ -731,15 +806,25 @@ another decode plus an arena append where the old one moved a pointer.
 
 Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
 
-- every main-thread sample in the `Validate` capture is inside `DeriveBatchId`,
-  and that function's own samples are dominated by `AppendField` →
-  `SHA256Hasher::Update`. `DeriveBatchId` reaches each row's key through
-  `AppendStoredRowKey` → `Batch::AppendFactKey` → `RowArena::AppendKey`. Since
-  `batch_id` is byte-identical between the revisions the hashed byte stream is
-  identical too, so this capture says what that span is *made of* and does **not**
-  locate the +13.7 s: a 6-second capture inside a 52-second span cannot apportion
-  it, and the pre revision was not profiled. The delta is reported as measured
-  and unattributed;
+- every main-thread sample in the `Validate` capture is inside `DeriveBatchId`
+  (100 %), and 90.1 % of the capture is inside `AppendStoredRowKey`, which splits
+  almost evenly into two halves. **45.4 % of `AppendStoredRowKey` renders each
+  row's key out of the batch's arena** through `Batch::AppendFactKey` →
+  `RowArena::AppendKey` → `WriteKey`, and **51.4 % hashes the rendered key**
+  through `AppendField` → `SHA256Hasher::Update`. The render is the largest
+  single named leaf in the capture, at 40.9 %, and it does not decode: `ReadRow`
+  and `DecodeCell` are absent from the capture entirely. Since `batch_id` is
+  byte-identical between the revisions the hashed byte *stream* is identical too,
+  so the hash half cannot itself be where 13.7 s went — **which leaves the render,
+  `RowArena::AppendKey`, as new work on this round's rewritten path and the
+  capture pointing at the round rather than away from it.** The original draft of
+  this section read the opposite way: it called the capture "dominated by
+  `AppendField` → `SHA256Hasher::Update`", which generalised one frame's
+  composition to the whole function and, worse, used it to conclude that the
+  arena's key render was not implicated. The figures above are the correction.
+  The disclaimer stands: a 6-second capture inside a 52-second span cannot
+  apportion the delta, and the pre revision was not profiled, so the +13.7 s is
+  reported as measured and **not** attributed;
 - the fact-store capture is 49.4 % `WitnessRange::Iterator::operator*` →
   `RowArena::DecodeWitness` (2201 of 4456 samples), with `FactIdentityMemo::
   Identify` at 26 % — the same decode-per-row shape, now in the consumer.
@@ -761,14 +846,17 @@ representation gap **and that CPU falls**. Measured:
   coordinate identical, both orderings of all four published tables
   byte-identical, all 13,716 per-component hashes identical, with working
   controls;
-- the per-term memory half **passes in part**: `wpa.orchestrate`'s peak moved
-  −0.402 GiB beyond both spreads and its resident delta −0.415 GiB, and
-  `facts.publish`'s resident delta moved −0.666 GiB, while
-  `facts.batch_assemble`'s grew +0.585 GiB and the process peaks did not move
-  measurably;
+- the per-term memory half **passes only in part, and less than the first draft
+  of this section claimed**: `wpa.orchestrate`'s peak moved −0.402 GiB and its
+  resident delta −0.415 GiB, both clearing the post spread thinly (by 0.061 and
+  0.077 GiB against a 0.341 and 0.338 GiB spread) and agreeing with each other;
+  `facts.batch_assemble`'s resident delta grew a robust +0.585 GiB; and
+  `facts.publish`'s −0.666 GiB is **withdrawn** because its own spread is
+  3.429 GiB. The process peaks did not move measurably;
 - the CPU half **fails**: +70.151 s (+16.7 %) and +1.17e12 instructions
   (+15.9 %), against a phase profile whose untouched phases are unchanged within
-  0.4 s.
+  0.8 s. Post is equally slow on both sides of the pre block, so the sign is the
+  revision's and not the session's.
 
 **This round is not accepted on section 4's framing as written.** The 29.1 s
 `canonicalize` win is real and is the round's own; it is outweighed by 47.7 s in
@@ -776,7 +864,10 @@ batch assembly, 31.3 s in `wpa.orchestrate`'s own time and 13.7 s in validation,
 all three on the path this round rewrote. The attribution in section 9.5.5 is
 what a successor stage needs: the decode-per-row tax that the compact
 representation introduces in every consumer of it, and which section 7.1's own
-premise — "callers decode one row at a time" — priced at the wrong place.
+premise — "callers decode one row at a time" — priced at the wrong place. The
+`validate` capture points at `RowArena::AppendKey`, the key render the arena
+representation introduced, so that tax is not only a decode cost; a successor
+should treat the render as a suspect too.
 
 ## 10. Successor Stages (not this change)
 
