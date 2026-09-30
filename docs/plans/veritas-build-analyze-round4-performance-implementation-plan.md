@@ -879,6 +879,12 @@ commit, because the batch is still a rich vector until Task 3. That is
 deliberate — it is what keeps this task's commit compiling without reaching into
 Task 3's redesign, and Task 3 removes the copy.
 
+Note also for the implementer: this task does not touch `FactStore.cpp`, whose
+own use-after-free arrives with Task 3 — see that task's Step 5e. The lesson is
+this task's too, though: a decoded value's address dies with the step that
+produced it, so the value-copied `surviving_root` in this task's test changes is
+the same shape as the bug Task 3 has to fix.
+
 - [ ] **Step 6: Run the WPA and repository tests**
 
 ```bash
@@ -916,6 +922,9 @@ git commit -m "perf(wpa): hold component payloads in a compact arena"
 - Modify: `include/veritas/facts/AnalysisFactBus.h:46-74`
 - Modify: `src/facts/AnalysisFactBus.cpp:274-416`
 - Modify: `src/analysis/ProjectAnalyzer.cpp:346-358`
+- Modify: `src/facts/FactStore.cpp` — **compile site and lifetime fix**; see the
+  note below. Adding it here rather than leaving it to Task 6, because the
+  payload conversion turns its witness grouping into a use-after-free.
 - Modify: `tests/unit/facts/AnalysisFactBusTest.cpp:341-342, 462-480, 660-670`
 - Modify: `tests/unit/facts/FactStoreTest.cpp:111-150`
 - Modify: `tests/unit/facts/ProvenanceStoreTest.cpp:108-109`
@@ -947,10 +956,30 @@ TEST(AnalysisFactBusTest, ArenaBatchKeepsTheCanonicalBatchIdAndOwnership) {
     EXPECT_EQ(fact.fact_id, expected.facts[i].fact_id);
     ++i;
   }
-  for (const auto& completion : consumed.completed_components) {
-    EXPECT_TRUE(completion.result.facts.empty());
-    EXPECT_TRUE(completion.result.witnesses.empty());
-    EXPECT_FALSE(completion.result.logical_input_hash.empty());
+  // The component's payload is retained and whole: round 4 releases nothing
+  // (spec section 5), so this asserts the *opposite* of what the vector-era
+  // test asserted. State it as a real before/after rather than as
+  // non-emptiness, which would still pass if assembly silently dropped rows:
+  // `expected` came from an lvalue run (a copy, left untouched by its own
+  // assembly) and `consumed` from the moved one, so comparing the two
+  // components' rows asserts assembly did not mutate either payload.
+  ASSERT_FALSE(consumed.completed_components.empty());
+  ASSERT_EQ(consumed.completed_components.size(),
+            expected.completed_components.size());
+  for (std::size_t c = 0; c < consumed.completed_components.size(); ++c) {
+    std::vector<core::StableId> before;
+    for (const AnalysisFact& fact : AnalysisFactRange(
+             &expected.completed_components[c].result.facts)) {
+      before.push_back(fact.fact_id);
+    }
+    std::vector<core::StableId> after;
+    for (const AnalysisFact& fact : AnalysisFactRange(
+             &consumed.completed_components[c].result.facts)) {
+      after.push_back(fact.fact_id);
+    }
+    EXPECT_EQ(after, before);
+    EXPECT_FALSE(
+        consumed.completed_components[c].result.logical_input_hash.empty());
   }
 }
 ```
@@ -1032,8 +1061,20 @@ arena appends in the same order. The two `std::ranges::unique` passes become a
 single pass that skips an entry whose rank equals the previous entry's, because
 an arena cannot erase.
 
-Note: the existing duplicate collapse relies on equal entries being adjacent
-after the rank sort, which stays true; only the mechanism changes.
+**The collapse predicate must be `unique`'s, not the sort rank's.** An earlier
+draft of this step said to skip an entry whose rank equals the previous
+candidate's, and that is wrong in a way that changes published output:
+`std::ranges::unique` removes an element equal to the last element it **kept**
+(not the previous candidate), and it compares whole `WitnessEdge`s, whose
+`operator==` also compares `derivation_key` — a field the four-field rank
+ordering does not carry. Two witness edges the sort cannot separate are
+therefore not necessarily one proof, so a rank-only check would drop edges the
+vector path kept, silently changing the selected derivations, the batch id, and
+every published provenance edge.
+
+Both loops must therefore decode each entry and compare it against the last
+entry **appended**, which is exactly what `unique` did over the vector. The
+sort's adjacency guarantee still holds; only the erasure mechanism changed.
 
 - [ ] **Step 5: Update every call site**
 
@@ -1076,6 +1117,36 @@ The batch id must still be recomputed after each rebuild, exactly as the comment
 at the top of that case explains — a stale id would be rejected at the batch-id
 gate before the check under test runs, and the case would pass vacuously.
 
+**A fifth site, and it is not mechanical either: `FactStore::Publish`
+(`src/facts/FactStore.cpp`).** Its witness grouping holds `ordered_edges` as
+`const WitnessEdge*` **into the batch**. That was valid while the payload was a
+`std::vector`, whose element addresses are stable. Once the payload is an arena
+read through a range that yields **by value**, the address of an edge read in
+the grouping pass is the address of a temporary that dies at the end of the step
+that produced it, while the grouping pass outlives it — a use-after-free. Store
+the edge's **position** in the witness arena plus its `input_ordinal` instead,
+and decode on demand:
+
+```cpp
+struct WitnessEdgeRef {
+  std::size_t position = 0;         // n-th witness entry, stable
+  std::uint32_t input_ordinal = 0;  // ordering needs only this, four bytes
+  core::StableId input_fact_id;
+};
+```
+
+`AnalysisFactBatch` exposes `StatusOr<WitnessEdge> witness_at(std::size_t)`, and
+`DeriveWitnessId` takes the batch so it can decode the edges it hashes. The
+ordinal is carried alongside the position because ordering a group's edges is
+the only use that needs it, and a row is hundreds of bytes where a `uint32_t` is
+four. `FactStoreTest` is the guard: this defect surfaces there as a cell-count
+mismatch, not as a crash.
+
+This is the same class as the borrowed reference Task 2 had to turn into a value
+copy in `AnalysisFactBusTest`: **any reference, pointer, or iterator into a
+decoded range dies with the step that produced it.** Sweep `FactStore.cpp` and
+every other consumer for that shape rather than fixing only this instance.
+
 - [ ] **Step 6: Run the batch, store, and explain tests**
 
 ```bash
@@ -1103,6 +1174,14 @@ git commit -m "perf(facts): hold the assembled batch in arenas"
 ---
 
 ### Task 4: Validation reads handles, not decoded rows
+
+**Partially done already, by Task 3.** Task 3 had to make `Validate` compile
+against the arena-backed batch, so it converted the two row comparisons to
+`RowsEqual` over row handles and added the constant-hash seam's plumbing. Read
+what is in the tree before starting: this task's remaining work is the
+hash-keyed fact index (Step 3), the CSR dependency arrays (Step 4), and the
+collision test (Steps 1-2) — **not** the row comparison, which is already
+handles. Do not redo it, and do not revert it to decoded comparisons.
 
 **Files:**
 
