@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <map>
 #include <span>
@@ -31,6 +32,7 @@
 
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/AnalysisRun.h"
+#include "veritas/facts/RowArena.h"
 #include "veritas/facts/Witness.h"
 #include "veritas/wpa/WpaOrchestrator.h"
 #include "veritas/wpa/WpaRunRepository.h"
@@ -39,6 +41,29 @@ namespace veritas::facts {
 namespace {
 
 namespace sem = analysis::semantic;
+
+// A component's payload is an arena, so a fixture that used to assign a vector
+// appends each element instead. A fixture whose append cannot encode its own
+// row is a broken fixture, not a case under test.
+void AddFact(wpa::WpaComponentResult *result, const AnalysisFact &fact) {
+  auto appended = result->facts.AppendFact(fact);
+  if (!appended.ok()) {
+    std::abort();
+  }
+}
+
+void AddWitness(wpa::WpaComponentResult *result, const WitnessEdge &edge) {
+  auto appended = result->witnesses.AppendWitness(edge);
+  if (!appended.ok()) {
+    std::abort();
+  }
+}
+
+// The first witness a component's arena holds, decoded, so a fixture that has
+// one edge asks the range for it rather than indexing a vector.
+WitnessEdge FirstWitness(const wpa::WpaComponentResult &result) {
+  return *WitnessRange(&result.witnesses).begin();
+}
 
 static_assert(std::is_same_v<
               decltype(&AnalysisFactBus::Publish),
@@ -196,7 +221,7 @@ CanonicalWitnessOrderByStringKeys(const wpa::WpaRunResult &run) {
   };
   std::vector<KeyedEdge> keyed;
   for (const auto &completion : run.completed_components) {
-    for (const auto &edge : completion.result.witnesses) {
+    for (const auto &edge : WitnessRange(&completion.result.witnesses)) {
       keyed.push_back(KeyedEdge{
           .result_key = EncodeSemanticKey(edge.result.row),
           .rule_id = edge.rule_id,
@@ -234,7 +259,7 @@ std::vector<AnalysisFact>
 CanonicalFactOrderByStringKeys(const wpa::WpaRunResult &run) {
   std::vector<AnalysisFact> facts;
   for (const auto &completion : run.completed_components) {
-    for (const auto &fact : completion.result.facts) {
+    for (const auto &fact : AnalysisFactRange(&completion.result.facts)) {
       facts.push_back(fact);
     }
   }
@@ -278,9 +303,11 @@ wpa::WpaRunResult TiebreakerRun() {
     completion.result.fixpoint_hash = "fixpoint";
     completion.result.external_hash = "external";
     for (auto &row : rows) {
-      completion.result.facts.push_back(fact(row));
+      AddFact(&completion.result, fact(row));
     }
-    completion.result.witnesses = std::move(edges);
+    for (const WitnessEdge &edge : edges) {
+      AddWitness(&completion.result, edge);
+    }
     return completion;
   };
 
@@ -362,8 +389,8 @@ wpa::WpaRunResult DuplicateProofRun() {
     completion.result.logical_input_hash = "logical";
     completion.result.fixpoint_hash = "fixpoint";
     completion.result.external_hash = "external";
-    completion.result.facts = {MakeFact(flow).value()};
-    completion.result.witnesses = {Edge(flow, kFlowParameter, root, 0)};
+    AddFact(&completion.result, MakeFact(flow).value());
+    AddWitness(&completion.result, Edge(flow, kFlowParameter, root, 0));
     return completion;
   };
   const auto completion_a = component("scc:a", root_a, shared_flow);
@@ -457,9 +484,9 @@ TEST(AnalysisFactBusTest, CoalescesAFactProvenByTwoComponents) {
   // surviving proof is whichever component's key sorts first -- and it must be
   // that component's whole derivation, root and all.
   const bool first_is_a = completion_a.key < completion_b.key;
-  const SemanticRow &surviving_root =
-      first_is_a ? completion_a.result.witnesses[0].input.row
-                 : completion_b.result.witnesses[0].input.row;
+  const SemanticRow surviving_root =
+      first_is_a ? FirstWitness(completion_a.result).input.row
+                 : FirstWitness(completion_b.result).input.row;
 
   const AnalysisFactBatch batch = MakeAnalysisFactBatch(run);
   ASSERT_EQ(batch.facts.size(), 1u);
@@ -540,9 +567,9 @@ TEST(AnalysisFactBusTest, PackedRanksKeepTheSameUniqueBoundary) {
   // An exact repeat of an edge already present, with the same rows, rule, and
   // ordinal -- so the two are equal under both the comparator and `operator==`,
   // and the collapse does not depend on which order a sort placed them in.
-  run.completed_components[0].result.witnesses.push_back(
-      Edge(Reachable("tie-alpha", "tie-beta"), "wpa.rule.alpha",
-           DirectCall("tie", "a"), 0));
+  AddWitness(&run.completed_components[0].result,
+             Edge(Reachable("tie-alpha", "tie-beta"), "wpa.rule.alpha",
+                  DirectCall("tie", "a"), 0));
 
   const AnalysisFactBatch packed = MakeAnalysisFactBatch(std::move(run));
 
@@ -569,8 +596,13 @@ TEST(AnalysisFactBusTest, ConsumesComponentPayloadIntoCanonicalBatchVectors) {
   EXPECT_EQ(consumed.witnesses, expected.witnesses);
   ASSERT_FALSE(consumed.completed_components.empty());
   for (const auto &completion : consumed.completed_components) {
-    EXPECT_TRUE(completion.result.facts.empty());
-    EXPECT_TRUE(completion.result.witnesses.empty());
+    // The payload stays whole. Assembly reads the arena and the batch keeps a
+    // decoded copy until Task 3 takes ownership of the selected derivation, so
+    // the component's own rows are still there -- nothing is released, which is
+    // the round's contract. The diagnostics are the exception: they are not
+    // payload and the assembly still moves them out.
+    EXPECT_FALSE(AnalysisFactRange(&completion.result.facts).empty());
+    EXPECT_FALSE(WitnessRange(&completion.result.witnesses).empty());
     EXPECT_TRUE(completion.result.diagnostics.empty());
     EXPECT_FALSE(completion.result.logical_input_hash.empty());
     EXPECT_FALSE(completion.result.fixpoint_hash.empty());

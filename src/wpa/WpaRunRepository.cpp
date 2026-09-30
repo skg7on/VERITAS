@@ -115,11 +115,11 @@ std::string SerializeResult(const WpaComponentResult& result) {
   AppendString(&out, result.fixpoint_hash);
   AppendString(&out, result.external_hash);
   AppendU32(&out, static_cast<std::uint32_t>(result.facts.size()));
-  for (const auto& fact : result.facts) {
+  for (const auto& fact : facts::AnalysisFactRange(&result.facts)) {
     AppendFact(&out, fact);
   }
   AppendU32(&out, static_cast<std::uint32_t>(result.witnesses.size()));
-  for (const auto& edge : result.witnesses) {
+  for (const auto& edge : facts::WitnessRange(&result.witnesses)) {
     AppendWitness(&out, edge);
   }
   AppendU32(&out, static_cast<std::uint32_t>(result.diagnostics.size()));
@@ -347,30 +347,37 @@ StatusOr<WpaComponentResult> DeserializeResult(std::string_view data) {
   }
   result.external_hash = std::string(*external);
 
+  // Each count below is still read and still bounds its loop: it is part of the
+  // format, and the arena an append lands in has no length to pre-reserve, only
+  // an entry index to advance.
   auto fact_count = reader.ReadU32();
   if (!fact_count.ok()) {
     return fact_count.status();
   }
-  result.facts.reserve(*fact_count);
   for (std::uint32_t i = 0; i < *fact_count; ++i) {
     auto fact = ReadFact(&reader);
     if (!fact.ok()) {
       return fact.status();
     }
-    result.facts.push_back(std::move(*fact));
+    auto appended = result.facts.AppendFact(*fact);
+    if (!appended.ok()) {
+      return appended.status();
+    }
   }
 
   auto witness_count = reader.ReadU32();
   if (!witness_count.ok()) {
     return witness_count.status();
   }
-  result.witnesses.reserve(*witness_count);
   for (std::uint32_t i = 0; i < *witness_count; ++i) {
     auto edge = ReadWitness(&reader);
     if (!edge.ok()) {
       return edge.status();
     }
-    result.witnesses.push_back(std::move(*edge));
+    auto appended = result.witnesses.AppendWitness(*edge);
+    if (!appended.ok()) {
+      return appended.status();
+    }
   }
 
   auto diagnostic_count = reader.ReadU32();
@@ -569,15 +576,30 @@ StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableCompon
     return Status::FailedPrecondition(
         "cached result does not match the requested component");
   }
-  for (const auto& fact : result->facts) {
+  for (const auto& fact : facts::AnalysisFactRange(&result->facts)) {
     auto derived = facts::MakeFact(fact.row);
     if (!derived.ok() || derived->fact_id != fact.fact_id) {
       return Status::FailedPrecondition(
           "cached fact identity does not match its row");
     }
   }
-  const auto hashes = facts::ComputeCanonicalResultHashes(result->facts,
-                                                          result->witnesses);
+  // The hash covers the whole payload at once and ComputeCanonicalResultHashes
+  // takes spans, so this is the one reader that cannot stream the arena. It
+  // materialises a cache hit once, where the pre-arena form held the rich
+  // vectors already; every other reader iterates a range.
+  std::vector<facts::AnalysisFact> facts;
+  facts.reserve(result->facts.size());
+  for (const facts::AnalysisFact& fact :
+       facts::AnalysisFactRange(&result->facts)) {
+    facts.push_back(fact);
+  }
+  std::vector<facts::WitnessEdge> witnesses;
+  witnesses.reserve(result->witnesses.size());
+  for (const facts::WitnessEdge& edge :
+       facts::WitnessRange(&result->witnesses)) {
+    witnesses.push_back(edge);
+  }
+  const auto hashes = facts::ComputeCanonicalResultHashes(facts, witnesses);
   if (hashes.fixpoint_hash != result->fixpoint_hash ||
       hashes.external_hash != result->external_hash) {
     return Status::FailedPrecondition(

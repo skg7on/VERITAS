@@ -16,6 +16,7 @@
 
 #include <charconv>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <limits>
 #include <span>
@@ -29,6 +30,7 @@
 
 #include "veritas/facts/AnalysisRun.h"
 #include "veritas/facts/ResultCanonicalizer.h"
+#include "veritas/facts/RowArena.h"
 #include "veritas/facts/Witness.h"
 
 namespace veritas::wpa {
@@ -66,13 +68,23 @@ facts::AnalysisFact ReachableFact(std::string_view from, std::string_view to) {
 }
 
 WpaComponentResult ResultFor(std::string_view scc_name) {
+  // The payload is an arena, so the fixture builds the rich forms it is written
+  // in and the component publishes them. The hashes are those of exactly what
+  // the arena holds.
+  const std::vector<facts::AnalysisFact> facts = {ReachableFact("f", "g")};
+  const std::vector<facts::WitnessEdge> witnesses;
+  const auto hashes = facts::ComputeCanonicalResultHashes(facts, witnesses);
+
   WpaComponentResult result;
   result.scc_id = FunctionId(scc_name);
   result.component = WpaComponentKind::kReachability;
   result.logical_input_hash = "logical";
-  result.facts = {ReachableFact("f", "g")};
-  const auto hashes =
-      facts::ComputeCanonicalResultHashes(result.facts, result.witnesses);
+  for (const facts::AnalysisFact& fact : facts) {
+    auto appended = result.facts.AppendFact(fact);
+    if (!appended.ok()) {
+      std::abort();
+    }
+  }
   result.fixpoint_hash = hashes.fixpoint_hash;
   result.external_hash = hashes.external_hash;
   return result;
@@ -163,7 +175,17 @@ TEST(WpaRunRepositoryTest, StoresAndLoadsAComponentResult) {
       MakeResultCacheDescriptor(run, key, "logical"));
   ASSERT_TRUE(loaded.ok());
   ASSERT_TRUE(loaded->has_value());
-  EXPECT_EQ(loaded->value().facts, result.facts);
+  // The round trip must reproduce the payload row for row in order. This is the
+  // durable cache format's guard, and an arena has no `operator==` to hand it
+  // to, so the two payloads are compared through their ranges.
+  const facts::AnalysisFactRange result_facts(&result.facts);
+  const facts::AnalysisFactRange loaded_facts(&loaded->value().facts);
+  ASSERT_EQ(loaded_facts.size(), result_facts.size());
+  auto loaded_it = loaded_facts.begin();
+  for (const facts::AnalysisFact& fact : result_facts) {
+    EXPECT_EQ(*loaded_it, fact);
+    ++loaded_it;
+  }
   EXPECT_EQ(loaded->value().external_hash, result.external_hash);
   EXPECT_EQ(loaded->value().scc_id, key.scc_id);
 

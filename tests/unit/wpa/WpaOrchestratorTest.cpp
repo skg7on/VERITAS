@@ -19,6 +19,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -26,6 +27,7 @@
 #include <unistd.h>
 
 #include "veritas/facts/AnalysisRun.h"
+#include "veritas/facts/RowArena.h"
 #include "veritas/facts/Witness.h"
 #include "veritas/summary/SummaryArtifact.h"
 #include "veritas/wpa/CallGraph.h"
@@ -37,6 +39,7 @@ namespace {
 
 namespace v1 = summary::v1;
 namespace v2 = summary::v2;
+namespace sem = analysis::semantic;
 
 core::StableId FunctionId(std::string_view name) {
   return core::MakeStableId(core::IdKind::kFunctionVariant,
@@ -222,6 +225,90 @@ class FactEmittingExecutor : public WpaExecutor {
  private:
   mutable std::vector<Observation> observations_;
 };
+
+// A program with exactly one SCC: `a` calls itself, so the call graph is one
+// vertex with one self-edge and a whole-program run completes exactly one
+// component. That is what lets a payload case read the run's single completion
+// rather than search the completed set for one that has a payload -- the leaf
+// of `ChainProgram` is completed first and derives nothing.
+std::vector<summary::SummaryArtifact> SelfRecursiveProgram() {
+  auto a = V2Summary("a");
+  AddCall(&a, "a", "a");
+  return {a};
+}
+
+// The single-component fixture the payload cases share: one reachability
+// component over `SelfRecursiveProgram`, executed by the fact-emitting
+// executor so the completion's arena carries the fact the SCC's DirectCall root
+// derives. `db` receives the fixture's database path for the caller to remove;
+// the run owns its payload by value, so it outlives the repository.
+StatusOr<WpaRunResult> SingleComponentRun(std::filesystem::path* db) {
+  const std::vector<summary::SummaryArtifact> program = SelfRecursiveProgram();
+  *db = TempDbPath();
+  auto repo = WpaRunRepository::Open(*db);
+  if (!repo.ok()) {
+    return repo.status();
+  }
+  FactEmittingExecutor executor;
+  WpaOrchestrator orchestrator(executor, *repo);
+
+  const std::array<WpaComponentKind, 1> components = {
+      WpaComponentKind::kReachability};
+  WpaRunRequest request;
+  request.run = MakeManifest(facts::EngineIdentity::kSouffle);
+  request.summaries = program;
+  request.components = components;
+  return orchestrator.Run(request);
+}
+
+// The identity of the one fact that fixture's component publishes, derived from
+// the row the executor builds rather than read back out of the run, so the two
+// cases cannot agree on a wrong value.
+core::StableId ExpectedSingleComponentFactId() {
+  const facts::SemanticRow row{
+      facts::RelationId::kReachableCall,
+      {FunctionId("a"), FunctionId("a"), sem::EpistemicState::kMust}};
+  return facts::MakeFact(row).value().fact_id;
+}
+
+// The payload lives in an arena rather than in a vector, so a reader decodes
+// one fact per step instead of borrowing a materialised element.
+TEST(WpaOrchestratorTest, ComponentResultPayloadRoundTripsThroughTheArena) {
+  std::filesystem::path db;
+  auto run = SingleComponentRun(&db);
+  ASSERT_TRUE(run.ok()) << run.status().message();
+  ASSERT_EQ(run->completed_components.size(), 1u);
+  const auto& completion = run->completed_components.front();
+
+  static_assert(
+      std::is_same_v<std::remove_cvref_t<decltype(completion.result.facts)>,
+                     facts::RowArena>);
+  static_assert(
+      std::is_same_v<std::remove_cvref_t<decltype(completion.result.witnesses)>,
+                     facts::RowArena>);
+
+  std::vector<facts::AnalysisFact> decoded;
+  for (const facts::AnalysisFact& fact :
+       facts::AnalysisFactRange(&completion.result.facts)) {
+    decoded.push_back(fact);
+  }
+  ASSERT_FALSE(decoded.empty());
+  EXPECT_EQ(decoded.front().fact_id, ExpectedSingleComponentFactId());
+
+  std::vector<facts::WitnessEdge> edges;
+  for (const facts::WitnessEdge& edge :
+       facts::WitnessRange(&completion.result.witnesses)) {
+    edges.push_back(edge);
+  }
+  EXPECT_EQ(edges.size(), completion.result.witnesses.size());
+  // A witness entry carries two rows, and the result row it carries is the
+  // published fact's own row: decoding the edge addresses them independently of
+  // the fact entry, which is what a reader that only identifies rows needs.
+  ASSERT_FALSE(edges.empty());
+  EXPECT_EQ(edges.front().result.row, decoded.front().row);
+
+  std::filesystem::remove_all(db);
+}
 
 TEST(WpaOrchestratorTest, RunsSccsInReverseTopologicalOrder) {
   const auto program = ChainProgram();

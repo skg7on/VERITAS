@@ -317,17 +317,24 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
   std::set<std::uint32_t> overridden;
   for (auto &completion : batch.completed_components) {
     overridden.clear();
-    for (auto &fact : completion.result.facts) {
+    // The payload is an arena, so each step of this loop decodes one entry and
+    // the decoded value is copied into the batch's keyed vector, which owns the
+    // published form from here on. The component's arena keeps its own copy,
+    // because round 4 releases no payload; Task 3 assembles the batch out of
+    // arenas instead and the copy goes away.
+    for (const AnalysisFact &fact :
+         facts::AnalysisFactRange(&completion.result.facts)) {
       fact_key.clear();
       AppendSemanticKey(&fact_key, fact.row);
       if (owned.insert(fact.fact_id).second) {
         keyed_facts.push_back(KeyedFact{.key_rank = ranks.Intern(fact_key),
-                                        .fact = std::move(fact)});
+                                        .fact = fact});
       } else {
         overridden.insert(ranks.Intern(fact_key));
       }
     }
-    for (auto &edge : completion.result.witnesses) {
+    for (const WitnessEdge &edge :
+         facts::WitnessRange(&completion.result.witnesses)) {
       result_key.clear();
       AppendSemanticKey(&result_key, edge.result.row);
       // The overridden set's member is the interned id, not the key bytes: the
@@ -346,18 +353,16 @@ AnalysisFactBatch MakeAnalysisFactBatch(wpa::WpaRunResult result) {
           .rule_rank = ranks.Intern(edge.rule_id),
           .input_rank = ranks.Intern(input_key),
           .input_ordinal = edge.input_ordinal,
-          .edge = std::move(edge),
+          .edge = edge,
       });
     }
     for (auto &diagnostic : completion.result.diagnostics) {
       batch.diagnostics.push_back(std::move(diagnostic));
     }
-    // Release the stripped payload vectors, not merely their elements. Moving
-    // each row out empties the row, but the vector keeps the buffer that held
-    // it; across thirteen thousand components that retained capacity is a
-    // second copy of the whole payload living until the batch is destroyed.
-    std::vector<AnalysisFact>().swap(completion.result.facts);
-    std::vector<WitnessEdge>().swap(completion.result.witnesses);
+    // The facts and witnesses need no release: their payload is a compact arena
+    // now, so there is no rich vector buffer left behind to reclaim. The
+    // diagnostics are still a rich vector, and moving each string out of one
+    // leaves its buffer behind exactly as before, so that release stays.
     std::vector<std::string>().swap(completion.result.diagnostics);
   }
 

@@ -35,6 +35,7 @@
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/AnalysisRun.h"
 #include "veritas/facts/DenseIdMap.h"
+#include "veritas/facts/RowArena.h"
 #include "veritas/facts/Witness.h"
 #include "veritas/summary/SummaryArtifact.h"
 
@@ -101,8 +102,14 @@ struct WpaComponentResult {
   std::string logical_input_hash;
   std::string fixpoint_hash;
   std::string external_hash;
-  std::vector<facts::AnalysisFact> facts;
-  std::vector<facts::WitnessEdge> witnesses;
+  // The payload is held compactly; iterate it rather than copying it. A
+  // completed component outlives its run's last materialization, so the rich
+  // form this replaces was a whole payload's worth of resident memory held for
+  // the entire run. Both arenas carry the payload-level entry form -- a fact
+  // entry for `facts`, a witness entry for `witnesses` -- so the ranges over
+  // them yield a complete AnalysisFact and WitnessEdge respectively.
+  facts::RowArena facts;
+  facts::RowArena witnesses;
   std::vector<std::string> diagnostics;
 };
 
