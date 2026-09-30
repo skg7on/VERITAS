@@ -425,6 +425,359 @@ Acceptance is that the payload terms move by roughly the measured representation
 gap and that CPU falls; each claim is reported with its own instrument, and a
 term that does not move is reported as not having moved.
 
+### 9.5 Measured outcome (2026-10-01)
+
+**The round does not meet the acceptance framing of section 4.** CPU rose and the
+larger of the two payload-time terms rose with it; only the memory terms moved,
+and only one of them moved by more than this fixture's run-to-run spread. This
+section records the pair, the equivalence result, and every term, including the
+ones that did not move.
+
+#### 9.5.1 The pair and the protocol
+
+Both revisions were built **in one build tree**, the pre-change revision first,
+and each was run three times against a fresh, non-existent output directory with
+the phase recorder enabled:
+
+```bash
+# pre-change: 59198f5, the round's branch point, rebuilt in this tree
+# post-change: 6a7635b, this round's head, after a clean full rebuild
+OUT=/tmp/veritas-round4-<rev>-<n>   # does not exist before the run
+/usr/bin/time -lp <icount wrapper> ./build/bin/veritas-build analyze \
+  --project /Users/skg7on/Workspace/Projects/leveldb \
+  --output "$OUT" --metrics true --metrics-interval-ms 250 \
+  --metrics-top-n 15 --metrics-series true
+```
+
+Six runs, all exit 0, all on the documented Debug configuration, all in one
+session at load 1.3-2.0 with 1,262 MiB of a 2,048 MiB swap file in use before,
+during and after. **Every figure below is worst-of-three within its revision**,
+round 3's convention for a fixture with a measured run-to-run spread.
+
+The instruction count is Darwin's per-process hardware counter,
+`ri_instructions` from `proc_pid_rusage(pid, RUSAGE_INFO_V6)`, read by a wrapper
+that forks the analyzer and polls the child's rusage every 100 ms, reporting the
+last reading taken before exit. The counter is real for this instrument: a
+10M/100M/1G-iteration busy loop reports 7.07e7 / 6.10e8 / 6.01e9 instructions,
+scaling linearly. It cannot be obtained without root through `powermetrics`, and
+the product execs no worker process on the production path, so a single-process
+count is the whole run's count. Two properties were checked rather than assumed:
+macOS propagates a grandchild's maximum resident set size through `wait4` (a
+211,435,520-byte direct run and a 211,419,136-byte wrapped run of the same
+probe), and the phase recorder's `memory.peak.rss_bytes` equals `/usr/bin/time`'s
+`maxrss` exactly in all six runs, so the two independent RSS instruments agree.
+
+#### 9.5.2 The pre-change member reproduces section 2.2
+
+The pair is only interpretable if the pre-change revision measured here is the
+one section 2 measured. It is, on every phase:
+
+| Span | Section 2.2 (`59198f5`, another tree) | This pair, pre-1 | Δ |
+| --- | ---: | ---: | ---: |
+| `run` | 419.178 s | 421.515 s | +2.337 s |
+| `facts.publish` | 119.998 s | 127.994 s | +7.996 s |
+| `wpa.orchestrate` | 157.318 s | 154.641 s | −2.677 s |
+| `m5.svf` | 74.847 s | 73.329 s | −1.518 s |
+| `facts.batch_assemble` | 32.820 s | 32.229 s | −0.591 s |
+| `m2m3.publish_summaries` | 11.872 s | 11.589 s | −0.283 s |
+| `m4.local_analysis` | 10.140 s | 9.845 s | −0.295 s |
+| `m6.cpg_projection` | 2.180 s | 2.127 s | −0.053 s |
+| `wpa.graph_build` | 0.354 s | 0.351 s | −0.003 s |
+| `canonicalize` | 66.056 s | 65.230 s | −0.826 s |
+| `execute` | 42.034 s | 41.180 s | −0.854 s |
+| `materialize` | 33.260 s | 32.665 s | −0.595 s |
+| `validate` | 39.726 s | 38.658 s | −1.068 s |
+| `sink.fact-store` | 80.271 s | 89.335 s | +9.064 s |
+| CPU (from `run`) | 418.702 s | 420.231 s | +1.529 s |
+
+Every phase reproduces within 10 s and almost all within 3 s; the two largest
+deviations, `facts.publish` at +8.0 s and `sink.fact-store` at +9.1 s, are on the
+span section 2.3 already attributes mostly to `ComputeSHA256`, `DeriveBatchId`
+and SQLite, i.e. the terms that move with machine state rather than with the
+build. Peak RSS is the other figure that does not reproduce — 7.03 GiB then,
+7.92 GiB in pre-1 and 7.96 GiB worst-of-three — and section 2.1 already records
+that its 7.03 GiB is one observation inside a spread and not a peak.
+
+#### 9.5.3 Equivalence: the form used, and why
+
+The section 9.1 instrument was run in round 3 section 9.1's **Step 2a** form —
+"identity unchanged", the strong form — and not in Step 2b. Step 2b exists to
+concede that identity columns move between two builds; they do not move here.
+Round 4 changes no file compiled into either hashed Soufflé library
+(`SouffleRunner.cpp`, `SouffleSemanticKeyFunctor.cpp`, `SemanticKeyCodec.cpp`),
+so the toolchain identity is unchanged, and with it every run-scoped column.
+That is checked first, from the two runs' own metrics artefacts:
+
+| Identity coordinate | Value in both revisions |
+| --- | --- |
+| `run_id` | `run:sha256:04df8175595dc38b56cd304b70fb08d92a785818b42e3263d3d0c518e67fa5d1` |
+| `batch_id` | `fact:sha256:2216f98ad0c4d7aae606e966371d0870dc58988ad7c01fdee237007ea91ac67d` |
+| `repository_id` | `repo:sha256:514e8958d4a5b803bc1325c5b63e64a619fef868c2ee8b8415945ba5c64ddc0f` |
+| `projection_id` | `cpgproj:sha256:e569ebf98cf26545487730a1581287a005c52582d4c4b8cb5e174efc8f27971f` |
+| `revision_id` | `rev:sha256:30ba85d6f2c3cfc5dfe77c2d2927aeeb0e4e0a7b257d5cfa7569f8a08d81cc1e` |
+| `build_variant_id` | `bv:sha256:9a44504b2a3bcd664ab916427e277d87d3cccdb4ae7eff1aeec9d760c870573d` |
+| `svf_config_hash` | `7b73593f52ef07ea056d435566969754e5c6846936e6a5193f5fc220d43140f6` |
+| `wpa_config_hash` | `59a176893f32081fdc57556d8e9c2bb17be683932b311578119a6126024ca553` |
+| `engine_toolchain_identity` | `souffle-a4cd7e4fcbee4241d278eab67b905ece4dbb03998ef096e1a870f881be5c53de` |
+
+All nine coordinates are byte-identical, `batch_id` included. Since
+`DeriveBatchId` hashes the canonical key of every row in order, an identical
+batch id over 1,249,792 facts and 1,375,911 witness edges is the round's
+strongest single equivalence result: the arena's encoding, its canonical order
+and the ownership rule all reproduce byte for byte.
+
+`veritas-store-diff` compares the two stores through the recorded projection and
+reports equality:
+
+```
+$ ./build/bin/veritas-store-diff /tmp/veritas-round4-pre-1 /tmp/veritas-round4-post-1
+stores are equivalent (37 tables compared)          # exit 0
+```
+
+The round's implementation plan writes that command as
+`veritas-store-diff <pre>/metadata.db <post>/metadata.db`; the tool takes store
+*roots* — the directories handed to `--output` — and appends `metadata.db`
+itself.
+
+**Both dump orderings, on all four published tables.** The recorded projection
+orders `analysis_facts` by `fact_id` and the other three by `rowid`, so
+`veritas-store-diff` alone exercises one ordering per table. The ordering half
+was therefore closed separately, with `sqlite3` projections ordered by `rowid`
+for **all four** tables, over the recorded column sets with the recorded
+exclusions (`run_id`; `analyzer_run_id` and `binding_id` for
+`run_fact_bindings`), escaped with the instrument's own rule so the stream stays
+unambiguous where a value carries a newline:
+
+| Projection (`ORDER BY rowid`) | Rows | Digest, identical in both revisions |
+| --- | ---: | --- |
+| `analysis_facts` | 1,249,792 | `6b0aea6381242e301ddfb993c7048b213037f9aafc18c7acd3e23ac894ab8ed1` |
+| `run_fact_bindings` | 752,076 | `d732ec43ca21a5967170139f69f3688145c2771b7a079b78ef7b26a6eddf3b63` |
+| `provenance_nodes` | 752,076 | `d8410e270ed19257491a830e9debb666299be54365482b83236ac06cbacdf321` |
+| `provenance_edges` | 1,375,911 | `6691f96f5b5f137e29f9ce0aeb4ddf4380c2da4f15ec3041a6f5344daa98a038` |
+
+Every one of the four row-stream files is **byte-identical** between the two
+revisions (`cmp`), not merely equal in digest, and every one reproduces the
+literal round 3 section 9.1 recorded for it. `analysis_facts` also reproduces
+under the recorded projection's own `fact_id` ordering,
+`452a850ec90ab192a2e5cde28269067f06f4618338675c26c870cac466e41cda`, in both
+revisions.
+
+This is the half Task 6's `semantic_zoo` A/B could not close. There, the witness
+arrival order already coincided with encoded-key order, so a rowid-ordered
+projection could not tell rank-order visiting from arrival-order visiting. On
+this workload it can: `rowid` order is the physical order the batch hands to
+`FactStore`, and across ~1.25M facts and ~1.375M witness edges any change in
+visit order would move it. It did not move.
+
+**Per-component hashes, all 13,716 components.** The section 9.1 instrument also
+requires the per-component comparison. The names section 9.1 uses —
+`input_hash`, `fixpoint_hash`, `externally_visible_hash` — are the v1
+`wpa_component_states` columns; the v2 table names the same three quantities
+`logical_input_hash`, `fixpoint_hash`, `external_hash`. Both were compared, and
+since the identity did not move, `run_id` was **included** rather than excluded:
+
+| Comparison | Rows | Digest, identical in both revisions |
+| --- | ---: | --- |
+| `wpa_component_states` (v1) + `revision_id`, `build_variant_id`, `iteration_count`, `status` | 13,716 | `51abd038fb3da2b70eb0d1df9478f67946a19f2c351c89afee0bca3bce98ceda` |
+| `wpa_component_states_v2` + `run_id` | 13,716 | `ce6d62ad36699b004920e83dd9dabdbfae3fbc2728e096481b5832efcd164ba5` |
+| `wpa_component_states_v2`, the three hashes alone | 13,716 | `c14be4d9337e7eb2492589b7ebf1d11148e0159d8d911f78dc3e930504b53275` |
+| `wpa_component_result_cache_v2` | 13,716 | `e5c405ad032085f53f33fbd6669ea15dc4ec19140c4776d8249d27cef97fe4df` |
+
+**The instruments can fail.** A one-cell perturbation — `cells_hex || 'f'` on
+`rowid` 1 of `analysis_facts`, row count unchanged — makes `veritas-store-diff`
+exit 1 and name the table (`differs: analysis_facts (left 1249792 rows, right
+1249792 rows)`), and moves both `analysis_facts` digests. A digest that cannot
+change would prove nothing; these change on one cell.
+
+#### 9.5.4 The terms
+
+CPU and wall, worst of three, with the hardware counter beside them:
+
+| Term | pre | post | Δ | % |
+| --- | ---: | ---: | ---: | ---: |
+| CPU (user+sys, `run` span) | 420.231 s | 490.382 s | **+70.151 s** | **+16.7 %** |
+| CPU (user+sys, `/usr/bin/time`) | 420.970 s | 491.100 s | +70.130 s | +16.7 % |
+| Wall | 422.170 s | 491.490 s | +69.320 s | +16.4 % |
+| Instructions retired | 7,353,722,014,589 | 8,523,927,367,036 | **+1,170,205,352,447** | **+15.9 %** |
+
+The per-run figures show this is not spread:
+
+| Run | `run` CPU | instructions | `maxrss` | peak footprint |
+| --- | ---: | ---: | ---: | ---: |
+| pre-1 | 420.231 s | 7.3537e12 | 7.918 GiB | 5.980 GiB |
+| pre-2 | 411.234 s | 7.2868e12 | 7.893 GiB | 5.936 GiB |
+| pre-3 | 410.057 s | 7.2736e12 | 7.961 GiB | 6.062 GiB |
+| post-1 | 490.382 s | 8.5239e12 | 6.936 GiB | 5.864 GiB |
+| post-2 | 488.329 s | 8.5099e12 | 7.794 GiB | 6.286 GiB |
+| post-3 | 488.211 s | 8.5045e12 | 7.420 GiB | 5.574 GiB |
+
+The pre revision spans 10.2 s of CPU and 0.080e12 instructions; the post
+revision spans 2.2 s and 0.019e12. The 70.2 s CPU gap is seven times the wider of
+those two spreads and the 1.17e12-instruction gap is fifteen times the wider
+instruction spread, so **CPU did not fall: it rose**, and the load-independent
+counter agrees.
+
+Memory, worst of three:
+
+| Term | pre | post | Δ | % | Moved? |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Maximum resident set size (`/usr/bin/time`) | 8,548,581,376 B (7.961 GiB) | 8,368,816,128 B (7.794 GiB) | −179,765,248 B (−0.167 GiB) | −2.1 % | **No** — inside the spread |
+| Peak physical footprint (sampler) | 6,509,468,344 B (6.062 GiB) | 6,749,067,960 B (6.286 GiB) | +239,599,616 B (+0.223 GiB) | +3.7 % | **No** — it rose |
+| Peak RSS (sampler) | 7.961 GiB | 7.794 GiB | −0.167 GiB | −2.1 % | same as `maxrss` |
+
+The peak-RSS reduction is **not established**: −0.167 GiB is far inside the post
+revision's own 0.858 GiB run-to-run spread, and this section does not claim it.
+The three pre runs cluster within 0.068 GiB (7.893-7.961) while the three post
+runs span 0.858 GiB (6.936-7.794); the post revision's best run is 0.96 GiB below
+the pre revision's best, and its worst is 0.17 GiB below the pre revision's
+worst. Peak footprint did not improve at all — worst-of-three it rose 0.223 GiB,
+and its spread also widened (0.126 GiB pre, 0.712 GiB post). Neither absolute
+threshold in section 4 is claimed here: the 375 s and 4 GiB criteria remain
+reopened.
+
+Per-span wall time, worst of three. The nested-inclusive rows are children of the
+row above them:
+
+| Span | pre | post | Δ | % |
+| --- | ---: | ---: | ---: | ---: |
+| `run` | 421.515 s | 490.805 s | +69.290 s | +16.4 % |
+|  `run` (self) | 7.826 s | 7.046 s | −0.780 s | −10.0 % |
+| `facts.batch_assemble` | 32.236 s | 79.942 s | **+47.706 s** | **+148.0 %** |
+| `facts.publish` | 127.994 s | 145.135 s | +17.142 s | +13.4 % |
+|  `facts.publish.validate` | 38.684 s | 52.371 s | +13.687 s | +35.4 % |
+|  `facts.publish.sink.fact-store` | 89.335 s | 92.763 s | +3.428 s | +3.8 % |
+| `wpa.orchestrate` | 155.120 s | 160.680 s | +5.560 s | +3.6 % |
+|  `wpa.orchestrate` (self) | 15.437 s | 46.736 s | **+31.299 s** | **+202.7 %** |
+|  `wpa.component.canonicalize` | 65.337 s | 36.192 s | **−29.145 s** | **−44.6 %** |
+|  `wpa.component.execute` | 41.343 s | 41.455 s | +0.112 s | +0.3 % |
+|  `wpa.component.materialize` | 32.740 s | 36.241 s | +3.501 s | +10.7 % |
+| `m5.svf` | 73.481 s | 73.871 s | +0.390 s | +0.5 % |
+| `m4.local_analysis` | 9.953 s | 10.096 s | +0.143 s | +1.4 % |
+| `m2m3.publish_summaries` | 11.589 s | 11.600 s | +0.011 s | +0.1 % |
+| `m6.cpg_projection` | 2.135 s | 2.134 s | −0.002 s | −0.1 % |
+| `wpa.graph_build` | 0.354 s | 0.352 s | −0.002 s | −0.5 % |
+
+Read plainly: **`canonicalize` fell 29.1 s — the round's one measured time win —
+and three other terms rose by 92.7 s between them.** The phases the round does
+not touch (`m5.svf`, `m4`, `m2m3`, `m6`, `graph_build`, `execute`, and the `run`
+span's own self time) are unchanged within 0.8 s, which is the control that makes
+the rest interpretable.
+
+Per-term resident deltas, from each span's `rss_start` / `rss_end`, worst of
+three. This is the section's central claim and it is why the process total is not
+the evidence:
+
+| Span | Δ resident, pre | Δ resident, post | Δ | Moved? |
+| --- | ---: | ---: | ---: | --- |
+| `wpa.orchestrate` | +2.153 GiB | +1.738 GiB | **−0.415 GiB** | **Yes** |
+| `facts.publish` | +1.838 GiB | +1.172 GiB | **−0.666 GiB** | **Yes** |
+| `facts.batch_assemble` | +0.565 GiB | +1.150 GiB | **+0.585 GiB** | **Yes — it rose** |
+| `m5.svf` | +2.668 GiB | +2.654 GiB | −0.013 GiB | No |
+| `m4.local_analysis` | +0.298 GiB | +0.291 GiB | −0.007 GiB | No |
+| `m2m3.publish_summaries` | +0.345 GiB | +0.348 GiB | +0.004 GiB | No |
+
+The payload terms did move where section 7.1 put the representation change — the
+retention term (`wpa.orchestrate`) by −0.415 GiB and the publish term by
+−0.666 GiB — but `facts.batch_assemble` **grew** by 0.585 GiB, because section 5
+forbids releasing component payloads, so the batch's own arena is a second copy
+of the payload living beside the component arenas rather than a re-homing of
+them. The net of the three is a reduction of about 0.5 GiB inside a process whose
+peak is set elsewhere, which is exactly the shape the peak-RSS term reports.
+
+Per-span peak resident, worst of three, which is the same claim from the other
+instrument:
+
+| Span | pre | post | Δ | pre spread | post spread |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `wpa.orchestrate` | 5.747 GiB | 5.345 GiB | **−0.402 GiB** | 0.046 GiB | 0.341 GiB |
+| `facts.batch_assemble` | 6.401 GiB | 6.275 GiB | −0.126 GiB | 0.159 GiB | 0.336 GiB |
+| `facts.publish` | 7.961 GiB | 7.794 GiB | −0.167 GiB | 0.068 GiB | 0.858 GiB |
+| `m5.svf` | 3.407 GiB | 3.400 GiB | −0.007 GiB | 0.016 GiB | 0.009 GiB |
+
+`wpa.orchestrate`'s peak is the one payload term that moved by more than both
+revisions' spreads: −0.402 GiB against a 0.046 GiB pre spread and a 0.341 GiB
+post spread. That is the representation change, measured on the phase that holds
+the component results.
+
+#### 9.5.5 Where the time went
+
+Three profiled runs took main-thread `sample` captures during the post revision,
+section 2.3's method. They are profiled runs, not acceptance measurements. Shares
+are summed per function rather than read off one node: `sample` splits a single
+function into many sibling frames because it aggregates by return address, so
+`MakeAnalysisFactBatch` appears as 33 nodes that together are the whole thread.
+
+Inside `facts.batch_assemble` (three captures at t≈273, 278 and 303 s of a
+79.8 s span; **100 % of the main thread is inside `MakeAnalysisFactBatch`** in all
+three):
+
+- the two selection-pass captures are **51.9 % and 52.1 %**
+  `WitnessRange::Iterator::operator*` / `AnalysisFactRange::Iterator::operator*`
+  — the row decode — with `RowArena::DecodeWitness` / `DecodeFact` at 51.0 % and
+  51.4 %;
+- the third, in the emit pass, is **61.3 % `RowArena::Append`** (appending every
+  owned row into the batch's own arena, `AppendId`'s hex rendering included) and
+  still 33.4 % decode.
+
+The mechanism is in the diff of `MakeAnalysisFactBatch`. The selection pass
+iterates each component's arena through `AnalysisFactRange` and dereferences it —
+`const AnalysisFact &fact = *it;`, whose documented contract is "decodes this
+entry, allocates the fact it returns and nothing else" — once per fact and once
+per witness, to recover an id and a sort key. The pre-change code iterated
+`completion.result.facts`, a vector of rich rows it already held, and read the
+id and key off them with no decode at all, then *moved* each row into the batch.
+So this pass pays 2.6M allocations the old one did not, and the emit pass pays
+another decode plus an arena append where the old one moved a pointer.
+
+Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
+
+- every main-thread sample in the `Validate` capture is inside `DeriveBatchId`,
+  and that function's own samples are dominated by `AppendField` →
+  `SHA256Hasher::Update`. `DeriveBatchId` reaches each row's key through
+  `AppendStoredRowKey` → `Batch::AppendFactKey` → `RowArena::AppendKey`. Since
+  `batch_id` is byte-identical between the revisions the hashed byte stream is
+  identical too, so this capture says what that span is *made of* and does **not**
+  locate the +13.7 s: a 6-second capture inside a 52-second span cannot apportion
+  it, and the pre revision was not profiled. The delta is reported as measured
+  and unattributed;
+- the fact-store capture is 49.4 % `WitnessRange::Iterator::operator*` →
+  `RowArena::DecodeWitness` (2201 of 4456 samples), with `FactIdentityMemo::
+  Identify` at 26 % — the same decode-per-row shape, now in the consumer.
+
+The `wpa.orchestrate` self term (+31.3 s) is likewise measured and not
+attributed: its captures show `ResultCanonicalizer::Canonicalize`,
+`WpaInputMaterializer::Build`, `SerializeResult` and `MakeResult` sharing the
+span, with `WitnessRange::Iterator::operator*` and `RowArena::AppendWitness`
+appearing under the last two, but no pre-revision capture was taken to say which
+of them grew.
+
+#### 9.5.6 Verdict
+
+Section 4 accepts round 4 on measured per-term reductions proven with the section
+9.1 instrument, and requires that the payload terms move by roughly the measured
+representation gap **and that CPU falls**. Measured:
+
+- the equivalence half **passes**, in its strongest form — every identity
+  coordinate identical, both orderings of all four published tables
+  byte-identical, all 13,716 per-component hashes identical, with working
+  controls;
+- the per-term memory half **passes in part**: `wpa.orchestrate`'s peak moved
+  −0.402 GiB beyond both spreads and its resident delta −0.415 GiB, and
+  `facts.publish`'s resident delta moved −0.666 GiB, while
+  `facts.batch_assemble`'s grew +0.585 GiB and the process peaks did not move
+  measurably;
+- the CPU half **fails**: +70.151 s (+16.7 %) and +1.17e12 instructions
+  (+15.9 %), against a phase profile whose untouched phases are unchanged within
+  0.4 s.
+
+**This round is not accepted on section 4's framing as written.** The 29.1 s
+`canonicalize` win is real and is the round's own; it is outweighed by 47.7 s in
+batch assembly, 31.3 s in `wpa.orchestrate`'s own time and 13.7 s in validation,
+all three on the path this round rewrote. The attribution in section 9.5.5 is
+what a successor stage needs: the decode-per-row tax that the compact
+representation introduces in every consumer of it, and which section 7.1's own
+premise — "callers decode one row at a time" — priced at the wrong place.
+
 ## 10. Successor Stages (not this change)
 
 1. **Streaming publication.** Remove batch materialization: emit canonical rows
