@@ -1217,7 +1217,7 @@ TEST(AnalysisFactBusTest, ValidateResolvesLookupsExactlyUnderATotalHashCollision
   // the well-formed case below and then resolves the tampered one to the wrong
   // entry, which is the failure this test exists to catch.
   AnalysisFactBus bus(*repo);
-  bus.SetKeyHashForTesting([](const SemanticRow&) { return 0u; });
+  bus.SetKeyHashForTesting([](const core::StableId&) { return 0u; });
 
   const AnalysisFactBatch batch = SuccessfulBatch();
   ASSERT_TRUE(bus.Publish(batch).ok());
@@ -1256,18 +1256,39 @@ comparison. A bucket with more than one index means two distinct rows hashed
 alike; the exact comparison picks the right one and a bucket that matches none
 falls through to the current failure.
 
-The 64-bit hash is the seam Step 1 installs, so it reads:
+**The seam is typed on the fact identity, not on the row.** An earlier draft of
+this step prescribed `std::function<std::uint64_t(const SemanticRow&)>`, hashing
+each row's re-encoded canonical key. That was measured and it is *slower than
+the container it replaces* — which is the one thing this task must not be:
+
+| Keyed on | insert | lookup |
+| --- | ---: | ---: |
+| Re-encoded canonical row key | 1959 ns | 1613 ns |
+| `std::map<StableId, std::size_t>` (what this replaces) | 1405 ns | 1073 ns |
+| The derived fact identity | ~505 ns | ~275 ns |
+
+The reason is that the brief's interface takes the rich row, which has no byte
+span, so hashing it means re-rendering the canonical key — an encode and a mix
+per fact *and* per witness endpoint, which is exactly the cost the round exists
+to remove. The identity is already a digest of the row's canonical preimage, so
+reducing it to 64 bits costs nothing the row has not paid. The seam reads:
 
 ```cpp
-// Defaults to the canonical key hash. A test injects a constant to force every
-// row into one bucket, which is the only way to exercise the exact-comparison
-// path from a unit test.
-std::function<std::uint64_t(const SemanticRow&)> key_hash_ = DefaultKeyHash;
+// Defaults to the identity hash. A test injects a constant so every entry lands
+// in one bucket, which is the only way to exercise the exact-row-comparison
+// path from a unit test. The seam is answer-neutral for any key function: the
+// entry that answers a lookup is always found by comparing stored rows, so no
+// key function can change an accept/reject decision.
+std::function<std::uint64_t(const core::StableId&)> key_hash_ = DefaultKeyHash;
 ```
 
 `SetKeyHashForTesting` assigns `key_hash_`. The member follows `SetMetrics`'s
 precedent of a non-owning, control-flow-neutral seam; it is not a global and it
 is not read anywhere decisions are made.
+
+**Do not "restore" the row-typed seam.** It was measured, it is slower, and the
+identity-typed one loses no check, no message, and none of the test's guard
+strength — the bucket is resolved by exact comparison of stored rows either way.
 
 - [ ] **Step 4: Replace the dependency vectors**
 
