@@ -35,6 +35,7 @@ constexpr std::string_view kDirect = "wpa.reachability.direct.v2";
 constexpr std::string_view kTransitive = "wpa.reachability.transitive.v2";
 constexpr std::string_view kFlowLocal = "wpa.flow.global.local.v2";
 constexpr std::string_view kFlowTransitive = "wpa.flow.global.transitive.v2";
+constexpr std::string_view kCoverage = "wpa.coverage.incomplete.v2";
 
 core::StableId FunctionId(std::string_view name) {
   return core::MakeStableId(core::IdKind::kFunctionVariant,
@@ -102,6 +103,26 @@ SemanticRow LocalFlow(std::string_view function, std::string_view from,
 SemanticRow GlobalFlow(std::string_view from, std::string_view to) {
   return SemanticRow{RelationId::kGlobalFlow,
                      {ValueId(from), ValueId(to), sem::EpistemicState::kMay}};
+}
+
+// The unresolved call the coverage rule consumes.
+SemanticRow UnresolvedCall(std::string_view function) {
+  return SemanticRow{RelationId::kUnknownEffect,
+                     {FunctionId(function), std::string("subject"),
+                      std::string("reason"), sem::EpistemicState::kUnknown}};
+}
+
+// A soundness-coverage gap for `scope`. Its third cell is the only numeric one
+// any IDB result relation carries, so two gaps for one scope share their whole
+// encoded prefix and differ only in the tail. The encoding frames every field
+// with its length, and a symbol is a symbol: the text "-7" sorts before the
+// text "7", while in a key the shorter "7" sorts first. A comparator that
+// ranked cells by their text, or by their value, rather than by the key those
+// cells encode would emit these facts in another order.
+SemanticRow Coverage(std::string_view scope, std::uint64_t complete) {
+  return SemanticRow{RelationId::kSoundnessCoverage,
+                     {std::string(scope), std::string("coverage_kind"),
+                      complete, sem::EpistemicState::kMust}};
 }
 
 CanonicalizationRequest RequestFor(const std::vector<RootedInputFact>& roots,
@@ -173,11 +194,108 @@ TEST(ResultCanonicalizerTest, RejectsCyclicUnrootedWitnesses) {
   auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
   ASSERT_FALSE(result.ok());
   EXPECT_EQ(result.status().code(), StatusCode::kFailedPrecondition);
-}
 
-// The same result reachable by a one-edge direct proof and a two-edge
-// transitive proof must always select the shorter one, whichever order the
-// evaluator happened to emit its candidates in.
+  // The same closed loop becomes publishable once an acyclic chain roots it:
+  // R(g,h) is now reachable from a declared direct-call root through four
+  // intervening transitive derivations, so neither R(g,h) nor R(f,h) leaves
+  // kUnproven until the relaxation has propagated the chain's costs level by
+  // level. A relaxation that stopped after one pass would leave the loop
+  // unproven and reject the component, and one that read a stale cost would
+  // select R(u5,q)'s four-step proof over its two-step proof.
+  const std::vector<RootedInputFact> chained_roots = {
+      Root(DirectCall("f", "g")),   Root(DirectCall("g", "f")),
+      Root(DirectCall("g", "u5")),  Root(DirectCall("u1", "q")),
+      Root(DirectCall("u2", "u1")), Root(DirectCall("u3", "u2")),
+      Root(DirectCall("u4", "u3")), Root(DirectCall("u5", "u3")),
+      Root(DirectCall("u5", "u4")), Root(DirectCall("u5", "zz"))};
+
+  RawWpaEvaluation chained;
+  chained.results = {Reachable("u1", "q"), Reachable("u2", "q"),
+                     Reachable("u3", "q"), Reachable("u4", "q"),
+                     Reachable("u5", "q"), Reachable("g", "h"),
+                     Reachable("f", "h")};
+  // The two candidate proofs of R(u5,q) that tie on cost are emitted with the
+  // later-sorting derivation key first, so only an ordering on the keys
+  // themselves selects "two_step" over "two_step_other".
+  chained.witnesses = {
+      Derivation(Reachable("u1", "q"), kDirect, "one", DirectCall("u1", "q"), 0),
+      Derivation(Reachable("u2", "q"), kTransitive, "two",
+                 DirectCall("u2", "u1"), 0),
+      Derivation(Reachable("u2", "q"), kTransitive, "two",
+                 Reachable("u1", "q"), 1),
+      Derivation(Reachable("u3", "q"), kTransitive, "three",
+                 DirectCall("u3", "u2"), 0),
+      Derivation(Reachable("u3", "q"), kTransitive, "three",
+                 Reachable("u2", "q"), 1),
+      Derivation(Reachable("u4", "q"), kTransitive, "four",
+                 DirectCall("u4", "u3"), 0),
+      Derivation(Reachable("u4", "q"), kTransitive, "four",
+                 Reachable("u3", "q"), 1),
+      Derivation(Reachable("u5", "q"), kTransitive, "long",
+                 DirectCall("u5", "u4"), 0),
+      Derivation(Reachable("u5", "q"), kTransitive, "long",
+                 Reachable("u4", "q"), 1),
+      Derivation(Reachable("u5", "q"), kTransitive, "two_step_other",
+                 DirectCall("u5", "zz"), 0),
+      Derivation(Reachable("u5", "q"), kTransitive, "two_step_other",
+                 Reachable("u3", "q"), 1),
+      Derivation(Reachable("u5", "q"), kTransitive, "two_step",
+                 DirectCall("u5", "u3"), 0),
+      Derivation(Reachable("u5", "q"), kTransitive, "two_step",
+                 Reachable("u3", "q"), 1),
+      Derivation(Reachable("g", "h"), kTransitive, "chain",
+                 DirectCall("g", "u5"), 0),
+      Derivation(Reachable("g", "h"), kTransitive, "chain",
+                 Reachable("u5", "q"), 1),
+      Derivation(Reachable("f", "h"), kTransitive, "loop_a",
+                 DirectCall("f", "g"), 0),
+      Derivation(Reachable("f", "h"), kTransitive, "loop_a",
+                 Reachable("g", "h"), 1),
+      Derivation(Reachable("g", "h"), kTransitive, "loop_b",
+                 DirectCall("g", "f"), 0),
+      Derivation(Reachable("g", "h"), kTransitive, "loop_b",
+                 Reachable("f", "h"), 1)};
+
+  auto chained_result =
+      ResultCanonicalizer::Canonicalize(RequestFor(chained_roots, chained));
+  ASSERT_TRUE(chained_result.ok()) << chained_result.status().message();
+  EXPECT_EQ(chained_result->facts.size(), 7u);
+
+  auto proof_of = [&](const SemanticRow& result) {
+    std::vector<WitnessEdge> proof;
+    for (const auto& edge : chained_result->witnesses) {
+      if (edge.result == SemanticKey{result})
+        proof.push_back(edge);
+    }
+    return proof;
+  };
+  // The two-step proof, not the four-step one, and between the two equally
+  // cheap candidates the one whose derivation key sorts first. The loop's own
+  // derivation of R(g,h) costs more than the chain's and is not selected.
+  EXPECT_EQ(proof_of(Reachable("u5", "q")),
+            (std::vector<WitnessEdge>{
+                Edge(Reachable("u5", "q"), kTransitive, DirectCall("u5", "u3"),
+                     0),
+                Edge(Reachable("u5", "q"), kTransitive, Reachable("u3", "q"),
+                     1)}));
+  EXPECT_EQ(proof_of(Reachable("g", "h")),
+            (std::vector<WitnessEdge>{
+                Edge(Reachable("g", "h"), kTransitive, DirectCall("g", "u5"),
+                     0),
+                Edge(Reachable("g", "h"), kTransitive, Reachable("u5", "q"),
+                     1)}));
+
+  // Neither the selected proofs nor the hashes may depend on the order the
+  // engine emitted its witness edges in.
+  RawWpaEvaluation chained_reversed = chained;
+  std::ranges::reverse(chained_reversed.witnesses);
+  auto reversed_result =
+      ResultCanonicalizer::Canonicalize(RequestFor(chained_roots, chained_reversed));
+  ASSERT_TRUE(reversed_result.ok()) << reversed_result.status().message();
+  EXPECT_EQ(reversed_result->facts, chained_result->facts);
+  EXPECT_EQ(reversed_result->witnesses, chained_result->witnesses);
+  EXPECT_EQ(reversed_result->fixpoint_hash, chained_result->fixpoint_hash);
+}
 TEST(ResultCanonicalizerTest, SelectsShortestProofDeterministically) {
   const std::vector<RootedInputFact> roots = {Root(DirectCall("f", "g")),
                                               Root(DirectCall("g", "h")),
@@ -216,6 +334,48 @@ TEST(ResultCanonicalizerTest, SelectsShortestProofDeterministically) {
         return edge.result == SemanticKey{Reachable("f", "h")};
       });
   EXPECT_EQ(chosen, 1);
+
+  // A second result set whose encoded keys share a long prefix -- one relation,
+  // one coverage kind, and for two of the rows one trailing number -- and whose
+  // distinguishing cells are exactly the ones a byte comparison and a value
+  // comparison disagree about. The scope cell holds the symbol "-7" in two rows
+  // and the symbol "7" in the third: as cell text "-7" precedes "7", but the
+  // encoding length-prefixes every field, so the shorter "7" precedes "-7". The
+  // gap cell holds the numbers 7 and 10, which the same length prefix orders
+  // the same way.
+  const std::vector<RootedInputFact> coverage_roots = {Root(UnresolvedCall("f"))};
+  const SemanticRow bare = Coverage("7", 7);
+  const SemanticRow negative = Coverage("-7", 7);
+  const SemanticRow wider = Coverage("-7", 10);
+
+  RawWpaEvaluation coverage_forward;
+  coverage_forward.results = {bare, negative, wider};
+  coverage_forward.witnesses = {Edge(bare, kCoverage, UnresolvedCall("f"), 0),
+                                Edge(negative, kCoverage, UnresolvedCall("f"), 0),
+                                Edge(wider, kCoverage, UnresolvedCall("f"), 0)};
+
+  RawWpaEvaluation coverage_reverse;
+  coverage_reverse.results = {wider, negative, bare};
+  coverage_reverse.witnesses = {Edge(wider, kCoverage, UnresolvedCall("f"), 0),
+                                Edge(negative, kCoverage, UnresolvedCall("f"), 0),
+                                Edge(bare, kCoverage, UnresolvedCall("f"), 0)};
+
+  auto coverage_first =
+      ResultCanonicalizer::Canonicalize(RequestFor(coverage_roots, coverage_forward));
+  auto coverage_second =
+      ResultCanonicalizer::Canonicalize(RequestFor(coverage_roots, coverage_reverse));
+  ASSERT_TRUE(coverage_first.ok()) << coverage_first.status().message();
+  ASSERT_TRUE(coverage_second.ok()) << coverage_second.status().message();
+  EXPECT_EQ(coverage_first->facts, coverage_second->facts);
+  EXPECT_EQ(coverage_first->witnesses, coverage_second->witnesses);
+  EXPECT_EQ(coverage_first->fixpoint_hash, coverage_second->fixpoint_hash);
+  EXPECT_EQ(coverage_first->external_hash, coverage_second->external_hash);
+
+  // Ordering by the symbol text alone would emit `negative` first.
+  ASSERT_EQ(coverage_first->facts.size(), 3u);
+  EXPECT_EQ(coverage_first->facts[0].row, bare);
+  EXPECT_EQ(coverage_first->facts[1].row, negative);
+  EXPECT_EQ(coverage_first->facts[2].row, wider);
 }
 
 // A witness naming a rule the bundle does not define cannot be validated, so
