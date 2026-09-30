@@ -644,17 +644,22 @@ git commit -m "perf(facts): add a compact arena for semantic rows"
 - Modify: `src/wpa/WpaOrchestrator.cpp:47-89, 326-360`
 - Modify: `src/wpa/WpaRunRepository.cpp:110-130, 311-390, 589-620`
 - Modify: `src/facts/ResultCanonicalizer.cpp` (return path only)
+- Modify: `src/facts/AnalysisFactBus.cpp` (compile site only — see Step 5)
+- Modify: `src/analysis/ProjectAnalyzer.cpp:145-178` (compile site only — see Step 5)
 - Verify: `tests/unit/wpa/WpaOrchestratorTest.cpp`
 - Verify: `tests/integration/wpa/WpaEndToEndTest.cpp`
+- Verify: `tests/integration/analysis/ProjectAnalyzerWpaTest.cpp` (build target
+  `project_analyzer_wpa_integration_test`; the CTest test name is
+  `ProjectAnalyzerWpaTest`)
 
 **Interfaces:**
 
-- Consumes: `RowArena`, `RowHandle` from Task 1.
+- Consumes: `RowArena`, `RowHandle`, `FactHandles`, `WitnessHandles`,
+  `AnalysisFactRange`, `WitnessRange`, `RowsEqual` from Task 1.
 - Produces: `WpaComponentResult` with `RowArena facts; RowArena witnesses;`
-  in place of the two `std::vector` payload fields, and a
-  `WpaComponentPayloadRange` helper used by both the repository and the
-  orchestrator. `SerializeResult` and `DeserializeResult` keep their external
-  contract; only their access to the payload changes.
+  in place of the two `std::vector` payload fields. `SerializeResult` and
+  `DeserializeResult` keep their external contract; only their access to the
+  payload changes.
 
 - [ ] **Step 1: Add a failing equivalence test**
 
@@ -780,10 +785,16 @@ alongside the row, and `AppendWitness` stores the result row, the rule id, the
 input row, and the ordinal, so a decoded value carries every field the rich
 types carry.
 
-- [ ] **Step 5: Update `SuccessorSupport` and the repository**
+- [ ] **Step 5: Update every compile site of the component payload**
 
-`SuccessorSupport` iterates the successor's arena and materializes only rows
-whose relation is in the expected derived set:
+Three readers outside the WPA layer also read `WpaComponentResult::facts` or
+`::witnesses`. They are this task's, not a later task's, because the payload
+type change does not compile until every one of them is adapted. Find them
+with `cmake --build --preset default 2>&1 | grep -E 'error:'` and work through
+them; the three known ones are below.
+
+**5a. `SuccessorSupport` (`WpaOrchestrator.cpp:47-71`)** iterates the successor's
+arena and materializes only rows whose relation is in the expected derived set:
 
 ```cpp
 for (const auto& fact : completed[it->second].result.facts) {
@@ -793,20 +804,78 @@ for (const auto& fact : completed[it->second].result.facts) {
 }
 ```
 
-becomes the same loop over the range, which yields by value and allocates one
-row at a time. `SerializeResult` walks the range instead of the vector;
-`DeserializeResult` appends into the arena. Neither changes its bytes.
+The loop body is unchanged — `AnalysisFactRange` yields `AnalysisFact` by value —
+but the element is now decoded per step rather than borrowed from a vector.
 
-Update `LoadReusableComponent`'s revalidation to iterate the range.
+**5b. `SerializeResult` / `DeserializeResult` (`WpaRunRepository.cpp:110-130,
+311-390`)** walk the range instead of the vector, and `DeserializeResult`
+appends through `AppendFact`/`AppendWitness` instead of
+`result.facts.push_back(...)`; drop its `reserve` calls, which an arena does not
+have. **Neither function's bytes may change** — this is the durable cache format
+and `WpaRunRepositoryTest` is what catches a mistake. Update
+`LoadReusableComponent`'s revalidation to iterate the range.
+
+**5c. `CompareCanonicalResults` (`ProjectAnalyzer.cpp:145-178`)** compares two
+runs' payloads with `if (p.facts != c.facts)`. Arenas have no `operator==`, so
+compare the two ranges row by row in order, and fail on the same message:
+
+```cpp
+// The two runs evaluated the same logical inputs, so their payloads must agree
+// row for row in canonical order. A size difference is a mismatch too.
+if (p.facts.size() != c.facts.size()) {
+  return Status::FailedPrecondition("conformance canonical facts differ");
+}
+auto primary_facts = p.facts.begin();
+for (const AnalysisFact& conformance_fact : c.facts) {
+  if (*primary_facts != conformance_fact) {
+    return Status::FailedPrecondition("conformance canonical facts differ");
+  }
+  ++primary_facts;
+}
+```
+
+**5d. `MakeAnalysisFactBatch` (`AnalysisFactBus.cpp:318-362`)** is Task 3's to
+rewrite, but it must compile here. Adapt it minimally in this step: iterate the
+range, and bind the owned fact by value rather than moving out of a vector:
+
+```cpp
+for (const AnalysisFact& fact : completion.result.facts) {
+  fact_key.clear();
+  AppendSemanticKey(&fact_key, fact.row);
+  if (owned.insert(fact.fact_id).second) {
+    keyed_facts.push_back(KeyedFact{.key_rank = ranks.Intern(fact_key),
+                                    .fact = fact});  // copied; Task 3 moves it
+  } else {
+    overridden.insert(ranks.Intern(fact_key));
+  }
+}
+```
+
+Delete the two capacity-release lines
+(`std::vector<AnalysisFact>().swap(completion.result.facts);` and its witness
+twin). They existed to release a rich vector's buffer; the payload is now a
+compact arena, so there is nothing worth releasing and Task 3 removes the
+release entirely. The same treatment applies to the witness loop.
+
+Note for the implementer: this leaves one avoidable copy per owned fact for one
+commit, because the batch is still a rich vector until Task 3. That is
+deliberate — it is what keeps this task's commit compiling without reaching into
+Task 3's redesign, and Task 3 removes the copy.
 
 - [ ] **Step 6: Run the WPA and repository tests**
 
 ```bash
 cmake --build --preset default --target WpaOrchestratorTest WpaEndToEndTest \
-  WpaInputMaterializerTest WpaRunRepositoryTest
+  WpaInputMaterializerTest WpaRunRepositoryTest AnalysisFactBusTest \
+  project_analyzer_wpa_integration_test
 ctest --test-dir build --output-on-failure \
-  -R 'WpaOrchestratorTest|WpaEndToEndTest|WpaInputMaterializerTest|WpaRunRepositoryTest'
+  -R 'WpaOrchestratorTest|WpaEndToEndTest|WpaInputMaterializerTest|WpaRunRepositoryTest|AnalysisFactBusTest|ProjectAnalyzerWpaTest'
 ```
+
+`WpaRunRepositoryTest` is the durable-format guard; `AnalysisFactBusTest` is
+unchanged in this task and passing it proves the Step 5d adaptation did not move
+canonical ownership; `ProjectAnalyzerWpaTest` exercises `CompareCanonicalResults`
+through the conformance oracle.
 
 Expected: all pass. The cached-result path is the risk here: a
 `LoadReusableComponent` failure surfaces as a hard cache-integrity error, so a
@@ -994,7 +1063,8 @@ gate before the check under test runs, and the case would pass vacuously.
 
 ```bash
 cmake --build --preset default --target AnalysisFactBusTest FactStoreTest \
-  ProvenanceStoreTest VeritasExplainTest WpaEndToEndTest ProjectAnalyzerWpaTest
+  ProvenanceStoreTest VeritasExplainTest WpaEndToEndTest \
+  project_analyzer_wpa_integration_test
 ctest --test-dir build --output-on-failure \
   -R 'AnalysisFactBusTest|FactStoreTest|ProvenanceStoreTest|VeritasExplainTest|WpaEndToEndTest|ProjectAnalyzerWpaTest'
 ```
@@ -1308,7 +1378,7 @@ unchanged.
 
 ```bash
 cmake --build --preset default --target FactStoreTest ProvenanceStoreTest \
-  VeritasExplainTest ProjectAnalyzerWpaTest
+  VeritasExplainTest project_analyzer_wpa_integration_test
 ctest --test-dir build --output-on-failure \
   -R 'FactStoreTest|ProvenanceStoreTest|VeritasExplainTest|ProjectAnalyzerWpaTest'
 ```
