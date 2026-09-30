@@ -15,12 +15,18 @@
 #include "veritas/facts/FactStore.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
-#include <map>
+#include <cstring>
+#include <memory>
+#include <numeric>
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -79,6 +85,92 @@ struct WitnessEdgeRef {
   core::StableId input_fact_id;
 };
 
+// The encoded result key of every witness edge, interned to a dense id and
+// ranked into the keys' own byte order.
+//
+// The grouping is the largest container cost in this pass: a run publishes
+// well over a million witness edges, one encoded result key each, and the
+// string-keyed map this replaces compared those keys on every level of every
+// insert. Interning each distinct key once means a lookup compares dense ids
+// instead, and the rank is what the groups are visited in: a rank is a key's
+// position in ascending byte order, which is the order the map iterated in, so
+// the published rows keep the order they had.
+//
+// Ids are dense in arrival order, so a caller holding one can size its group
+// vector from it. `Finish` is the last mutation -- nothing may intern or read a
+// key after it -- and it releases the key bytes and the lookup index, which are
+// dead the moment the ranks exist.
+class ResultRanks {
+ public:
+  // The id of `key`, assigning the next dense id the first time it is seen.
+  std::uint32_t Intern(std::string_view key) {
+    const auto found = index_.find(key);
+    if (found != index_.end()) {
+      return found->second;
+    }
+    const std::uint32_t id = static_cast<std::uint32_t>(keys_.size());
+    char* const stored = Allocate(key.size());
+    std::memcpy(stored, key.data(), key.size());
+    const std::string_view view(stored, key.size());
+    keys_.push_back(view);
+    index_.emplace(view, id);
+    return id;
+  }
+
+  // Fixes every id's rank and releases the keys. Nothing may intern after this.
+  void Finish() {
+    by_rank_.resize(keys_.size());
+    std::iota(by_rank_.begin(), by_rank_.end(), std::uint32_t{0});
+    std::ranges::sort(by_rank_, {},
+                      [this](std::uint32_t id) { return keys_[id]; });
+    std::vector<std::string_view>().swap(keys_);
+    std::unordered_map<std::string_view, std::uint32_t>().swap(index_);
+    std::vector<Chunk>().swap(chunks_);
+    used_ = 0;
+  }
+
+  // The number of distinct interned keys. Only valid after `Finish`.
+  std::uint32_t Count() const {
+    return static_cast<std::uint32_t>(by_rank_.size());
+  }
+
+  // The id whose key sorts at `rank`, so a caller can visit the keys in order.
+  // Only valid after `Finish`.
+  std::uint32_t IdAtRank(std::uint32_t rank) const { return by_rank_[rank]; }
+
+ private:
+  // A bump-allocated block of key bytes. A raw array rather than a
+  // `std::vector<char>`: a vector value-initializes every element on the way in
+  // and destroys every element on the way out, which is two passes over a
+  // megabyte per interner.
+  struct Chunk {
+    std::unique_ptr<char[]> bytes;
+    std::size_t size = 0;
+  };
+
+  // Bump allocation out of fixed-size chunks. Offsets into one big buffer would
+  // be smaller, but the interned views must survive the buffer's growth, and a
+  // chunk that is never reallocated gives them somewhere stable to point.
+  char* Allocate(std::size_t bytes) {
+    constexpr std::size_t kChunkBytes = std::size_t{1} << 20;
+    if (chunks_.empty() || used_ + bytes > chunks_.back().size) {
+      const std::size_t capacity = bytes > kChunkBytes ? bytes : kChunkBytes;
+      chunks_.push_back(
+          Chunk{std::unique_ptr<char[]>(new char[capacity]), capacity});
+      used_ = 0;
+    }
+    char* const out = chunks_.back().bytes.get() + used_;
+    used_ += bytes;
+    return out;
+  }
+
+  std::vector<Chunk> chunks_;
+  std::size_t used_ = 0;
+  std::vector<std::string_view> keys_;
+  std::unordered_map<std::string_view, std::uint32_t> index_;
+  std::vector<std::uint32_t> by_rank_;
+};
+
 // The witness-dependent derivation identity (design §7): the semantic key of
 // the result, the rule that derived it, and its ordered input semantic keys.
 // Distinct derivations of the same fact produce distinct witness ids, while
@@ -88,15 +180,23 @@ struct WitnessEdgeRef {
 // first cost one large allocation per derivation and, on the caller's side, a
 // copy of every input row just to reach the encoder.
 //
-// Each edge is decoded here, one at a time: the input keys are what the hash is
-// computed over, and retaining them from the grouping pass would be a copy of
+// Every row is rendered from the batch's own arena, by handle, one field at a
+// time: the arena produces exactly the bytes `AppendSemanticKey` produces for
+// the rich row, and a decode per edge would materialise both of an edge's rows
+// -- the input and the result -- for the two fields this hash is computed
+// over. Retaining those keys from the grouping pass instead would be a copy of
 // every input row, which is the representation this round removes.
 StatusOr<std::string>
 DeriveWitnessId(const AnalysisFactBatch& batch,
                 const std::vector<WitnessEdgeRef>& ordered_edges) {
-  auto front = batch.witness_at(ordered_edges.front().position);
-  if (!front.ok()) {
-    return front.status();
+  const std::size_t front = ordered_edges.front().position;
+  auto result_row = batch.witness_result_row_handle_at(front);
+  if (!result_row.ok()) {
+    return result_row.status();
+  }
+  auto rule_id = batch.witness_rule_id_at(front);
+  if (!rule_id.ok()) {
+    return rule_id.status();
   }
   core::SHA256Hasher hasher;
   auto update = [&hasher](std::string_view value) {
@@ -109,16 +209,22 @@ DeriveWitnessId(const AnalysisFactBatch& batch,
   };
   std::string key;
   update("veritas.witness.derivation.v1");
-  AppendSemanticKey(&key, front->result.row);
+  if (Status rendered = batch.AppendWitnessRowKey(*result_row, &key);
+      !rendered.ok()) {
+    return rendered;
+  }
   append_field(key);
-  append_field(front->rule_id);
+  append_field(*rule_id);
   for (const WitnessEdgeRef& ref : ordered_edges) {
-    auto edge = batch.witness_at(ref.position);
-    if (!edge.ok()) {
-      return edge.status();
+    auto input_row = batch.witness_input_row_handle_at(ref.position);
+    if (!input_row.ok()) {
+      return input_row.status();
     }
     key.clear();
-    AppendSemanticKey(&key, edge->input.row);
+    if (Status rendered = batch.AppendWitnessRowKey(*input_row, &key);
+        !rendered.ok()) {
+      return rendered;
+    }
     append_field(key);
   }
   return core::DigestToHex(hasher.Finalize());
@@ -202,9 +308,15 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   // witness input, which may be a rooted input absent from batch.facts(). Any
   // validation failure here happens before a transaction opens, so no rollback
   // is needed.
-  std::set<core::StableId> fact_ids;
+  //
+  // Membership is keyed on the identity's digest, which is the whole of what
+  // distinguishes one of these ids from another: every id here is a fact id,
+  // and a fact id's kind is always `kFact` because `DeriveFactId` derived it.
+  // The set is asked a membership question per witness endpoint, so the
+  // byte-wise comparisons down a tree are what its hashing replaces.
+  std::unordered_set<std::string> fact_ids;
   for (const AnalysisFact& fact : batch.facts()) {
-    fact_ids.insert(fact.fact_id);
+    fact_ids.insert(fact.fact_id.digest_hex);
   }
   std::vector<AnalysisFact> missing_input_facts;
   std::set<core::StableId> rooted_inputs(batch.rooted_input_fact_ids.begin(),
@@ -226,7 +338,14 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   // it, and a derived fact is an input wherever another rule cites it. One memo
   // derives each distinct input row once instead of once per citing edge.
   FactIdentityMemo input_identity;
-  std::map<std::string, ResultWitness> result_witnesses;
+  // One group per interned result id, so this vector is indexed by that id and
+  // grows to it as the pass discovers results. Ranks, not ids, are what the
+  // passes below visit the groups in.
+  ResultRanks result_ranks;
+  std::vector<ResultWitness> result_witnesses;
+  // One scratch key for every edge: an encoded key per edge handed to the
+  // interner is an allocation per edge otherwise.
+  std::string result_key;
   const WitnessRange batch_witnesses = batch.witnesses();
   std::size_t position = 0;
   for (auto it = batch_witnesses.begin(); it != batch_witnesses.end();
@@ -238,22 +357,42 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     }
     // The row is only copied for an input that is not already a published fact,
     // which is the only case that has to be stored from here.
-    if (fact_ids.insert(*input_fact_id).second) {
+    if (fact_ids.insert(input_fact_id->digest_hex).second) {
       missing_input_facts.push_back(
           AnalysisFact{*input_fact_id, edge.input.row});
     }
-    result_witnesses[EncodeSemanticKey(edge.result.row)].ordered_edges.push_back(
+    result_key.clear();
+    AppendSemanticKey(&result_key, edge.result.row);
+    const std::uint32_t result_id = result_ranks.Intern(result_key);
+    // Ids are dense in arrival order and each is handed out once, where it is
+    // created, so a fresh id is the one past the last group and every later
+    // edge of the same result finds its group here. Growing is conditional
+    // because the ids repeat: an unconditional resize would shrink the vector
+    // back to a repeated id and drop the groups past it.
+    if (result_id >= result_witnesses.size()) {
+      result_witnesses.resize(result_id + 1);
+    }
+    result_witnesses[result_id].ordered_edges.push_back(
         WitnessEdgeRef{.position = position,
                        .input_ordinal = edge.input_ordinal,
                        .input_fact_id = std::move(*input_fact_id)});
   }
+  result_ranks.Finish();
 
   // Group the canonical witnesses by result and derive each result's
   // witness-dependent derivation identity. The selected proof's witness id is
   // distinct from the semantic FactID, so re-deriving a fact by a different
   // proof retains a distinct witness record.
-  std::map<core::StableId, std::string> witness_id_by_fact;
-  for (auto& [result_key, entry] : result_witnesses) {
+  //
+  // The binding pass below asks which group a published fact's proof is in. It
+  // is answered with the group's own position rather than a second copy of its
+  // witness id, and keyed on a view into the group's id, which this loop
+  // assigns once and the vector holds for the rest of the call: the group
+  // vector is sized by the interning pass and never grows again.
+  std::unordered_map<std::string_view, std::uint32_t> group_by_fact;
+  for (std::uint32_t rank = 0; rank < result_ranks.Count(); ++rank) {
+    const std::uint32_t result_id = result_ranks.IdAtRank(rank);
+    ResultWitness& entry = result_witnesses[result_id];
     std::ranges::sort(entry.ordered_edges, [](const auto& a, const auto& b) {
       return a.input_ordinal < b.input_ordinal;
     });
@@ -275,12 +414,16 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     }
     entry.fact_id = *fact_id;
     entry.rule_id = std::move(front->rule_id);
-    witness_id_by_fact[*fact_id] = entry.witness_id;
+    // Assigning rather than inserting keeps the last group to name a fact as
+    // the one the binding selects, which is what the key-ordered map did.
+    group_by_fact.insert_or_assign(entry.fact_id.digest_hex, result_id);
   }
 
-  std::map<core::StableId, const RootedInputFact*> root_evidence;
+  // Rooted evidence is keyed on the rooted input's own id digest, read from the
+  // batch, which outlives every lookup below.
+  std::unordered_map<std::string_view, const RootedInputFact*> root_evidence;
   for (const auto& root : batch.rooted_input_facts) {
-    root_evidence[root.fact.fact_id] = &root;
+    root_evidence.insert_or_assign(root.fact.fact_id.digest_hex, &root);
   }
 
   // Idempotent redelivery: a batch already durably published is a successful
@@ -347,10 +490,11 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     binding.fact_id = fact.fact_id;
     binding.producer_kind = ProducerKindForEngine(batch.run.engine);
     binding.is_current = true;
-    const auto witness = witness_id_by_fact.find(fact.fact_id);
+    const auto witness = group_by_fact.find(fact.fact_id.digest_hex);
     binding.selected_witness_id =
-        witness != witness_id_by_fact.end() ? witness->second
-                                            : core::ToString(fact.fact_id);
+        witness != group_by_fact.end()
+            ? result_witnesses[witness->second].witness_id
+            : core::ToString(fact.fact_id);
     s = AppendBinding(bindings, binding);
     if (!s.ok()) {
       return rollback(s);
@@ -358,8 +502,13 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   }
 
   // The witness DAG: one node per selected proof, one edge per derivation step.
+  // The groups are visited by ascending rank, which is their results' encoded
+  // keys' own byte order -- the order the map this replaces iterated in -- so
+  // the rows are inserted in the order they have always been inserted in.
   ProvenanceStore provenance(metadata_store_);
-  for (const auto& [result_key, entry] : result_witnesses) {
+  for (std::uint32_t rank = 0; rank < result_ranks.Count(); ++rank) {
+    const ResultWitness& entry =
+        result_witnesses[result_ranks.IdAtRank(rank)];
     const core::StableId& result_fact_id = entry.fact_id;
 
     FactWitness node;
@@ -372,7 +521,8 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     // Populate provenance metadata from a rooted input's structured evidence,
     // so the explanation graph reports source anchors and summaries.
     for (const WitnessEdgeRef& edge_ref : entry.ordered_edges) {
-      const auto root = root_evidence.find(edge_ref.input_fact_id);
+      const auto root =
+          root_evidence.find(edge_ref.input_fact_id.digest_hex);
       if (root != root_evidence.end()) {
         node.producer_id = root->second->producer_id;
         node.source_anchor_id = root->second->source_anchor_id;
