@@ -428,12 +428,12 @@ term that does not move is reported as not having moved.
 ### 9.5 Measured outcome (2026-10-01)
 
 **The round does not meet the acceptance framing of section 4.** CPU rose and the
-larger of the two payload-time terms rose with it. On memory, two of the payload
-terms moved in the intended direction and one moved against it, but only
-`wpa.orchestrate`'s pair of readings clears this fixture's run-to-run spread, and
-it does so thinly; the process peaks do not move measurably at all. This section
-records the pair, the equivalence result, and every term, including the ones that
-did not move.
+larger of the two payload-time terms rose with it. On memory, of the three payload
+terms one moved **down** (`wpa.orchestrate`, thinly), one moved **up** robustly
+(`facts.batch_assemble`), and one is **withdrawn** because its own run-to-run
+spread swallows the difference (`facts.publish`); the process peaks do not move
+measurably at all. This section records the pair, the equivalence result, and
+every term, including the ones that did not move.
 
 #### 9.5.1 The pair and the protocol
 
@@ -664,8 +664,8 @@ Memory, worst of three:
 
 | Term | pre | post | Δ | % | Moved? |
 | --- | ---: | ---: | ---: | ---: | --- |
-| Maximum resident set size (`/usr/bin/time`) | 8,548,581,376 B (7.961 GiB) | 8,368,816,128 B (7.794 GiB) | −179,765,248 B (−0.167 GiB) | −2.1 % | **No** — inside the 0.858 GiB spread |
-| Peak physical footprint (sampler) | 6,509,468,344 B (6.062 GiB) | 6,749,067,960 B (6.286 GiB) | +239,599,616 B (+0.223 GiB) | +3.7 % | **No** — inside the 0.712 GiB spread, either way |
+| Maximum resident set size (`/usr/bin/time`) | 8,548,581,376 B (7.961 GiB) | 8,368,816,128 B (7.794 GiB) | −179,765,248 B (−0.167 GiB) | −2.1 % | **No** — inside the post spread of 0.858 GiB |
+| Peak physical footprint (sampler) | 6,509,468,344 B (6.062 GiB) | 6,749,067,960 B (6.286 GiB) | +239,599,616 B (+0.223 GiB) | +3.7 % | **No** — inside the post spread of 0.712 GiB; it *does* exceed the pre spread of 0.126 GiB, so this row is the one place the two spreads disagree |
 | Peak RSS (sampler) | 7.961 GiB | 7.794 GiB | −0.167 GiB | −2.1 % | same as `maxrss` |
 
 The peak-RSS reduction is **not established**: −0.167 GiB is far inside the post
@@ -713,13 +713,20 @@ span's own self time) are unchanged within 0.8 s, which is the control that make
 the rest interpretable.
 
 **The criterion, stated once and applied to every memory term below.** A term has
-moved only if its **worst-of-three** difference exceeds the **post revision's own
-run-to-run spread** for that term. Worst-of-three is round 3's convention, and
-the post spread is the right yardstick because it is the revision whose
-behaviour is in question; the pre spread is reported beside it so a reader can see
-when the two disagree. Nothing below is called a reduction on a difference that
-fails this test, and the peak-RSS term in the table above is dismissed by the
-same rule.
+moved only if *both* hold: its **worst-of-three** difference exceeds the **post
+revision's own run-to-run spread** for that term, *and* that difference is at
+least **0.05 GiB**. Worst-of-three is round 3's convention, and the post spread is
+the right yardstick because it is the revision whose behaviour is in question; the
+pre spread is reported beside it so a reader can see when the two disagree.
+
+The magnitude floor is stated rather than left implicit because two rows below —
+`m5.svf` and `m4.local_analysis` — clear their spreads by 1.2× and 1.1× while
+amounting to 14.2 MB and 7.4 MB, which is not a design quantity at this phase
+scale. 0.05 GiB sits 3.8× above the larger of those two and 8.0× below the
+smallest effect claimed here (`wpa.orchestrate`'s peak), so it separates them
+without arbitrating anything else. Nothing below is called a reduction on a
+difference that fails either half, and the peak-RSS term in the table above is
+dismissed by the spread half of the same rule.
 
 Per-term resident deltas, from each span's `rss_start` / `rss_end`. This is the
 section's central claim and it is why the process total is not the evidence.
@@ -730,9 +737,9 @@ Every run's delta is shown, because the spread is what decides:
 | `wpa.orchestrate` | +2.039 / +2.110 / +2.153 | 0.113 | +1.738 / +1.399 / +1.436 | 0.338 | **−0.415 GiB** | **Yes, by 0.077 GiB** |
 | `facts.publish` | +1.759 / +1.838 / +1.697 | 0.141 | **−2.257** / +1.081 / +1.172 | **3.429** | −0.666 GiB | **Withdrawn — see below** |
 | `facts.batch_assemble` | +0.300 / +0.565 / +0.356 | 0.265 | +0.929 / +1.150 / +0.934 | 0.221 | **+0.585 GiB** | **Yes — it rose** |
-| `m5.svf` | +2.668 / +2.644 / +2.643 | 0.024 | +2.652 / +2.654 / +2.643 | 0.011 | −0.013 GiB | No |
-| `m4.local_analysis` | +0.287 / +0.298 / +0.296 | 0.011 | +0.285 / +0.291 / +0.291 | 0.006 | −0.007 GiB | No |
-| `m2m3.publish_summaries` | +0.345 / +0.344 / +0.248 | 0.097 | +0.348 / +0.345 / +0.243 | 0.105 | +0.004 GiB | No |
+| `m5.svf` | +2.668 / +2.644 / +2.643 | 0.024 | +2.652 / +2.654 / +2.643 | 0.011 | −0.013 GiB | No — clears the spread, below the 0.05 GiB floor |
+| `m4.local_analysis` | +0.287 / +0.298 / +0.296 | 0.011 | +0.285 / +0.291 / +0.291 | 0.006 | −0.007 GiB | No — clears the spread, below the 0.05 GiB floor |
+| `m2m3.publish_summaries` | +0.345 / +0.344 / +0.248 | 0.097 | +0.348 / +0.345 / +0.243 | 0.105 | +0.004 GiB | No — inside the spread |
 
 **`facts.publish`'s −0.666 GiB is withdrawn.** Its post spread is 3.429 GiB —
 the three deltas are −2.257, +1.081 and +1.172 GiB — so by the rule used above to
@@ -762,8 +769,8 @@ The peak-resident instrument, from the same runs and by the same rule:
 | --- | --- | ---: | --- | ---: | ---: | --- |
 | `wpa.orchestrate` | 5.701 / 5.721 / 5.747 | 0.046 | 5.345 / 5.049 / 5.004 | 0.341 | **−0.402 GiB** | **Yes, by 0.061 GiB** |
 | `facts.batch_assemble` | 6.242 / 6.287 / 6.401 | 0.159 | 6.275 / 6.202 / 5.939 | 0.336 | −0.126 GiB | No |
-| `facts.publish` | 7.918 / 7.893 / 7.961 | 0.068 | 6.869 / 7.794 / 7.420 | 0.925 | −0.167 GiB | No |
-| `m5.svf` | 3.407 / 3.393 / 3.391 | 0.016 | 3.391 / 3.400 / 3.390 | 0.010 | −0.007 GiB | No |
+| `facts.publish` | 7.918 / 7.893 / 7.961 | 0.068 | 6.869 / 7.794 / 7.420 | 0.925 | −0.167 GiB | No — inside the spread |
+| `m5.svf` | 3.407 / 3.393 / 3.391 | 0.016 | 3.391 / 3.400 / 3.390 | 0.010 | −0.007 GiB | No — inside the spread |
 
 `wpa.orchestrate`'s peak is the strongest single memory result in the round:
 −0.402 GiB worst-of-three, clearing the post spread by 0.061 GiB, on the phase
@@ -809,22 +816,29 @@ Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
 - every main-thread sample in the `Validate` capture is inside `DeriveBatchId`
   (100 %), and 90.1 % of the capture is inside `AppendStoredRowKey`, which splits
   almost evenly into two halves. **45.4 % of `AppendStoredRowKey` renders each
-  row's key out of the batch's arena** through `Batch::AppendFactKey` →
-  `RowArena::AppendKey` → `WriteKey`, and **51.4 % hashes the rendered key**
-  through `AppendField` → `SHA256Hasher::Update`. The render is the largest
-  single named leaf in the capture, at 40.9 %, and it does not decode: `ReadRow`
-  and `DecodeCell` are absent from the capture entirely. Since `batch_id` is
-  byte-identical between the revisions the hashed byte *stream* is identical too,
-  so the hash half cannot itself be where 13.7 s went — **which leaves the render,
-  `RowArena::AppendKey`, as new work on this round's rewritten path and the
-  capture pointing at the round rather than away from it.** The original draft of
-  this section read the opposite way: it called the capture "dominated by
-  `AppendField` → `SHA256Hasher::Update`", which generalised one frame's
-  composition to the whole function and, worse, used it to conclude that the
-  arena's key render was not implicated. The figures above are the correction.
-  The disclaimer stands: a 6-second capture inside a 52-second span cannot
-  apportion the delta, and the pre revision was not profiled, so the +13.7 s is
-  reported as measured and **not** attributed;
+  row's key out of the batch's arena**, and **51.4 % hashes the rendered key**
+  through `AppendField` → `SHA256Hasher::Update`. The render half's whole stack is
+  `AppendStoredRowKey` → `AnalysisFactBatch::AppendWitnessRowKey` →
+  `RowArena::AppendKey` → `WriteKey`: the accessor that parents every
+  `RowArena::AppendKey` frame here is the **witness**-arena one
+  (`AnalysisFactBus.h:94`), and `AppendFactKey` — its fact-arena sibling at `:91`
+  — has no frame in this capture at all. `RowArena::AppendKey` is the largest named
+  function on that path, at 40.9 % of the capture, and that figure is a **summed
+  per-function share** (1835 of 4484 frames across five call sites), not a single
+  frame. The distinction matters because the two aggregations disagree: **by tips
+  the capture is dominated by the SHA-256 core — `RotR` 25.9 %, `ProcessBlock`
+  23.9 % — and `AppendKey` contributes 10 samples.** The render does not decode:
+  `ReadRow` and `DecodeCell` are absent from the capture entirely. Since
+  `batch_id` is byte-identical between the revisions the hashed byte *stream* is
+  identical too, so the hash half cannot itself be where 13.7 s went — **which
+  leaves the render, new work on this round's rewritten path, as the suspect and
+  the capture pointing at the round rather than away from it.** The original draft
+  of this section read the opposite way: it called the capture "dominated by
+  `AppendField` → `SHA256Hasher::Update`", generalising one frame's composition to
+  the whole function and, worse, using it to conclude that the arena's key render
+  was not implicated. The disclaimer stands: a 6-second capture inside a 52-second
+  span cannot apportion the delta, and the pre revision was not profiled, so the
+  +13.7 s is reported as measured and **not** attributed;
 - the fact-store capture is 49.4 % `WitnessRange::Iterator::operator*` →
   `RowArena::DecodeWitness` (2201 of 4456 samples), with `FactIdentityMemo::
   Identify` at 26 % — the same decode-per-row shape, now in the consumer.
