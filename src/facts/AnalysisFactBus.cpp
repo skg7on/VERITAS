@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
-#include <map>
 #include <numeric>
 #include <set>
 #include <span>
@@ -76,6 +75,43 @@ std::string RenderRow(const SemanticRow &row) {
         cell);
   }
   return out;
+}
+
+// FNV-1a, 64-bit: the offset basis and the prime. A key hash is a bucket
+// selector rather than an identity -- the fact index resolves every bucket by
+// comparing stored rows, so a collision costs a comparison and never an answer
+// -- which is why a cheap, well-spread mix is the right tool here and a
+// cryptographic digest would cost more per row than the index it feeds saves.
+constexpr std::uint64_t kFnvOffsetBasis = 0xcbf29ce484222325ull;
+constexpr std::uint64_t kFnvPrime = 0x100000001b3ull;
+
+// Appends one stored row's canonical key to the batch-id stream, rendered from
+// the cells its arena holds. `render` is the arena-named accessor for that
+// arena, so a caller cannot render a fact row against the witness arena or the
+// reverse.
+//
+// The render cannot fail for a handle the batch's own index produced: the bytes
+// it names are bytes that arena wrote, and a row one arena accepted renders the
+// same way a second time. The assert states that, and a render that somehow
+// failed leaves an empty field, which no stored row renders -- so the derived
+// id moves and the batch-id gate rejects the batch rather than accepting an id
+// that covers a row the batch does not have. That is the same choice
+// `MakeAnalysisFactBatch` makes when an append it enumerated itself fails.
+void AppendStoredRowKey(core::SHA256Hasher *canonical, std::string *scratch,
+                        const AnalysisFactBatch &batch,
+                        const StatusOr<RowHandle> &handle,
+                        Status (AnalysisFactBatch::*render)(
+                            RowHandle, std::string *) const) {
+  scratch->clear();
+  assert(handle.ok());
+  if (handle.ok()) {
+    const Status rendered = (batch.*render)(*handle, scratch);
+    assert(rendered.ok());
+    if (!rendered.ok()) {
+      scratch->clear();
+    }
+  }
+  AppendField(canonical, *scratch);
 }
 
 constexpr std::string_view kDeliveryTableSql =
@@ -237,6 +273,20 @@ private:
 
 } // namespace
 
+std::uint64_t DefaultKeyHash(const core::StableId &id) {
+  // An id is already a digest of the row's canonical preimage, so reducing it
+  // to 64 bits is a pure function of the row that costs nothing the row has not
+  // paid. FNV over the canonical text the id carries, which is one pass over 64
+  // characters and mixes the whole digest; parsing those characters into digest
+  // bytes to read a slice of them would cost more and spread no better.
+  std::uint64_t hash = kFnvOffsetBasis;
+  for (char c : id.digest_hex) {
+    hash ^= static_cast<std::uint8_t>(c);
+    hash *= kFnvPrime;
+  }
+  return hash;
+}
+
 core::StableId DeriveBatchId(const AnalysisFactBatch &batch) {
   core::SHA256Hasher canonical;
   // One scratch key for every row in the batch. The batch id covers a million
@@ -263,20 +313,40 @@ core::StableId DeriveBatchId(const AnalysisFactBatch &batch) {
   for (const auto &id : batch.rooted_input_fact_ids) {
     AppendField(&canonical, core::ToString(id));
   }
-  for (const auto &fact : batch.facts()) {
-    key.clear();
-    AppendSemanticKey(&key, fact.row);
-    AppendField(&canonical, key);
+  // The rows are rendered from the batch's own arenas, not decoded: `AppendKey`
+  // produces exactly the bytes `AppendSemanticKey` produces for the rich row,
+  // and this function runs twice per run over every fact and both endpoints of
+  // every witness, so a decode per row is precisely the cost the batch's arenas
+  // exist to remove.
+  for (std::size_t i = 0; i < batch.fact_count(); ++i) {
+    AppendStoredRowKey(&canonical, &key, batch, batch.fact_row_handle_at(i),
+                       &AnalysisFactBatch::AppendFactKey);
   }
-  for (const auto &edge : batch.witnesses()) {
-    key.clear();
-    AppendSemanticKey(&key, edge.result.row);
-    AppendField(&canonical, key);
-    AppendField(&canonical, edge.rule_id);
-    key.clear();
-    AppendSemanticKey(&key, edge.input.row);
-    AppendField(&canonical, key);
-    AppendField(&canonical, std::to_string(edge.input_ordinal));
+  for (std::size_t i = 0; i < batch.witness_count(); ++i) {
+    AppendStoredRowKey(&canonical, &key, batch,
+                       batch.witness_result_row_handle_at(i),
+                       &AnalysisFactBatch::AppendWitnessRowKey);
+    // The rule id and the ordinal are the two witness fields that are not a
+    // row. Both are read from the entry's own bytes, so no edge is decoded for
+    // them either, and both fail exactly as the renders above do: asserted,
+    // with an empty field on the impossible failure.
+    const auto rule_id = batch.witness_rule_id_at(i);
+    assert(rule_id.ok());
+    std::string rule_id_text;
+    if (rule_id.ok()) {
+      rule_id_text = *rule_id;
+    }
+    AppendField(&canonical, rule_id_text);
+    AppendStoredRowKey(&canonical, &key, batch,
+                       batch.witness_input_row_handle_at(i),
+                       &AnalysisFactBatch::AppendWitnessRowKey);
+    const auto ordinal = batch.witness_ordinal_at(i);
+    assert(ordinal.ok());
+    std::string ordinal_text;
+    if (ordinal.ok()) {
+      ordinal_text = std::to_string(*ordinal);
+    }
+    AppendField(&canonical, ordinal_text);
   }
   for (const auto &diagnostic : batch.diagnostics) {
     AppendField(&canonical, diagnostic);
@@ -554,7 +624,9 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
   }
 
   // Stable fact identity: every fact's ID matches its semantic row, and no two
-  // facts share an ID.
+  // facts share an identity. The index below enforces the second by comparing
+  // rows rather than ids, which the first check makes the same statement: an id
+  // is a function of its row, so two facts sharing a row share an id.
   //
   // One identity memo serves this loop and both endpoints of every witness
   // edge below: the witness rows are drawn from exactly the rows the fact list
@@ -567,8 +639,17 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
   // through the range. Every check below is the one this pass has always made,
   // in the same order: the position a fact is indexed at is its position in the
   // range, which was its index in the vector.
+  //
+  // The index is keyed on a 64-bit reduction of the row's identity and resolved
+  // by comparing stored rows, never on the identity itself. An identity is a
+  // 64-character string, so a container keyed on one allocates a string per
+  // fact and compares those strings on every lookup, and this pass indexes
+  // every fact and looks up both endpoints of every witness. The reduction
+  // decides nothing: two rows can reduce alike, and the bucket is resolved by
+  // the exact comparison the arenas support, which is what lets a test force
+  // every row into one bucket and still require these same answers.
   FactIdentityMemo identity;
-  std::map<core::StableId, std::size_t> fact_index;
+  std::unordered_map<std::uint64_t, std::vector<std::size_t>> fact_index;
   std::size_t position = 0;
   for (const auto &fact : batch.facts()) {
     auto derived = identity.Identify(fact.row);
@@ -578,11 +659,28 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
     if (*derived != fact.fact_id) {
       return Status::FailedPrecondition("fact_id does not match its row");
     }
-    if (!fact_index.emplace(fact.fact_id, position).second) {
+    auto row = batch.fact_row_handle_at(position);
+    if (!row.ok()) {
+      return row.status();
+    }
+    std::vector<std::size_t> &bucket = fact_index[key_hash_(*derived)];
+    bool duplicate = false;
+    for (std::size_t indexed : bucket) {
+      auto indexed_row = batch.fact_row_handle_at(indexed);
+      if (!indexed_row.ok()) {
+        return indexed_row.status();
+      }
+      if (batch.FactRowsEqual(*indexed_row, *row)) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) {
       return Status::FailedPrecondition("duplicate fact_id " +
                                         core::ToString(fact.fact_id) +
                                         " for row " + RenderRow(fact.row));
     }
+    bucket.push_back(position);
     ++position;
   }
 
@@ -595,6 +693,36 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
     std::size_t result = kNoFact;
     std::size_t input = kNoFact;
   };
+  // The published fact a row names, or `kNoFact`. A derived id lands in a
+  // bucket, and the bucket is answered by comparing rows: the position a
+  // candidate names carries a stored row, and the entry that matches the
+  // witness's endpoint byte for byte is the one that answers. Both sides are
+  // addressed as rows rather than compared as decoded values -- the published
+  // row lives in the batch's fact arena and the endpoint row in its witness
+  // arena, and `RowsEqual` routes each handle to its own arena -- and the
+  // comparison decides exactly what the structural comparison decided, because
+  // a row is stored in its canonical, injective encoding. A bucket that holds
+  // no such entry, including a bucket two distinct rows reduced into, reports
+  // the same absence the identity lookup reported.
+  const auto published_fact = [&](const core::StableId &id,
+                                  RowHandle endpoint_row)
+      -> StatusOr<std::size_t> {
+    const auto bucket = fact_index.find(key_hash_(id));
+    if (bucket == fact_index.end()) {
+      return kNoFact;
+    }
+    for (std::size_t indexed : bucket->second) {
+      auto published = batch.fact_row_handle_at(indexed);
+      if (!published.ok()) {
+        return published.status();
+      }
+      if (batch.RowsEqual(*published, endpoint_row)) {
+        return indexed;
+      }
+    }
+    return kNoFact;
+  };
+
   std::vector<WitnessEndpoints> endpoints;
   endpoints.reserve(batch.witness_count());
   std::vector<bool> witnessed(batch.fact_count(), false);
@@ -612,41 +740,24 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
       return input.status();
     }
 
-    // The position a derived id names carries a stored row, and the check is
-    // that it is the row the witness cites. Both sides are addressed as rows
-    // rather than compared as decoded values: the published row lives in the
-    // batch's fact arena and the endpoint row in its witness arena, and
-    // `RowsEqual` routes each handle to its own arena. The comparison decides
-    // exactly what the structural comparison decided, because a row is stored
-    // in its canonical, injective encoding.
     WitnessEndpoints refs;
-    const auto result_it = fact_index.find(*result);
-    bool result_is_published = false;
-    if (result_it != fact_index.end()) {
-      auto published = batch.fact_row_handle_at(result_it->second);
-      if (!published.ok()) {
-        return published.status();
-      }
-      result_is_published = batch.RowsEqual(*published, it.result_row_handle());
+    auto result_fact = published_fact(*result, it.result_row_handle());
+    if (!result_fact.ok()) {
+      return result_fact.status();
     }
-    if (!result_is_published) {
+    if (*result_fact == kNoFact) {
       result_outside_published_set = true;
     } else {
-      refs.result = result_it->second;
+      refs.result = *result_fact;
       witnessed[refs.result] = true;
     }
 
-    const auto input_it = fact_index.find(*input);
-    bool input_is_published = false;
-    if (input_it != fact_index.end()) {
-      auto published = batch.fact_row_handle_at(input_it->second);
-      if (!published.ok()) {
-        return published.status();
-      }
-      input_is_published = batch.RowsEqual(*published, it.input_row_handle());
+    auto input_fact = published_fact(*input, it.input_row_handle());
+    if (!input_fact.ok()) {
+      return input_fact.status();
     }
-    if (input_is_published) {
-      refs.input = input_it->second;
+    if (*input_fact != kNoFact) {
+      refs.input = *input_fact;
     } else if (!roots.contains(*input)) {
       input_outside_root_set = true;
     }
@@ -666,12 +777,35 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
 
   // The witness DAG must be acyclic: every published fact's proof is a finite
   // tree rooted in declared inputs. A cycle would let a fact justify itself.
-  std::vector<std::vector<std::size_t>> dependencies(batch.fact_count());
+  //
+  // The edges are two flat arrays and an offset table rather than a vector per
+  // fact: a batch holds a position per derived row, so a vector of vectors
+  // allocates once per fact and most of those vectors are empty, where the
+  // targets and the offsets are one block each. The slice
+  // `depend_target[depend_offset[i] .. depend_offset[i + 1])` is exactly the
+  // list of results fact `i` proves, so the traversal below is the one this
+  // pass has always run, over index arithmetic instead of a nested vector.
+  std::vector<std::size_t> depend_offset(batch.fact_count() + 1, 0);
+  std::vector<std::size_t> depend_target;
   std::vector<std::size_t> input_count(batch.fact_count(), 0);
   for (const auto &edge : endpoints) {
     if (edge.input != kNoFact) {
-      dependencies[edge.input].push_back(edge.result);
+      ++depend_offset[edge.input + 1];
       ++input_count[edge.result];
+    }
+  }
+  for (std::size_t i = 0; i < batch.fact_count(); ++i) {
+    depend_offset[i + 1] += depend_offset[i];
+  }
+  depend_target.resize(depend_offset.back());
+  // The fill replays the pass that counted: `cursor` is a private copy of the
+  // offsets, so each input's slice fills from its own start and a slice keeps
+  // the order the edges were recorded in.
+  std::vector<std::size_t> cursor(depend_offset.begin(),
+                                  depend_offset.end() - 1);
+  for (const auto &edge : endpoints) {
+    if (edge.input != kNoFact) {
+      depend_target[cursor[edge.input]++] = edge.result;
     }
   }
   std::vector<std::size_t> ready;
@@ -684,7 +818,10 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
   std::size_t processed = 0;
   for (std::size_t i = 0; i < ready.size(); ++i) {
     ++processed;
-    for (const auto &dependent : dependencies[ready[i]]) {
+    const std::size_t fact = ready[i];
+    for (std::size_t at = depend_offset[fact]; at < depend_offset[fact + 1];
+         ++at) {
+      const std::size_t dependent = depend_target[at];
       if (--input_count[dependent] == 0) {
         ready.push_back(dependent);
       }

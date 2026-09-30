@@ -606,6 +606,41 @@ StatusOr<RowHandle> RowArena::witness_input_row_handle_at(
   return entries_[index].second_row;
 }
 
+StatusOr<std::string> RowArena::rule_id_at(std::size_t index) const {
+  if (index >= entries_.size() || entries_[index].kind != EntryKind::kWitness) {
+    return Status::InvalidArgument("entry is not a stored witness");
+  }
+  const Entry& entry = entries_[index];
+  Reader reader(Span(entry.entry));
+  // `AppendWitness` writes the result row first and the rule id immediately
+  // after it, and the result row's own handle records its width -- so the rule
+  // id sits exactly that many bytes past the entry's start and the row is
+  // skipped rather than parsed.
+  auto skipped = reader.Fixed(static_cast<std::size_t>(entry.first_row.size));
+  if (!skipped.ok()) {
+    return skipped.status();
+  }
+  std::string rule_id;
+  if (Status read = ReadLengthPrefixed(&reader, &rule_id); !read.ok()) {
+    return read;
+  }
+  return rule_id;
+}
+
+StatusOr<std::uint32_t> RowArena::ordinal_at(std::size_t index) const {
+  if (index >= entries_.size() || entries_[index].kind != EntryKind::kWitness) {
+    return Status::InvalidArgument("entry is not a stored witness");
+  }
+  // The ordinal is the last field `AppendWitness` writes, so it is the entry's
+  // trailing four bytes: nothing before it has to be walked to reach it.
+  const RowHandle entry = entries_[index].entry;
+  if (entry.size < sizeof(std::uint32_t)) {
+    return Status::InvalidArgument("stored witness is truncated");
+  }
+  return GetU32(Span(entry), static_cast<std::size_t>(entry.size) -
+                                sizeof(std::uint32_t));
+}
+
 bool RowArena::RowsEqual(const RowArena& left, RowHandle left_row,
                          const RowArena& right, RowHandle right_row) {
   // Each handle is resolved against its own arena, so a caller cannot compare

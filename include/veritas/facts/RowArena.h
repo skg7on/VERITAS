@@ -110,6 +110,16 @@ class RowArena {
   StatusOr<RowHandle> witness_result_row_handle_at(std::size_t index) const;
   StatusOr<RowHandle> witness_input_row_handle_at(std::size_t index) const;
 
+  // The two witness fields that are not a row, by position, read from the
+  // entry's own bytes rather than from a decoded edge. A caller that hashes a
+  // witness's rule id or ordinal -- the batch id does -- must not decode the
+  // edge to reach them, because the rows an edge carries would then be
+  // materialised for a field neither of them mentions. Each fails with
+  // InvalidArgument past the end or when the entry was appended as a different
+  // payload kind.
+  StatusOr<std::string> rule_id_at(std::size_t index) const;
+  StatusOr<std::uint32_t> ordinal_at(std::size_t index) const;
+
   // Compares two rows that may live in different arenas, which `RowEquals`
   // cannot: a batch compares a published fact's row against a witness's result
   // row, and those are stored in the facts arena and the witnesses arena
