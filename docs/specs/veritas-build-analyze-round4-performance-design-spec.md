@@ -817,23 +817,27 @@ Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
   (100 %), and 90.1 % of the capture is inside `AppendStoredRowKey`, which splits
   almost evenly into two halves. **45.4 % of `AppendStoredRowKey` renders each
   row's key out of the batch's arena**, and **51.4 % hashes the rendered key**
-  through `AppendField` → `SHA256Hasher::Update`. The render half's whole stack is
+  through `AppendField` → `SHA256Hasher::Update`. The render half runs through
   `AppendStoredRowKey` → `AnalysisFactBatch::AppendWitnessRowKey` →
-  `RowArena::AppendKey` → `WriteKey`: the accessor that parents every
-  `RowArena::AppendKey` frame here is the **witness**-arena one
-  (`AnalysisFactBus.h:94`), and `AppendFactKey` — its fact-arena sibling at `:91`
-  — has no frame in this capture at all. `RowArena::AppendKey` is the largest named
-  function on that path, at 40.9 % of the capture, and that figure is a **summed
-  per-function share** (1835 of 4484 frames across five call sites), not a single
-  frame. The distinction matters because the two aggregations disagree: **by tips
-  the capture is dominated by the SHA-256 core — `RotR` 25.9 %, `ProcessBlock`
-  23.9 % — and `AppendKey` contributes 10 samples.** The render does not decode:
-  `ReadRow` and `DecodeCell` are absent from the capture entirely. Since
-  `batch_id` is byte-identical between the revisions the hashed byte *stream* is
-  identical too, so the hash half cannot itself be where 13.7 s went — **which
-  leaves the render, new work on this round's rewritten path, as the suspect and
-  the capture pointing at the round rather than away from it.** The original draft
-  of this section read the opposite way: it called the capture "dominated by
+  `RowArena::AppendKey` → `WriteKey`: the accessor in that stack is the
+  **witness**-arena one (`AnalysisFactBus.h:94`), and `AppendFactKey` — its
+  fact-arena sibling at `:91` — has **zero** frames in this capture, so no
+  `AppendKey` frame here is reached through the fact arena. Below the shared
+  `AppendStoredRowKey` prologue — itself 90.1 % of the capture — and setting aside
+  that `AppendWitnessRowKey` accessor (41.0 %), the function with the largest
+  share is `RowArena::AppendKey`, at 40.9 %, ahead of `WriteKey` at 38.7 %. All
+  four of those figures are **summed per-function shares** over call sites rather
+  than single frames: `AppendKey`'s 40.9 % is 1835 samples summed over 19 frames,
+  the largest single frame holding 975 of them. The aggregation is worth naming
+  because the tip view disagrees — there the capture is dominated by the SHA-256
+  core, `RotR` 25.9 % and `ProcessBlock` 23.9 %, where `AppendKey` is 0.2 %. The
+  render does not decode: `ReadRow` and `DecodeCell` are absent from the capture
+  entirely. Since `batch_id` is byte-identical between the revisions the hashed
+  byte *stream* is identical, and `AppendField`/`UpdateHash` are byte-identical
+  source, so the hash half is not where new work entered — **which leaves the
+  render, the part of this captured window the round rewrote, as the candidate,
+  and makes the capture evidence for the round rather than against it.** The
+  original draft of this section read the opposite way: it called the capture "dominated by
   `AppendField` → `SHA256Hasher::Update`", generalising one frame's composition to
   the whole function and, worse, using it to conclude that the arena's key render
   was not implicated. The disclaimer stands: a 6-second capture inside a 52-second
