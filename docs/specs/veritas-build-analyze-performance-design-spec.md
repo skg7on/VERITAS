@@ -498,3 +498,53 @@ timed out in gate runs while the machine was indexing the freshly built tree,
 and both pass in isolation and in a subsequent full-suite run in 17 and 10
 seconds respectively. A timeout in those two is worth re-running before it is
 treated as a regression.
+
+## 10. Risks and Mitigations
+
+| Risk | Mitigation |
+| --- | --- |
+| Index outlives or mismatches its summary storage | Non-owning index records source data pointer and size; indexed build validates `Covers` on every call. |
+| Moving facts changes canonical ownership | Component completions are sorted before moving; existing ownership tests run in both original and reversed input order. |
+| Stripped completion payload breaks M9 | M9's documented completion contract is key + object/hash metadata; canonical payloads remain in batch facts/witnesses/diagnostics. |
+| Cached sort keys change ordering | Keys use the same `EncodeSemanticKey`, rule, input, and ordinal sequence as the current comparator. |
+| Faster hex encoding changes IDs | Exact known-output and round-trip tests prove byte-for-byte equivalence. |
+| Optimization hides a larger Soufflé-process cost | SCC batching remains out of scope and is evaluated only if the bounded changes miss the acceptance target. |
+
+## 11. Rejected Alternatives
+
+### 11.1 Select the C++ emergency engine by default
+
+Rejected because Soufflé is the mandatory production WPA engine. Changing the
+engine would alter provenance and evade rather than fix shared orchestration
+costs.
+
+### 11.2 Cache summary indices globally
+
+Rejected because process-global pointers would complicate lifetime, revision,
+and concurrency safety. One run-scoped index removes the repeated work without
+new shared state.
+
+### 11.3 Batch all SCCs into one Soufflé invocation
+
+Potentially valuable, but architectural. It changes failure isolation,
+component caching, limits, result ownership, and incremental scheduling. It
+must be proposed separately if the bounded work misses the target.
+
+### 11.4 Add wall-clock assertions to CTest
+
+Rejected because timing thresholds are machine-dependent and flaky. CI proves
+semantic equivalence; the pinned LevelDB benchmark proves performance on the
+reference machine.
+
+## 12. Completion Criteria
+
+The work is complete only when:
+
+1. All goals and preserved contracts above are implemented.
+2. Targeted tests demonstrate red/green behavior for the new index and
+   consuming batch contract.
+3. The full clean build and full test suite pass with no failures or skips.
+4. `git diff --check` and the repository license-header check pass.
+5. The LevelDB benchmark meets both the wall-time and peak-RSS thresholds.
+6. The branch diff contains only this performance improvement and its tests and
+   documentation.
