@@ -1462,9 +1462,10 @@ derivation_id)`.
 - [ ] **Step 4: Replace the comparator encoding**
 
 The two sorts that call `EncodeSemanticKey` inside their comparators
-(`ResultCanonicalizer.cpp:67-85` and `:302-316`) sort on the interned dense id,
-which preserves encoded-key order by construction because ids are assigned in
-sorted key order.
+(`ResultCanonicalizer.cpp:67-85` and `:302-316`) sort on the interned row's
+*rank*, not on an id: the interner assigns ids in **encounter** order, and
+`KeyInterner::Finish` fixes each id's rank as the position its key sorts into, so
+rank order is the encoded keys' own order by construction.
 
 - [ ] **Step 5: Replace the cost sweep with a worklist**
 

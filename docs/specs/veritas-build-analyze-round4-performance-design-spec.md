@@ -274,7 +274,13 @@ reopened decision belongs to the repository owner, not to this change.
 
 ## 7. Design
 
-### 7.1 The row arena
+### 7.1 The row arena — **Dropped**
+
+**Dropped (2026-10-01), ratified on measurement. Built, measured, reverted in
+`4c81e50`. Not in the tree.** `include/veritas/facts/RowArena.h`,
+`src/facts/RowArena.cpp` and `tests/unit/facts/RowArenaTest.cpp` were deleted by
+the revert, so `RowHandle`, `RowArena`, `Append`, `Decode`, `AppendKey` and
+`RowEquals` do not exist in the tree. Section 9.6 records what is left behind.
 
 Introduce a compact, append-only, arena-backed store for semantic rows and
 witness edges, reusing the encoding `SerializeResult` already defines. One arena
@@ -302,7 +308,12 @@ class RowArena {
 `Decode` exists for consumers that need a rich row — `ToProtoFact`, row
 renderers, tests — and is never called in a loop that retains its result.
 
-### 7.2 Payload retention
+### 7.2 Payload retention — **Dropped**
+
+**Dropped (2026-10-01), ratified on measurement. Built, measured, reverted in
+`4c81e50`. Not in the tree.** `WpaComponentResult` holds its payload in two rich
+vectors again and `WpaOrchestrator` retains completions unchanged; there is no
+arena for `SuccessorSupport` to read. Section 9.6 records what is left behind.
 
 `WpaComponentResult` keeps its identity and hash fields and holds its payload in
 a `RowArena` instead of two rich vectors. `WpaComponentCompletion` is unchanged
@@ -317,7 +328,12 @@ untouched, and none of round 3 section 7.7's hazards can arise.
 `SuccessorSupport` reads the relations that kind derives directly out of each
 successor's arena and materializes only those rows.
 
-### 7.3 Batch assembly
+### 7.3 Batch assembly — **Dropped**
+
+**Dropped (2026-10-01), ratified on measurement. Built, measured, reverted in
+`4c81e50`. Not in the tree.** `AnalysisFactBatch` holds canonical facts and
+witnesses in rich vectors again, and no `FactRange` or arena-backed accessor
+exists. Section 9.6 records what is left behind.
 
 `AnalysisFactBatch` keeps its logical fields and holds canonical facts and
 witnesses in arenas. Consumers iterate a decoded view:
@@ -333,22 +349,32 @@ FactRange witnesses() const;
 the canonical owner of each fact, and move the selected derivations; it appends
 into arenas instead of vectors. Round 3's packed ranks are retained.
 
-### 7.4 Id-keyed downstream
+### 7.4 Id-keyed downstream — **Partly dropped**
 
-- `ResultCanonicalizer` replaces its three nested `std::map<std::string, …>`
-  levels with dense identifier keys from one interner built over the component's
-  rows, precomputes each row's sort rank once so no comparator encodes, and
-  replaces the cost relaxation's full sweep with a worklist that revisits a
-  derivation only when the cost of one of its inputs decreases.
-- `FactStore::Publish` groups witnesses by interned result rank rather than by
-  encoded key string, and keys its fact, witness and root lookups on dense
-  identifiers.
-- `AnalysisFactBus::Validate` keys its fact index and root membership on
-  precomputed 64-bit key hashes with exact arena byte comparison on collision,
-  and stores the witness DAG's dependencies as one flat CSR array pair instead
-  of `std::vector<std::vector<std::size_t>>`.
+- **Retained. This bullet is the round's one survivor, and section 9.6 carries
+  its measurement.** `ResultCanonicalizer` replaces its three nested
+  `std::map<std::string, …>` levels with dense identifier keys from one interner
+  built over the component's rows, precomputes each row's sort rank once so no
+  comparator encodes, and replaces the cost relaxation's full sweep with a
+  worklist that revisits a derivation only when the cost of one of its inputs
+  decreases.
+- **Dropped (2026-10-01), ratified on measurement. Built, measured, reverted in
+  `4c81e50`. Not in the tree.** `FactStore::Publish` groups witnesses by interned
+  result rank rather than by encoded key string, and keys its fact, witness and
+  root lookups on dense identifiers.
+- **Dropped (2026-10-01), ratified on measurement. Built, measured, reverted in
+  `4c81e50`. Not in the tree.** `AnalysisFactBus::Validate` keys its fact index
+  and root membership on precomputed 64-bit key hashes with exact arena byte
+  comparison on collision, and stores the witness DAG's dependencies as one flat
+  CSR array pair instead of `std::vector<std::vector<std::size_t>>`.
 
-### 7.5 Data flow
+### 7.5 Data flow — **Dropped**
+
+**Dropped (2026-10-01), ratified on measurement. Built, measured, reverted in
+`4c81e50`. Not in the tree.** The stages below are unchanged, but no arrow after
+canonicalization carries an arena: every one of them still carries the rich
+object graph it carried before this round, and no stage encodes a row's
+canonical key once per stage. Section 9.6 records what is left behind.
 
 Unchanged end to end: ingest → local analysis → SVF → summaries → WPA
 components → canonicalized component results → batch → fact store. What changes
@@ -356,6 +382,13 @@ is that every arrow after canonicalization carries a compact arena rather than a
 rich object graph, and each row's canonical key is encoded once per stage.
 
 ## 8. Error Handling
+
+**Dropped (2026-10-01), ratified on measurement. Built, measured, reverted in
+`4c81e50`. Not in the tree.** The first two rules below are `RowArena`'s error
+contract, and `RowArena` and `RowHandle` were deleted by the revert: neither
+rule guards anything today, and they are retained so the record shows what the
+arena promised. The `Validate` rule that follows is live, on code the revert left
+untouched.
 
 - An arena append of a row whose relation or cell count does not match
   `relations.v2` returns `InvalidArgument`, as `AppendRow`'s callers do today.
@@ -384,19 +417,27 @@ The round is accepted on that instrument reporting equality, not on row counts.
 
 ### 9.2 Unit tests
 
-- `RowArenaTest` (new): round-trip of every cell alternative, `AppendKey`
+- **Dropped (2026-10-01), ratified on measurement. Built, measured, reverted in
+  `4c81e50`. Not in the tree.**
+  `RowArenaTest` (new) covered round-trip of every cell alternative, `AppendKey`
   equality with `AppendSemanticKey` on the rich row, `RowEquals` against
   `SemanticRow::operator==`, and a rejected out-of-range handle.
-- `ResultCanonicalizerTest`: the rank sort orders identically to the encoded-key
-  comparator on a corpus including duplicate keys and ties; the worklist cost
-  relaxation converges to the same costs and rejects the same unrooted cycles.
-- `AnalysisFactBusTest`: the batch id is unchanged with the arena in place; the
-  canonical owner, uniqueness, and witness selection are unchanged under
-  reversed component order; arena-backed and rich assembly agree row for row.
+- `ResultCanonicalizerTest`: the shipped change extends
+  `RejectsCyclicUnrootedWitnesses` and `SelectsShortestProofDeterministically` in
+  place and carries the tie-break selection case, in which two candidate proofs
+  of one result tie on cost and only an ordering on the keys themselves selects
+  between them, so the rank sort is exercised on ties. It has **no duplicate-key
+  corpus for the interner**, which this listing promised and which is not in the
+  tree; the worklist's convergence and its rejection of unrooted cycles are
+  covered by the same two cases, not by a new one.
+- `AnalysisFactBusTest`: unchanged expectations; **the clause that arena-backed
+  and rich assembly agree row for row is dropped with the arena (`4c81e50`)** —
+  there is no arena to disagree.
 - `FactStoreTest`, `ProvenanceStoreTest`, `VeritasExplainTest`,
-  `WpaEndToEndTest`: unchanged expectations, proving the representation change is
-  invisible to every consumer.
-- `WpaOrchestratorTest`: successor support is unchanged when served from arenas.
+  `WpaEndToEndTest`: **restored to their pre-round-4 form in `4c81e50`**, so the
+  representation change they were to be invariant under does not exist.
+- `WpaOrchestratorTest`: **dropped with the arena (`4c81e50`).** The test that
+  asserted successor support served from arenas was deleted by the revert.
 
 ### 9.3 Qualification
 
@@ -805,8 +846,9 @@ three):
 
 The mechanism is in the diff of `MakeAnalysisFactBatch`. The selection pass
 iterates each component's arena through `AnalysisFactRange` and dereferences it —
-`const AnalysisFact &fact = *it;`, whose documented contract is "decodes this
-entry, allocates the fact it returns and nothing else" — once per fact and once
+`const AnalysisFact &fact = *it;`, whose documented contract, as measured at
+`6a7635b` — the revision these captures were taken on — reads "Decodes this
+entry. Allocates the fact it returns and nothing else." — once per fact and once
 per witness, to recover an id and a sort key. The pre-change code iterated
 `completion.result.facts`, a vector of rich rows it already held, and read the
 id and key off them with no decode at all, then *moved* each row into the batch.
@@ -835,8 +877,8 @@ Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
   `AppendStoredRowKey` prologue — itself 90.1 % of the capture — and setting aside
   that `AppendWitnessRowKey` accessor (41.0 %), the function with the largest
   share **on that render path** is `RowArena::AppendKey`, at 40.9 % of the
-  capture, ahead of `WriteKey` at 38.7 %; those two are all that is left of the
-  path once the prologue and its accessor are set aside. All four of those
+  capture, ahead of `WriteKey` at 38.7 %; those two are all that is left of that
+  four-link chain once the prologue and its accessor are set aside. All four of those
   figures are **summed per-function shares** over call sites rather than single
   frames: `AppendKey`'s 40.9 % is 1835 samples summed over 18 frames, the largest
   single frame holding 975 of them. The scope is load-bearing. Counting each
@@ -921,6 +963,68 @@ premise — "callers decode one row at a time" — priced at the wrong place. Th
 `validate` capture points at `RowArena::AppendKey`, the key render the arena
 representation introduced, so that tax is not only a decode cost; a successor
 should treat the render as a suspect too.
+
+### 9.6 State left behind
+
+**What the revert removed.** The arena design is section 7.1 (`RowArena`,
+`RowHandle`), section 7.2 (`WpaComponentResult` and `WpaOrchestrator` payload
+retention), section 7.3 (`AnalysisFactBatch`'s arenas and `FactRange`), section
+7.5 (the arena-carrying data flow), and section 7.4's second and third bullets
+(`FactStore::Publish`'s interned-rank grouping, and
+`AnalysisFactBus::Validate`'s key-hash index and CSR dependency array). All of it
+was built across six tasks, measured, and reverted in one commit, `4c81e50`:
+`include/veritas/facts/RowArena.h`, `src/facts/RowArena.cpp`,
+`tests/unit/facts/RowArenaTest.cpp` and the `RowArena.cpp` entry in
+`src/facts/CMakeLists.txt` are gone, and the tree holds no `RowArena` class, no
+`RowHandle` struct, no `FactRange` view, and no `AppendFactKey` or
+`AppendWitnessRowKey` accessor. Section 9.5 is the measured record of the state
+the arena work was reverted *from*; this section records only what survives it.
+
+**What is in the tree.** Section 7.4's **first** bullet — task 5 of the round, in
+`src/facts/ResultCanonicalizer.cpp` — and nothing else. The canonicalizer still
+interns rows to dense ids, sorts on each row's precomputed rank rather than
+re-encoding a key inside every comparison, and relaxes derivation costs with a
+worklist rather than a full sweep. It is kept because it is independent of the
+payload representation: it replaces the canonicalizer's own string-keyed maps and
+comparators, and a decoded row is not on its path, so the revert's cause — a
+decode tax in every consumer that iterates a payload — does not reach it.
+
+**The survivor's measurement.** Task 5 was measured as a controlled pair in one
+build tree, three runs per revision, worst-of-three, against the branch point
+`59198f5`. It is the whole justification for keeping task 5, and it is recorded
+here because it is recorded nowhere else — not in the plan, the progress log or
+the task report:
+
+| Term | pre `59198f5` | survivor `4c81e50` | Δ |
+| --- | ---: | ---: | ---: |
+| CPU (`run` span, user+sys) | 420.231 s | 390.855 s | −29.376 s (−7.0 %) |
+| Wall (`run` span) | 421.515 s | 391.463 s | −30.052 s (−7.1 %) |
+| Instructions retired | 7,353,722,014,589 | 6,798,519,413,648 | −555,202,600,941 (−7.6 %) |
+| `wpa.component.canonicalize` | 65.337 s | 36.697 s | −28.640 s (−43.8 %) |
+| `wpa.orchestrate` | 155.120 s | 127.874 s | −27.246 s (−17.6 %) |
+| Max RSS (worst of three) | 7.961 GiB | 8.205 GiB | +0.244 GiB — **not established**, inside a 1.82 GiB spread |
+
+Run-to-run spreads are what make the reductions credible: **0.009e12**
+instructions against the 0.555e12 gap, and **1.8 s** CPU against the 29.4 s gap.
+The instruction counter is load-independent (Darwin's `ri_instructions`), which
+matters because the surviving runs were taken at load 2.4-3.4 against the pair's
+1.3-2.0. The RSS row is reported as not established rather than as a regression,
+because its sign is inside the fixture's own spread; nothing about the survivor
+is claimed on memory.
+
+**Published content is byte-identical between the two revisions.** All nine
+identity coordinates are equal including `batch_id`
+(`fact:sha256:2216f98ad0c4d7aae606e966371d0870dc58988ad7c01fdee237007ea91ac67d`),
+rowid-ordered projections of all four published tables are byte-identical under
+`cmp`, and all 13,716 per-component hashes are identical. The survivor therefore
+buys its time without moving a single published byte, which is the section 6
+contract this round was constrained by.
+
+**Completion criteria.** Section 14 criterion 1 is moot for every part of
+section 7 that is marked dropped in place: those goals were built and measured
+and the round's own decision, ratified on the section 9.5 record, was to revert
+them, so the tree is not expected to implement them. The criteria that remain are
+the round's own and are satisfied by the part that survives.
 
 ## 10. Successor Stages (not this change)
 
@@ -1007,7 +1111,11 @@ Restore the three sections verbatim so the citation resolves.
 
 The work is complete only when:
 
-1. All goals in section 7 are implemented and every contract in section 6 holds.
+1. Every goal in section 7 that is not marked dropped in place is implemented,
+   and every contract in section 6 holds. The parts of section 7 that section 9.6
+   records as built, measured and reverted in `4c81e50` — §7.1-§7.3, §7.5, and
+   §7.4's second and third bullets — are moot: the round decided against them on
+   measurement, so the tree is not expected to carry them.
 2. The section 9.1 instrument reports published content equal, including the
    batch id and all 13,716 per-component hashes.
 3. The full clean build and the full CTest suite pass with no failures, skips, or
