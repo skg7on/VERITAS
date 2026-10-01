@@ -261,8 +261,9 @@ CanonicalResultHashes ComputeCanonicalResultHashes(
   // The inputs are ordered here rather than trusted, so a caller cannot hash a
   // producer-dependent iteration order. Both orders are decided by interned
   // keys: the previous comparators encoded both rows of every pair they looked
-  // at, and a witness endpoint is always a row the fact list already holds, so
-  // this encodes each distinct key once.
+  // at, while one interner encodes each distinct key once. A witness's result
+  // is always a row the fact list holds, but its input is frequently a root row
+  // that no fact carries, so both endpoints go through the same table.
   KeyInterner rows;
   KeyInterner labels;
   std::string key;
@@ -581,11 +582,20 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
       total += cost[input];
     }
     // A cost that did not fall cannot lower its result's below the result's
-    // own: a derivation's cost is never above its result's, because the two are
-    // only ever set together, from the same total.
+    // own. The invariant is `cost[derivation.result] <= derivation.cost`: a
+    // derivation's cost is never below its result's, because the result's cost
+    // is the cheapest of its derivations. So a total at or above this
+    // derivation's cost is at or above its result's cost too, and this skip
+    // loses nothing.
     if (!provable || total >= derivation.cost) {
       continue;
     }
+    // The two are not set together: this lowers the derivation alone, and a
+    // total below the derivation's old cost can still be at or above its
+    // result's, so the result is re-tested below rather than assumed. This
+    // guard is not the one above restated; dropping it and assigning
+    // unconditionally would let a dearer derivation raise a result's cost over
+    // a cheaper one's, changing the selected proof and both hashes.
     derivation.cost = total;
     if (total >= cost[derivation.result]) {
       continue;

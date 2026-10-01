@@ -23,7 +23,6 @@
 #include <gtest/gtest.h>
 
 #include "veritas/facts/AnalysisFact.h"
-#include "veritas/facts/RuleRegistry.h"
 #include "veritas/facts/Witness.h"
 
 namespace veritas::facts {
