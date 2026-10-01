@@ -816,8 +816,11 @@ Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
 - every main-thread sample in the `Validate` capture is inside `DeriveBatchId`
   (100 %), and 90.1 % of the capture is inside `AppendStoredRowKey`, which splits
   almost evenly into two halves. **45.4 % of `AppendStoredRowKey` renders each
-  row's key out of the batch's arena**, and **51.4 % hashes the rendered key**
-  through `AppendField` → `SHA256Hasher::Update`. The render half runs through
+  row's key out of the batch's arena** — 1835 of its 4042 samples, the frames of
+  `RowArena::AppendKey` — and **54.0 % hashes the rendered key** through
+  `AppendField` → `SHA256Hasher::Update` — the `AppendField` frames called
+  directly from that prologue, 2181 samples. Both are shares of the same 4042,
+  and together they account for 99.4 % of it. The render half runs through
   `AppendStoredRowKey` → `AnalysisFactBatch::AppendWitnessRowKey` →
   `RowArena::AppendKey` → `WriteKey`: the accessor in that stack is the
   **witness**-arena one (`AnalysisFactBus.h:94`), and `AppendFactKey` — its
@@ -825,14 +828,24 @@ Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
   `AppendKey` frame here is reached through the fact arena. Below the shared
   `AppendStoredRowKey` prologue — itself 90.1 % of the capture — and setting aside
   that `AppendWitnessRowKey` accessor (41.0 %), the function with the largest
-  share is `RowArena::AppendKey`, at 40.9 %, ahead of `WriteKey` at 38.7 %. All
-  four of those figures are **summed per-function shares** over call sites rather
-  than single frames: `AppendKey`'s 40.9 % is 1835 samples summed over 19 frames,
-  the largest single frame holding 975 of them. The aggregation is worth naming
-  because the tip view disagrees — there the capture is dominated by the SHA-256
-  core, `RotR` 25.9 % and `ProcessBlock` 23.9 %, where `AppendKey` is 0.2 %. The
-  render does not decode: `ReadRow` and `DecodeCell` are absent from the capture
-  entirely. Since `batch_id` is byte-identical between the revisions the hashed
+  share **on that render path** is `RowArena::AppendKey`, at 40.9 % of the
+  capture, ahead of `WriteKey` at 38.7 %; those two are all that is left of the
+  path once the prologue and its accessor are set aside. All four of those
+  figures are **summed per-function shares** over call sites rather than single
+  frames: `AppendKey`'s 40.9 % is 1835 samples summed over 18 frames, the largest
+  single frame holding 975 of them. The scope is load-bearing: the same
+  aggregation read against the capture-wide set instead of the render path puts
+  four functions ahead of `AppendKey` — `AppendField` 48.6 %, `UpdateHash`
+  48.0 %, `SHA256Hasher::Update` 47.2 % and `ProcessBlock` 46.1 % — and, the
+  prologue and its accessor aside, those four are the whole of the set that does
+  so, each of them in the *hash* half rather than the render half this sentence
+  is about. Read against the tip view instead, the aggregation is what lifts
+  `AppendKey` to 40.9 %: the two views agree on where the leaves are — `RotR`
+  25.9 % and `ProcessBlock` 23.9 % by tips — and differ only on `AppendKey`'s
+  rank, 40.9 % summed against 0.2 % by tips, since a summed share
+  counts a function's whole subtree where the tip view counts only the samples it
+  tops. The render does not decode: `ReadRow` and `DecodeCell` are absent from
+  the capture entirely. Since `batch_id` is byte-identical between the revisions the hashed
   byte *stream* is identical, and `AppendField`/`UpdateHash` are byte-identical
   source, so the hash half is not where new work entered — **which leaves the
   render, the part of this captured window the round rewrote, as the candidate,
@@ -840,9 +853,15 @@ Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
   original draft of this section read the opposite way: it called the capture "dominated by
   `AppendField` → `SHA256Hasher::Update`", generalising one frame's composition to
   the whole function and, worse, using it to conclude that the arena's key render
-  was not implicated. The disclaimer stands: a 6-second capture inside a 52-second
-  span cannot apportion the delta, and the pre revision was not profiled, so the
-  +13.7 s is reported as measured and **not** attributed;
+  was not implicated. Two figures in the bullet above have moved in the course of
+  these corrections, for the reason the whole section keeps running into: an
+  earlier reading put the hash half at 51.4 %, counting only its two largest
+  frames and leaving it 2.6 points short of the 54.0 % its own render-half figure
+  was measured against, and an earlier one gave `AppendKey` 19 frames, a `grep`
+  count that included a leaf-aggregation row from the capture's "Sort by top of
+  stack" section rather than a frame. The disclaimer stands: a 6-second capture
+  inside a 52-second span cannot apportion the delta, and the pre revision was
+  not profiled, so the +13.7 s is reported as measured and **not** attributed;
 - the fact-store capture is 49.4 % `WitnessRange::Iterator::operator*` →
   `RowArena::DecodeWitness` (2201 of 4456 samples), with `FactIdentityMemo::
   Identify` at 26 % — the same decode-per-row shape, now in the consumer.
