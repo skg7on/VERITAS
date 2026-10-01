@@ -1,5 +1,11 @@
 # `veritas-build analyze` Round 4 Performance Implementation Plan
 
+> **Status: Tasks 1-4 and 6 were built, measured and reverted in `4c81e50`;
+> Task 5 survives.** The arena was a net CPU regression (CPU +70.151 s,
+> +16.7 %; instructions retired +15.9 %). The task bodies below are left as
+> written; the record of what was kept is §9.6 of
+> [`docs/specs/veritas-build-analyze-round4-performance-design-spec.md`](../specs/veritas-build-analyze-round4-performance-design-spec.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:subagent-driven-development` (recommended) or
 > `superpowers:executing-plans` to implement this plan task-by-task. Steps use

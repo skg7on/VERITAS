@@ -972,7 +972,8 @@ retention), section 7.3 (`AnalysisFactBatch`'s arenas and `FactRange`), section
 7.5 (the arena-carrying data flow), and section 7.4's second and third bullets
 (`FactStore::Publish`'s interned-rank grouping, and
 `AnalysisFactBus::Validate`'s key-hash index and CSR dependency array). All of it
-was built across six tasks, measured, and reverted in one commit, `4c81e50`:
+was built across five of the round's six build tasks — Tasks 1-4 and 6 —
+measured, and reverted in one commit, `4c81e50`:
 `include/veritas/facts/RowArena.h`, `src/facts/RowArena.cpp`,
 `tests/unit/facts/RowArenaTest.cpp` and the `RowArena.cpp` entry in
 `src/facts/CMakeLists.txt` are gone, and the tree holds no `RowArena` class, no
@@ -989,42 +990,72 @@ payload representation: it replaces the canonicalizer's own string-keyed maps an
 comparators, and a decoded row is not on its path, so the revert's cause — a
 decode tax in every consumer that iterates a payload — does not reach it.
 
-**The survivor's measurement.** Task 5 was measured as a controlled pair in one
-build tree, three runs per revision, worst-of-three, against the branch point
-`59198f5`. It is the whole justification for keeping task 5, and it is recorded
-here because it is recorded nowhere else — not in the plan, the progress log or
-the task report:
+**The survivor's measurement.** Task 5's three runs were taken fresh,
+worst-of-three, against the branch point `59198f5`. The pre column is **not** a
+re-run of that pair: it is section 9.5.1's recorded pre member, taken in the same
+build tree on the same documented Debug configuration, and the survivor was
+re-measured against it. That makes this a cross-session comparison — the pre runs
+were taken at load 1.3-2.0 and the survivor's at 2.4-3.4 — and its cost is met
+two ways: the pre member reproduces every section 2.2 phase within 10 s (section
+9.5.2), so it is the revision section 2 measured, and the instruction counter is
+of a kind that does not read load (below). The survivor's figures are the whole
+justification for keeping Task 5, and they are recorded nowhere else in the
+repository — the round's progress log records this measurement's protocol and
+the pre baseline it compares against, but not the survivor's results:
 
 | Term | pre `59198f5` | survivor `4c81e50` | Δ |
 | --- | ---: | ---: | ---: |
 | CPU (`run` span, user+sys) | 420.231 s | 390.855 s | −29.376 s (−7.0 %) |
 | Wall (`run` span) | 421.515 s | 391.463 s | −30.052 s (−7.1 %) |
-| Instructions retired | 7,353,722,014,589 | 6,798,519,413,648 | −555,202,600,941 (−7.6 %) |
+| Instructions retired | 7,353,722,014,589 | 6,798,519,413,648 | −555,202,600,941 (−7.5 %) |
 | `wpa.component.canonicalize` | 65.337 s | 36.697 s | −28.640 s (−43.8 %) |
 | `wpa.orchestrate` | 155.120 s | 127.874 s | −27.246 s (−17.6 %) |
 | Max RSS (worst of three) | 7.961 GiB | 8.205 GiB | +0.244 GiB — **not established**, inside a 1.82 GiB spread |
 
-Run-to-run spreads are what make the reductions credible: **0.009e12**
-instructions against the 0.555e12 gap, and **1.8 s** CPU against the 29.4 s gap.
-The instruction counter is load-independent (Darwin's `ri_instructions`), which
-matters because the surviving runs were taken at load 2.4-3.4 against the pair's
-1.3-2.0. The RSS row is reported as not established rather than as a regression,
-because its sign is inside the fixture's own spread; nothing about the survivor
-is claimed on memory.
+Run-to-run spreads are what make the reductions credible, and each gap is
+measured against the **wider of the two revisions' spreads** — the rule section
+9.5.4 states and the one the RSS row above applies. CPU: **10.174 s** (the pre
+revision's 420.231 / 411.234 / 410.057 s) against the 29.376 s gap, **2.9×**.
+Instructions: **0.0801e12** (7.3537 / 7.2868 / 7.2736 e12) against the 0.5552e12
+gap, **6.9×**. The survivor's own spreads are narrower — 1.793 s and 0.0086e12 —
+and a sentence quoting only those would overstate both margins; the wider,
+pre-side spread is what the comparison is stated against.
+
+The counter is Darwin's per-process `ri_instructions` from `proc_pid_rusage`.
+Section 9.5.1 validated it by iteration-count linearity — a 10M/100M/1G busy loop
+reports 7.07e7 / 6.10e8 / 6.01e9 — and that is not the same property as
+load-independence: no run in this round measured one revision at two machine
+loads, so the cross-load comparison above rests on the counter's kind, stated as
+the reasoned assumption it is rather than as a measured invariance. The RSS row
+is reported as not established rather than as a regression, because its sign is
+inside the fixture's own spread; nothing about the survivor is claimed on memory.
 
 **Published content is byte-identical between the two revisions.** All nine
 identity coordinates are equal including `batch_id`
 (`fact:sha256:2216f98ad0c4d7aae606e966371d0870dc58988ad7c01fdee237007ea91ac67d`),
 rowid-ordered projections of all four published tables are byte-identical under
-`cmp`, and all 13,716 per-component hashes are identical. The survivor therefore
-buys its time without moving a single published byte, which is the section 6
-contract this round was constrained by.
+`cmp`, and all 13,716 per-component hashes are identical. Section 9.5.3's
+identity block and digest tables are the record these values are read from, and
+they are the round's only saved equivalence capture — this pair carries no
+separate record of its own. The survivor therefore buys its time without moving a
+single published byte, which is the section 6 contract this round was constrained
+by.
 
 **Completion criteria.** Section 14 criterion 1 is moot for every part of
 section 7 that is marked dropped in place: those goals were built and measured
 and the round's own decision, ratified on the section 9.5 record, was to revert
-them, so the tree is not expected to implement them. The criteria that remain are
-the round's own and are satisfied by the part that survives.
+them, so the tree is not expected to implement them. Criterion 2 is the
+equivalence result above, and criterion 6 is the table above, which reports each
+term with the instrument that took it and marks the RSS row as not having moved.
+Two criteria are **not** evidenced for this state of the tree. Criterion 5
+requires worst-of-three peak RSS **and footprint** plus the per-term resident
+deltas for both revisions; the table above carries worst-of-three CPU,
+instructions and RSS, but neither a footprint row nor any per-term resident
+delta. Criterion 3 — the clean build, the full CTest suite and the ten-criterion
+M9 entry gate — is not evidenced in the repository: the revert's build and test
+run are recorded only in the round's gitignored progress log, and the entry
+gate's result is recorded nowhere. The surviving part is kept on the measurement
+above; it does not carry the round's full acceptance record.
 
 ## 10. Successor Stages (not this change)
 
