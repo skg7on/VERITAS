@@ -787,7 +787,8 @@ Three profiled runs took main-thread `sample` captures during the post revision,
 section 2.3's method. They are profiled runs, not acceptance measurements. Shares
 are summed per function rather than read off one node: `sample` splits a single
 function into many sibling frames because it aggregates by return address, so
-`MakeAnalysisFactBatch` appears as 33 nodes that together are the whole thread.
+`MakeAnalysisFactBatch` appears as 33, 29 and 11 nodes in the three
+`facts.batch_assemble` captures, which together are the whole thread in each.
 
 Inside `facts.batch_assemble` (three captures at t≈273, 278 and 303 s of a
 79.8 s span; **100 % of the main thread is inside `MakeAnalysisFactBatch`** in all
@@ -797,9 +798,10 @@ three):
   `WitnessRange::Iterator::operator*` / `AnalysisFactRange::Iterator::operator*`
   — the row decode — with `RowArena::DecodeWitness` / `DecodeFact` at 51.0 % and
   51.4 %;
-- the third, in the emit pass, is **61.3 % `RowArena::Append`** (appending every
-  owned row into the batch's own arena, `AppendId`'s hex rendering included) and
-  still 33.4 % decode.
+- the third, in the emit pass, is **61.3 % `RowArena::AppendWitness`** (appending
+  every owned row into the batch's own arena, `AppendId`'s hex rendering
+  included) — 2316 of that capture's 3780 main-thread samples, with no
+  `RowArena::Append` frame anywhere in it — and still 33.4 % decode.
 
 The mechanism is in the diff of `MakeAnalysisFactBatch`. The selection pass
 iterates each component's arena through `AnalysisFactRange` and dereferences it —
@@ -825,7 +827,11 @@ Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
   `RowArena::AppendKey` → `WriteKey`: the accessor in that stack is the
   **witness**-arena one (`AnalysisFactBus.h:94`), and `AppendFactKey` — its
   fact-arena sibling at `:91` — has **zero** frames in this capture, so no
-  `AppendKey` frame here is reached through the fact arena. Below the shared
+  `AppendKey` frame here is reached through the fact arena. Both citations are
+  as measured at `6a7635b`, the revision these captures were taken on; the arena
+  was reverted at `4c81e50`, so `AppendFactKey`, `AppendWitnessRowKey` and
+  `RowArena` are gone from that header today and the line numbers no longer
+  resolve against the tree. Below the shared
   `AppendStoredRowKey` prologue — itself 90.1 % of the capture — and setting aside
   that `AppendWitnessRowKey` accessor (41.0 %), the function with the largest
   share **on that render path** is `RowArena::AppendKey`, at 40.9 % of the
@@ -833,19 +839,28 @@ Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
   path once the prologue and its accessor are set aside. All four of those
   figures are **summed per-function shares** over call sites rather than single
   frames: `AppendKey`'s 40.9 % is 1835 samples summed over 18 frames, the largest
-  single frame holding 975 of them. The scope is load-bearing: the same
-  aggregation read against the capture-wide set instead of the render path puts
-  four functions ahead of `AppendKey` — `AppendField` 48.6 %, `UpdateHash`
-  48.0 %, `SHA256Hasher::Update` 47.2 % and `ProcessBlock` 46.1 % — and, the
-  prologue and its accessor aside, those four are the whole of the set that does
-  so, each of them in the *hash* half rather than the render half this sentence
-  is about. Read against the tip view instead, the aggregation is what lifts
-  `AppendKey` to 40.9 %: the two views agree on where the leaves are — `RotR`
-  25.9 % and `ProcessBlock` 23.9 % by tips — and differ only on `AppendKey`'s
-  rank, 40.9 % summed against 0.2 % by tips, since a summed share
-  counts a function's whole subtree where the tip view counts only the samples it
-  tops. The render does not decode: `ReadRow` and `DecodeCell` are absent from
-  the capture entirely. Since `batch_id` is byte-identical between the revisions the hashed
+  single frame holding 975 of them. The scope is load-bearing. Counting each
+  function only over its samples **inside the `AppendStoredRowKey` subtree**
+  rather than over the capture as a whole, the same aggregation puts four
+  functions ahead of `AppendKey`: `AppendField` 2181 samples (48.6 %),
+  `UpdateHash` 2153 (48.0 %), `SHA256Hasher::Update` 2114 (47.1 %) and
+  `ProcessBlock` 2065 (46.1 %) — counts out of the subtree's 4042, percentages
+  out of the same 4484-sample capture that `AppendKey`'s 40.9 % is a share of.
+  And, the prologue and its accessor aside, those four are the whole of the set
+  that does so **within that subtree**, each of them in the *hash* half rather
+  than the render half this sentence is about. Counted capture-wide instead they
+  read 54.3 %, 53.3 %, 51.5 % and 49.8 %, and there the completeness clause
+  fails: the spine that encloses the prologue — `Validate`, `DeriveBatchId`,
+  `Publish` and `RunWpa`, each 100 % — is ahead of `AppendKey` too, which is why
+  the subtree, and not the capture, is the universe this clause needs. Read
+  against the tip view instead, the aggregation is what lifts `AppendKey` to
+  40.9 %: the two views agree on where the leaves are — `RotR` 25.9 % and
+  `ProcessBlock` 23.9 % by tips — and part company on rank, `AppendKey` 40.9 %
+  summed against 0.2 % by tips and `ProcessBlock` 49.8 % against the 23.9 % it
+  tops, since a summed share counts a function's whole subtree where the tip
+  view counts only the samples it tops. The render does not decode: `ReadRow`
+  and `DecodeCell` are absent from the capture entirely. Since `batch_id` is
+  byte-identical between the revisions the hashed
   byte *stream* is identical, and `AppendField`/`UpdateHash` are byte-identical
   source, so the hash half is not where new work entered — **which leaves the
   render, the part of this captured window the round rewrote, as the candidate,
@@ -864,7 +879,8 @@ Inside `facts.publish`, two captures cover `Validate` and the fact-store sink:
   not profiled, so the +13.7 s is reported as measured and **not** attributed;
 - the fact-store capture is 49.4 % `WitnessRange::Iterator::operator*` →
   `RowArena::DecodeWitness` (2201 of 4456 samples), with `FactIdentityMemo::
-  Identify` at 26 % — the same decode-per-row shape, now in the consumer.
+  Identify` at 27.9 % — 1244 of the same 4456, summed over 13 sibling frames —
+  the same decode-per-row shape, now in the consumer.
 
 The `wpa.orchestrate` self term (+31.3 s) is likewise measured and not
 attributed: its captures show `ResultCanonicalizer::Canonicalize`,
