@@ -101,6 +101,16 @@ unknowns and exact coverage. A genuine semantic observation can be reported
 without fabrication of EIR facts. Any verified claim is backed by a configured
 authority bound to its obligation.
 
+The first analytical example is a modified `handle_request` that removes a
+32-byte local-buffer bound while retaining a user-payload source-length check.
+User input supplies the length/index; independently selected `memcpy`, indexed
+read and indexed store sites are the sinks. The
+[worked investigation](../specs/veritas-review-driven-analysis-design-spec.md#101-worked-review-modified-code-with-user-input-and-buffer-sinks)
+defines base/modified comparisons, a proposed 33-byte witness and negative
+controls. Existing memcpy qualification remains the first slice; indexed
+read/write support is an explicit additional capability, not a claim about the
+current resolver. Related sites may share one root-cause review finding.
+
 Evaluation demonstrates the benefit and full cost of analysis beyond source
 retrieval. Completion of infrastructure alone, a fake-backend transcript or a
 green serializer test is insufficient release evidence.

@@ -222,32 +222,127 @@ docs/tests as well as code. Unstable host/toolchain identities restrict reuse;
 #125 must be resolved before portable cache claims. Cross-revision reuse requires
 dependency revalidation; until then use exact-snapshot reuse only.
 
-## 10.1 Worked review investigation
+## 10.1 Worked review: modified code with user input and buffer sinks
 
-A diff removes a packet-length check before
-`memcpy(b->data, p->payload, p->len)` and leaves a call to `vendor_validate(p)`.
+Use this source-to-sink change as the first analytical agent example. It is a
+proposed review/evaluation fixture, not an already implemented detector or a
+verified result from this documentation change.
 
-1. The LLM reads the diff, validator declaration and relevant test, and proposes
-   that the removed check protected destination capacity. This is an `INFERRED`
-   candidate, not an overflow verdict.
-2. Admission binds the copy's exact call site, length operand and destination
-   object. A different external exit or another `memcpy` caller is not evidence
-   for this claim (#132).
-3. The controller requests range/capacity and the relevant dominating-check
-   query. Missing #124 producers produce explicit unknowns, not invented numeric
-   bounds or a verified result. A complete scoped check query is distinguished
-   from truncated absence.
-4. If the length range overlaps an unsafe extent, investigate feasibility and
-   whether intervening writes can invalidate the check. Range overlap alone
-   does not establish an executable violating input. Alias refinement is requested
-   only if that memory question affects the result.
-5. The LLM may propose a contract for `vendor_validate`, but the proof cannot
-   assume that candidate contract as authoritative. The report identifies the
-   opaque validator as a blocker unless an admitted model or checked behavior
-   resolves it.
-6. A feasible replay/solver witness can support the corresponding verified
-   defect under declared assumptions. Otherwise report a supported concern or
-   inconclusive investigation with the exact missing condition.
+**Source contract:** a request reader provides user-controlled payload bytes and
+parses a user-controlled length into `requested_len` in `[0, 4096]`. It records
+`payload_bytes` as the actual readable payload extent. This contract is part of
+the example's input model; a real review must inspect the reader or retain an
+unknown. Input validity does not establish destination-buffer capacity.
+
+The existing function uses a 32-byte local buffer and selects one sink per call:
+
+```cpp
+enum class SinkKind { Copy, Access, Write };
+
+unsigned char handle_request(const unsigned char* payload,
+                             std::size_t payload_bytes,
+                             std::size_t requested_len,
+                             SinkKind kind) {
+    unsigned char buffer[32] = {};
+    if (requested_len == 0 || requested_len > sizeof(buffer) ||
+        requested_len > payload_bytes) {
+        return 0;
+    }
+
+    switch (kind) {
+    case SinkKind::Copy:
+        std::memcpy(buffer, payload, requested_len);
+        return buffer[0];
+    case SinkKind::Access:
+        return buffer[requested_len - 1];
+    case SinkKind::Write:
+        buffer[requested_len - 1] = payload[0];
+        return buffer[0];
+    }
+    return 0;
+}
+```
+
+The modification removes the destination bound while keeping the source bound:
+
+```diff
+-    if (requested_len == 0 || requested_len > sizeof(buffer) ||
+-        requested_len > payload_bytes) {
++    if (requested_len == 0 || requested_len > payload_bytes) {
+         return 0;
+     }
+```
+
+The reader supplies valid storage for at least `payload_bytes` bytes, and
+`payload_bytes` may exceed 32. Thus the remaining check establishes that the
+source is long enough; it does not protect the local destination or indexed
+access. `kind` selects independent executions: the access/write examples do not
+rely on execution continuing after an earlier overflowing copy.
+
+| Candidate | User-input flow | Sink condition to check | Potential defect |
+| --- | --- | --- | --- |
+| Copy | Payload bytes and `requested_len` reach the copy operands | `requested_len <= capacity(buffer)` | Destination buffer overflow in `memcpy`. |
+| Access | `requested_len` controls `requested_len - 1` | `0 <= index < capacity(buffer)` | Out-of-bounds read; distinguish this from an overflowing write. |
+| Write | `requested_len` controls the index; payload supplies the byte | `0 <= index < capacity(buffer)` | Out-of-bounds write. Here write means a memory store, not a `write()` syscall. |
+
+The LLM connects the removed guard to all three uses and proposes separate
+`INFERRED` candidates. User-controlled payload content and user-controlled
+extent/index are different flows; the report must name the one that drives the
+bounds violation. Arbitrary indexed accesses are proposed additional review
+fixtures, not automatically supported by the current memcpy-specific resolver.
+
+**Agent investigation:**
+
+1. Read the modified hunk, enclosing function and bounded request-reader/test
+   context. Propose that the change removes a buffer-capacity invariant; do not
+   assume that user input alone proves a vulnerability.
+2. Admit each candidate with the exact copy/access/store site, containing
+   function, length/index and buffer entity. Another caller or external exit
+   cannot supply this claim's operands (#132). The new access/write sink mapping
+   requires its own registered predicate and capability qualification.
+3. Request source-flow evidence, the 32-byte object extent, the post-guard length
+   range and relevant dominating-check evidence. Read the unchanged source-bound
+   guard as counterevidence to source over-read, not destination safety. Missing
+   #124 producers remain explicit unknowns rather than invented facts.
+4. Check the proposed counterexample: `requested_len = 33`, `payload_bytes = 33`
+   with 33 readable payload bytes. The modified guard permits it; the copy would
+   write 33 bytes into 32, and the indexed branches would use index 32. The base
+   revision rejects the same request. This is a reasoned witness proposal until
+   an authoritative backend checks or reproduces the corresponding execution.
+5. For this direct local array, do not require whole-program Andersen analysis
+   merely to know its declared capacity. Request alias/interprocedural refinement
+   only if a real variant uses a pointer, wrapper, callback or mutation that
+   makes the object's identity, capacity or reaching guard uncertain. A narrowed
+   scope still reports unexamined boundary effects.
+6. Ask a configured verifier/replay backend to check the exact candidate and
+   snapshot. A concrete reproduction supports the observed defect, not universal
+   safety; unsupported operations or missing facts produce a supported concern
+   or inconclusive investigation with the precise blocker.
+
+**Expected non-verified review comment:**
+
+> Removing the destination-capacity check allows a valid 33-byte request through
+> the remaining payload-length check. The local buffer has 32 bytes: the copy
+> uses length 33, and the indexed branches use index 32. Restore a bound against
+> the local buffer before these operations. Source inspection supports this
+> concern; execution feasibility has not yet been verified by a configured backend.
+
+A production report emits a comment only for sites present and relevant in the
+selected change, cites their actual snapshot-bound anchors, and states any
+unconfirmed reader contract. It does not copy the example's numbers into an
+unrelated case or claim three independent findings when they share one root cause;
+related sink candidates can be grouped into one finding with three affected sites.
+
+**Evaluation controls:** base vs modified code; lengths 0, 31, 32 and 33; a short
+payload rejected by the source bound; each sink kind independently; an equivalent
+restored guard; a sibling guard that does not dominate the sink; an opaque
+validator; and a pointer/wrapper variant requiring additional evidence. A separate
+terminator variant `buffer[requested_len] = 0` must require
+`requested_len < capacity(buffer)`, even when the copy's `<=` bound is satisfied.
+Declare the `memcpy` input non-overlapping in the copy fixture so overlap does
+not confound the bounds question. Use a real backend and observable fixture
+outputs when implementing replay/analysis tests; illustrative source is not proof
+that optimization preserves a particular IR sink.
 
 Separately, a diff may compare the requesting user's account ID with an invoice
 owner while updating a different invoice selected by a request parameter. The

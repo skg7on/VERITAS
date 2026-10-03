@@ -14,7 +14,12 @@ review cost. Comprehensive whole-program fact production is a supporting
 capability, not an entry requirement for every review.
 
 The initial language remains C/C++. The initial analytical demonstration remains
-buffer overflow. The first real review must also exercise a semantic contract
+buffer overflow from a modified user-input handler: removed capacity guard,
+user-controlled length/index, and `memcpy` or indexed memory access/store sinks.
+The [worked example](../specs/veritas-review-driven-analysis-design-spec.md#101-worked-review-modified-code-with-user-input-and-buffer-sinks)
+separates source validity from destination bounds and treats each sink as an
+independent execution. Indexed sinks need additional capability qualification.
+The first real review must also exercise a semantic contract
 concern that is not already supplied as an analyzer finding.
 
 ## 2. Review loop
