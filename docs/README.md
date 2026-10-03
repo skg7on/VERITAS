@@ -6,6 +6,14 @@ plans describe implementation work and milestone sequencing, and developer
 guides explain how to operate and extend the implemented system without
 confusing approved target interfaces with commands that exist today.
 
+## Product Direction
+
+Start with the proposed [Review Agent architecture](architecture/06-review-agent-architecture.md),
+[review-driven analysis specification](specs/veritas-review-driven-analysis-design-spec.md),
+and [review delivery roadmap](plans/veritas-review-agent-milestone-roadmap.md).
+They refine product priorities while preserving current engine/data contracts.
+The review specification maps every open issue as of 2026-10-03.
+
 ## Primary Reading Order
 
 1. [Platform architecture](architecture/01-platform-architecture.md) — system
@@ -21,7 +29,7 @@ confusing approved target interfaces with commands that exist today.
 6. [Backbone milestone roadmap](plans/veritas-backbone-milestone-roadmap.md) —
    implementation sequence and current milestones.
 7. [Scaling milestone roadmap](plans/veritas-scaling-milestone-roadmap.md) —
-   the M13–M18 scale programme, its constraints, and its gates.
+   the M13–M19 scale programme, its constraints, and its gates.
 8. [Developer guides and tutorials](guides/README.md) — generating a SummaryDB,
    extending SummaryDB and Evidence IR, and building analysis or Agent-facing
    tools.

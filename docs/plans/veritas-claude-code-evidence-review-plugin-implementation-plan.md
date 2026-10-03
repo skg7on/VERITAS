@@ -1,5 +1,10 @@
 # VERITAS Claude Code Evidence Review Plugin Implementation Plan
 
+> **Review direction (2026-10-03):** Use the review delivery roadmap for proposed product priority. This plan retains its capability-specific history and gates. See the
+> [review-driven analysis proposal](../specs/veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use

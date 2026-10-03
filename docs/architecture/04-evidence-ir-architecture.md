@@ -1,5 +1,10 @@
 # VERITAS Evidence IR
 
+> **Review direction (2026-10-03):** The proposed product path is a bounded LLM investigation with selective analysis. See the
+> [review-driven analysis proposal](../specs/veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 ## Formal Syntax and Semantic Specification
 
 **Status:** Draft Architecture Specification
@@ -107,7 +112,10 @@ Unknown:
 
 ## 2.2 Evidence, not source code, is primary
 
-Source code is referenced by stable source locations.
+Source code is referenced by stable source locations. The reviewer may also
+receive bounded source, diff, test and documentation excerpts from the pinned
+snapshot through the controller. EIR structures analytical support; it does not
+exclude the context needed to interpret API intent or propose a new claim.
 
 EIR primarily contains semantic objects such as:
 
@@ -2358,7 +2366,11 @@ transition {
 
 # 56. Review Agent contract
 
-The Review Agent SHALL consume EIR through semantic operations rather than requiring full serialization into one prompt.
+The Review Agent SHALL consume EIR through semantic operations rather than
+requiring full serialization into one prompt. The proposed review controller
+also admits source-backed LLM candidates and bounded context retrieval. Report
+annotations need not fabricate an EIR case when the required analytical entities
+are unavailable. Existing EIR grammar and verified-state authority remain unchanged.
 
 Required API concepts:
 

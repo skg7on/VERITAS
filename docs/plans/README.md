@@ -1,9 +1,12 @@
 # VERITAS Implementation Plans
 
-Plans are executable implementation guidance. Read the
+The proposed [review delivery roadmap](veritas-review-agent-milestone-roadmap.md)
+sets product priority. It is a direction document, not an executable plan;
+focused implementation plans follow specification review. Existing plans retain
+capability-specific gates and historical delivery guidance. Read the
 [backbone milestone roadmap](veritas-backbone-milestone-roadmap.md) for
 milestone sequencing, the [scaling milestone roadmap](veritas-scaling-milestone-roadmap.md)
-for the M13–M18 scale programme, and the [GitHub Actions CI build plan](github-actions-ci-build-implementation-plan.md)
+for the M13–M19 scale programme, and the [GitHub Actions CI build plan](github-actions-ci-build-implementation-plan.md)
 for the project tooling plan. The [documentation information architecture
 migration plan](documentation-information-architecture-migration-implementation-plan.md)
 records this hierarchy migration.
@@ -33,17 +36,17 @@ orchestration and M8R.5 mixed C/C++ qualification.
 | M7 | Implemented | [plan](milestones/m07-reverse-dependency-incremental-scheduler-implementation-plan.md) | [spec](../specs/milestones/m07-reverse-dependency-incremental-scheduler-design-spec.md) | [#10](https://github.com/skg7on/VERITAS/issues/10) |
 | M8 | Implemented | [plan](milestones/m08-scc-wpa-souffle-fact-engine-implementation-plan.md) | [spec](../specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md) | [#11](https://github.com/skg7on/VERITAS/issues/11) |
 | M8R.1–M8R.2 | Delivered | [plan](milestones/m08r-souffle-wpa-remediation-implementation-plan.md) | [remediation spec](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md); [architecture refinement](../specs/milestones/m08r-souffle-wpa-architecture-refinement-design-spec.md) | [#64](https://github.com/skg7on/VERITAS/pull/64), [#76](https://github.com/skg7on/VERITAS/pull/76) |
-| M8R.3–M8R.5 | Outstanding | [plan](milestones/m08r-souffle-wpa-remediation-implementation-plan.md) | [remediation spec](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md); [architecture refinement](../specs/milestones/m08r-souffle-wpa-architecture-refinement-design-spec.md) | [#61](https://github.com/skg7on/VERITAS/issues/61) (bridge, owns M8R.4–M8R.5); [#77](https://github.com/skg7on/VERITAS/issues/77) (M8R.3) |
-| M9 | Planned | [plan](milestones/m09-provenance-fact-store-explain-api-implementation-plan.md) | [spec](../specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md) | [#12](https://github.com/skg7on/VERITAS/issues/12) |
+| M8R.3–M8R.5 | Delivered | [plan](milestones/m08r-souffle-wpa-remediation-implementation-plan.md) | [remediation spec](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md) | [#78](https://github.com/skg7on/VERITAS/pull/78), [#87](https://github.com/skg7on/VERITAS/pull/87), [#89](https://github.com/skg7on/VERITAS/pull/89) |
+| M9 | Delivered | [plan](milestones/m09-provenance-fact-store-explain-api-implementation-plan.md) | [spec](../specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md) | [#12](https://github.com/skg7on/VERITAS/issues/12) |
 | M10A | Delivered | [plan](milestones/m10a-recursive-domain-expansion-implementation-plan.md) | [spec](../specs/milestones/m10a-recursive-domain-expansion-design-spec.md) | [#117](https://github.com/skg7on/VERITAS/pull/117) |
-| M10B | Planned | [plan](milestones/m10b-evidence-builder-input-apis-demo-implementation-plan.md) | [spec](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md) | [#13](https://github.com/skg7on/VERITAS/issues/13) |
-| M10C | Planned | [plan](milestones/m10c-evidence-ir-semantic-model-serialization-implementation-plan.md) | [spec](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md) | — |
+| M10B | Delivered foundation; correctness gaps #124/#132/#149 | [plan](milestones/m10b-evidence-builder-input-apis-demo-implementation-plan.md) | [spec](../specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md) | [#13](https://github.com/skg7on/VERITAS/issues/13) |
+| M10C | Delivered foundation; correctness gaps #124/#132/#149 | [plan](milestones/m10c-evidence-ir-semantic-model-serialization-implementation-plan.md) | [spec](../specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md) | [#70](https://github.com/skg7on/VERITAS/issues/70) |
 | M11 | Approved / pending implementation | [unified IR acquisition, reporting, and performance plan](milestones/m11-external-ir-adapter-implementation-plan.md) | [shared ingest-boundary spec](../specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md) | [#20](https://github.com/skg7on/VERITAS/issues/20) |
 | M12A | Approved / pending implementation | [SummaryDB provider substrate plan](milestones/m12a-summarydb-external-provider-substrate-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
-| M12B | Approved / pending implementation | [Joern GraphSON/GraphML importer plan](milestones/m12b-joern-graphson-graphml-importer-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
-| M12C | Approved / pending implementation | [provider fusion/Evidence plan](milestones/m12c-provider-fusion-evidence-integration-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#21](https://github.com/skg7on/VERITAS/issues/21) |
+| M12B | Approved / pending implementation | [Joern GraphSON/GraphML importer plan](milestones/m12b-joern-graphson-graphml-importer-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#74](https://github.com/skg7on/VERITAS/issues/74) |
+| M12C | Approved / pending implementation | [provider fusion/Evidence plan](milestones/m12c-provider-fusion-evidence-integration-implementation-plan.md) | [Joern/SummaryDB spec](../specs/milestones/m12-joern-cpg-summarydb-importer-design-spec.md) | [#75](https://github.com/skg7on/VERITAS/issues/75) |
 | M12D | Detailed design and plan required | — | PhASAR adapter is intentionally separate from the Joern graph importer | [#21](https://github.com/skg7on/VERITAS/issues/21) |
-| M13 | Planned | [plan](milestones/m13-scale-profile-store-equivalence-instrument-implementation-plan.md) | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §6 | [#141](https://github.com/skg7on/VERITAS/issues/141) |
+| M13 | Delivered | [plan](milestones/m13-scale-profile-store-equivalence-instrument-implementation-plan.md) | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §6 | [#141](https://github.com/skg7on/VERITAS/issues/141) |
 | M14 | Planned | [plan](milestones/m14-scaling-corpus-regime-determination-implementation-plan.md) | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §7 | [#142](https://github.com/skg7on/VERITAS/issues/142) |
 | M15–M19 | Not yet planned | — | [scaling roadmap](veritas-scaling-milestone-roadmap.md) §5 | [#140](https://github.com/skg7on/VERITAS/issues/140) (umbrella) |
 

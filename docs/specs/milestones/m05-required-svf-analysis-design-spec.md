@@ -1,5 +1,10 @@
 # M5 Required In-Process SVF Value-Flow and Pointer Analysis Design Spec
 
+> **Review direction (2026-10-03):** This capability is retained; its place in the first review delivery is defined by the new proposal. See the
+> [review-driven analysis proposal](../veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 **Status:** Draft
 **Milestone:** M5
 **Depends on:** M4 VERITAS-owned Clang/LLVM project analysis

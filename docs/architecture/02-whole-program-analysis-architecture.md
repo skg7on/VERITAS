@@ -1,5 +1,10 @@
 # VERITAS Whole-Program Analysis
 
+> **Review direction (2026-10-03):** The proposed product path is a bounded LLM investigation with selective analysis. See the
+> [review-driven analysis proposal](../specs/veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 ## Analyzer Engines, Graph Representations, and SOTA C/C++ Pointer-Alias Policy
 
 **Status:** Draft Architecture Specification
@@ -24,13 +29,11 @@ This document specifies how VERITAS builds the deterministic semantic world that
 * what SVF at the committed revision delivers today and the upgrade path;
 * how uncertainty is preserved end-to-end.
 
-**Delivery status.** M8 is implemented with a C++ recursive engine and optional
-file-based Souffle comparison. The approved M8R architecture described below is
-the target and is not yet delivered: pinned SVF owns V1 points-to/alias/SVFG and
-indirect-call truth, compiled Souffle owns normal production recursive WPA, and
-C++ is only a conformance oracle or explicitly selected emergency engine. The
-[M8R bridge spec](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md)
-records the gated transition without rewriting M8 history.
+**Delivery status.** M8R and M9 are delivered: pinned SVF owns native V1
+points-to/alias/SVFG and indirect calls, compiled Souffle owns normal production
+recursive WPA, and C++ is conformance or explicit emergency only. Alias tier
+refinement remains a capability policy rather than a claim that L2/L3 are
+qualified. #124 tracks missing queryable alias/range/check facts.
 
 Platform-wide invariants (P1–P8) live in `01-platform-architecture.md`. Storage layout and identity IDs live in `03-summarydb-storage-architecture.md`. This document assumes both.
 
@@ -432,11 +435,15 @@ revision: 18fb5650600530a54f0afc22f4df1a10b03d3c02
 
 Pinned SVF is the authoritative V1 owner for Andersen points-to results, alias
 classification, SVFG construction, and indirect-call candidates. A
-Souffle-native PTA is not a production alternative; M13 may research one only
-against explicit correctness, precision, model-coverage, and performance
-benchmarks, independently of the M9-M12 critical path.
+Souffle-native PTA is not a production alternative. Future PTA research requires
+correctness, precision, model-coverage, performance and review-value benchmarks.
+It has no active milestone number; M13 now denotes store equivalence.
 
-Standard VERITAS builds cannot disable SVF — there is no `VERITAS_ENABLE_SVF` option — because M5's design invariants require whole-program pointer analysis for correctness of call-graph refinement and value flow.
+Standard VERITAS builds cannot disable SVF — there is no `VERITAS_ENABLE_SVF`
+option. The existing native command retains this contract. A proposed lighter
+review provider would require separate coverage/configuration identity and must
+expose unresolved memory and call effects; it cannot impersonate native analysis
+or silently treat skipped pointer analysis as resolved alias information.
 
 ## 6.4 Upgrade path to L2 / L3
 

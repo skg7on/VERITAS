@@ -1,5 +1,10 @@
 # M10C Evidence IR Semantic Model and Serialization Design Spec
 
+> **Review direction (2026-10-03):** This capability is retained; its place in the first review delivery is defined by the new proposal. See the
+> [review-driven analysis proposal](../veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 **Status:** Approved
 **Milestone:** M10C
 **Depends on:** M10B Evidence Builder input APIs and first demo
