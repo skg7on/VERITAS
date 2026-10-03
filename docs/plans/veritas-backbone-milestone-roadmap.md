@@ -1,5 +1,10 @@
 # VERITAS Backbone Milestone Implementation Plan
 
+> **Review direction (2026-10-03):** Use the review delivery roadmap for proposed product priority. This plan retains its capability-specific history and gates. See the
+> [review-driven analysis proposal](../specs/veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Break the VERITAS engineering backbone into small, testable milestones, each with a design spec and implementation plan.
@@ -88,7 +93,7 @@ The source architecture says "Build a VERITAS CPG, but keep it thin." This docum
 | M12B | Joern CPG importer | Direct GraphSON/GraphML parsing, identity, normalization, provenance | M12A |
 | M12C | Provider fusion and Evidence integration | Unified pinned query view and M10B integration | M10B, M12B |
 | M12D | PhASAR result adapter | Separately designed result-fact adapter | M12A |
-| M13 | Benchmark-gated PTA research | Independent Souffle-native PTA comparison against pinned SVF | independent of M9-M12 |
+| M13 | Scale profile and store equivalence | Delivered comparison instrument and perturbation controls | scaling roadmap |
 
 Each milestone should merge independently. Every milestone has tests and a small user-visible CLI behavior.
 
@@ -111,7 +116,7 @@ Detailed milestone design specs live under `docs/specs/milestones/`:
 | M8 | `docs/specs/milestones/m08-scc-wpa-souffle-fact-engine-design-spec.md` |
 | M8R.1-M8R.5 | `docs/specs/milestones/m08r-souffle-wpa-remediation-design-spec.md` |
 | M9 | `docs/specs/milestones/m09-provenance-fact-store-explain-api-design-spec.md` |
-| M10A | Detailed recursive-domain-expansion spec required before implementation |
+| M10A | `docs/specs/milestones/m10a-recursive-domain-expansion-design-spec.md` |
 | M10B | `docs/specs/milestones/m10b-evidence-builder-input-apis-demo-design-spec.md` |
 | M10C | `docs/specs/milestones/m10c-evidence-ir-semantic-model-serialization-design-spec.md` |
 | M11/M12 boundary | `docs/specs/milestones/m11-m12-summarydb-ingest-adapters-design-spec.md` |
@@ -120,10 +125,14 @@ Detailed milestone design specs live under `docs/specs/milestones/`:
 Historical per-milestone implementation plans live under `docs/plans/`. The
 M8R executable plan is
 `docs/plans/milestones/m08r-souffle-wpa-remediation-implementation-plan.md`;
-M10A still requires its detailed plan. M10C's executable plan is
+M10A's delivered plan is
+`docs/plans/milestones/m10a-recursive-domain-expansion-implementation-plan.md`.
+M10C's executable plan is
 `docs/plans/milestones/m10c-evidence-ir-semantic-model-serialization-implementation-plan.md`;
-M13's independently approved research plan is outside the M9-M12 critical
-path.
+M13 now denotes the delivered scale-profile/store-equivalence instrument.
+PTA research is unnumbered future work, conditional on review-value benchmarks.
+The [review roadmap](veritas-review-agent-milestone-roadmap.md) defines proposed
+product sequencing; M11–M19 are not collectively a first-review entry gate.
 
 ---
 

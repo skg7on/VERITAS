@@ -1,6 +1,6 @@
 # `veritas-build analyze` Round 3 Performance Design Specification
 
-**Status:** Draft for review
+**Status:** Delivered optimization record (PR #137); historical measurements
 
 **Extends:**
 [`veritas-build-analyze-performance-design-spec.md`](veritas-build-analyze-performance-design-spec.md)

@@ -1,6 +1,6 @@
 # `veritas-build analyze` Phase Observability Design Specification
 
-**Status:** Draft for review
+**Status:** Delivered observability contract (PR #139)
 
 **Depends on:**
 [`veritas-build-analyze-round3-performance-design-spec.md`](veritas-build-analyze-round3-performance-design-spec.md)

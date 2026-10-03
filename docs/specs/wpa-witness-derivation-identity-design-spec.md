@@ -2,7 +2,11 @@
 
 ## Status
 
-Draft — precedes the implementation.
+Delivered in [PR #105](https://github.com/skg7on/VERITAS/pull/105), with subsequent
+self-join/duplicate-fact corrections in [PR #130](https://github.com/skg7on/VERITAS/pull/130).
+The design below records its original defect and remedy. The
+[review-driven analysis proposal](veritas-review-driven-analysis-design-spec.md)
+preserves rooted witness and provenance authority.
 
 ## Problem
 

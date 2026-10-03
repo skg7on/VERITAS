@@ -3,6 +3,13 @@
 Cross-cutting specifications establish repository-wide design requirements.
 Milestone-specific specifications live in the parallel `milestones/` subtree.
 
+## Current Product Refinement
+
+[Review-driven analysis](veritas-review-driven-analysis-design-spec.md) proposes
+the LLM/static-analysis reviewer goal, preserves authority and data contracts,
+and maps open issues to delivery priorities. Existing capability specifications
+remain binding for runtime/schema/acceptance until explicitly amended.
+
 ## Cross-Cutting Specifications
 
 - [GitHub Actions CI build](github-actions-ci-build-design-spec.md)

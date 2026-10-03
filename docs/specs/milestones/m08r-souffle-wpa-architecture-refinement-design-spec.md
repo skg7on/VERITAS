@@ -517,9 +517,14 @@ Imported observations remain non-authoritative and cannot silently participate
 in native summary or WPA invalidation. The canonical design is
 `m12-joern-cpg-summarydb-importer-design-spec.md`.
 
-### M13 — Benchmark-gated PTA Research
+### Historical M13 proposal — Benchmark-gated PTA Research
 
-Evaluate a Soufflé-native points-to and call-graph kernel against pinned SVF. Replacement requires an independently approved design and explicit correctness, precision, performance, and model-coverage thresholds. M13 is not a dependency of M9–M12.
+This historical milestone number is superseded: active M13 is the delivered
+scale-profile/store-equivalence instrument. PTA research remains unnumbered
+future capability work under the [review-driven analysis proposal](../veritas-review-driven-analysis-design-spec.md).
+Replacement of SVF still requires an independently reviewed design and explicit
+correctness, precision, performance, model-coverage and review-value benchmarks.
+It is not a first-review dependency.
 
 ## 17. M9 Entry Criteria
 

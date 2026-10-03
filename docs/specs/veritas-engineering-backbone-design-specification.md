@@ -1,5 +1,10 @@
 # VERITAS Engineering Backbone Design Specification
 
+> **Review direction (2026-10-03):** Product sequencing, candidate origins and context access are refined by the new proposal. See the
+> [review-driven analysis proposal](veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 ## SummaryDB, Incremental WPA, and Provenance-Aware Fact Infrastructure
 
 **Status:** Draft Architecture Specification
@@ -17,7 +22,9 @@
 
 This document turns the high-level SummaryDB architecture into an engineering design for the first real VERITAS backbone.
 
-The backbone is the subsystem that makes VERITAS scalable before any LLM reviewer is introduced:
+The backbone supplies evidence capabilities for the reviewer. Its complete
+scaling programme is not a prerequisite for the proposed first real review.
+The existing native analysis route is:
 
 ```text
 Tier 1: project directory containing compile_commands.json (current/pre-M11)
@@ -40,14 +47,13 @@ The central engineering goal is:
 
 This document specifies the V1 data model, hash model, storage layout, update algorithms, consistency rules, and implementation milestones.
 
-**Approved remediation overlay.** The implemented M8 baseline uses C++
-fixpoint execution and optional Souffle comparison. The approved M8R target is
-not yet delivered and supersedes live WPA/Datalog ownership statements in this
-draft: Function Summary IR is durable, detailed relations are run-local, pinned
-SVF owns V1 points-to/alias/SVFG and indirect calls, compiled Souffle owns normal
-production recursion, and C++ is conformance or explicit emergency only. The
-[M8R bridge spec](milestones/m08r-souffle-wpa-remediation-design-spec.md) is the
-delivery authority.
+**Delivered remediation overlay.** M8R and M9 supersede the historical C++
+fixpoint baseline: Function Summary IR is durable, detailed relations are
+run-local, pinned SVF owns native points-to/alias/SVFG and indirect calls,
+compiled Souffle owns normal production recursion, and C++ is conformance or
+explicit emergency only. Operational invalidation still has the documented
+#143 gap. The review proposal changes product sequencing, not B1–B15 or
+published schema/identity contracts.
 
 ---
 

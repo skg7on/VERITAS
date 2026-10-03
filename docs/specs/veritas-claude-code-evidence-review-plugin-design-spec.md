@@ -1,6 +1,11 @@
 # VERITAS Claude Code Evidence Review Plugin Design Spec
 
-**Status:** Approved
+> **Review direction (2026-10-03):** Product sequencing, candidate origins and context access are refined by the new proposal. See the
+> [review-driven analysis proposal](veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
+**Status:** Approved baseline; proposed context/discovery refinement pending
 
 **Scope:** Explicitly invoked, capability-isolated Evidence IR code review in
 Claude Code
@@ -22,6 +27,15 @@ and the
 ---
 
 # 1. Purpose
+
+**Proposed amendment boundary.** The review-driven analysis specification adds a
+bounded context-led discovery phase before EIR cases: controller-issued artifact
+references, LLM candidate admission and source-backed report observations. This
+requires explicit handshake/schema capability negotiation and a revised #79
+implementation plan. It does not silently add fields or operations to
+`veritas.review.backend.v1`, grant ambient file/Bash tools, remove EIR-L0-first
+disclosure for admitted cases, or weaken verified-state checks. Until amended,
+the protocol below is the approved evidence-led baseline.
 
 This specification defines a distributable Claude Code plugin that turns a Git
 comparison or stable finding ID into a bounded set of Evidence IR review cases.

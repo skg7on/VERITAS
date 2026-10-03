@@ -4,7 +4,17 @@
 
 **VERITAS** — Verified Evidence Reasoning IR for Trans-program Analysis and Semantics
 
-**Core Thesis:** A Review Agent should never be asked to "understand a million-line repository." Deterministic analysis first builds a compact, immutable, provenance-carrying semantic world. The Agent reasons only over that structured representation (Evidence IR), and any hypothesis it produces must round-trip through a deterministic verifier before becoming a fact.
+**Core Thesis (proposed refinement):** VERITAS helps an LLM investigate code
+changes using bounded, provenance-backed program evidence, and applies stronger
+analysis when needed to support a review claim. The reviewer sees bounded
+diff/source/test/doc context alongside EIR; candidates may originate from the
+LLM or deterministic seeders. Model assertions remain `INFERRED`; supported
+concerns and semantic observations do not acquire verified-fact authority.
+See [Review Agent architecture](docs/architecture/06-review-agent-architecture.md),
+[review-driven analysis spec](docs/specs/veritas-review-driven-analysis-design-spec.md)
+and [review roadmap](docs/plans/veritas-review-agent-milestone-roadmap.md). This
+is design direction; lightweight review analysis and the production agent
+backend are not yet implemented. Existing native SVF/Souffle contracts remain.
 
 **Three IRs + Feedback Loop:**
 
@@ -12,7 +22,9 @@
 
 2. **SummaryDB** — a logical subsystem across seven physical layers: Object Store · Metadata · Fact Store · Graph Index · Dependency Index · Evidence Cache · History Store. Backed by RocksDB (CAS), SQLite (metadata/facts), and Soufflé (WPA execution).
 
-3. **Evidence IR (EIR)** — claim-oriented, provenance-preserving typed graph IR the Agent consumes. Enforces MUST / MAY / MUST_NOT / INFERRED / ASSUMED / UNKNOWN as distinct epistemic states. LLM output enters as INFERRED and requires deterministic verification (static analysis / SMT / symbolic execution) before promotion to MUST.
+3. **Evidence IR (EIR)** — claim-oriented, provenance-preserving typed graph IR the Agent consumes. Enforces MUST / MAY / MUST_NOT / INFERRED / ASSUMED / UNKNOWN as distinct epistemic states. LLM output enters as INFERRED; promotion to MUST requires an authoritative
+check for the exact predicate, assumptions and execution domain. Non-verified
+review observations remain separate from authoritative program facts.
 
 **Pipeline:** Ingest (compile_commands.json, bitcode, or external analysis) → module acquisition → local static analysis → Function Summary IR → SummaryDB → Incremental WPA (SCC + fixpoint + Datalog) → global derived facts → Evidence Builder → Evidence IR → Agent + Proof Engines → Review Result.
 
@@ -24,13 +36,25 @@
 
 **Milestones M0–M12:** Skeleton + toolchain → project ingestion → identity + metadata → Summary IR + CAS → Clang/LLVM local extraction → required in-process SVF → thin CPG projection → reverse-dep index + incremental scheduler → SCC WPA + Soufflé → provenance fact store + explain API → Evidence Builder input APIs + buffer-overflow demo → Evidence IR semantic model + serialization → external IR adapter (bitcode) → SummaryDB external-provider substrate → direct Joern GraphSON/GraphML importer → provider fusion/Evidence integration; PhASAR remains a separately designed provider adapter.
 
-**First Demo:** A `decode → memcpy(b->data, p->payload, p->len)` fixture showing upstream `validatePacket` change → one local summary recomputed → range component delta → seven dependent summaries invalidated → WPA finds unsafe flow → M10B builds a completeness-aware input → M10C builds a validated Evidence case carrying the value flow, the missing dominating check, and a proof obligation, while the external-validator unknown is demonstrated at the M10B query layer (`QRY-009`) — the demo's own artefacts carry no unknowns, though M10C's builder does carry one into a built case (`BLD-004`) — and the range and capacity facts stay deferred by the test contract's §2.3. No LLM required.
+**First Demo (target story; operational invalidation and domain facts remain
+under #143/#124):** A `decode → memcpy(b->data, p->payload, p->len)` fixture showing upstream `validatePacket` change → one local summary recomputed → range component delta → seven dependent summaries invalidated → WPA finds unsafe flow → M10B builds a completeness-aware input → M10C builds a validated Evidence case carrying the value flow, the missing dominating check, and a proof obligation, while the external-validator unknown is demonstrated at the M10B query layer (`QRY-009`) — the demo's own artefacts carry no unknowns, though M10C's builder does carry one into a built case (`BLD-004`) — and the range and capacity facts stay deferred by the test contract's §2.3. The existing query/representation fixture requires no LLM. The proposed
+product demo adds a real review loop and a cited semantic contract observation.
 
 **Current State:** M0–M8 are implemented and tested. The standard `veritas-build analyze --project <dir>` runs M1 → M4 → M5 → M3 → M6 entirely in-process: Clang/LLVM local extraction → required in-process SVF → Summary IR → atomic summary+CPG publication, with the thin CPG queryable via `veritas-query`. M7 adds the reverse-dependency index and deterministic incremental scheduler. M8 adds deterministic call/SCC graphs, persisted SCC convergence hashes, and M7 propagation only for externally visible changes. The legacy C++ `FixpointEngine` and its `FactRelation`/`FactTuple` fact system are retired; recursive WPA runs compiled Soufflé with C++ retained only as a conformance oracle, and engine agreement is guarded by `WpaExecutorConformanceTest.EnginesProduceSameCanonicalFacts` and the `wpa-qualification` differential corpus. Note that a `GTEST_SKIP` still reports as passed to CTest, so a green summary alone does not prove that test ran.
 
-The M8R remediation bridge sits between M8 and M9. **M8R.1** (semantic fact contract: `AnalysisRun`, typed relation registry, dense/stable maps), **M8R.2** (native `summary.v2`, version-aware SummaryDB, collision-free memory/value identity, normalized SVF facts, model bundle), **M8R.3** (relational WPA projection), **M8R.4** (production Soufflé executor with pinned-revision provenance), and **M8R.5** (qualification corpus plus the executable ten-criterion M9 entry gate) are delivered and merged. The M8R–M9 contract reconciliation (issue #109) delivers **M9** (durable provenance and explain APIs): `veritas-build analyze` publishes canonical `AnalysisFactBatch`es through the `AnalysisFactBus` to a `FactStore` on the shared SummaryDB, with witness-dependent identities, a schema-v4 atomic receipt for idempotent publication, and current-binding explanation via `veritas-explain`. M10–M12 (recursive domain expansion, Evidence Builder inputs, Evidence IR semantic modeling and serialization, the external IR adapter, and the external-provider/Joern SummaryDB path) remain planned behind that gate. Start with the [documentation index](docs/README.md), then use the [architecture index](docs/architecture/README.md), [milestone specifications](docs/specs/milestones/README.md), and [milestone plans](docs/plans/README.md).
+The M8R remediation bridge sits between M8 and M9. **M8R.1** (semantic fact contract: `AnalysisRun`, typed relation registry, dense/stable maps), **M8R.2** (native `summary.v2`, version-aware SummaryDB, collision-free memory/value identity, normalized SVF facts, model bundle), **M8R.3** (relational WPA projection), **M8R.4** (production Soufflé executor with pinned-revision provenance), and **M8R.5** (qualification corpus plus the executable ten-criterion M9 entry gate) are delivered and merged. The M8R–M9 contract reconciliation (issue #109) delivers **M9** (durable provenance and explain APIs): `veritas-build analyze` publishes canonical `AnalysisFactBatch`es through the `AnalysisFactBus` to a `FactStore` on the shared SummaryDB, with witness-dependent identities, a schema-v4 atomic receipt for idempotent publication, and current-binding explanation via `veritas-explain`. M10A–M10C foundations are delivered, with missing domain producers (#124),
+call-site scoping (#132), and completeness/containment/summary-handoff gaps
+recorded by #149. M11/M12 adapters and the production review backend remain
+pending. M7 scheduling infrastructure exists but operational WPA invalidation
+is incomplete (#143). The first real review is the proposed product priority;
+M11–M19 are not collectively prerequisites. Start with the [documentation index](docs/README.md), then use the [architecture index](docs/architecture/README.md), [milestone specifications](docs/specs/milestones/README.md), and [milestone plans](docs/plans/README.md).
 
-The `veritas-build analyze` performance work in PRs #135 and #137 is merged. It adds a run-scoped summary index, direct digest encoding, consuming fact-batch assembly, bulk publication, in-memory Soufflé execution, memoized fact identity, packed canonical-order ranks, and batched WPA state commits. Published analysis content was proven unchanged, and the measured LevelDB workload's CPU time fell from 573.93 s to 421.67 s (26.5%). Issue #133 remains open because its acceptance limits are still missed: CPU time alone exceeds the 375 s wall ceiling, and worst-of-three peak RSS is 8.5945 GiB against the 4 GiB limit.
+The `veritas-build analyze` performance work in PRs #135 and #137 is merged. It adds a run-scoped summary index, direct digest encoding, consuming fact-batch assembly, bulk publication, in-memory Soufflé execution, memoized fact identity, packed canonical-order ranks, and batched WPA state commits. Published analysis content was proven unchanged, and the measured LevelDB workload's CPU time fell from 573.93 s to 421.67 s (26.5%). These are historical measurements. PR #150 subsequently reports Debug CPU
+390.855 s / wall 391.463 s, with memory improvement not established; it reverted
+the payload arena and retained canonicalizer row interning/worklist changes.
+Issue #133 is closed as of 2026-10-03; #140 remains the scaling umbrella. M13
+(store equivalence, PR #148) is delivered; M14 and later structural stages remain
+pending/conditional. No historical acceptance limit is claimed achieved.
 
 Issue #125 is a known identity-portability defect: `FunctionVariantID` still hashes LLVM's host-derived `target-features` attribute, so dependent value, memory, fact, CPG, and evidence content addresses are not portable across analysis hosts. [Architecture document 05](docs/architecture/05-portable-analysis-target-identity-architecture.md) proposes the complete remediation: a canonical explicit-or-inferred `AnalysisTarget`, identical target injection into both Clang paths, `build_variant.v2` and `function-variant.v2`, and an additive SummaryDB migration. This design is not yet implemented; cross-host golden comparisons therefore still mask affected digests.
 

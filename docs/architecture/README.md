@@ -1,7 +1,8 @@
 # VERITAS Architecture
 
-Read these architecture documents in order. They move from platform context to
-analysis, storage, and the evidence representation consumed by review agents.
+Start with architecture 06 for the proposed review product direction. Documents
+01–05 describe the platform, analysis, storage, evidence and identity capabilities
+that support it.
 
 1. [01 Platform architecture](01-platform-architecture.md) — defines the
    end-to-end VERITAS pipeline, principles, and input boundaries.
@@ -14,3 +15,9 @@ analysis, storage, and the evidence representation consumed by review agents.
 5. [05 Portable analysis target and identity architecture](05-portable-analysis-target-identity-architecture.md)
    — defines canonical target resolution, compiler injection, portable identity,
    and non-destructive migration from host-scoped identities.
+
+6. [06 Review Agent architecture](06-review-agent-architecture.md) — proposed
+   product goal, bounded context, dual candidate discovery and selective analysis.
+
+For current product direction, read 06 first, then the capability documents as
+needed. Earlier target pipelines are not claims that every capability is shipped.
