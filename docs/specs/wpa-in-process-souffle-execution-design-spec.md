@@ -2,7 +2,12 @@
 
 ## Status
 
-Draft — precedes the implementation.
+Delivered in [PR #107](https://github.com/skg7on/VERITAS/pull/107). The design
+and motivating profile below are historical; [PR #137](https://github.com/skg7on/VERITAS/pull/137)
+subsequently introduced in-memory execution. The
+[review-driven analysis proposal](veritas-review-driven-analysis-design-spec.md)
+retains this production capability without treating the old bottleneck
+attribution as a current measurement.
 
 ## Problem
 

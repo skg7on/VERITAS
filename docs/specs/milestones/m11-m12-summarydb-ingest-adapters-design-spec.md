@@ -1,5 +1,10 @@
 # VERITAS SummaryDB Ingest Adapters — Milestone Design Specification
 
+> **Review direction (2026-10-03):** This capability is retained; its place in the first review delivery is defined by the new proposal. See the
+> [review-driven analysis proposal](../veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 **Status:** M11 design and replacement implementation plan approved; pending
 implementation. M12 details are superseded by
 `m12-joern-cpg-summarydb-importer-design-spec.md`.

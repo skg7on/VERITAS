@@ -1,5 +1,10 @@
 # M10A Recursive Domain Expansion Design Spec
 
+> **Review direction (2026-10-03):** This capability is retained; its place in the first review delivery is defined by the new proposal. See the
+> [review-driven analysis proposal](../veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 **Status:** Approved
 **Milestone:** M10A
 **Depends on:** M8R.3 relational WPA projection, M8R.4 production Soufflé executor, M8R.5 qualification corpus, M9 fact/provenance store
