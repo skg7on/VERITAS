@@ -115,7 +115,24 @@ For non-local environments, omit `LLVM_PROJECT_BUILD_DIR` to use
 `find_package(LLVM/Clang CONFIG)`: provide `LLVM_DIR` and `Clang_DIR` explicitly,
 or let CMake search system paths.
 
-**Available presets:** `default` (Debug), `debug`, `release`, `static-release` (opts out of `BUILD_SHARED_LIBS`). All resolve `binaryDir` to `<repo>/build`.
+**Available presets:** `default` (Debug), `debug`, `release`, `static-release` (opts out of `BUILD_SHARED_LIBS`), and `homebrew-clang` (below). Apart from `homebrew-clang`, all resolve `binaryDir` to `<repo>/build`.
+
+**Homebrew Clang toolchain (local macOS development):**
+
+```bash
+cmake --preset homebrew-clang \
+  -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build
+cmake --build --preset homebrew-clang
+ctest --preset homebrew-clang
+```
+
+`homebrew-clang` pins `CMAKE_C_COMPILER`/`CMAKE_CXX_COMPILER` to
+`/opt/homebrew/bin/clang` and `/opt/homebrew/bin/clang++` and builds in
+`build-homebrew-clang/`, so it can coexist with a `default` tree. The top-level
+CMakeLists probes whether `<random>` compiles under strict C++20; Homebrew LLVM
+20's `float.h` does not implement clang's `__need_infinity_nan` protocol, so
+that probe fails there and the build applies the `INFINITY=__builtin_inff()`
+compatibility definition automatically. The `default` preset is unaffected.
 
 **Configure without presets** (for CMake < 3.19 or non-Ninja generators):
 

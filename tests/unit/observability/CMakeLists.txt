@@ -21,7 +21,7 @@
 # `${LLVM_INCLUDE_DIRS}` is spelled out because the LLVM imported targets carry
 # no include directories of their own: linking `LLVM` brings the library and
 # nothing else. Without this line `<llvm/Support/JSON.h>` still resolves — but
-# against whatever other LLVM headers sit on the prefix (Homebrew's llvm@17
+# against whatever other LLVM headers sit on the prefix (Homebrew's LLVM
 # here) while linking the LLVM this build was configured with. The tree is
 # SYSTEM for the same reason it is in src/observability: upstream headers are
 # not held to this project's -Werror warning contract.

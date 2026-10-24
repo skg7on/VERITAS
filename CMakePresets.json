@@ -18,6 +18,17 @@
       }
     },
     {
+      "name": "homebrew-clang",
+      "inherits": "default",
+      "displayName": "VERITAS (Ninja, Debug, Homebrew Clang)",
+      "description": "Debug build with Homebrew's /opt/homebrew/bin/clang and clang++ as the host toolchain. Uses build-homebrew-clang/ so it can coexist with the default preset's build/ tree. The top-level CMakeLists applies the LLVM 20 <random> compatibility definition automatically when the compiler needs it.",
+      "binaryDir": "${sourceDir}/build-homebrew-clang",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/opt/homebrew/bin/clang",
+        "CMAKE_CXX_COMPILER": "/opt/homebrew/bin/clang++"
+      }
+    },
+    {
       "name": "debug",
       "inherits": "default",
       "displayName": "VERITAS Debug",
@@ -50,6 +61,11 @@
       "name": "default",
       "configurePreset": "default",
       "displayName": "Build (default)"
+    },
+    {
+      "name": "homebrew-clang",
+      "configurePreset": "homebrew-clang",
+      "displayName": "Build (homebrew-clang)"
     },
     {
       "name": "debug",
@@ -85,6 +101,12 @@
       "inherits": "default",
       "configurePreset": "debug",
       "displayName": "Test (debug)"
+    },
+    {
+      "name": "homebrew-clang",
+      "inherits": "default",
+      "configurePreset": "homebrew-clang",
+      "displayName": "Test (homebrew-clang)"
     }
   ]
 }

@@ -43,7 +43,7 @@ gtest_discover_tests(ProjectManifestLoaderTest DISCOVERY_TIMEOUT 60)
 # Linking `LLVM` brings the library and no include directories, so
 # `${LLVM_INCLUDE_DIRS}` is spelled out: without it `<llvm/Support/JSON.h>`
 # resolves against whatever other LLVM headers sit on the prefix (Homebrew's
-# llvm@17 here) while linking the LLVM this build was configured with. The tree
+# LLVM here) while linking the LLVM this build was configured with. The tree
 # is SYSTEM for the same reason it is in src/observability: upstream headers are
 # not held to this project's -Werror warning contract.
 add_executable(VeritasBuildAnalyzeCliTest VeritasBuildAnalyzeCliTest.cpp)
