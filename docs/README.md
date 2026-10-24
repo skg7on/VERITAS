@@ -28,6 +28,11 @@ confusing approved target interfaces with commands that exist today.
 
 ## Document Classes
 
+The [claim-driven redesign proposal](specs/veritas-claim-driven-redesign-design-spec.md)
+reviews the implementation and recorded performance baseline, then proposes a
+staged migration toward demand-scoped analysis and LLM-guided review. It is
+proposed work, not a replacement for the approved contracts below.
+
 - [Architecture](architecture/README.md) contains ordered, durable system
   architecture.
 - [Specifications](specs/README.md) contains cross-cutting and milestone

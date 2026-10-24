@@ -8,6 +8,7 @@ Milestone-specific specifications live in the parallel `milestones/` subtree.
 - [GitHub Actions CI build](github-actions-ci-build-design-spec.md)
 - [Documentation information architecture](veritas-documentation-information-architecture-design-specification.md)
 - [Engineering backbone](veritas-engineering-backbone-design-specification.md)
+- [Claim-driven redesign proposal and staged plan](veritas-claim-driven-redesign-design-spec.md)
 - [Evidence IR formal specification](veritas-evidence-ir-formal-specification.md)
 - [Evidence IR Agent security use cases](veritas-evidence-ir-agent-security-use-cases-design-spec.md)
 - [Claude Code Evidence IR review plugin](veritas-claude-code-evidence-review-plugin-design-spec.md)
