@@ -12,36 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(svf_config_test
+# tests/unit/analysis/svf/CMakeLists.txt
+
+add_executable(veritas_unit_analysis_svf_tests
   SvfConfigTest.cpp
-)
-
-target_link_libraries(svf_config_test
-  PRIVATE
-    veritas_svf_analysis
-    veritas_unit_test_support
-)
-
-target_include_directories(svf_config_test
-  PRIVATE "${PROJECT_SOURCE_DIR}/src"
-)
-
-add_test(NAME SvfConfigTest COMMAND svf_config_test)
-set_tests_properties(SvfConfigTest PROPERTIES TIMEOUT 10)
-
-add_executable(svf_budget_test
   SvfBudgetTest.cpp
 )
 
-target_link_libraries(svf_budget_test
+target_link_libraries(veritas_unit_analysis_svf_tests
   PRIVATE
     veritas_svf_analysis
     veritas_unit_test_support
 )
 
-target_include_directories(svf_budget_test
+target_include_directories(veritas_unit_analysis_svf_tests
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
 )
 
-add_test(NAME SvfBudgetTest COMMAND svf_budget_test)
+add_test(NAME SvfConfigTest
+  COMMAND veritas_unit_analysis_svf_tests --gtest_filter=SvfConfigTest.*)
+set_tests_properties(SvfConfigTest PROPERTIES TIMEOUT 10)
+
+add_test(NAME SvfBudgetTest
+  COMMAND veritas_unit_analysis_svf_tests --gtest_filter=SvfBudgetTest.*)
 set_tests_properties(SvfBudgetTest PROPERTIES TIMEOUT 10)

@@ -16,72 +16,35 @@
 #
 # Unit tests for veritas_summarydb.
 
-add_executable(MetadataStoreTest MetadataStoreTest.cpp)
-target_link_libraries(MetadataStoreTest PRIVATE
-  veritas_summarydb
-  GTest::gtest_main
+add_executable(veritas_unit_summarydb_tests
+  MetadataStoreTest.cpp
+  ObjectStoreTest.cpp
+  SummaryRepositoryTest.cpp
+  SummaryDeltaTest.cpp
+  DependencyIndexTest.cpp
+  StoreEquivalenceTest.cpp
+  StoreEquivalenceEndToEndTest.cpp
 )
-veritas_add_warnings(MetadataStoreTest)
-gtest_discover_tests(MetadataStoreTest DISCOVERY_TIMEOUT 60)
-
-add_executable(ObjectStoreTest ObjectStoreTest.cpp)
-target_link_libraries(ObjectStoreTest PRIVATE
-  veritas_summarydb
-  GTest::gtest_main
-)
-veritas_add_warnings(ObjectStoreTest)
-gtest_discover_tests(ObjectStoreTest DISCOVERY_TIMEOUT 60)
-
-add_executable(SummaryRepositoryTest SummaryRepositoryTest.cpp)
-target_link_libraries(SummaryRepositoryTest PRIVATE
+target_link_libraries(veritas_unit_summarydb_tests PRIVATE
   veritas_summarydb
   veritas::summary
-  GTest::gtest_main
-)
-veritas_add_warnings(SummaryRepositoryTest)
-gtest_discover_tests(SummaryRepositoryTest DISCOVERY_TIMEOUT 60)
-
-add_executable(SummaryDeltaTest SummaryDeltaTest.cpp)
-target_link_libraries(SummaryDeltaTest PRIVATE
-  veritas_summarydb
-  veritas::summary
-  GTest::gtest_main
-)
-veritas_add_warnings(SummaryDeltaTest)
-gtest_discover_tests(SummaryDeltaTest DISCOVERY_TIMEOUT 60)
-
-add_executable(DependencyIndexTest DependencyIndexTest.cpp)
-target_link_libraries(DependencyIndexTest PRIVATE
-  veritas_summarydb
-  veritas::summary
-  GTest::gtest_main
-)
-veritas_add_warnings(DependencyIndexTest)
-gtest_discover_tests(DependencyIndexTest DISCOVERY_TIMEOUT 60)
-
-add_executable(StoreEquivalenceTest StoreEquivalenceTest.cpp)
-target_link_libraries(StoreEquivalenceTest PRIVATE
-  veritas_summarydb
-  GTest::gtest_main
-)
-veritas_add_warnings(StoreEquivalenceTest)
-gtest_discover_tests(StoreEquivalenceTest DISCOVERY_TIMEOUT 60)
-
-# The end-to-end case runs two full M1->M4->M5->M3 analyses in-process, so it
-# links `veritas_analysis` as well and needs a per-test timeout.
-# `gtest_discover_tests` cannot give one — it registers its cases with the
-# default timeout — hence the explicit `add_test` + `set_tests_properties`
-# form. The two together would double-register, so only one of them is used.
-add_executable(StoreEquivalenceEndToEndTest StoreEquivalenceEndToEndTest.cpp)
-target_link_libraries(StoreEquivalenceEndToEndTest PRIVATE
   veritas_analysis
-  veritas_summarydb
   veritas_test_support
   GTest::gtest_main
 )
-veritas_add_warnings(StoreEquivalenceEndToEndTest)
+veritas_add_warnings(veritas_unit_summarydb_tests)
+
+# The end-to-end case runs two full M1->M4->M5->M3 analyses in-process, so it
+# needs a per-test timeout. `gtest_discover_tests` registers its cases with the
+# default timeout, hence the explicit `add_test` + `set_tests_properties` form
+# below. Discovery excludes that suite so the two registrations cannot overlap.
+gtest_discover_tests(veritas_unit_summarydb_tests DISCOVERY_TIMEOUT 60
+  TEST_FILTER "MetadataStoreTest.*:ObjectStoreTest.*:SummaryRepositoryTest.*:SummaryDeltaTest.*:DependencyIndexTest.*:StoreEquivalenceTest.*"
+)
+
 add_test(NAME StoreEquivalenceEndToEndTest
-  COMMAND StoreEquivalenceEndToEndTest
+  COMMAND veritas_unit_summarydb_tests
+    --gtest_filter=StoreEquivalenceEndToEndTest.*
 )
 set_tests_properties(StoreEquivalenceEndToEndTest PROPERTIES
   TIMEOUT 300

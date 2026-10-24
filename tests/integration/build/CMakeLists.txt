@@ -18,46 +18,38 @@
 # real fixtures under tests/fixtures/projects and exercise the Clang
 # LibTooling compilation-database code path.
 
-add_executable(ProjectManifestLoaderTest ProjectManifestLoaderTest.cpp)
+add_executable(veritas_integration_build_tests
+  ProjectManifestLoaderTest.cpp
+  VeritasBuildAnalyzeCliTest.cpp
+)
 # `LLVMTargetParser` is named directly because `veritas_build` links LLVM
-# PRIVATE, so nothing propagates it: the suite asserts that a project naming no
-# target records the analysis host's default triple, and the only honest oracle
-# for that is `llvm::sys::getDefaultTargetTriple()` itself. The include tree is
-# SYSTEM for the same reason it is in src/build — upstream headers are not held
-# to this project's warning contract.
-target_include_directories(ProjectManifestLoaderTest SYSTEM PRIVATE
+# PRIVATE, so nothing propagates it: ProjectManifestLoaderTest asserts that a
+# project naming no target records the analysis host's default triple, and the
+# only honest oracle for that is `llvm::sys::getDefaultTargetTriple()` itself.
+#
+# `LLVM` and `${LLVM_INCLUDE_DIRS}` are for `VeritasBuildAnalyzeCliTest`, which
+# parses the run-metrics artifact with `llvm::json::parse` — the only way to
+# assert that the root phase is the real folded span rather than the synthetic
+# fallback of the same name. Linking `LLVM` brings the library and no include
+# directories, so the tree is spelled out: without it `<llvm/Support/JSON.h>`
+# resolves against whatever LLVM headers sit on the prefix (Homebrew's LLVM
+# here) while linking the LLVM this build was configured with. Both include
+# trees are SYSTEM for the same reason they are in src/build and
+# src/observability: upstream headers are not held to this project's -Werror
+# warning contract.
+target_include_directories(veritas_integration_build_tests SYSTEM PRIVATE
   ${LLVM_INCLUDE_DIRS}
 )
-target_link_libraries(ProjectManifestLoaderTest PRIVATE
+target_link_libraries(veritas_integration_build_tests PRIVATE
   veritas_build
   veritas_test_support
-  GTest::gtest_main
-  LLVMTargetParser
-)
-veritas_add_warnings(ProjectManifestLoaderTest)
-gtest_discover_tests(ProjectManifestLoaderTest DISCOVERY_TIMEOUT 60)
-
-# `VeritasBuildAnalyzeCliTest` parses the run-metrics artifact with
-# `llvm::json::parse`, which is the only way to assert that the root phase is
-# the real folded span rather than the synthetic fallback of the same name.
-# Linking `LLVM` brings the library and no include directories, so
-# `${LLVM_INCLUDE_DIRS}` is spelled out: without it `<llvm/Support/JSON.h>`
-# resolves against whatever other LLVM headers sit on the prefix (Homebrew's
-# LLVM here) while linking the LLVM this build was configured with. The tree
-# is SYSTEM for the same reason it is in src/observability: upstream headers are
-# not held to this project's -Werror warning contract.
-add_executable(VeritasBuildAnalyzeCliTest VeritasBuildAnalyzeCliTest.cpp)
-target_include_directories(VeritasBuildAnalyzeCliTest SYSTEM PRIVATE
-  ${LLVM_INCLUDE_DIRS}
-)
-target_link_libraries(VeritasBuildAnalyzeCliTest PRIVATE
-  veritas_test_support
   LLVM
+  LLVMTargetParser
   GTest::gtest_main
 )
-target_compile_definitions(VeritasBuildAnalyzeCliTest PRIVATE
+target_compile_definitions(veritas_integration_build_tests PRIVATE
   VERITAS_BUILD_BINARY="$<TARGET_FILE:veritas-build>"
 )
-add_dependencies(VeritasBuildAnalyzeCliTest veritas-build)
-veritas_add_warnings(VeritasBuildAnalyzeCliTest)
-gtest_discover_tests(VeritasBuildAnalyzeCliTest DISCOVERY_TIMEOUT 60)
+add_dependencies(veritas_integration_build_tests veritas-build)
+veritas_add_warnings(veritas_integration_build_tests)
+gtest_discover_tests(veritas_integration_build_tests DISCOVERY_TIMEOUT 60)

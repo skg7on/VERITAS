@@ -12,52 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(ThinCpgTest
+# tests/unit/cpg/CMakeLists.txt
+
+add_executable(veritas_unit_cpg_tests
   ThinCpgTest.cpp
-)
-target_link_libraries(ThinCpgTest PRIVATE
-  veritas::cpg
-  GTest::gtest_main
-)
-gtest_discover_tests(ThinCpgTest DISCOVERY_TIMEOUT 60)
-
-add_executable(CpgQueryTest
   CpgQueryTest.cpp
-)
-target_include_directories(CpgQueryTest PRIVATE
-  "${PROJECT_SOURCE_DIR}/src"
-)
-target_link_libraries(CpgQueryTest PRIVATE
-  veritas::cpg
-  veritas_summarydb
-  veritas::core
-  GTest::gtest_main
-)
-gtest_discover_tests(CpgQueryTest DISCOVERY_TIMEOUT 60)
-
-add_executable(CpgRepositoryTest
   CpgRepositoryTest.cpp
-)
-target_include_directories(CpgRepositoryTest PRIVATE
-  "${PROJECT_SOURCE_DIR}/src"
-)
-target_link_libraries(CpgRepositoryTest PRIVATE
-  veritas::cpg
-  veritas_summarydb
-  veritas::core
-  GTest::gtest_main
-)
-gtest_discover_tests(CpgRepositoryTest DISCOVERY_TIMEOUT 60)
-
-add_executable(CpgCanonicalizerTest
   CpgCanonicalizerTest.cpp
 )
-target_include_directories(CpgCanonicalizerTest PRIVATE
+target_include_directories(veritas_unit_cpg_tests PRIVATE
   "${PROJECT_SOURCE_DIR}/src"
 )
-target_link_libraries(CpgCanonicalizerTest PRIVATE
+target_link_libraries(veritas_unit_cpg_tests PRIVATE
   veritas::cpg
+  veritas_summarydb
   veritas::core
   GTest::gtest_main
 )
-gtest_discover_tests(CpgCanonicalizerTest DISCOVERY_TIMEOUT 60)
+veritas_add_warnings(veritas_unit_cpg_tests)
+gtest_discover_tests(veritas_unit_cpg_tests DISCOVERY_TIMEOUT 60)

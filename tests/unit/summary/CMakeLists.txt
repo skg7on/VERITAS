@@ -14,28 +14,17 @@
 
 # tests/unit/summary/CMakeLists.txt
 
-add_executable(ComponentHashTest
+add_executable(veritas_unit_summary_tests
   ComponentHashTest.cpp
-)
-
-target_link_libraries(ComponentHashTest PRIVATE
-  veritas::summary
-  veritas::core
-  GTest::gtest_main
-)
-
-gtest_discover_tests(ComponentHashTest DISCOVERY_TIMEOUT 60)
-
-add_executable(SummaryV2BuilderTest
   SummaryV2BuilderTest.cpp
 )
 
-target_link_libraries(SummaryV2BuilderTest PRIVATE
+target_link_libraries(veritas_unit_summary_tests PRIVATE
   veritas::summary
   veritas_analysis_semantic
   veritas::core
   GTest::gtest_main
 )
 
-gtest_discover_tests(SummaryV2BuilderTest DISCOVERY_TIMEOUT 60)
-veritas_m9_entry_test(SummaryV2BuilderTest summary-v2)
+gtest_discover_tests(veritas_unit_summary_tests DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(SummaryV2BuilderTest summary-v2 veritas_unit_summary_tests)

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# tests/unit/observability/CMakeLists.txt
+#
 # `RunReportTest` reads the artifact back with `llvm::json::parse`, which is the
 # only way to assert that what the renderer wrote is a JSON document rather than
 # merely a string that looks like one. `veritas_observability` links LLVM
@@ -25,36 +27,30 @@
 # here) while linking the LLVM this build was configured with. The tree is
 # SYSTEM for the same reason it is in src/observability: upstream headers are
 # not held to this project's -Werror warning contract.
-add_executable(RunReportTest RunReportTest.cpp)
-target_include_directories(RunReportTest SYSTEM PRIVATE
+#
+# `veritas_summarydb` is named directly for `StoreSummaryTest`, which opens a
+# store directly in three of its cases. `veritas_build` and
+# `veritas_test_support` are for the case that builds a manifest through the
+# real M1 ingestion and the `multiple_tus` fixture. `veritas_analysis` is not
+# needed: `ProjectAnalysisRequest` is a header-only aggregate and this test
+# never runs the analyzer, so no SVF and no WPA are linked or executed.
+
+add_executable(veritas_unit_observability_tests
+  RunReportTest.cpp
+  StoreSummaryTest.cpp
+)
+target_include_directories(veritas_unit_observability_tests SYSTEM PRIVATE
   ${LLVM_INCLUDE_DIRS}
 )
-target_link_libraries(RunReportTest PRIVATE
-  veritas_observability
-  LLVM
-  GTest::gtest_main
-)
-veritas_add_warnings(RunReportTest)
-gtest_discover_tests(RunReportTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "observability-unit")
-
-# `StoreSummaryTest` opens a store directly for three of its cases, so
-# `veritas_summarydb` is named here rather than reached through
-# `veritas_observability` (which links it PRIVATE). `veritas_build` and
-# `veritas_test_support` are for the last case, which builds a manifest through
-# the real M1 ingestion and the `multiple_tus` fixture. `veritas_analysis` is
-# not needed: `ProjectAnalysisRequest` is a header-only aggregate and this test
-# never runs the analyzer, so no SVF and no WPA are linked or executed.
-add_executable(StoreSummaryTest StoreSummaryTest.cpp)
-target_link_libraries(StoreSummaryTest PRIVATE
+target_link_libraries(veritas_unit_observability_tests PRIVATE
   veritas_observability
   veritas_summarydb
   veritas_build
   veritas_test_support
+  LLVM
   GTest::gtest_main
 )
-veritas_add_warnings(StoreSummaryTest)
-gtest_discover_tests(StoreSummaryTest DISCOVERY_TIMEOUT 60
+veritas_add_warnings(veritas_unit_observability_tests)
+gtest_discover_tests(veritas_unit_observability_tests DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
   PROPERTIES LABELS "observability-unit")
