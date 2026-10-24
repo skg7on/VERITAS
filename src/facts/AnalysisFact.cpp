@@ -14,6 +14,7 @@
 
 #include "veritas/facts/AnalysisFact.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -372,6 +373,23 @@ void WritePreimage(std::byte* out, std::size_t size, const SemanticRow& row) {
   assert(cursor.Position() == size);
 }
 
+template <typename Cell>
+Status ValidateEpistemicAdmission(const RelationSchema& schema,
+                                 ColumnDomain domain, const Cell& cell) {
+  if (domain != ColumnDomain::kEpistemic) {
+    return Status::Ok();
+  }
+  // Domain validation precedes this check for both stable and dense rows.
+  const auto* state = std::get_if<semantic::EpistemicState>(&cell);
+  assert(state != nullptr);
+  if (std::find(schema.allowed_epistemic.begin(), schema.allowed_epistemic.end(),
+                *state) == schema.allowed_epistemic.end()) {
+    return Status::InvalidArgument("epistemic state not allowed for relation " +
+                                   schema.name);
+  }
+  return Status::Ok();
+}
+
 }  // namespace
 
 Status ValidateSemanticRow(const SemanticRow& row) {
@@ -384,6 +402,11 @@ Status ValidateSemanticRow(const SemanticRow& row) {
   }
   for (std::size_t i = 0; i < row.cells.size(); ++i) {
     if (Status s = ValidateSemanticCell(schema.columns[i].domain, row.cells[i]);
+        !s.ok()) {
+      return s;
+    }
+    if (Status s = ValidateEpistemicAdmission(
+            schema, schema.columns[i].domain, row.cells[i]);
         !s.ok()) {
       return s;
     }
@@ -401,6 +424,11 @@ Status ValidateExecutionRow(const ExecutionRow& row) {
   }
   for (std::size_t i = 0; i < row.cells.size(); ++i) {
     if (Status s = ValidateExecutionCell(schema.columns[i].domain, row.cells[i]);
+        !s.ok()) {
+      return s;
+    }
+    if (Status s = ValidateEpistemicAdmission(
+            schema, schema.columns[i].domain, row.cells[i]);
         !s.ok()) {
       return s;
     }

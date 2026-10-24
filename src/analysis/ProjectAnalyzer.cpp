@@ -111,7 +111,10 @@ std::string WpaConfigurationHash(const AnalysisConfig &config) {
     out->push_back(':');
     out->append(value);
   };
-  std::string canonical = "veritas.wpa.config.v1";
+  // v2 identifies relation-authority admission and conservative unresolved-call
+  // projection. A previous run may contain UnknownCall(MUST), so its receipt
+  // must not be reused for the corrected materialization under the same ID.
+  std::string canonical = "veritas.wpa.config.v2";
   append_field(&canonical, "reachability");
   append_field(&canonical, "memory_effects");
   append_field(&canonical, std::to_string(config.wpa_component_timeout.count()));

@@ -276,6 +276,32 @@ TEST(WpaInputMaterializerTest, EmitsNoModeledEffectsWithoutABundle) {
   EXPECT_EQ(CountRows(input->edb, facts::RelationId::kModeledEffect), 0u);
 }
 
+TEST(WpaInputMaterializerTest, UnresolvedTargetsDoNotInheritDefiniteCallAuthority) {
+  struct Case {
+    v1::EpistemicState source;
+    semantic::EpistemicState projected;
+  };
+  const Case cases[] = {
+      {v1::EPISTEMIC_STATE_MUST, semantic::EpistemicState::kMay},
+      {v1::EPISTEMIC_STATE_MAY, semantic::EpistemicState::kMay},
+      {v1::EPISTEMIC_STATE_INFERRED, semantic::EpistemicState::kUnknown},
+      {v1::EPISTEMIC_STATE_ASSUMED, semantic::EpistemicState::kUnknown},
+      {v1::EPISTEMIC_STATE_UNKNOWN, semantic::EpistemicState::kUnknown},
+  };
+  for (const auto& test : cases) {
+    SCOPED_TRACE(static_cast<int>(test.source));
+    auto caller = V2Summary("caller");
+    AddCall(&caller, "external", "", v2::DISPATCH_KIND_EXTERNAL, test.source);
+    const std::vector<summary::SummaryArtifact> artifacts = {caller};
+    auto input = WpaInputMaterializer::Build(
+        Request(artifacts, WpaComponentKind::kReachability, "caller"));
+    ASSERT_TRUE(input.ok()) << input.status().message();
+    const auto* row = FirstRow(input->edb, facts::RelationId::kUnknownCall);
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(std::get<semantic::EpistemicState>(row->cells[3]), test.projected);
+  }
+}
+
 // An indirect MAY target must reach the EDB as a DirectCall row carrying its
 // dispatch and epistemic state independently -- MAY does not make the dispatch
 // unknown, and an indirect dispatch does not make the target unknown. The
