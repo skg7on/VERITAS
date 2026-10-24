@@ -177,6 +177,69 @@ TEST(AnalysisFactTest, RejectsInvalidSemanticRow) {
   EXPECT_EQ(DeriveFactId(row).status().code(), StatusCode::kInvalidArgument);
 }
 
+TEST(AnalysisFactTest, UnknownCallRejectsStatesItsProducerCannotEstablish) {
+  SemanticRow row;
+  row.relation = RelationId::kUnknownCall;
+  row.cells = {SeededId(core::IdKind::kCallSite, 1), FunctionStableId(2),
+               std::string("unresolved target"), EpistemicState::kMay};
+  for (const auto state : {EpistemicState::kMay, EpistemicState::kUnknown}) {
+    row.cells.back() = state;
+    ASSERT_TRUE(MakeFact(row).ok());
+  }
+  for (const auto state : {EpistemicState::kMust, EpistemicState::kMustNot,
+                           EpistemicState::kInferred, EpistemicState::kAssumed}) {
+    SCOPED_TRACE(static_cast<int>(state));
+    row.cells.back() = state;
+    EXPECT_EQ(ValidateSemanticRow(row).code(), StatusCode::kInvalidArgument);
+    EXPECT_EQ(MakeFact(row).status().code(), StatusCode::kInvalidArgument);
+    EXPECT_EQ(DeriveFactId(row).status().code(), StatusCode::kInvalidArgument);
+  }
+}
+
+TEST(AnalysisFactTest, ExecutionRowsEnforceTheSameUnknownCallAuthority) {
+  ExecutionRow row;
+  row.relation = RelationId::kUnknownCall;
+  row.cells = {CallSiteId{1}, FunctionId{2}, std::string("unresolved target"),
+               EpistemicState::kMay};
+  for (const auto state : {EpistemicState::kMay, EpistemicState::kUnknown}) {
+    row.cells.back() = state;
+    EXPECT_TRUE(ValidateExecutionRow(row).ok());
+  }
+  for (const auto state : {EpistemicState::kMust, EpistemicState::kMustNot,
+                           EpistemicState::kInferred, EpistemicState::kAssumed}) {
+    SCOPED_TRACE(static_cast<int>(state));
+    row.cells.back() = state;
+    EXPECT_EQ(ValidateExecutionRow(row).code(), StatusCode::kInvalidArgument);
+  }
+}
+
+TEST(AnalysisFactTest, ExistentialFlowCannotStateMustNot) {
+  const auto row = ReachableCallSemanticRow(
+      FunctionStableId(1), FunctionStableId(2), EpistemicState::kMustNot);
+  EXPECT_EQ(MakeFact(row).status().code(), StatusCode::kInvalidArgument);
+  ExecutionRow execution;
+  execution.relation = RelationId::kReachableCall;
+  execution.cells = {FunctionId{1}, FunctionId{2}, EpistemicState::kMustNot};
+  EXPECT_EQ(ValidateExecutionRow(execution).code(), StatusCode::kInvalidArgument);
+}
+
+TEST(AnalysisFactTest, CoverageRejectsPossibleAndNegativeCertificates) {
+  SemanticRow row;
+  row.relation = RelationId::kSoundnessCoverage;
+  row.cells = {std::string("scope"), std::string("complete"), std::uint64_t{1},
+               EpistemicState::kMust};
+  for (const auto state : {EpistemicState::kMust, EpistemicState::kUnknown}) {
+    row.cells.back() = state;
+    ASSERT_TRUE(MakeFact(row).ok());
+  }
+  for (const auto state : {EpistemicState::kMay, EpistemicState::kMustNot,
+                           EpistemicState::kInferred, EpistemicState::kAssumed}) {
+    SCOPED_TRACE(static_cast<int>(state));
+    row.cells.back() = state;
+    EXPECT_EQ(MakeFact(row).status().code(), StatusCode::kInvalidArgument);
+  }
+}
+
 // Validation and persistence only need the identity, and paying for a row copy
 // per fact is the difference between a bounded and an unbounded peak on a
 // million-fact batch. The identity must nevertheless be the same one MakeFact

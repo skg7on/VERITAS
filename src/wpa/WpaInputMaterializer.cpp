@@ -417,12 +417,22 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
         row.cells = {*call_site, member, callee, call.dispatch, call.epistemic};
       } else {
         // An unresolved target stays scoped to its call site. It never becomes
-        // an edge to every function.
+        // an edge to every function. A definite call instruction does not
+        // establish a definite target relation. Weaken that projection to MAY;
+        // inferred/assumed source claims must weaken to UNKNOWN rather than
+        // being strengthened to MAY. A negative call remains inadmissible here.
+        auto epistemic = call.epistemic;
+        if (epistemic == sem::EpistemicState::kMust) {
+          epistemic = sem::EpistemicState::kMay;
+        } else if (epistemic == sem::EpistemicState::kInferred ||
+                   epistemic == sem::EpistemicState::kAssumed) {
+          epistemic = sem::EpistemicState::kUnknown;
+        }
         row.relation = facts::RelationId::kUnknownCall;
         row.cells = {*call_site, member,
                      call.callee_symbol.empty() ? std::string("<unknown>")
                                                 : call.callee_symbol,
-                     call.epistemic};
+                     epistemic};
       }
       local_base_rows.push_back(LocalBaseFact{row, member});
       semantic_edb.push_back(std::move(row));

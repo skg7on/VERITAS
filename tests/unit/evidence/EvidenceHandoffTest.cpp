@@ -285,61 +285,54 @@ TEST(EvidenceHandoffTest, UsesOneImmutableSnapshot) {
   EXPECT_EQ(result.status().message(), "evidence snapshot changed; retry");
 }
 
-// HND-003: supporting and contradicting facts for one predicate stay separate,
-// retaining IDs and epistemic states; the conflict is not resolved by dropping
-// one side. Flow facts are scoped to the query's discovered path, so an
-// unrelated value-pair fact is excluded.
+// HND-003: retain positive/negative evidence using a relation that admits both.
+// GlobalFlow is existential and cannot carry MUST_NOT; the former placeholder
+// depended on MakeFact failing to enforce the registry. Alias admits a real
+// negative, so the handoff must retain both facts and their separate identities.
 TEST(EvidenceHandoffTest, KeepsSupportingAndContradictingFactsSeparate) {
   EvidenceScenarioBuilder builder;
   const ClaimSeed seed = MakeClaimSeed(builder);
-
   const auto v1 = builder.Id(core::IdKind::kValueRef, "v1");
   const auto v2 = builder.Id(core::IdKind::kValueRef, "v2");
-
-  const auto supporting = GlobalFlowFact(builder, v1, v2, sem::EpistemicState::kMay);
-  // kMustNot GlobalFlow is a schema-invalid placeholder by GlobalFlow's
-  // allowed_epistemic (which excludes MUST_NOT and is not yet enforced by
-  // facts::MakeFact); it stands in for the currently unrepresentable
-  // "contradicting flow" shape.
-  const auto contradicting =
-      GlobalFlowFact(builder, v1, v2, sem::EpistemicState::kMustNot);
-  // An unrelated flow fact whose endpoints are not on the src->dst path.
+  const auto flow = GlobalFlowFact(builder, v1, v2, sem::EpistemicState::kMay);
+  const auto other_memory = builder.Id(core::IdKind::kMemoryRef, "other");
+  const auto supporting = AliasFact(builder, seed.subject_ref, other_memory,
+                                    sem::AliasKind::kMayAlias,
+                                    sem::EpistemicState::kMay);
+  const auto contradicting = AliasFact(builder, seed.subject_ref, other_memory,
+                                       sem::AliasKind::kMayAlias,
+                                       sem::EpistemicState::kMustNot);
   const auto unrelated =
       GlobalFlowFact(builder, builder.Id(core::IdKind::kValueRef, "ux"),
                      builder.Id(core::IdKind::kValueRef, "uy"),
                      sem::EpistemicState::kMust);
-
   FakeEvidenceBackend backend(Descriptor(builder));
-  backend.SetFacts({supporting, contradicting, unrelated});
-
+  backend.SetFacts({flow, supporting, contradicting, unrelated});
   cpg::ThinCpg cpg = FlowCpg(builder, seed);
   EvidenceQueryService service(cpg, backend, backend.run_id());
   auto result = service.BuildEvidenceInput(seed, Budget(8, 256, 5, 64, 8));
   ASSERT_TRUE(result.ok()) << result.status().message();
-
-  const FlowSlice& slice = result->flow_slice;
-  ASSERT_EQ(slice.supporting_facts.size(), 1u);
-  ASSERT_EQ(slice.contradicting_facts.size(), 1u);
-  EXPECT_EQ(slice.supporting_facts[0].fact_id, supporting.fact_id);
-  EXPECT_EQ(slice.contradicting_facts[0].fact_id, contradicting.fact_id);
-
-  // The unrelated flow fact is excluded from every collection.
-  for (const auto& fact : slice.supporting_facts) {
-    EXPECT_NE(fact.fact_id, unrelated.fact_id);
+  ASSERT_EQ(result->flow_slice.supporting_facts.size(), 1u);
+  EXPECT_EQ(result->flow_slice.supporting_facts[0].fact_id, flow.fact_id);
+  EXPECT_TRUE(result->flow_slice.contradicting_facts.empty());
+  EXPECT_TRUE(result->flow_slice.unknowns.empty());
+  ASSERT_EQ(result->aliases.facts.size(), 2u);
+  bool saw_support = false;
+  bool saw_contradiction = false;
+  for (const auto& fact : result->aliases.facts) {
+    const auto state = std::get<sem::EpistemicState>(fact.row.cells.back());
+    if (fact.fact_id == supporting.fact_id) {
+      saw_support = true;
+      EXPECT_EQ(state, sem::EpistemicState::kMay);
+    } else if (fact.fact_id == contradicting.fact_id) {
+      saw_contradiction = true;
+      EXPECT_EQ(state, sem::EpistemicState::kMustNot);
+    } else {
+      ADD_FAILURE() << "unexpected alias fact in the handoff";
+    }
   }
-  for (const auto& fact : slice.contradicting_facts) {
-    EXPECT_NE(fact.fact_id, unrelated.fact_id);
-  }
-  EXPECT_TRUE(slice.unknowns.empty());
-
-  const auto* supporting_state =
-      std::get_if<sem::EpistemicState>(&slice.supporting_facts[0].row.cells[2]);
-  const auto* contradicting_state =
-      std::get_if<sem::EpistemicState>(&slice.contradicting_facts[0].row.cells[2]);
-  ASSERT_NE(supporting_state, nullptr);
-  ASSERT_NE(contradicting_state, nullptr);
-  EXPECT_EQ(*supporting_state, sem::EpistemicState::kMay);
-  EXPECT_EQ(*contradicting_state, sem::EpistemicState::kMustNot);
+  EXPECT_TRUE(saw_support);
+  EXPECT_TRUE(saw_contradiction);
 }
 
 // HND-004: a closed-world dominating-check query that completes empty retains

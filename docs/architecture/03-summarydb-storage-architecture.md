@@ -1,5 +1,12 @@
 # VERITAS Thin SummaryDB and Pluggable Backends
 
+> **Detailed redesign boundary:** The proposed
+> [demand lifecycle contract](../specs/veritas-demand-analysis-lifecycle-design-spec.md)
+> adds indexed pinned reads and schema-v5 query manifests beside native M9
+> receipts. Staging/sealing a bounded query never means a complete whole-program
+> run. The first lightweight review does not require this migration; native
+> publication and historical store readers retain explicit version gates.
+
 > **Review direction (2026-10-03):** The proposed product path is a bounded LLM investigation with selective analysis. See the
 > [review-driven analysis proposal](../specs/veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
 > acceptance contracts remain unchanged until their implementation amendments

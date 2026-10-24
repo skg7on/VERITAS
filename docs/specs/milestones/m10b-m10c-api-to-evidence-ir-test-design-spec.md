@@ -1,5 +1,13 @@
 # M10B–M10C API-to-Evidence-IR Test Design Spec
 
+> **Authority refinement (2026-10-24):** HND-003 retains admitted positive and
+> negative Alias evidence with distinct IDs/states, while unrelated flow facts
+> remain excluded. Its former MUST_NOT GlobalFlow placeholder violated the
+> relation registry and is removed when row admission is enforced. This is not
+> a claim that a negative-flow producer exists. All original test IDs remain
+> active; broader ownership/coverage/provenance/summary repairs follow the
+> [native integrity amendment](../veritas-native-evidence-integrity-design-spec.md).
+
 **Status:** Approved — M10B-owned cases carry a documented partial deferral, see §2.3
 **Milestones:** M10B Evidence Builder inputs and M10C Evidence IR semantic serialization
 **Depends on:** M6 thin CPG, M9 fact/provenance store, M10A recursive domain expansion
@@ -591,7 +599,7 @@ materialization in a different checkout root).
 | --- | --- | --- | --- |
 | `HND-001 BundlesEveryRequiredQueryResult` | Unsafe claim with complete service responses | Claim, flow, ranges, capacities, aliases, checks, unknowns, summaries, anchors, completion facts, and witnesses are present — every slot is carried with its own completeness metadata and query provenance. `DEFERRED (§2.3)`: on real fixtures the range, capacity, alias, and positive-check slots are complete-empty rather than populated | M10C must issue an additional analysis or provenance query, or an absent slot arrives without its completeness metadata |
 | `HND-002 UsesOneImmutableSnapshot` | Backend current run changes between subquery opportunities | Input is wholly from the pinned first snapshot or returns retryable failure | Mixed-run input returned as success |
-| `HND-003 KeepsSupportingAndContradictingFactsSeparate` | Same predicate has support and counterevidence | Both collections retain IDs, epistemic states, and provenance | Conflict resolved by dropping one side |
+| `HND-003 KeepsSupportingAndContradictingFactsSeparate` | An admitted Alias predicate has positive and negative evidence; unrelated flow is also present | Both Alias facts retain distinct IDs/states in the immutable handoff; only relevant positive flow is retained | Conflict resolved by dropping a fact; schema-invalid MUST_NOT GlobalFlow used as a placeholder |
 | `HND-004 CarriesCompleteEmptyCheckEvidence` | Closed-world dominating-check query completes empty | Empty set retains scope, run, query provenance, examined count, and complete state | Bare empty vector interpreted as proof |
 | `HND-005 CarriesTruncatedEmptyCheckEvidence` | Dominating-check query truncates before finding a result | Empty set retains reason and truncated state | Result indistinguishable from `HND-004` |
 | `HND-006 UsesReferencesWithoutSourceTextAndIsDeterministic` | `evidence_overflow_summary` built in two checkout roots and insertion orders | Same semantic input and IDs; source anchors and summary refs present; no source body | Absolute path or source text changes handoff bytes |

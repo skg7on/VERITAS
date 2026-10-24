@@ -13,6 +13,12 @@ records this hierarchy migration.
 
 Additional project/tooling plans:
 
+- [Redesign program and issue execution map](veritas-redesign-program-implementation-plan.md)
+- [Native Evidence integrity](veritas-native-evidence-integrity-implementation-plan.md)
+- [Lightweight review runtime/backend v2](veritas-lightweight-review-runtime-implementation-plan.md)
+- [Demand analysis and lifecycle](veritas-demand-analysis-lifecycle-implementation-plan.md)
+- [Verification and qualification](veritas-review-verification-qualification-implementation-plan.md)
+
 - [Build warning cleanup](build-warning-cleanup-implementation-plan.md)
 - [Claude Code Evidence IR review plugin](veritas-claude-code-evidence-review-plugin-implementation-plan.md)
 - [`veritas-build analyze` performance](veritas-build-analyze-performance-implementation-plan.md)

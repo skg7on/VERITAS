@@ -1,5 +1,13 @@
 # M10B Evidence Builder Input APIs and First Demo Implementation Plan
 
+> **Execution amendment (2026-10-24):** M10B's foundation is delivered. Do not
+> rerun historical Create steps. Repair exact ownership/callsites, coverage,
+> provenance limits and summary handoff using the
+> [native integrity plan](../veritas-native-evidence-integrity-implementation-plan.md).
+> Its task tests distinguish the known gaps; #124 retains its full native
+> producer oracles. Lightweight local review follows the separate runtime plan
+> and does not fake an M9 binding to satisfy this interface.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Expose bounded, provenance-backed Evidence Builder input APIs and

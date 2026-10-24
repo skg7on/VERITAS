@@ -5,7 +5,7 @@
 > acceptance contracts remain unchanged until their implementation amendments
 > are reviewed.
 
-**Status:** Approved baseline; proposed context/discovery refinement pending
+**Status:** Approved v1 baseline; detailed v2 context/discovery amendment proposed
 
 **Scope:** Explicitly invoked, capability-isolated Evidence IR code review in
 Claude Code
@@ -60,6 +60,40 @@ protocol and renderer are claim-agnostic so later VERITAS claim kinds can use
 the same plugin without weakening its trust model.
 
 # 2. Goals and non-goals
+
+## Detailed v2 amendment and execution precedence
+
+For the redesign, the [lightweight runtime/backend v2 specification](veritas-lightweight-review-runtime-design-spec.md)
+supplies the exact context, snapshot, candidate, limits and report contracts.
+The [runtime implementation plan](../plans/veritas-lightweight-review-runtime-implementation-plan.md)
+is the focused execution path. The v1 body below remains the baseline for
+practice/EIR-only compatibility; it must not force a lightweight backend to
+invent M9 identities or delay source-driven discovery until an EIR case exists.
+The package described here is approved design, not delivered code: baseline
+`99d3130` has no `plugins/` tree. The focused plan explicitly creates retained
+packaging, capability/process/audit and isolated-host pieces before qualification.
+
+| Boundary | v1 retained behavior | Proposed v2 behavior |
+| --- | --- | --- |
+| Handshake | `veritas.review.backend.v1`, native `eir.v1` inputs | Explicit `veritas.review.backend.v2`; reject unnegotiated shapes |
+| Binding | Native run/projection/fact snapshot mandatory | ReviewBinding with nullable native_binding and separately typed local artifacts |
+| Initial turn | Deterministically selected EIR-L0 case | Bounded diff/source/test/doc artifacts plus deterministic and model candidate proposals |
+| Context refs | `request_source` for advertised EIR entities/anchors | Also immutable pre-case context artifacts; no invented EIR entity |
+| Admission | Evidence requests/assessments over a known case | Candidate deduplication, unregistered semantic annotations, then advertised evidence requests |
+| Verification | Configured obligation-bound producer only | Same authority boundary; local replay is report-scoped, not automatic EIR state mutation |
+| Host responsibilities | Two isolated `start`/`advance` tools and capability manager | Same; delegate to the single shared controller |
+
+Both modes retain explicit invocation, configured executables, bounded argv
+subprocesses, strict output validation, untrusted source handling and no ambient
+runner shell/files/web. v1 and v2 schemas have separate filenames and negotiation
+tests. A v2 production run requires real local/backend/replay qualification;
+practice labels or a skipped real-backend test do not qualify the release.
+
+Native-EIR profile is unavailable until the native integrity gate passes.
+Local-only review can qualify independently when it has correct snapshot,
+authority, local-producer and replay coverage; it makes no claim to repair the
+native M10B/M10C gaps. This refines the earlier broad dependency wording without
+weakening any native acceptance obligation.
 
 ## 2.1 Goals
 
