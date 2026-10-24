@@ -25,7 +25,7 @@ target_compile_definitions(VeritasExplainTest PRIVATE
 add_dependencies(VeritasExplainTest veritas-explain)
 veritas_add_warnings(VeritasExplainTest)
 gtest_discover_tests(VeritasExplainTest DISCOVERY_TIMEOUT 60)
-veritas_m9_entry_test(VeritasExplainTest explain-cli)
+veritas_m9_entry_test(VeritasExplainTest explain-cli VeritasExplainTest)
 
 # Proves the six semantic-key functors produce byte-identical keys to
 # SemanticKeyCodec. Links veritas-souffle-functors and libsouffle, so it is

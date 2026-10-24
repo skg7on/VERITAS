@@ -17,53 +17,36 @@
 # Real-pipeline evidence integration: run the full M1->M6->M9->M10A pipeline on
 # the overflow fixtures, then query the durable FactStore/ProvenanceStore and
 # CPG through the concrete FactStoreEvidenceBackend.
+#
+# Discovery is split per label set so each case keeps the labels it had when
+# every suite had its own binary; TEST_FILTER keeps the calls disjoint.
 
-add_executable(OverflowEvidenceFixtureTest OverflowEvidenceFixtureTest.cpp)
-target_link_libraries(OverflowEvidenceFixtureTest PRIVATE
+add_executable(veritas_integration_evidence_tests
+  OverflowEvidenceFixtureTest.cpp
+  EvidenceHandoffIntegrationTest.cpp
+  VeritasQueryEvidenceTest.cpp
+  VeritasQueryEirTest.cpp
+)
+target_link_libraries(veritas_integration_evidence_tests PRIVATE
   veritas::evidence
   veritas_wpa_fixture_support
   GTest::gtest_main
 )
-veritas_add_warnings(OverflowEvidenceFixtureTest)
-gtest_discover_tests(OverflowEvidenceFixtureTest DISCOVERY_TIMEOUT 120
-  PROPERTIES LABELS "evidence-integration")
-
-add_executable(EvidenceHandoffIntegrationTest EvidenceHandoffIntegrationTest.cpp)
-target_link_libraries(EvidenceHandoffIntegrationTest PRIVATE
-  veritas::evidence
-  veritas_wpa_fixture_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EvidenceHandoffIntegrationTest)
-gtest_discover_tests(EvidenceHandoffIntegrationTest DISCOVERY_TIMEOUT 120
-  PROPERTIES LABELS "evidence-integration")
-
-add_executable(VeritasQueryEvidenceTest VeritasQueryEvidenceTest.cpp)
-target_link_libraries(VeritasQueryEvidenceTest PRIVATE
-  veritas::evidence
-  veritas_wpa_fixture_support
-  GTest::gtest_main
-)
-target_compile_definitions(VeritasQueryEvidenceTest PRIVATE
+target_compile_definitions(veritas_integration_evidence_tests PRIVATE
   VERITAS_QUERY_BINARY="$<TARGET_FILE:veritas-query>"
   VERITAS_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/golden/evidence"
 )
-veritas_add_warnings(VeritasQueryEvidenceTest)
-gtest_discover_tests(VeritasQueryEvidenceTest DISCOVERY_TIMEOUT 120
+add_dependencies(veritas_integration_evidence_tests veritas-query)
+veritas_add_warnings(veritas_integration_evidence_tests)
+
+gtest_discover_tests(veritas_integration_evidence_tests DISCOVERY_TIMEOUT 120
+  TEST_FILTER "OverflowEvidenceFixtureTest.*:EvidenceHandoffIntegrationTest.*"
+  PROPERTIES LABELS "evidence-integration")
+
+gtest_discover_tests(veritas_integration_evidence_tests DISCOVERY_TIMEOUT 120
+  TEST_FILTER "VeritasQueryEvidenceTest.*"
   PROPERTIES LABELS "evidence-integration\;evidence-cli")
-add_dependencies(VeritasQueryEvidenceTest veritas-query)
 
-add_executable(VeritasQueryEirTest VeritasQueryEirTest.cpp)
-target_link_libraries(VeritasQueryEirTest PRIVATE
-  veritas::evidence
-  veritas_wpa_fixture_support
-  GTest::gtest_main
-)
-target_compile_definitions(VeritasQueryEirTest PRIVATE
-  VERITAS_QUERY_BINARY="$<TARGET_FILE:veritas-query>"
-  VERITAS_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/golden/evidence"
-)
-veritas_add_warnings(VeritasQueryEirTest)
-gtest_discover_tests(VeritasQueryEirTest DISCOVERY_TIMEOUT 120
+gtest_discover_tests(veritas_integration_evidence_tests DISCOVERY_TIMEOUT 120
+  TEST_FILTER "VeritasQueryEirTest.*"
   PROPERTIES LABELS "evidence-integration\;evidence-cli\;evidence-roundtrip")
-add_dependencies(VeritasQueryEirTest veritas-query)

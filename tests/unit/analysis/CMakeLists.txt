@@ -12,30 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(SemanticTypesTest SemanticTypesTest.cpp)
-target_link_libraries(SemanticTypesTest PRIVATE
-  veritas_analysis_semantic
-  GTest::gtest_main
-)
-veritas_add_warnings(SemanticTypesTest)
-gtest_discover_tests(SemanticTypesTest DISCOVERY_TIMEOUT 60)
+# tests/unit/analysis/CMakeLists.txt
 
-add_executable(ModelBundleTest ModelBundleTest.cpp)
-target_link_libraries(ModelBundleTest PRIVATE
+add_executable(veritas_unit_analysis_tests
+  SemanticTypesTest.cpp
+  ModelBundleTest.cpp
+  AnalysisConfigTest.cpp
+)
+target_link_libraries(veritas_unit_analysis_tests PRIVATE
   veritas_analysis_semantic
+  veritas_analysis
   veritas::core
   veritas_test_support
   GTest::gtest_main
 )
-gtest_discover_tests(ModelBundleTest DISCOVERY_TIMEOUT 60)
-
-add_executable(AnalysisConfigTest AnalysisConfigTest.cpp)
-target_link_libraries(AnalysisConfigTest PRIVATE
-  veritas_analysis
-  GTest::gtest_main
-)
-veritas_add_warnings(AnalysisConfigTest)
-gtest_discover_tests(AnalysisConfigTest DISCOVERY_TIMEOUT 60)
+veritas_add_warnings(veritas_unit_analysis_tests)
+gtest_discover_tests(veritas_unit_analysis_tests DISCOVERY_TIMEOUT 60)
 
 add_subdirectory(llvm)
 add_subdirectory(svf)

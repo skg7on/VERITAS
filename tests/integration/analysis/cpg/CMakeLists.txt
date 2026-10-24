@@ -12,29 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(cpg_end_to_end_integration_test
-  CpgEndToEndTest.cpp
-)
-target_link_libraries(cpg_end_to_end_integration_test PRIVATE
-  veritas_analysis
-  veritas_test_support
-  GTest::gtest_main
-)
-add_test(NAME CpgEndToEndTest COMMAND cpg_end_to_end_integration_test)
-set_tests_properties(CpgEndToEndTest PROPERTIES
-  TIMEOUT 180
-  LABELS "integration;analysis"
-)
+# tests/integration/analysis/cpg/CMakeLists.txt
 
-add_executable(cpg_projection_stage_integration_test
+add_executable(veritas_integration_analysis_cpg_tests
+  CpgEndToEndTest.cpp
   CpgProjectionStageTest.cpp
 )
-
-target_include_directories(cpg_projection_stage_integration_test PRIVATE
+target_include_directories(veritas_integration_analysis_cpg_tests PRIVATE
   "${PROJECT_SOURCE_DIR}/src"
 )
-
-target_link_libraries(cpg_projection_stage_integration_test PRIVATE
+target_link_libraries(veritas_integration_analysis_cpg_tests PRIVATE
+  veritas_analysis
   veritas_analysis_cpg
   veritas_analysis_pipeline
   veritas_build
@@ -44,8 +32,17 @@ target_link_libraries(cpg_projection_stage_integration_test PRIVATE
   GTest::gtest_main
 )
 
+add_test(NAME CpgEndToEndTest
+  COMMAND veritas_integration_analysis_cpg_tests
+    --gtest_filter=CpgEndToEndTest.*)
+set_tests_properties(CpgEndToEndTest PROPERTIES
+  TIMEOUT 180
+  LABELS "integration;analysis"
+)
+
 add_test(NAME CpgProjectionStageTest
-  COMMAND cpg_projection_stage_integration_test)
+  COMMAND veritas_integration_analysis_cpg_tests
+    --gtest_filter=CpgProjectionStageTest.*)
 set_tests_properties(CpgProjectionStageTest PROPERTIES
   TIMEOUT 120
   LABELS "integration;analysis"

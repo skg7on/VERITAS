@@ -16,19 +16,14 @@
 #
 # Unit tests for the veritas_build library.
 
-add_executable(ProjectInputTest ProjectInputTest.cpp)
-target_link_libraries(ProjectInputTest PRIVATE
+add_executable(veritas_unit_build_tests
+  ProjectInputTest.cpp
+  AnalysisManifestTest.cpp
+)
+target_link_libraries(veritas_unit_build_tests PRIVATE
   veritas_build
   veritas_test_support
   GTest::gtest_main
 )
-veritas_add_warnings(ProjectInputTest)
-gtest_discover_tests(ProjectInputTest DISCOVERY_TIMEOUT 60)
-
-add_executable(AnalysisManifestTest AnalysisManifestTest.cpp)
-target_link_libraries(AnalysisManifestTest PRIVATE
-  veritas_build
-  GTest::gtest_main
-)
-veritas_add_warnings(AnalysisManifestTest)
-gtest_discover_tests(AnalysisManifestTest DISCOVERY_TIMEOUT 60)
+veritas_add_warnings(veritas_unit_build_tests)
+gtest_discover_tests(veritas_unit_build_tests DISCOVERY_TIMEOUT 60)
