@@ -85,14 +85,74 @@ Preserve the existing single-seed CLI. Add typed `CallSiteBinding` internally:
 and optional result. For `memcpy`, destination/source/length are arguments
 0/1/2 after registered LLVM-intrinsic normalization. Unsupported ABI/intrinsic
 forms return `UNSUPPORTED`, never a canonical-minimum guess. Bind all seed
-operands to the same callsite. The closed #132 needs an open successor tracker
-for its still-unimplemented scope; its producer-gated fan-out policy remains
-separate from fixing identity. Adding an unrelated caller cannot move a claim.
+operands to the same callsite. #156 is the successor to closed #132 for exact-callsite scoping; the
+producer-gated automatic fan-out policy remains separate from fixing identity. Adding an unrelated caller cannot move a claim.
 
 CPG projection bytes/IDs legitimately change when containment or callsite nodes
 are added. Version the projection producer (`thin-cpg.v2`) and preserve reading
 old projections. Do not mask their hashes in golden comparisons or reinterpret
 an old projection as ownership-complete.
+
+### Task 2 execution amendment (#156)
+
+`thin-cpg.v2` now carries typed `CallSiteBinding` records alongside the existing
+node/edge allowlists: callsite ID, compiler function-variant owner, callee ref,
+normalized operation, indexed actual value/memory refs, and optional result.
+`StableValueMapper` already uses caller-local block/instruction positions; its
+native encodings are retained. A real regression showed SVF normalization can
+shift those positions and rewrite memcpy intrinsics. `ProjectAnalyzer` now
+captures an immutable `CompilerProjection` during M4, before SVF runs, and M6
+merges its typed nodes/bindings/owners with the completed summaries. Native
+DirectCall/UnknownCall facts and CPG bindings name the same original callsite;
+recomputing identities from the post-SVF module is forbidden. The snapshot
+contains no LLVM pointers and is checked against the original module hash. Reordering functions or inserting another caller
+cannot influence a selected call's operands or seed, provided its prerequisite
+native function/value identities are unchanged (#125 still governs portability).
+
+Ownership is captured from live M4 compiler arguments/instructions and OriginMap, never
+from a completed summary's arbitrary endpoints. Noncaptured stack locations may
+also have a compiler owner. Global/argument pointees and captured allocations
+remain unowned; an argument *value* belonging to a function does not establish
+ownership of the pointed-to memory. Missing origins, including synthetic SVF
+model definitions, do not acquire guessed owners. Conflicting origins/owners or
+incomplete callsite bindings are refused.
+
+`CpgRepository` stores v2 bindings/arguments in additive
+`cpg_callsite_bindings` / `cpg_callsite_arguments` tables, created inside the
+existing summary+CPG publication transaction. Every semantic field participates
+in the version-gated canonical suffix; reload validates both references and the
+projection ID. Historical `veritas.cpg.v1` projections retain their exact encoding
+and remain readable without creating the extension tables. Their explicit
+`HasCompilerOwnership()==false` coverage cannot qualify exact seed resolution.
+This extension does not consume SummaryDB schema-v5, reserved for query manifests.
+
+The public single-seed command retains `--sink memcpy` and adds optional
+`--callsite <callsite-id>` for an explicit selection. Multiple matching calls
+without a selection remain an ambiguity error. Exact C memcpy ABI and registered
+LLVM memcpy intrinsics map to `memcpy.v1`; name substrings, user definitions and
+unsupported ABI forms do not. Automatic qualifying fan-out remains gated by #124.
+
+`ClaimSeed` adds optional `callsite_ref` (also in diagnostic slice JSON). The
+resolver sets destination memory from argument 0, retains actual byte source at
+argument 1 in the binding, and sets the queried extent to argument 2. Its flow
+origin is the unique caller-local extent root when known, otherwise the extent
+itself; no global exit closure or canonical-minimum root is consulted. The
+finding domain advances to `veritas.evidence.buffer-overflow.v2` and binds the
+callsite and operands. The input service re-derives and checks the exact destination, extent and
+caller-local source before opening its snapshot and scopes unknowns by this exact callsite even
+when the extent is a constant shared by several functions. Legacy hand-written
+seeds without that field retain their old query behavior; they do not claim the
+new exact-callsite guarantee. `eir.v1` grammar and native fact identities remain.
+
+Intentional artifact changes: corrected destination/seed identity, versioned
+CPG/projection and query completion identities, and restored caller-scoped
+UnknownEffect facts. The unsafe slice retains its five flow nodes, four edges
+and seventeen GlobalFlow supports while adding the two real unknowns. EIR now
+includes the function and analyzer omissions referenced by those unknowns; L2
+also exposes its existing missing-summary omission. Range/capacity/alias/positive
+check producers, semantic truncation coverage and summary handoff stay owned by
+#124/#157/#158. A safe and unsafe fixture may have the same exact extent path;
+that must not be changed by choosing a different external exit.
 
 ## 4. Coverage and handoff
 
@@ -152,3 +212,20 @@ reach EIR; missing containment and complete-empty/truncated inputs discriminate;
 two callers/two externals never contaminate operands; L2 has real references;
 depth 1 versus depth 2 produces the expected rooted frontier; all original
 unaffected native conformance tests remain live with no unexpected skips.
+
+### Task 2 review refinements
+
+Verifier-valid ABI-affecting parameter/return attributes (including `byval`,
+`byref`, `sret`, register/static-chain and Swift conventions) do not qualify the
+ordinary memcpy profile. The producer also refuses ordinary C pointer spaces
+other than zero. Registered LLVM memcpy intrinsics retain their own explicit
+address-space semantics. Scalable/unsized base or GEP storage cannot acquire a
+fixed memory location: the memory helper reports unsupported before fixed-size
+conversion, ownership skips it, and call binding retains the raw value while
+withholding the normalized-copy capability when required memory is unavailable.
+These paths retain valid fixed-layout native encodings.
+
+Review deferred minor: pure-graph validation checks optional `result_ref`
+existence but not its owner. The compiler producer supplies the correct owner;
+no current consumer uses this field. Tighten that check before qualifying a
+result-consuming backend.

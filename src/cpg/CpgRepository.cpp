@@ -81,6 +81,34 @@ Status CpgRepository::StageProjection(const ThinCpg& graph) {
   const std::string pid = core::ToString(projection_id);
   const auto& meta = graph.metadata();
 
+  if (graph.HasCompilerOwnership()) {
+    // Additive projection extension, versioned by thin-cpg.v2. Created inside
+    // the caller's summary+CPG publication transaction; no global migration or
+    // mutation of historical projections is needed.
+    auto status = metadata_store_.Execute(
+        "CREATE TABLE IF NOT EXISTS cpg_callsite_bindings ("
+        "projection_id TEXT NOT NULL, callsite_id TEXT NOT NULL, "
+        "owner_id TEXT NOT NULL, callee_id TEXT NOT NULL, operation TEXT NOT "
+        "NULL, "
+        "result_id TEXT NOT NULL, PRIMARY KEY (projection_id, callsite_id), "
+        "FOREIGN KEY (projection_id) REFERENCES "
+        "cpg_projections(projection_id))",
+        {});
+    if (!status.ok())
+      return status;
+    status = metadata_store_.Execute(
+        "CREATE TABLE IF NOT EXISTS cpg_callsite_arguments ("
+        "projection_id TEXT NOT NULL, callsite_id TEXT NOT NULL, "
+        "argument_index INTEGER NOT NULL, value_id TEXT NOT NULL, memory_id "
+        "TEXT NOT NULL, "
+        "PRIMARY KEY (projection_id, callsite_id, argument_index), "
+        "FOREIGN KEY (projection_id, callsite_id) REFERENCES "
+        "cpg_callsite_bindings(projection_id, callsite_id))",
+        {});
+    if (!status.ok())
+      return status;
+  }
+
   {
     auto status = metadata_store_.Execute(
         "INSERT OR REPLACE INTO cpg_projections (projection_id, schema_version, "
@@ -122,6 +150,31 @@ Status CpgRepository::StageProjection(const ThinCpg& graph) {
           {pid, core::ToString(edge.edge_id), std::to_string(position++),
            core::ToString(support.function_summary_id), support.provenance_ref});
       if (!support_status.ok()) return support_status;
+    }
+  }
+
+  for (const auto &binding : graph.callsites()) {
+    auto status = metadata_store_.Execute(
+        "INSERT OR REPLACE INTO cpg_callsite_bindings "
+        "(projection_id, callsite_id, owner_id, callee_id, operation, "
+        "result_id) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        {pid, core::ToString(binding.callsite_id),
+         core::ToString(binding.function_variant_id),
+         core::ToString(binding.callee_ref), binding.normalized_operation,
+         binding.result_ref ? core::ToString(*binding.result_ref) : ""});
+    if (!status.ok())
+      return status;
+    for (const auto &arg : binding.arguments) {
+      status = metadata_store_.Execute(
+          "INSERT OR REPLACE INTO cpg_callsite_arguments "
+          "(projection_id, callsite_id, argument_index, value_id, memory_id) "
+          "VALUES (?, ?, ?, ?, ?)",
+          {pid, core::ToString(binding.callsite_id), std::to_string(arg.index),
+           core::ToString(arg.value_ref),
+           arg.memory_ref ? core::ToString(*arg.memory_ref) : ""});
+      if (!status.ok())
+        return status;
     }
   }
 
@@ -223,6 +276,69 @@ StatusOr<ThinCpg> CpgRepository::LoadProjection(
     if (!status.ok()) return status;
   }
 
+  if (graph.HasCompilerOwnership()) {
+    auto bindings = metadata_store_.Query(
+        "SELECT callsite_id, owner_id, callee_id, operation, result_id "
+        "FROM cpg_callsite_bindings WHERE projection_id = ? ORDER BY "
+        "callsite_id",
+        {pid});
+    if (!bindings.ok())
+      return bindings.status();
+    auto arguments = metadata_store_.Query(
+        "SELECT callsite_id, argument_index, value_id, memory_id "
+        "FROM cpg_callsite_arguments WHERE projection_id = ? "
+        "ORDER BY callsite_id, argument_index",
+        {pid});
+    if (!arguments.ok())
+      return arguments.status();
+    std::map<std::string, std::vector<CallSiteArgument>> by_site;
+    for (const auto &arg : *arguments) {
+      auto index = ParseInt(arg[1]);
+      auto value = core::ParseStableId(arg[2]);
+      if (!index.ok() || *index < 0 || !value.ok()) {
+        return Status::Internal("invalid persisted callsite argument");
+      }
+      CallSiteArgument argument{static_cast<std::uint32_t>(*index), *value,
+                                std::nullopt};
+      if (!arg[3].empty()) {
+        auto memory = core::ParseStableId(arg[3]);
+        if (!memory.ok())
+          return memory.status();
+        argument.memory_ref = *memory;
+      }
+      by_site[arg[0]].push_back(std::move(argument));
+    }
+    for (const auto &binding : *bindings) {
+      auto site = core::ParseStableId(binding[0]);
+      auto owner = core::ParseStableId(binding[1]);
+      auto callee = core::ParseStableId(binding[2]);
+      if (!site.ok() || !owner.ok() || !callee.ok()) {
+        return Status::Internal("invalid persisted callsite binding");
+      }
+      CallSiteBinding call{*site,
+                           *owner,
+                           *callee,
+                           binding[3],
+                           std::move(by_site[binding[0]]),
+                           std::nullopt};
+      if (!binding[4].empty()) {
+        auto result = core::ParseStableId(binding[4]);
+        if (!result.ok())
+          return result.status();
+        call.result_ref = *result;
+      }
+      auto status = graph.AddCallSiteBinding(std::move(call));
+      if (!status.ok())
+        return status;
+    }
+    auto valid = graph.Validate();
+    if (!valid.ok())
+      return valid;
+    if (CpgCanonicalizer::ProjectionId(graph) != projection_id) {
+      return Status::FailedPrecondition(
+          "compiler CPG content does not match projection ID");
+    }
+  }
   return graph;
 }
 

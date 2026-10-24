@@ -21,8 +21,14 @@
 #include <string>
 #include <string_view>
 
+#include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Module.h>
+
+#include "analysis/cpg/EntityOwnership.h"
+#include "analysis/llvm/AbstractMemoryBuilder.h"
+#include "analysis/llvm/StableValueMapper.h"
 
 #include "veritas/core/Hash.h"
 #include "veritas/summary/FunctionSummary.h"
@@ -113,19 +119,181 @@ Status AddSemanticEdge(ThinCpg *graph, EdgeKind kind,
   return graph->AddEdge(std::move(edge));
 }
 
+bool IsMemcpyAbi(const ::llvm::CallBase &call) {
+  const auto *callee = call.getCalledFunction();
+  if (!callee || call.arg_size() < 3 ||
+      call.getCallingConv() != ::llvm::CallingConv::C ||
+      callee->getCallingConv() != ::llvm::CallingConv::C)
+    return false;
+  const auto unsupported_attributes =
+      [](const ::llvm::AttributeSet &attributes) {
+        for (const auto &attr : attributes) {
+          if (attr.isTypeAttribute() || attr.isStringAttribute())
+            return true;
+          switch (attr.getKindAsEnum()) {
+          case ::llvm::Attribute::InReg:
+          case ::llvm::Attribute::Nest:
+          case ::llvm::Attribute::SwiftSelf:
+          case ::llvm::Attribute::SwiftError:
+          case ::llvm::Attribute::SwiftAsync:
+          case ::llvm::Attribute::SExt:
+          case ::llvm::Attribute::ZExt:
+            return true;
+          default:
+            break;
+          }
+        }
+        return false;
+      };
+  if (unsupported_attributes(call.getAttributes().getRetAttrs()) ||
+      unsupported_attributes(callee->getAttributes().getRetAttrs()))
+    return false;
+  for (unsigned i = 0; i < call.arg_size(); ++i) {
+    if (unsupported_attributes(call.getAttributes().getParamAttrs(i)) ||
+        unsupported_attributes(callee->getAttributes().getParamAttrs(i)))
+      return false;
+  }
+  if (::llvm::isa<::llvm::MemCpyInst>(call))
+    return true;
+  const auto ordinary_pointer = [](const ::llvm::Type *type) {
+    const auto *pointer = ::llvm::dyn_cast<::llvm::PointerType>(type);
+    return pointer && pointer->getAddressSpace() == 0;
+  };
+  // A name substring (or a user-defined function named memcpy) is insufficient.
+  return callee->isDeclaration() && callee->getName() == "memcpy" &&
+         !callee->isVarArg() && call.arg_size() == 3 &&
+         call.getFunctionType() == callee->getFunctionType() &&
+         call.getCallingConv() == ::llvm::CallingConv::C &&
+         ordinary_pointer(call.getType()) &&
+         ordinary_pointer(call.getArgOperand(0)->getType()) &&
+         ordinary_pointer(call.getArgOperand(1)->getType()) &&
+         call.getArgOperand(2)->getType()->isIntegerTy(
+             call.getModule()->getDataLayout().getPointerSizeInBits());
+}
+
+Status
+AddCompilerCallSites(const pipeline::ProgramIr &ir,
+                     const std::map<std::string, core::StableId> &functions,
+                     ThinCpg *graph) {
+  llvm::StableValueMapper values(*ir.GetModule(), ir.origin_map());
+  llvm::AbstractMemoryBuilder memory(ir.GetModule()->getDataLayout(), values,
+                                     ir.origin_map());
+  for (const auto &function : *ir.GetModule()) {
+    auto origin = ir.origin_map().GetSymbolId(&function);
+    if (function.isDeclaration() || !origin)
+      continue;
+    auto owner = functions.find(*origin);
+    if (owner == functions.end())
+      continue;
+    for (const auto &block : function) {
+      for (const auto &inst : block) {
+        const auto *call = ::llvm::dyn_cast<::llvm::CallBase>(&inst);
+        if (!call)
+          continue;
+        auto site = values.CallSiteIdFor(*call);
+        if (!site.ok())
+          return site.status();
+        const auto *callee = call->getCalledFunction();
+        const std::string symbol =
+            callee ? callee->getName().str() : "<unknown>";
+        auto status = graph->AddNode({*site, NodeKind::kCallSite, symbol});
+        if (!status.ok())
+          return status;
+        auto callee_origin =
+            callee ? ir.origin_map().GetSymbolId(callee) : std::nullopt;
+        auto found =
+            callee_origin ? functions.find(*callee_origin) : functions.end();
+        const auto target = found == functions.end()
+                                ? MakeId(core::IdKind::kUnknownNode, symbol)
+                                : found->second;
+        if (found == functions.end()) {
+          status = graph->AddNode({target, NodeKind::kUnknown, symbol});
+          if (!status.ok())
+            return status;
+        }
+        status = AddSemanticEdge(graph,
+                                 callee ? EdgeKind::kCalls : EdgeKind::kMayCall,
+                                 *site, target, std::nullopt, {});
+        if (!status.ok())
+          return status;
+        ::veritas::cpg::CallSiteBinding binding;
+        binding.callsite_id = *site;
+        binding.function_variant_id = owner->second;
+        binding.callee_ref = target;
+        if (IsMemcpyAbi(*call))
+          binding.normalized_operation = "memcpy.v1";
+        for (unsigned i = 0; i < call->arg_size(); ++i) {
+          const auto &actual = *call->getArgOperand(i);
+          auto value = values.IdFor(actual);
+          if (!value.ok())
+            return value.status();
+          status = graph->AddNode(
+              {*value, NodeKind::kParameter, core::ToString(*value)});
+          if (!status.ok())
+            return status;
+          ::veritas::cpg::CallSiteArgument argument{i, *value, std::nullopt};
+          if (actual.getType()->isPointerTy()) {
+            auto location = memory.LocationFor(actual, std::nullopt);
+            if (!location.ok()) {
+              if (location.status().code() != StatusCode::kFailedPrecondition)
+                return location.status();
+              binding.arguments.push_back(std::move(argument));
+              continue;
+            }
+            argument.memory_ref = location->id;
+            if (!graph->HasNode(location->id)) {
+              status = graph->AddNode({location->id, NodeKind::kMemoryObject,
+                                       location->object.diagnostic_name.empty()
+                                           ? core::ToString(location->id)
+                                           : location->object.diagnostic_name});
+              if (!status.ok())
+                return status;
+            }
+          }
+          binding.arguments.push_back(std::move(argument));
+        }
+        if (binding.normalized_operation == "memcpy.v1" &&
+            (!binding.arguments[0].memory_ref ||
+             !binding.arguments[1].memory_ref))
+          binding.normalized_operation.clear();
+        if (!call->getType()->isVoidTy()) {
+          auto result = values.IdFor(*call);
+          if (!result.ok())
+            return result.status();
+          status = graph->AddNode(
+              {*result, NodeKind::kParameter, core::ToString(*result)});
+          if (!status.ok())
+            return status;
+          binding.result_ref = *result;
+        }
+        status = graph->AddCallSiteBinding(std::move(binding));
+        if (!status.ok())
+          return status;
+      }
+    }
+  }
+  return Status::Ok();
+}
+
 } // namespace
 
-StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
-  ThinCpg graph;
-
-  ::llvm::Module *module = input.program_ir.GetModule();
+StatusOr<CompilerProjection>
+CaptureCompilerProjection(const pipeline::ProgramIr &ir) {
+  CompilerProjection snapshot;
+  snapshot.module_hash = std::string(ir.module_hash());
+  auto owners = CollectEntityOwners(ir);
+  if (!owners.ok())
+    return owners.status();
+  snapshot.owners = std::move(*owners);
+  auto &graph = snapshot.graph;
+  ::llvm::Module *module = ir.GetModule();
   if (!module) {
     return Status::FailedPrecondition("ProgramIr has no module");
   }
 
   // 1. Function nodes and a mangled-name -> node-id lookup.
   std::map<std::string, core::StableId> function_ids;
-  const auto &origin_map = input.program_ir.origin_map();
+  const auto &origin_map = ir.origin_map();
   for (const auto &function : *module) {
     if (function.isDeclaration())
       continue;
@@ -155,6 +323,37 @@ StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
         CpgNode{*node_id, NodeKind::kFunction, std::move(*origin_id)});
     if (!status.ok())
       return status;
+  }
+
+  auto callsites = AddCompilerCallSites(ir, function_ids, &graph);
+  if (!callsites.ok())
+    return callsites;
+  return snapshot;
+}
+
+StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
+  std::optional<CompilerProjection> captured;
+  const auto *compiler = input.compiler_projection;
+  if (!compiler) {
+    auto result = CaptureCompilerProjection(input.program_ir);
+    if (!result.ok())
+      return result.status();
+    captured.emplace(std::move(*result));
+    compiler = &*captured;
+  }
+  if (compiler->module_hash != input.program_ir.module_hash()) {
+    return Status::InvalidArgument(
+        "compiler projection belongs to another module");
+  }
+  ThinCpg graph;
+  std::map<std::string, core::StableId> function_ids;
+  for (const auto &node : compiler->graph.nodes()) {
+    if (node.kind != NodeKind::kFunction)
+      continue;
+    auto status = graph.AddNode(node);
+    if (!status.ok())
+      return status;
+    function_ids.emplace(core::ToString(node.node_id), node.node_id);
   }
 
   // 2. Summary nodes and semantic edges from completed summary.v2 facts.
@@ -325,9 +524,39 @@ StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
     }
   }
 
+  // Reuse M4 identities after SVF. A lowered call is not a new native callsite.
+  // Summary diagnostics win for already declared nodes; bindings/IDs are exact.
+  for (const auto &node : compiler->graph.nodes()) {
+    if (graph.HasNode(node.node_id))
+      continue;
+    auto status = graph.AddNode(node);
+    if (!status.ok())
+      return status;
+  }
+  for (const auto &edge : compiler->graph.edges()) {
+    auto status = graph.AddEdge(edge);
+    if (!status.ok())
+      return status;
+  }
+  for (const auto &binding : compiler->graph.callsites()) {
+    auto status = graph.AddCallSiteBinding(binding);
+    if (!status.ok())
+      return status;
+  }
+  for (const auto &owner : compiler->owners) {
+    if (!graph.HasNode(owner.entity_id))
+      continue;
+    auto status =
+        AddSemanticEdge(&graph, EdgeKind::kContains, owner.function_variant_id,
+                        owner.entity_id, std::nullopt, {});
+    if (!status.ok())
+      return status;
+  }
+
   // 3. Projection metadata: revision/build/module/sorted summary IDs.
   std::sort(summary_ids.begin(), summary_ids.end());
   ::veritas::cpg::ProjectionMetadata meta;
+  meta.schema_version = ::veritas::cpg::kCompilerOwnedProjection;
   meta.revision_id = input.revision_id;
   meta.build_variant_id = input.build_variant_id;
   meta.module_hash = std::string(input.program_ir.module_hash());

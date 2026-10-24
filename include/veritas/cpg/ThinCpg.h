@@ -38,10 +38,15 @@ class ThinCpg {
 
   Status AddNode(CpgNode node);
   Status AddEdge(CpgEdge edge);
+  Status AddCallSiteBinding(CallSiteBinding binding);
   Status Validate() const;
 
   std::span<const CpgNode> nodes() const { return nodes_; }
   std::span<const CpgEdge> edges() const { return edges_; }
+  std::span<const CallSiteBinding> callsites() const { return callsites_; }
+  bool HasCompilerOwnership() const {
+    return metadata_.schema_version == kCompilerOwnedProjection;
+  }
 
   bool HasNode(const core::StableId& node_id) const;
   bool HasEdge(const core::StableId& edge_id) const;
@@ -50,8 +55,10 @@ class ThinCpg {
   ProjectionMetadata metadata_;
   std::vector<CpgNode> nodes_;
   std::vector<CpgEdge> edges_;
+  std::vector<CallSiteBinding> callsites_;
   std::unordered_map<std::string, size_t> node_positions_;
   std::unordered_map<std::string, size_t> edge_positions_;
+  std::unordered_map<std::string, size_t> callsite_positions_;
 };
 
 }  // namespace veritas::cpg

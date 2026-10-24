@@ -69,6 +69,15 @@ tracked implementation work, not claimed complete by these checked steps.
 value/callsite identity producer, and their CMake target lists. Tests:
 `tests/integration/analysis/cpg/CpgProjectionStageTest.cpp` and
 `tests/integration/evidence/VeritasQueryEvidenceTest.cpp`.
+**Execution amendment:** persistence/canonicalization (`CpgTypes`, `ThinCpg`,
+`CpgRepository`, `CpgCanonicalizer`), optional exact CLI/seed context
+(`veritas-query`, `SliceTypes`, `EvidenceQueryService`) and real two-caller
+fixtures are required to make compiler bindings survive the public query. This
+is an additive CPG extension, not the Task 3 coverage-sidecar migration. Existing
+StableValueMapper encodings are retained; capture a pointer-free CompilerProjection
+in ProjectAnalyzer's M4 span and reuse it after SVF normalization. Recomputing
+callsite/operand identities from post-SVF instructions is forbidden.
+
 **Consumes:** live `ProgramIr` and OriginMap; no guessed ownership from summary
 flow endpoints. **Produces:** `CollectEntityOwners(const ProgramIr&) ->
 StatusOr<std::vector<EntityOwner>>`, `thin-cpg.v2` containment and callsite bindings.
@@ -86,6 +95,11 @@ StatusOr<std::vector<EntityOwner>>`, `thin-cpg.v2` containment and callsite bind
   reorderings, explicit old-projection coverage and no whole-program exit guess.
 - [ ] Review intentional projection/golden changes, update only explained
   expectations, and commit without enabling producer-gated multi-claim fan-out.
+
+Task 2 regression record: missing ownership/calls, lost persisted bindings,
+external-exit-dependent seed selection, foreign caller operands, incomplete
+bindings, missing CLI selection and constant-extent scope were observed RED.
+Final qualification evidence is recorded in the program plan when complete.
 
 ## Task 3: Make unsupported/open/truncated coverage explicit
 

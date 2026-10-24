@@ -14,6 +14,7 @@
 
 add_library(veritas_analysis_cpg
   CpgProjectionStage.cpp
+  EntityOwnership.cpp
 )
 
 target_include_directories(veritas_analysis_cpg

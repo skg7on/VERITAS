@@ -80,5 +80,86 @@ TEST(CpgRepositoryTest, OpensHistoricalProjectionById) {
   std::filesystem::remove(path);
 }
 
+TEST(CpgRepositoryTest, PersistsCallSitesWithoutUpgradingLegacyOwnership) {
+  const auto path =
+      std::filesystem::temp_directory_path() / "veritas_cpg_calls.db";
+  std::filesystem::remove(path);
+  auto md = summarydb::MetadataStore::Open(path);
+  ASSERT_TRUE(md.ok());
+  ASSERT_TRUE(md->ApplySchema().ok());
+  CpgRepository repository(*md);
+  auto legacy = MakeGraph();
+  const auto legacy_id = CpgCanonicalizer::ProjectionId(legacy);
+  ASSERT_TRUE(repository.StageProjection(legacy).ok());
+
+  auto graph = MakeGraph();
+  auto meta = graph.metadata();
+  meta.schema_version = kCompilerOwnedProjection;
+  graph.SetMetadata(meta);
+  const auto site = Id(core::IdKind::kCallSite, "call");
+  const auto target = Id(core::IdKind::kUnknownNode, "memcpy");
+  const auto owner = Id(core::IdKind::kFunctionVariant, "f");
+  const auto memory = Id(core::IdKind::kMemoryRef, "m");
+  ASSERT_TRUE(graph.AddNode({site, NodeKind::kCallSite, "memcpy"}).ok());
+  ASSERT_TRUE(graph.AddNode({target, NodeKind::kUnknown, "memcpy"}).ok());
+  std::vector<CallSiteArgument> args;
+  for (std::uint32_t i = 0; i < 3; ++i) {
+    const auto value = Id(core::IdKind::kValueRef, "arg" + std::to_string(i));
+    ASSERT_TRUE(graph.AddNode({value, NodeKind::kParameter, "arg"}).ok());
+    args.push_back({i, value, i < 2 ? std::optional(memory) : std::nullopt});
+  }
+  ASSERT_TRUE(graph
+                  .AddEdge({Id(core::IdKind::kCpgEdge, "contains"),
+                            EdgeKind::kContains, owner, site, std::nullopt})
+                  .ok());
+  ASSERT_TRUE(graph
+                  .AddEdge({Id(core::IdKind::kCpgEdge, "calls"),
+                            EdgeKind::kCalls, site, target, std::nullopt})
+                  .ok());
+  ASSERT_TRUE(graph
+                  .AddCallSiteBinding(
+                      {site, owner, target, "memcpy.v1", args, std::nullopt})
+                  .ok());
+  ASSERT_TRUE(graph.Validate().ok());
+  const auto id = CpgCanonicalizer::ProjectionId(graph);
+  ASSERT_TRUE(md->BeginTransaction().ok());
+  ASSERT_TRUE(repository.StageProjection(graph).ok());
+  ASSERT_TRUE(md->CommitTransaction().ok());
+  auto loaded = repository.LoadProjection(id);
+  ASSERT_TRUE(loaded.ok()) << loaded.status().message();
+  ASSERT_EQ(loaded->callsites().size(), 1u);
+  EXPECT_EQ(loaded->callsites()[0], graph.callsites()[0]);
+  EXPECT_TRUE(loaded->HasCompilerOwnership());
+  EXPECT_EQ(CpgCanonicalizer::ProjectionId(*loaded), id);
+  auto historical = repository.LoadProjection(legacy_id);
+  ASSERT_TRUE(historical.ok());
+  EXPECT_FALSE(historical->HasCompilerOwnership());
+  EXPECT_TRUE(historical->callsites().empty());
+  EXPECT_EQ(CpgCanonicalizer::ProjectionId(*historical), legacy_id);
+
+  auto next = graph;
+  meta.revision_id = Id(core::IdKind::kRevision, "next");
+  next.SetMetadata(meta);
+  const auto next_id = CpgCanonicalizer::ProjectionId(next);
+  ASSERT_TRUE(md->BeginTransaction().ok());
+  ASSERT_TRUE(repository.StageProjection(next).ok());
+  ASSERT_TRUE(md->RollbackTransaction().ok());
+  EXPECT_FALSE(repository.LoadProjection(next_id).ok());
+  EXPECT_EQ(*repository.OpenCurrent(graph.metadata().revision_id,
+                                    graph.metadata().build_variant_id),
+            id);
+
+  // A valid but cross-wired operand must fail the persisted content identity,
+  // rather than acquiring the old projection's authority after reload.
+  ASSERT_TRUE(md->Execute("UPDATE cpg_callsite_arguments SET value_id = ? "
+                          "WHERE projection_id = ? "
+                          "AND callsite_id = ? AND argument_index = 1",
+                          {core::ToString(args[2].value_ref),
+                           core::ToString(id), core::ToString(site)})
+                  .ok());
+  EXPECT_FALSE(repository.LoadProjection(id).ok());
+  std::filesystem::remove(path);
+}
+
 } // namespace
 } // namespace veritas::cpg

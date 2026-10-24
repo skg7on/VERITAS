@@ -1,5 +1,13 @@
 # M6 LLVM-Native Thin VERITAS CPG Projection Design Spec
 
+> **#156 producer amendment (2026-10-24):** The current native producer emits
+> `thin-cpg.v2` compiler-owned containment and typed callsite/argument bindings.
+> Historical `veritas.cpg.v1` remains readable with explicit legacy coverage.
+> See [native integrity §3](../veritas-native-evidence-integrity-design-spec.md)
+> for canonicalization, additive publication tables, exact ABI admission and
+> compatibility. The baseline allowlists below remain; this is not a full AST.
+
+
 **Status:** Draft
 **Milestone:** M6
 **Depends on:** M4 live `ProgramIr` and origin map, M5 completed mapped facts

@@ -14,12 +14,13 @@
 
 // VeritasQueryEvidenceTest.cpp — DEM-001.
 //
-// `veritas-query evidence overflow` must publish the M10B slice as deterministic
-// diagnostic JSON. These tests materialize the unsafe fixture through the real
-// M1→M6→M9→M10A pipeline, build the typed oracle in process, then run the
-// PUBLIC CLI against the same materialized store. Typed content is validated
-// first (claim seed, the real value-flow path, the pinned run, provenance, and
-// the completeness of every fact set), and only then is output compared.
+// `veritas-query evidence overflow` must publish the M10B slice as
+// deterministic diagnostic JSON. These tests materialize the unsafe fixture
+// through the real M1→M6→M9→M10A pipeline, build the typed oracle in process,
+// then run the PUBLIC CLI against the same materialized store. Typed content is
+// validated first (claim seed, the real value-flow path, the pinned run,
+// provenance, and the completeness of every fact set), and only then is output
+// compared.
 //
 // Two comparison strengths are used, deliberately:
 //
@@ -62,22 +63,16 @@
 // analyzed code into the unmodeled sink) plus the provenance closure of the six
 // per-query completion certificates.
 //
-// Two slots are complete-EMPTY by construction of BuildEvidenceInput, not by
-// omission here, and are serialized faithfully rather than dropped:
-//   * `dominating_checks` matches only POSITIVE "dominating_check" facts, and
-//     M9/M10A derives only the negative "dominating_check_absence" certificate
-//     (asserted directly on the fact store by OverflowEvidenceFixtureTest).
-//   * `unknowns` is scoped through FindContainingFunction, which resolves a
-//     node to its function through a kContains edge. The M6 projection emits no
-//     kContains edges, so the scope falls back to the degenerate empty
-//     FunctionVariant ref and no UnknownEffect fact matches.
+// The positive dominating-check slot remains complete-empty: M9/M10A emits
+// only the negative certificate. v2 compiler containment now scopes unknowns
+// to the selected caller, preserving real memcpy and SVF UnknownEffect rows.
 // DEFERRED (scoping decision, not a defect): value-range [0,65535], capacity
 // 2048, alias states, and the positive "dominating_check" fact are DEFERRED to
 // a later milestone — M9/M10A does not emit them.
 //
 // The evidence_overflow_* fixtures compile with
-// `-fdebug-prefix-map=@PROJECT_ROOT@=.` so the materialized checkout root cannot
-// leak into debug info; without it the slice JSON differs between two
+// `-fdebug-prefix-map=@PROJECT_ROOT@=.` so the materialized checkout root
+// cannot leak into debug info; without it the slice JSON differs between two
 // materializations of the same source (asserted below).
 
 #include <array>
@@ -271,12 +266,26 @@ void ExpectTypedSliceContent(const ev::EvidenceBuildInput& input,
             core::IdKind::kAnalysisRun);
 
   // Deferred relations are complete-empty, not omitted and not fabricated.
-  for (const ev::EvidenceFactSet* set :
+  for (const ev::EvidenceFactSet *set :
        {&input.ranges, &input.capacities, &input.aliases,
-        &input.dominating_checks, &input.unknowns}) {
+        &input.dominating_checks}) {
     EXPECT_EQ(set->metadata.completeness, ev::QueryCompleteness::kComplete);
     EXPECT_TRUE(set->metadata.truncation_reasons.empty());
     EXPECT_TRUE(set->facts.empty());
+  }
+
+  // Compiler containment now scopes unknowns to the selected caller. Preserve
+  // the real opaque memcpy target and SVF coverage unknown without
+  // strengthening.
+  EXPECT_EQ(input.unknowns.metadata.completeness,
+            ev::QueryCompleteness::kComplete);
+  EXPECT_EQ(input.unknowns.facts.size(), 2u);
+  for (const auto &fact : input.unknowns.facts) {
+    EXPECT_EQ(fact.row.relation, facts::RelationId::kUnknownEffect);
+    const auto state =
+        std::get<analysis::semantic::EpistemicState>(fact.row.cells.back());
+    EXPECT_TRUE(state == analysis::semantic::EpistemicState::kMay ||
+                state == analysis::semantic::EpistemicState::kUnknown);
   }
 
   // The one analysis run is pinned and every query's completion certificate is
@@ -959,6 +968,12 @@ StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
                                    .subject_ref = *subject,
                                    .source_ref = *source,
                                    .sink_ref = *sink};
+  if (const auto *callsite = seed.Member("callsite_ref")) {
+    auto parsed = ReadStableId(*callsite);
+    if (!parsed.ok())
+      return parsed.status();
+    slice.claim_seed.callsite_ref = *parsed;
+  }
 
   const JsonNode& flow = RequireMember(root, "flow_slice");
   for (const std::string_view name :
@@ -1058,8 +1073,20 @@ bool SameValue(std::string_view name, const T& left, const T& right,
 
 bool SameFactSet(std::string_view name, const FactSetView& left,
                  const FactSetView& right, std::string* mismatch) {
-  if (!SameList(std::string(name) + ".facts", left.facts, right.facts,
-                RenderFactRow, mismatch)) {
+  // Native hash ordering can change across the already documented host-bound
+  // identities. Compare a semantic multiset after normalization: preserve all
+  // row cells, relation/kind tags and multiplicity, not incidental hash order.
+  const auto semantic_rows = [](const auto &facts) {
+    std::vector<std::string> rows;
+    for (const auto &fact : facts)
+      rows.push_back(StabilizeDigests(RenderFactRow(fact)));
+    std::sort(rows.begin(), rows.end());
+    return rows;
+  };
+  if (!SameList(
+          std::string(name) + ".facts", semantic_rows(left.facts),
+          semantic_rows(right.facts), [](const auto &row) { return row; },
+          mismatch)) {
     return false;
   }
   if (!SameValue(std::string(name) + ".completeness", left.completeness,
@@ -1123,6 +1150,16 @@ bool SameStableSlice(const SemanticSlice& left, const SemanticSlice& right,
                  right.claim_seed.sink_ref, RenderId, mismatch)) {
     return false;
   }
+  if (left.claim_seed.callsite_ref.has_value() !=
+      right.claim_seed.callsite_ref.has_value()) {
+    if (mismatch)
+      *mismatch = "claim_seed.callsite_ref presence";
+    return false;
+  }
+  if (left.claim_seed.callsite_ref &&
+      !SameValue("claim_seed.callsite_ref", *left.claim_seed.callsite_ref,
+                 *right.claim_seed.callsite_ref, RenderId, mismatch))
+    return false;
   if (!SameList("flow_slice.nodes", left.flow_nodes, right.flow_nodes, RenderId,
                 mismatch)) {
     return false;
@@ -1158,6 +1195,147 @@ bool SameStableSlice(const SemanticSlice& left, const SemanticSlice& right,
          SameFactSet("dominating_checks", left.dominating_checks,
                      right.dominating_checks, mismatch) &&
          SameFactSet("unknowns", left.unknowns, right.unknowns, mismatch);
+}
+
+// No closure of another external call can supply operands for this callsite.
+TEST(VeritasQueryEvidenceTest,
+     SelectedCallSiteIgnoresOtherCallersAndExternalExits) {
+  const auto id = [](core::IdKind kind, std::string_view seed) {
+    return core::MakeStableId(
+        kind, std::as_bytes(std::span(seed.data(), seed.size())));
+  };
+  cpg::ThinCpg graph;
+  graph.SetMetadata(
+      {.schema_version = "thin-cpg.v2",
+       .revision_id = id(core::IdKind::kRevision, "rev"),
+       .build_variant_id = id(core::IdKind::kBuildVariant, "build")});
+  const auto callee = id(core::IdKind::kUnknownNode, "memcpy");
+  ASSERT_TRUE(graph.AddNode({callee, cpg::NodeKind::kUnknown, "memcpy"}).ok());
+  std::vector<core::StableId> sites, lengths, destinations;
+  for (const auto name : {"first", "second"}) {
+    const auto owner = id(core::IdKind::kFunctionVariant, name);
+    const auto site = id(core::IdKind::kCallSite, name);
+    const auto dst = id(core::IdKind::kMemoryRef, name);
+    ASSERT_TRUE(graph.AddNode({owner, cpg::NodeKind::kFunction, name}).ok());
+    ASSERT_TRUE(graph.AddNode({site, cpg::NodeKind::kCallSite, "memcpy"}).ok());
+    ASSERT_TRUE(
+        graph.AddNode({dst, cpg::NodeKind::kMemoryObject, "destination"}).ok());
+    std::vector<cpg::CallSiteArgument> args;
+    for (std::uint32_t i = 0; i < 3; ++i) {
+      const auto value =
+          id(core::IdKind::kValueRef, std::string(name) + std::to_string(i));
+      ASSERT_TRUE(
+          graph.AddNode({value, cpg::NodeKind::kParameter, "value"}).ok());
+      args.push_back({i, value, i < 2 ? std::optional(dst) : std::nullopt});
+      ASSERT_TRUE(
+          graph
+              .AddEdge({id(core::IdKind::kCpgEdge,
+                           std::string(name) + "owns" + std::to_string(i)),
+                        cpg::EdgeKind::kContains, owner, value, std::nullopt})
+              .ok());
+    }
+    ASSERT_TRUE(
+        graph
+            .AddEdge(
+                {id(core::IdKind::kCpgEdge, std::string(name) + "contains"),
+                 cpg::EdgeKind::kContains, owner, site, std::nullopt})
+            .ok());
+    ASSERT_TRUE(
+        graph
+            .AddEdge({id(core::IdKind::kCpgEdge, std::string(name) + "calls"),
+                      cpg::EdgeKind::kCalls, site, callee, std::nullopt})
+            .ok());
+    ASSERT_TRUE(graph
+                    .AddCallSiteBinding(
+                        {site, owner, callee, "memcpy.v1", args, std::nullopt})
+                    .ok());
+    sites.push_back(site);
+    lengths.push_back(args[2].value_ref);
+    destinations.push_back(dst);
+  }
+  ASSERT_TRUE(graph.Validate().ok());
+  for (std::size_t i = 0; i < sites.size(); ++i) {
+    auto seed = ev::ResolveOverflowClaimSeed(graph, {}, "memcpy", sites[i]);
+    ASSERT_TRUE(seed.ok()) << seed.status().message();
+    EXPECT_EQ(seed->subject_ref, destinations[i]);
+    EXPECT_EQ(seed->sink_ref, lengths[i]);
+    EXPECT_EQ(seed->source_ref, lengths[i]);
+  }
+  auto ambiguous = ev::ResolveOverflowClaimSeed(graph, {}, "memcpy");
+  ASSERT_FALSE(ambiguous.ok());
+  EXPECT_EQ(ambiguous.status().code(), StatusCode::kInvalidArgument);
+}
+
+TEST(VeritasQueryEvidenceTest,
+     CliSelectsOneNativeCallSiteWithoutAutomaticFanOut) {
+  auto snapshot = AnalyzeRealFixture("evidence_two_copy_calls");
+  ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
+  auto ambiguous = RunEvidenceOverflow(snapshot->output_root);
+  EXPECT_NE(ambiguous.exit_code, 0);
+  EXPECT_NE(ambiguous.stdout_text.find("ambiguous"), std::string::npos);
+  std::size_t checked = 0;
+  std::set<core::StableId> findings;
+  ev::FactStoreEvidenceBackend backend(snapshot->fact_store,
+                                       snapshot->descriptor);
+  ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
+  auto native_calls = snapshot->fact_store.GetCurrentFacts(snapshot->run_id);
+  ASSERT_TRUE(native_calls.ok());
+  for (const auto &binding : snapshot->cpg.callsites()) {
+    if (binding.normalized_operation != "memcpy.v1")
+      continue;
+    EXPECT_TRUE(std::ranges::any_of(
+        *native_calls,
+        [&](const auto &fact) {
+          return fact.row.relation == facts::RelationId::kUnknownEffect &&
+                 std::get<core::StableId>(fact.row.cells[0]) ==
+                     binding.function_variant_id &&
+                 std::get<std::string>(fact.row.cells[1]) ==
+                     core::ToString(binding.callsite_id);
+        }))
+        << "compiler projection and native M9 must name the same call "
+           "instruction";
+    auto cli = RunVeritasQuery(
+        {"evidence", "overflow", "--sink", "memcpy", "--callsite",
+         core::ToString(binding.callsite_id), "--format", "json", "--db",
+         snapshot->output_root.string()});
+    ASSERT_EQ(cli.exit_code, 0) << cli.stdout_text;
+    auto slice = ParseSemanticSlice(cli.stdout_text);
+    ASSERT_TRUE(slice.ok()) << slice.status().message();
+    EXPECT_EQ(slice->claim_seed.subject_ref, *binding.arguments[0].memory_ref);
+    EXPECT_EQ(slice->claim_seed.sink_ref, binding.arguments[2].value_ref);
+    EXPECT_EQ(slice->claim_seed.callsite_ref, binding.callsite_id);
+    EXPECT_FALSE(slice->unknowns.facts.empty())
+        << "a constant size still has the selected callsite's function scope";
+    findings.insert(slice->claim_seed.finding_id);
+    auto mismatched = slice->claim_seed;
+    mismatched.sink_ref = binding.arguments[1].value_ref;
+    auto rejected = service.BuildEvidenceInput(mismatched, Budget());
+    ASSERT_FALSE(rejected.ok());
+    EXPECT_EQ(rejected.status().code(), StatusCode::kInvalidArgument);
+    auto other = std::ranges::find_if(
+        snapshot->cpg.callsites(), [&](const auto &candidate) {
+          return candidate.normalized_operation == "memcpy.v1" &&
+                 candidate.function_variant_id != binding.function_variant_id;
+        });
+    ASSERT_NE(other, snapshot->cpg.callsites().end());
+    auto foreign = slice->claim_seed;
+    foreign.source_ref = other->arguments[1].value_ref;
+    auto foreign_result = service.BuildEvidenceInput(foreign, Budget());
+    EXPECT_FALSE(foreign_result.ok())
+        << "exact seed cannot import another caller's source";
+    ++checked;
+  }
+  EXPECT_EQ(checked, 2u);
+  EXPECT_EQ(findings.size(), 2u);
+}
+
+TEST(VeritasQueryEvidenceTest, LegacyProjectionHasNoExactCallSiteCapability) {
+  cpg::ThinCpg legacy;
+  auto seed = ev::ResolveOverflowClaimSeed(legacy, {});
+  ASSERT_FALSE(seed.ok());
+  EXPECT_EQ(seed.status().code(), StatusCode::kFailedPrecondition);
+  EXPECT_NE(seed.status().message().find("legacy CPG coverage"),
+            std::string::npos);
 }
 
 TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
@@ -1224,6 +1402,16 @@ TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
 
   auto cli_slice = ParseSemanticSlice(cli.stdout_text);
   ASSERT_TRUE(cli_slice.ok()) << cli_slice.status().message();
+  auto reordered_unknowns = *cli_slice;
+  std::reverse(reordered_unknowns.unknowns.facts.begin(),
+               reordered_unknowns.unknowns.facts.end());
+  std::string order_mismatch;
+  EXPECT_TRUE(SameStableSlice(*cli_slice, reordered_unknowns, &order_mismatch))
+      << order_mismatch;
+  ASSERT_FALSE(reordered_unknowns.unknowns.facts.empty());
+  reordered_unknowns.unknowns.facts[0].cells[2] = "s:invented_reason";
+  EXPECT_FALSE(
+      SameStableSlice(*cli_slice, reordered_unknowns, &order_mismatch));
   auto golden_slice = ParseSemanticSlice(ReadFile(golden));
   ASSERT_TRUE(golden_slice.ok()) << golden_slice.status().message();
 

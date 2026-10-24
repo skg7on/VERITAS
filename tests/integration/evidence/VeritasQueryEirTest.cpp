@@ -89,12 +89,12 @@
 // are reviewed artefacts pinned against the CLI. `overflow_unsafe.l1.eir.json`
 // is a fifth artefact and it is read too, by DEM-005: it is byte-compared
 // against `ToEvidenceJson` of the case `overflow_unsafe.l1.eir` parses into, so
-// the `.eir` and `.json` halves of one case cannot drift apart unnoticed. (There
-// is no JSON *reader* in M10C, so the JSON golden is never parsed back into a
-// case — the comparison runs from the text side.) None of these files is the
-// oracle for anything: the same-build comparisons above are strictly stronger
-// on the axes they measure, and the golden comparison exists to catch drift in
-// the semantics a different toolchain must still reproduce.
+// the `.eir` and `.json` halves of one case cannot drift apart unnoticed.
+// (There is no JSON *reader* in M10C, so the JSON golden is never parsed back
+// into a case — the comparison runs from the text side.) None of these files is
+// the oracle for anything: the same-build comparisons above are strictly
+// stronger on the axes they measure, and the golden comparison exists to catch
+// drift in the semantics a different toolchain must still reproduce.
 //
 // DEVIATION FROM THE DESIGN SPEC'S §14.3, RECORDED HERE BECAUSE IT IS A FINDING
 //
@@ -114,9 +114,9 @@
 //     `coverage_kind == "dominating_check"`. No producer emits that kind today
 //     — M10A emits the negative `"dominating_check_absence"` certificate — so
 //     that query is complete-empty by construction and the branch is
-//     unreachable from the CLI. Measured directly: `--max-facts 1`,
-//     `--max-depth 1`, `--max-nodes 1`, and `--max-paths 1` all leave the case
-//     with zero omissions and zero unknowns.
+//     unreachable from the CLI. #156 restores two independently scoped
+//     analyzer unknowns/omissions; none represents the missing flow-truncation
+//     reason. #157 owns that remaining distinction.
 //   * `BuildPaths` reads only the flow slice's edges; it never consults
 //     `flow_slice.metadata.completeness`. A truncated flow slice is therefore
 //     not recorded in the case at all — no omission, no unknown, just a
@@ -135,9 +135,9 @@
 //     dominates_bounds_check(sink, sink)`. The safe fixture does NOT reach
 //     `VERIFIED_SAFE` and does NOT carry positive dominating-check
 //     counterevidence: `dominating_checks` is the same complete-empty query in
-//     both (M9/M10A derives no positive check fact). What differs is the flow
-//     shape — 13 entities / 19 facts / 4 edges on the unsafe fixture against
-//     19 / 22 / 3 on the safe one — not the verdict.
+//     both (M9/M10A derives no positive check fact). Exact extent selection
+//     permits the same five-node length path in both; guard-related fact
+//     populations and semantic identities differ, while the verdict does not.
 //   * `overflow_truncated.l1.eir` is the same store as the unsafe default with
 //     the flow slice truncated to no nodes: 0 edges, 0 paths, and the same
 //     `MUST_NOT` fact as the default. It is the "partial evidence is not
@@ -1116,12 +1116,19 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
     EXPECT_EQ(l0.program.analysis_run_id, other->program.analysis_run_id);
   }
 
-  // L0 withholds members and says so. Every omission it carries is a
-  // level-projection marker, and it names the member it withheld.
+  // L0 names withheld members and retains the analyzer omission belonging to
+  // its retained unknown. Original uncertainty is distinct from projection.
   EXPECT_GT(l0.omissions.size(), 0u);
   std::set<std::string> named;
   for (const ev::Omission& omission : l0.omissions) {
-    EXPECT_EQ(omission.kind, "level_projection");
+    if (omission.kind != "level_projection") {
+      EXPECT_EQ(omission.kind, "analyzer_expansion");
+      EXPECT_FALSE(omission.expandable);
+      EXPECT_TRUE(std::ranges::any_of(l0.unknowns, [&](const auto &unknown) {
+        return unknown.id == omission.subject;
+      }));
+      continue;
+    }
     EXPECT_TRUE(omission.expandable);
     auto member = WithheldMember(omission);
     ASSERT_TRUE(member.ok()) << member.status().message();
@@ -1164,16 +1171,23 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
   // L1 withholds nothing: no level-projection marker survives at the causal
   // level, so the projection is one-way and cannot be mistaken for a case that
   // simply lost members.
-  EXPECT_EQ(l1.omissions.size(), 0u);
+  EXPECT_EQ(l1.omissions.size(), 2u);
+  EXPECT_EQ(l1.unknowns.size(), 2u);
+  for (const auto &omission : l1.omissions) {
+    EXPECT_EQ(omission.kind, "analyzer_expansion");
+    EXPECT_FALSE(omission.expandable);
+  }
 
-  // L2 does not drop anything L1 kept, and adds no marker L1 lacks. On this
-  // fixture L2 is L1 with a different `level` token and nothing else: the only
-  // L2-only expansion is `BuildSummaryExpansions`, which returns early unless
-  // the case has Function entities, and this fixture has none.
+  // L2 preserves L1 and now exposes the existing missing-summary omission:
+  // scoped unknowns introduce a real Function entity. #158 owns supplying its
+  // summary; this test must not claim the expansion is already implemented.
   EXPECT_GE(l2.entities.size(), l1.entities.size());
   EXPECT_GE(l2.facts.size(), l1.facts.size());
   EXPECT_GE(l2.provenance.size(), l1.provenance.size());
-  EXPECT_EQ(l2.omissions.size(), l1.omissions.size());
+  EXPECT_EQ(l2.omissions.size(), l1.omissions.size() + 1);
+  EXPECT_EQ(std::ranges::count(l2.omissions, "summary_expansion",
+                               &ev::Omission::kind),
+            1);
   EXPECT_EQ(l2.primary_claim.id, l1.primary_claim.id);
   EXPECT_EQ(l2.verification_state, l1.verification_state);
 
@@ -1629,12 +1643,13 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   EXPECT_EQ(unsafe_case.primary_claim.severity, safe_case.primary_claim.severity);
   EXPECT_EQ(unsafe_case.paths.size(), 1u);
   EXPECT_EQ(safe_case.paths.size(), 1u);
-  EXPECT_NE(unsafe_case.paths.front().entity_ids.size(),
-            safe_case.paths.front().entity_ids.size())
-      << "the two fixtures were expected to differ in flow length";
+  // Exact memcpy extent selection gives the same length chain in these two
+  // fixtures. Their guard-related facts differ; arbitrary exit selection is
+  // no longer allowed to manufacture a path-length difference.
   EXPECT_NE(unsafe_case.facts.size(), safe_case.facts.size());
 
-  // The truncated case is partial evidence with no marker for its partiality:
+  // The truncated case still lacks a marker for flow partiality (#157).
+  // Its two independently scoped analyzer unknowns/omissions are preserved:
   // the flow slice's nodes and edges are gone, so there is no path to emit, and
   // `BuildPaths` never consults the slice's completeness, so nothing records
   // that the path was cut rather than absent. The derived negative absence
@@ -1655,8 +1670,11 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   EXPECT_GT(unsafe_case.paths.size(), 0u);
   EXPECT_EQ(truncated_case.paths.size(), 0u);
   EXPECT_EQ(truncated_case.edges.size(), 0u);
-  EXPECT_EQ(truncated_case.omissions.size(), 0u);
-  EXPECT_EQ(truncated_case.unknowns.size(), 0u);
+  EXPECT_EQ(truncated_case.omissions.size(), 2u);
+  EXPECT_EQ(truncated_case.unknowns.size(), 2u);
+  for (const auto &omission : truncated_case.omissions) {
+    EXPECT_EQ(omission.kind, "analyzer_expansion");
+  }
   EXPECT_EQ(truncated_case.primary_claim.kind,
             unsafe_case.primary_claim.kind);
   EXPECT_EQ(truncated_case.verification_state, unsafe_case.verification_state);

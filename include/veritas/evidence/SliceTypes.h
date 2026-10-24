@@ -153,6 +153,9 @@ struct ClaimSeed {
   core::StableId subject_ref;
   core::StableId source_ref;
   core::StableId sink_ref;
+  // Exact compiler callsite, when supplied by a thin-cpg.v2 resolver. Retained
+  // even for a shared constant extent, which cannot carry a unique owner.
+  std::optional<core::StableId> callsite_ref = std::nullopt;
 };
 
 // EvidenceBuildInput is the single immutable handoff M10C consumes. Summary and

@@ -748,7 +748,8 @@ claims to hold on every path. Both halves of the prohibition, and every claim in
 the descriptive sentence above it, were checked against the artefact. The
 no-universal-check half holds and the `MUST_NOT` half does not; of the
 descriptive claims only the partial-evidence one is true of the artefact, which
-carries no path-budget reason and no unknown or omission at all. The cause is
+carries no path-budget reason. With #156, its independently scoped analyzer
+unknowns/omissions are retained; none describes flow truncation. The cause is
 structural: the unsafe fixture's flow slice holds exactly one value-flow path,
 so `--max-paths 1` cannot bind, and the golden is generated with `--max-nodes 1`
 — the only CLI-reachable input that genuinely truncates a query. The `MUST_NOT`
