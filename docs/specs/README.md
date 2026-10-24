@@ -10,6 +10,10 @@ the LLM/static-analysis reviewer goal, preserves authority and data contracts,
 and maps open issues to delivery priorities. Existing capability specifications
 remain binding for runtime/schema/acceptance until explicitly amended.
 
+The [claim-driven redesign reconciliation and delivery plan](veritas-claim-driven-redesign-design-spec.md)
+adds the saved review's P0–P4 sequence and measurable first-release, scoped
+publication, caching, and semantic-contract gates.
+
 ## Cross-Cutting Specifications
 
 - [GitHub Actions CI build](github-actions-ci-build-design-spec.md)

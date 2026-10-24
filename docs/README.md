@@ -14,6 +14,11 @@ and [review delivery roadmap](plans/veritas-review-agent-milestone-roadmap.md).
 They refine product priorities while preserving current engine/data contracts.
 The review specification maps every open issue as of 2026-10-03.
 
+The [claim-driven redesign reconciliation and delivery plan](specs/veritas-claim-driven-redesign-design-spec.md)
+connects the saved architecture review to that direction, with concrete
+lightweight-review, scoped-analysis, storage, and qualification gates. It is
+proposed follow-up work; existing runtime contracts remain binding.
+
 ## Primary Reading Order
 
 1. [Platform architecture](architecture/01-platform-architecture.md) — system
