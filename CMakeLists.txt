@@ -40,10 +40,11 @@
 cmake_minimum_required(VERSION 3.23)
 
 # Homebrew ships its prebuilt dependencies (Abseil, Protobuf, Z3, RocksDB,
-# GTest, ...) targeting the newest macOS SDK. When the host compiler predates
-# that SDK (the intentional llvm@17 skew), it emits no -mmacosx-version-min and
-# the linker falls back to a much older floor, producing "built for newer
-# macOS version" warnings on every link. Derive the deployment target from the
+# GTest, ...) targeting the newest macOS SDK. When the host compiler's default
+# deployment target predates that SDK — Homebrew's clang defaults to an older
+# macOS than the installed SDK — it emits no -mmacosx-version-min and the
+# linker falls back to a much older floor, producing "built for newer macOS
+# version" warnings on every link. Derive the deployment target from the
 # active SDK so VERITAS matches the Homebrew floor. Overridable via
 # -DCMAKE_OSX_DEPLOYMENT_TARGET=...
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
@@ -70,8 +71,8 @@ project(VERITAS
 #
 # Clang derives its sysroot from its own resource directory, while xcrun — and
 # with it every find_path/find_library CMake runs on macOS — reports the newest
-# installed SDK. On the supported toolchain the two differ: the llvm@17 host
-# compiler searches MacOSX26.sdk while xcrun reports MacOSX.sdk. The mismatch
+# installed SDK. A host compiler older than the installed Command Line Tools
+# can disagree with xcrun about which SDK is current. The mismatch
 # surfaces as soon as a dependency's header is resolved inside the SDK — CMake's
 # FindSQLite3 and the vendored Souffle's own ncurses/zlib/sqlite3/libffi finds
 # all land there — because the imported targets they build then republish
@@ -130,6 +131,59 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Homebrew LLVM 20's resource-dir <float.h> does not implement clang's
+# __need_infinity_nan protocol. The macOS SDK's <math.h> relies on that
+# protocol in module-aware mode to define INFINITY, so libc++ 20's <random>
+# fails with "use of undeclared identifier 'INFINITY'" under strict
+# -std=c++20 even though the same SDK headers compile under Apple clang.
+# Newer clang resource headers define INFINITY as __builtin_inff()
+# themselves; supplying the same definition restores the header's contract.
+#
+# Probe rather than version-gate: the gap belongs to a particular header set,
+# not to a release number, and Apple clang and Homebrew LLVM do not share a
+# versioning scheme.
+if(APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  include(CheckCXXSourceCompiles)
+  set(CMAKE_REQUIRED_QUIET ON)
+  check_cxx_source_compiles("
+    #include <random>
+    int main() {
+      std::mt19937_64 generator(42);
+      return static_cast<int>(generator());
+    }
+  " VERITAS_COMPILES_CXX20_RANDOM)
+
+  if(NOT VERITAS_COMPILES_CXX20_RANDOM)
+    set(CMAKE_REQUIRED_DEFINITIONS "-DINFINITY=__builtin_inff()")
+    check_cxx_source_compiles("
+      #include <random>
+      int main() {
+        std::mt19937_64 generator(42);
+        return static_cast<int>(generator());
+      }
+    " VERITAS_COMPILES_CXX20_RANDOM_WITH_INFINITY)
+    unset(CMAKE_REQUIRED_DEFINITIONS)
+
+    if(NOT VERITAS_COMPILES_CXX20_RANDOM_WITH_INFINITY)
+      message(FATAL_ERROR
+        "VERITAS: <random> does not compile with "
+        "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}, even with "
+        "the INFINITY compatibility definition. Point the build at a "
+        "supported host compiler (see CLAUDE.md).")
+    endif()
+
+    message(STATUS
+      "VERITAS: ${CMAKE_CXX_COMPILER_ID} "
+      "${CMAKE_CXX_COMPILER_VERSION} needs the INFINITY compatibility "
+      "definition for <random>; defining INFINITY=__builtin_inff()")
+    # Quoted: add_compile_options parses its arguments shell-style and would
+    # otherwise split the parentheses into separate arguments.
+    add_compile_options("-DINFINITY=__builtin_inff()")
+  endif()
+
+  unset(CMAKE_REQUIRED_QUIET)
+endif()
 
 # Export compile_commands.json for clangd, veritas-build ingest tests, and
 # downstream tooling.

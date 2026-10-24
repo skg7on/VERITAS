@@ -32,7 +32,7 @@ add_executable(veritas_integration_build_tests
 # assert that the root phase is the real folded span rather than the synthetic
 # fallback of the same name. Linking `LLVM` brings the library and no include
 # directories, so the tree is spelled out: without it `<llvm/Support/JSON.h>`
-# resolves against whatever LLVM headers sit on the prefix (Homebrew's llvm@17
+# resolves against whatever LLVM headers sit on the prefix (Homebrew's LLVM
 # here) while linking the LLVM this build was configured with. Both include
 # trees are SYSTEM for the same reason they are in src/build and
 # src/observability: upstream headers are not held to this project's -Werror
