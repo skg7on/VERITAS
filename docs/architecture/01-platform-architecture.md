@@ -1,5 +1,10 @@
 # VERITAS Platform Architecture
 
+> **Review direction (2026-10-03):** The proposed product path is a bounded LLM investigation with selective analysis. See the
+> [review-driven analysis proposal](../specs/veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 ## System Pipeline, Design Principles, and Ingest Adapters
 
 **Status:** Draft Architecture Specification
@@ -16,7 +21,10 @@
 
 # 1. Purpose
 
-VERITAS is an evidence-centric whole-program analysis platform that combines deterministic static analysis with LLM-assisted semantic reasoning.
+VERITAS is a code review agent combining LLM semantic investigation with
+provenance-backed static analysis. Whole-program analysis is one supporting
+capability; the proposed review path is defined in
+[architecture 06](06-review-agent-architecture.md).
 
 This document is the top-level architectural entry point. It fixes:
 
@@ -41,7 +49,15 @@ Readers new to VERITAS should read this document first, then either peer as need
 
 The organizing thesis is:
 
-> A Review Agent should never be asked to "understand a million-line repository." Deterministic analysis first builds a compact, immutable, provenance-carrying semantic world. The Agent reasons only over that world.
+> VERITAS helps an LLM investigate code changes using bounded, provenance-backed
+> program evidence, and applies stronger analysis when needed to support a
+> review claim.
+
+The reviewer consumes bounded source, diffs, tests and documentation alongside
+EIR through a controlled context boundary. Deterministic seeds and LLM-proposed
+concerns both enter candidate admission. The full native analysis pipeline below
+remains implemented infrastructure; a lightweight review analysis path is proposed,
+not shipped.
 
 To deliver that thesis, VERITAS maintains three intermediate representations and one feedback loop:
 
@@ -91,7 +107,11 @@ The Code Property Graph is one materialization over the same underlying summarie
 
 ### P8 — LLM output is a hypothesis, not a fact
 
-Neuro-symbolic reasoning enters only as `INFERRED` propositions. Promotion to `MUST` requires a deterministic verifier — static analysis, SMT, symbolic execution, or concrete replay.
+Model propositions enter as `INFERRED`. Promotion to `MUST` requires an
+authoritative check for the exact predicate, assumptions and execution domain.
+A concrete replay establishes the observed execution, not universal safety.
+Supported concerns and cited semantic observations may appear in a review
+without becoming verified program facts; see the review proposal for reporting.
 
 ---
 
@@ -141,14 +161,13 @@ Neuro-symbolic reasoning enters only as `INFERRED` propositions. Promotion to `M
 
 The pipeline is deliberately asymmetric: local extraction, SummaryDB, WPA, and Evidence Builder run deterministically and are reproducible for identical inputs. The Agent adds semantic hypotheses that only re-enter the deterministic world as proof obligations.
 
-**Current versus approved target.** Implemented M8 currently uses the C++
-fixpoint engine and can optionally compare file-based Souffle output. The
-approved M8R target, which is not yet delivered, keeps pinned SVF authoritative
-for V1 points-to, aliases, SVFG, and indirect calls; requires compiled Souffle
-for normal production recursive WPA; and restricts C++ to conformance or an
-explicit `cpp-emergency` engine. There is no automatic fallback. See the
-[M8R bridge specification](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md)
-for delivery status and the executable M9 gate.
+**Current delivery.** M8R and M9 are delivered. Pinned SVF owns native V1
+points-to/alias/SVFG and indirect-call analysis; compiled Souffle owns normal
+production recursive WPA. C++ is a conformance oracle or explicitly selected
+`cpp-emergency` engine, with no automatic fallback. M10A–M10C foundations are
+delivered with documented producer and semantic handoff gaps. Operational
+incremental WPA remains incomplete under #143; this diagram is not evidence
+that an edit currently costs only its affected cone.
 
 ---
 
@@ -571,7 +590,10 @@ V1 focuses on the local single-machine version. Once the local model works, the 
 
 # 15. CLI Contract
 
-The developer surface for the platform is deliberately small:
+The following is a **target CLI contract**, not a list of all shipped commands.
+`analyze --project`, Evidence queries and run-bound explanation exist. M11
+`--bitcode` and M12 `import --joern` are pending. The proposed review API is also
+pending; consult the developer guides for current executable syntax.
 
 ```bash
 veritas-build analyze --project <directory>        # Tier 1: compile_commands.json
@@ -660,17 +682,24 @@ Evidence IR semantic modeling and serialization.
 | M12B | Direct Joern GraphSON/GraphML importer and normalization. |
 | M12C | Provider fusion, provider-aware queries, and M10B integration. |
 | M12D | Separately designed PhASAR result adapter over the M12A substrate. |
-| M13 | Benchmark-gated Souffle PTA research, independent of the M9-M12 critical path. |
+| M13 | Delivered scale-profile/store-equivalence instrument; see the scaling roadmap. |
 
-The Review Agent and its verification loop are post-backbone milestones and are
-not required for the platform's V1 usefulness. M10C supplies the stable EIR
-boundary they will consume. See §17 for the first target demo.
+The Review Agent is the proposed product delivery priority, using the delivered
+backbone and corrected M10 evidence boundary. M11/M12 and the entire scaling
+programme are not prerequisites for its first source-based review. See the
+[review roadmap](../plans/veritas-review-agent-milestone-roadmap.md). PTA research
+is unnumbered future work, conditional on measured review value.
 
 ---
 
 # 17. First High-Value Demo
 
-The demo that exercises the whole platform is deliberately narrow — one small program, one upstream change:
+This is a **target acceptance story**, not a claim of delivered end-to-end
+incrementality or agent integration. #124 tracks missing domain facts, #132
+tracks call-site scoping and #143 tracks discarded WPA invalidation. The proposed
+first product demo adds a real bounded review and a source-backed semantic
+contract observation. The analytical story remains narrow — one program and
+one upstream change:
 
 ```cpp
 void decode(Packet *p, Buffer *b) {
@@ -705,7 +734,9 @@ Result:
     Review Agent inspects
 ```
 
-This single demo demonstrates the entire VERITAS thesis: incremental semantic invalidation, provenance-carrying facts, and a compact Evidence case delivered to the Agent.
+When qualified, this story will demonstrate incremental semantic invalidation
+and provenance-backed review. Existing Evidence fixtures demonstrate narrower
+representation/query contracts and do not yet establish the full story.
 
 ---
 
@@ -800,10 +831,9 @@ Implementers:
   [`M8R bridge spec`](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md)
   and
   [`remediation implementation plan`](../plans/milestones/m08r-souffle-wpa-remediation-implementation-plan.md).
-* M10A's detailed design and implementation plan are still pending. M13 is the
-  separately approved, benchmark-gated research scope in the
-  [architecture refinement design](../specs/milestones/m08r-souffle-wpa-architecture-refinement-design-spec.md#m13--benchmark-gated-pta-research)
-  and remains independent of the M9-M12 critical path.
+* M10A–M10C have delivered foundations with remaining correctness work under
+  #124/#132/#149. M13 is the delivered scale-profile/store-equivalence milestone.
+  PTA research no longer owns that milestone number.
 * The
   [engineering-backbone spec](../specs/veritas-engineering-backbone-design-specification.md)
   connects this document to milestone-level detail.

@@ -1,6 +1,6 @@
 # `veritas-build analyze` Performance Design Specification
 
-**Status:** Approved for implementation
+**Status:** Delivered optimization record (PR #135); historical measurements
 
 **Tracking issue:** [#133](https://github.com/skg7on/VERITAS/issues/133)
 

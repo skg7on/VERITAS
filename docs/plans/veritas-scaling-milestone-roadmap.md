@@ -1,5 +1,10 @@
 # VERITAS Scaling Milestone Roadmap
 
+> **Review direction (2026-10-03):** Use the review delivery roadmap for proposed product priority. This plan retains its capability-specific history and gates. See the
+> [review-driven analysis proposal](../specs/veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 Milestone band **M13–M18**, planned against the measured evidence of
 `veritas-build analyze` rounds 2 and 3. This roadmap defines stages, gates, and
 falsification criteria. It is deliberately **not** an implementation plan: each

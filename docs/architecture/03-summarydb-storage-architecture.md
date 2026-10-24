@@ -1,5 +1,10 @@
 # VERITAS Thin SummaryDB and Pluggable Backends
 
+> **Review direction (2026-10-03):** The proposed product path is a bounded LLM investigation with selective analysis. See the
+> [review-driven analysis proposal](../specs/veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 ## Physical Layers, Identity Model, Content-Addressed Storage, and Backend Adapter Contract
 
 **Status:** Draft Architecture Specification
@@ -28,11 +33,11 @@ This document specifies:
 
 Platform principles P1–P8 and the ingest tiers live in `01-platform-architecture.md`. Analyzer engines live in `02-whole-program-analysis-architecture.md`. This document assumes both.
 
-**Delivery status.** Implemented M8 publishes C++ fixed-point state and supports
-optional file-based Souffle comparison. The approved, not-yet-delivered M8R
-target adds the run/component/fact/witness contracts below. Its gate status is
-tracked in the
-[M8R bridge specification](../specs/milestones/m08r-souffle-wpa-remediation-design-spec.md).
+**Delivery status.** M8R and M9 provide the production Souffle, run/component,
+fact/witness and publication contracts described below. Evidence persistence
+and lifecycle remain target capabilities. #143/#144 track operational
+incrementality and physical CAS-growth gaps; interface invariants are not proof
+that those implementation objectives are met.
 
 ---
 
@@ -756,7 +761,13 @@ The single-writer authority is a V1 simplification. It can move to a lease-based
 
 # 15. V1 Storage Footprint
 
-Rough sizing for the M10B demo target (100K–1M LOC):
+**Unvalidated historical sizing model**, not a delivered scale envelope.
+The LevelDB measurements in #140 and the later #150 optimization show the
+current design does not establish this model. Keep these estimates as targets
+for measurement, not claims of laptop-scale feasibility. Review workloads must
+also report bounded scope, cold analysis and repeated-run storage costs.
+
+Historical sizing for a 100K–1M LOC target:
 
 | Layer | V1 estimate |
 | --- | --- |
@@ -768,7 +779,10 @@ Rough sizing for the M10B demo target (100K–1M LOC):
 | Evidence Cache (RocksDB) | 100 MB – 2 GB |
 | History Store (SQLite) | 20 MB – 400 MB |
 
-These numbers exist to bound the V1 scaling target — a laptop-class machine analyzing a million-line C/C++ codebase. Team-scale deployments (10M+ LOC) migrate the fact and metadata stores to PostgreSQL and shard the object store; the adapter contracts (§9) make that a swap rather than a rewrite.
+These numbers are aspirations requiring qualification. Changing storage
+backends alone does not resolve materialized-closure growth, retained witnesses
+or global analysis setup. The scaling programme and review evaluation must
+establish feasibility before promising 1M LOC or larger deployments.
 
 ---
 
