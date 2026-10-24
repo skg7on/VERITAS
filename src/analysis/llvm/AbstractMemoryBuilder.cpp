@@ -281,6 +281,28 @@ StatusOr<semantic::MemoryLocation> AbstractMemoryBuilder::LocationFor(
   }
   base = RecoverSingleStoreSlotValue(base);
 
+  // Valid LLVM storage/access types can be scalable or opaque. No fixed byte
+  // identity/path can be claimed for them by this producer; never call
+  // getFixedValue or a struct-layout query on such a shape.
+  const auto fixed_type = [&](::llvm::Type *type) {
+    return type->isSized() && !layout_.getTypeAllocSize(type).isScalable();
+  };
+  for (const auto *gep : geps) {
+    if (!fixed_type(gep->getSourceElementType())) {
+      return Status::FailedPrecondition(
+          "unsupported scalable or unsized memory location");
+    }
+  }
+  ::llvm::Type *allocation_type = nullptr;
+  if (const auto *alloca = ::llvm::dyn_cast<::llvm::AllocaInst>(base))
+    allocation_type = alloca->getAllocatedType();
+  else if (const auto *global = ::llvm::dyn_cast<::llvm::GlobalVariable>(base))
+    allocation_type = global->getValueType();
+  if (allocation_type && !fixed_type(allocation_type)) {
+    return Status::FailedPrecondition(
+        "unsupported scalable or unsized memory location");
+  }
+
   // 2. Determine the abstract object kind and base value fingerprint.
   const semantic::AbstractObjectKind kind = KindForBase(*base);
   auto base_id = values_.IdFor(*base);

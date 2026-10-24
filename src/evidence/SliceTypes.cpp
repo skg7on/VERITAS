@@ -379,6 +379,10 @@ void AppendClaimSeed(std::string* out, const ClaimSeed& seed) {
   AppendStableIdValue(out, seed.source_ref);
   out->append(",\"sink_ref\":");
   AppendStableIdValue(out, seed.sink_ref);
+  if (seed.callsite_ref) {
+    out->append(",\"callsite_ref\":");
+    AppendStableIdValue(out, *seed.callsite_ref);
+  }
   out->push_back('}');
 }
 

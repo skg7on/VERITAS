@@ -69,8 +69,13 @@ with four focused spec/plan pairs and sixteen work packages. The first runtime
 slice enforces relation epistemic allowlists at stable/dense row boundaries and
 conservatively projects unresolved call targets; WPA configuration identity is
 `veritas.wpa.config.v2` so old receipts do not impersonate the corrected policy.
-This does not deliver the planned lightweight backend/controller or repair all
-native Evidence gaps. Native SVF/Soufflé requirements remain unchanged.
+Issue #156 adds `thin-cpg.v2` compiler containment and typed callsite bindings,
+captured before SVF can rewrite LLVM instructions. Exact copy seeds retain their
+callsite for constant-extent scope; the CLI accepts optional `--callsite` while
+ambiguous family lookup still refuses. Legacy projections remain readable with
+explicit missing ownership capability. Native identities and `eir.v1` stay intact;
+#124/#157/#158 retain producer/coverage/handoff gaps. This does not deliver the
+planned lightweight backend/controller or repair all native Evidence gaps. Native SVF/Soufflé requirements remain unchanged.
 
 Canonical configure and build (uses `CMakePresets.json` at repo root):
 

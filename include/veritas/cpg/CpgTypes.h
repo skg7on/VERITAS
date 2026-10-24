@@ -15,8 +15,10 @@
 #ifndef VERITAS_CPG_CPGTYPES_H_
 #define VERITAS_CPG_CPGTYPES_H_
 
+#include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "veritas/core/Ids.h"
@@ -88,6 +90,30 @@ struct CpgEdge {
   bool expandable = false;
   std::vector<SupportRef> support;
 };
+
+// Compiler operands in source ABI order. A memory ref describes the pointer's
+// abstract location; it does not assert capacity, alias precision or ownership.
+struct CallSiteArgument {
+  std::uint32_t index;
+  core::StableId value_ref;
+  std::optional<core::StableId> memory_ref;
+  auto operator<=>(const CallSiteArgument &) const = default;
+};
+
+struct CallSiteBinding {
+  core::StableId callsite_id;
+  core::StableId function_variant_id;
+  core::StableId callee_ref;
+  // Empty for unclassified/unsupported ABIs; only exact compiler-recognized
+  // memcpy forms receive "memcpy.v1". Diagnostic callee labels are not
+  // authority.
+  std::string normalized_operation;
+  std::vector<CallSiteArgument> arguments;
+  std::optional<core::StableId> result_ref;
+  auto operator<=>(const CallSiteBinding &) const = default;
+};
+
+inline constexpr std::string_view kCompilerOwnedProjection = "thin-cpg.v2";
 
 // ProjectionMetadata carries the revision/build/module/summary context that the
 // ProjectionID and canonical graph bytes are derived from.

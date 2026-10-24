@@ -1,5 +1,15 @@
 # M10B Evidence Builder Input APIs and First Demo Design Spec
 
+> **#156 exact-callsite amendment:** Native `thin-cpg.v2` retains M4 compiler
+> ownership/argument bindings across SVF normalization. `--callsite <id>` selects
+> one copy call while `--sink memcpy` still rejects ambiguity. Resolved seeds
+> carry optional `callsite_ref` in diagnostic JSON; input assembly validates its
+> destination/extent and uses its owner even for a constant extent. Existing
+> hand-written seeds without the field retain legacy behavior. See
+> [native integrity §3](../veritas-native-evidence-integrity-design-spec.md).
+> This does not enable #132's producer-gated fan-out or complete #124/#157/#158.
+
+
 > **Detailed refinement:** The delivered query foundation retains native
 > producer/ownership/coverage/provenance/summary gaps. Follow the
 > [native integrity amendment](../veritas-native-evidence-integrity-design-spec.md)

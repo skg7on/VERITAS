@@ -84,6 +84,30 @@ std::string CpgCanonicalizer::CanonicalBytes(const ThinCpg& graph) {
     }
   }
 
+  // Version-gated suffix: historical veritas.cpg.v1 bytes remain exact.
+  if (graph.HasCompilerOwnership()) {
+    std::vector<CallSiteBinding> bindings(graph.callsites().begin(),
+                                          graph.callsites().end());
+    std::sort(bindings.begin(), bindings.end());
+    AppendField(&out, "compiler.calls.v1");
+    AppendField(&out, std::to_string(bindings.size()));
+    for (const auto &binding : bindings) {
+      AppendField(&out, core::ToString(binding.callsite_id));
+      AppendField(&out, core::ToString(binding.function_variant_id));
+      AppendField(&out, core::ToString(binding.callee_ref));
+      AppendField(&out, binding.normalized_operation);
+      AppendField(&out, std::to_string(binding.arguments.size()));
+      for (const auto &arg : binding.arguments) {
+        AppendField(&out, std::to_string(arg.index));
+        AppendField(&out, core::ToString(arg.value_ref));
+        AppendField(&out,
+                    arg.memory_ref ? core::ToString(*arg.memory_ref) : "");
+      }
+      AppendField(&out, binding.result_ref ? core::ToString(*binding.result_ref)
+                                           : "");
+    }
+  }
+
   return out;
 }
 

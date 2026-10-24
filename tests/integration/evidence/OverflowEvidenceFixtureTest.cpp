@@ -100,7 +100,8 @@ StatusOr<core::StableId> FunctionNode(const cpg::ThinCpg& cpg) {
 // labeled with Clang's lowered intrinsic name (llvm.memcpy.p0.p0.i64).
 StatusOr<core::StableId> MemcpySinkNode(const cpg::ThinCpg& cpg) {
   for (const auto& node : cpg.nodes()) {
-    if (node.label.find("memcpy") != std::string::npos) {
+    if (node.kind == cpg::NodeKind::kUnknown &&
+        node.label.find("memcpy") != std::string::npos) {
       return node.node_id;
     }
   }

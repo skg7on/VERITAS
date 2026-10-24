@@ -17,6 +17,7 @@
 
 #include <span>
 
+#include "analysis/cpg/EntityOwnership.h"
 #include "analysis/pipeline/ProgramIr.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
@@ -24,6 +25,17 @@
 #include "veritas/summary/v2/summary.pb.h"
 
 namespace veritas::analysis::cpg {
+
+// Immutable compiler identities captured at M4, before SVF normalizes/replaces
+// instructions. Contains no LLVM pointers and is not a published projection.
+struct CompilerProjection {
+  ::veritas::cpg::ThinCpg graph;
+  std::vector<EntityOwner> owners;
+  std::string module_hash;
+};
+
+StatusOr<CompilerProjection>
+CaptureCompilerProjection(const pipeline::ProgramIr &ir);
 
 // CpgProjectionInput is the private, engine-neutral input boundary for the M6
 // projection stage. It borrows the live ProgramIr and completed summary.v2
@@ -34,6 +46,7 @@ struct CpgProjectionInput {
   std::span<const summary::v2::FunctionSummary> completed_summaries;
   core::StableId revision_id;
   core::StableId build_variant_id;
+  const CompilerProjection *compiler_projection = nullptr;
 };
 
 // BuildThinCpg projects the live ProgramIr and completed summaries into a

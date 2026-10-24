@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "veritas/core/Hash.h"
+#include "veritas/evidence/OverflowClaimSeed.h"
 #include "veritas/evidence/QueryCompletion.h"
 #include "veritas/facts/FactProto.h"
 #include "veritas/facts/RelationSchema.h"
@@ -856,6 +857,24 @@ StatusOr<EvidenceBuildInput> EvidenceQueryService::BuildEvidenceInput(
   if (Status s = ValidateEvidenceQueryBudget(budget); !s.ok()) {
     return s;
   }
+  std::optional<core::StableId> callsite_owner;
+  if (claim_seed.callsite_ref) {
+    auto expected = ResolveOverflowClaimSeed(*cpg_, {}, kMemcpySink,
+                                             claim_seed.callsite_ref);
+    if (!expected.ok())
+      return expected.status();
+    const auto it =
+        std::ranges::find(cpg_->callsites(), *claim_seed.callsite_ref,
+                          &cpg::CallSiteBinding::callsite_id);
+    if (it == cpg_->callsites().end() || claim_seed.kind != expected->kind ||
+        expected->subject_ref != claim_seed.subject_ref ||
+        expected->source_ref != claim_seed.source_ref ||
+        expected->sink_ref != claim_seed.sink_ref) {
+      return Status::InvalidArgument(
+          "claim seed operands do not match its compiler callsite");
+    }
+    callsite_owner = it->function_variant_id;
+  }
   auto snapshot = backend_->OpenSnapshot(run_id_);
   if (!snapshot.ok()) {
     return snapshot.status();
@@ -889,12 +908,12 @@ StatusOr<EvidenceBuildInput> EvidenceQueryService::BuildEvidenceInput(
   // absent scope is recorded as an absent scope: `EncodeScopeRefs` renders it
   // as the empty string, which round-trips to an empty ref list.
   //
-  // The underlying gap is upstream: `FindContainingFunction` needs a
-  // `kContains` CPG edge, `kContains` is defined and consumed but never
-  // emitted, so this lookup currently fails for every sink. Making the M6
-  // projection emit containment edges is M6's fix, not this one's.
+  // thin-cpg.v2 emits compiler-owned containment for local values. Historical
+  // projections and unowned constant/global operands may still lack an owner;
+  // the absence remains explicit rather than borrowing a summary endpoint.
   const std::optional<core::StableId> function_scope =
-      FindContainingFunction(*cpg_, claim_seed.sink_ref);
+      callsite_owner ? callsite_owner
+                     : FindContainingFunction(*cpg_, claim_seed.sink_ref);
 
   // Run each fact query against the same snapshot. Results and certificates
   // are validated together before the handoff is returned.

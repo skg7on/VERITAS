@@ -415,10 +415,18 @@ public:
     }
 
     // M4: build linked IR and extract local summary drafts.
-    auto local = [&] {
+    std::optional<cpg::CompilerProjection> compiler_projection;
+    auto local = [&]() -> StatusOr<pipeline::LocalAnalysisResult> {
       core::PhaseSpan span(metrics, "m4.local_analysis",
                            core::SpanMode::kBearing);
-      return pipeline::RunLocalAnalysis(*manifest);
+      auto result = pipeline::RunLocalAnalysis(*manifest);
+      if (!result.ok())
+        return result.status();
+      auto compiler = cpg::CaptureCompilerProjection(result->program_ir);
+      if (!compiler.ok())
+        return compiler.status();
+      compiler_projection.emplace(std::move(*compiler));
+      return result;
     }();
     if (!local.ok())
       return local.status();
@@ -479,6 +487,7 @@ public:
           .completed_summaries = *merged,
           .revision_id = *revision_id,
           .build_variant_id = *build_variant_id,
+          .compiler_projection = &*compiler_projection,
       });
     }();
     if (!graph.ok())

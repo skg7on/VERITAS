@@ -51,6 +51,9 @@ class AbstractMemoryBuilder {
                         const OriginMap& origins);
   ~AbstractMemoryBuilder() = default;
 
+  // FailedPrecondition means an unsupported scalable/unsized memory shape;
+  // consumers may retain an unowned/unsupported result instead of inventing a
+  // fixed location. Other errors must be propagated.
   StatusOr<semantic::MemoryLocation> LocationFor(
       const ::llvm::Value& pointer,
       std::optional<std::uint64_t> access_size) const;

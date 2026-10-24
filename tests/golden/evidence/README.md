@@ -32,7 +32,7 @@ fixpoint, or survive into the content-addressed bytes and change every
 | `overflow_unsafe.l1.eir.json` | The full-fidelity JSON rendering of `overflow_unsafe.l1.eir`. **Read** by DEM-005 and required to be byte-identical to `ToEvidenceJson` of the case the `.eir` beside it parses into, so the two halves of one case cannot drift apart. (M10C ships no JSON *reader*, so this golden is never parsed back into a case; the comparison runs from the text side.) |
 | `overflow_safe.l1.eir` | The safe fixture at `l1`. The difference from unsafe is flow shape, not verdict — both are `POSSIBLE_DEFECT` and both carry the derived `MUST_NOT dominates_bounds_check`. |
 | `overflow_truncated.l1.eir` | The unsafe fixture analysed with `--max-nodes 1`. |
-| `overflow_unsafe.slice.json` | **Not an EIR artefact.** The M10B `EvidenceInput` slice, delivered by M10B. Do not regenerate. |
+| `overflow_unsafe.slice.json` | **Not an EIR artefact.** The M10B diagnostic `EvidenceInput` slice, including the additive exact `callsite_ref` when supplied. |
 
 ## How they are used
 
@@ -43,3 +43,16 @@ oracle across machines: content addresses embed LLVM's host-dependent
 executable, so two machines legitimately disagree on the bytes. The comparison
 is therefore semantic. Byte equality is asserted only where both sides come from
 the same build — see that file's header comment for the split and the reasons.
+
+## #156 regeneration rationale
+
+The versioned native CPG and exact operand correction restores caller-scoped
+unknowns: the unsafe slice has five flow nodes, four flow edges and seventeen
+GlobalFlow supports as before, plus the actual memcpy and SVF UnknownEffect
+rows. The EIR artifacts retain `POSSIBLE_DEFECT` and add their real function,
+unknown and analyzer-omission members. Native FactIDs are not redefined, and no
+missing range/capacity/check producer is fabricated. Query/CPG/finding addresses
+legitimately change. The truncated golden still records the independent
+complete dominating-check query; fixing flow truncation semantics belongs to
+#157. EIR-T/JSON pairs are regenerated from the same real CLI execution and
+remain subject to round-trip, identity and typed semantic checks.

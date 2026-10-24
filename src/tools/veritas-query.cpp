@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -25,6 +26,7 @@
 
 #include "veritas/build/AnalysisManifest.h"
 #include "veritas/core/AtomicFile.h"
+#include "veritas/core/Hash.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Version.h"
 #include "veritas/cpg/CpgQuery.h"
@@ -35,8 +37,8 @@
 #include "veritas/evidence/EvidenceJson.h"
 #include "veritas/evidence/EvidenceProto.h"
 #include "veritas/evidence/EvidenceQueryService.h"
-#include "veritas/evidence/OverflowClaimSeed.h"
 #include "veritas/evidence/FactStoreEvidenceBackend.h"
+#include "veritas/evidence/OverflowClaimSeed.h"
 #include "veritas/evidence/SliceTypes.h"
 #include "veritas/facts/FactStore.h"
 #include "veritas/summarydb/MetadataStore.h"
@@ -51,11 +53,14 @@ using veritas::core::StableId;
 constexpr std::string_view kUsage =
     "usage:\n"
     "  veritas-query --version\n"
-    "  veritas-query callees <function-id> --revision <id> --build <id> --db <dir>\n"
+    "  veritas-query callees <function-id> --revision <id> --build <id> --db "
+    "<dir>\n"
     "  veritas-query flow <src-id> <dst-id> --projection <id> --db <dir> "
     "[--max-depth N --max-nodes N --max-paths N]\n"
-    "  veritas-query evidence overflow --sink <value> --format <fmt> --db <dir> "
-    "[--level l0|l1|l2 --output <path> --max-depth N --max-nodes N "
+    "  veritas-query evidence overflow --sink <value> --format <fmt> --db "
+    "<dir> "
+    "[--callsite <callsite-id> --level l0|l1|l2 --output <path> --max-depth N "
+    "--max-nodes N "
     "--max-paths N --max-facts N --max-provenance-depth N]\n"
     "\n"
     "  --format json     the M10B diagnostic slice JSON (default level: none)\n"
@@ -102,6 +107,7 @@ constexpr std::string_view kEvidenceFormats[] = {"json", "eir-t", "eir-json",
 struct EvidenceOptions {
   std::string db_path;
   std::string sink;
+  std::optional<StableId> callsite;
   std::string format;
   std::string output;
   veritas::evidence::EvidenceLevel level = veritas::evidence::EvidenceLevel::kL1;
@@ -161,6 +167,14 @@ Status ParseEvidenceOptions(const std::vector<std::string>& args,
         return Status::InvalidArgument("unsupported --sink '" + out->sink +
                                        "'");
       }
+    } else if (flag == "--callsite") {
+      auto id = ParseStableId(TakeValue(args, &i, flag));
+      if (!id.ok() || id->kind != veritas::core::IdKind::kCallSite ||
+          !veritas::core::HexToDigest(id->digest_hex)) {
+        return Status::InvalidArgument(
+            "--callsite requires a valid callsite ID");
+      }
+      out->callsite = *id;
     } else if (flag == "--format") {
       out->format = TakeValue(args, &i, flag);
       if (!IsSupported(out->format, kEvidenceFormats)) {
@@ -338,7 +352,7 @@ int RunEvidenceOverflow(const std::vector<std::string>& args) {
                                                   *run_id, *current_facts);
 
   auto seed = veritas::evidence::ResolveOverflowClaimSeed(
-      *cpg, *current_facts, options.sink);
+      *cpg, *current_facts, options.sink, options.callsite);
   if (!seed.ok()) return ReportError(seed.status().message());
 
   veritas::evidence::FactStoreEvidenceBackend backend(*fact_store, descriptor);
