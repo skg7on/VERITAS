@@ -1,5 +1,10 @@
 # VERITAS Evidence IR Agent Security Use Cases Design Spec
 
+> **Review direction (2026-10-03):** Product sequencing, candidate origins and context access are refined by the new proposal. See the
+> [review-driven analysis proposal](veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
+> acceptance contracts remain unchanged until their implementation amendments
+> are reviewed.
+
 **Status:** Draft use-case companion
 
 **Scope:** Review Agent consumption of Evidence IR for large C and C++ repositories
@@ -70,26 +75,18 @@ canonicalization, and EIR-T/Protobuf/JSON representation boundaries.
 
 # 2. Capability and readiness boundary
 
-The use cases deliberately span the complete target workflow. The repository's
-current documentation matrix marks M0 through M8 as implemented, M8R as
-approved but pending, and M9, M10A, M10B, M10C, and the Review Agent path as
-planned.
+The use cases span the target workflow; delivery is narrower than semantic
+completion. M8R/M9 and M10A–M10C foundations have landed. The Review Agent and
+production backend remain pending.
 
-| Layer | Capability used by these use cases | Readiness represented here |
-| --- | --- | --- |
-| M6 thin CPG | Stable nodes, source anchors, calls, writes, budgeted value-flow and call-path traversal | Implemented foundation |
-| M8 fact engine | Canonical base and derived fact tuples, epistemic values, immediate witness inputs, and explicit unknown calls | Implemented foundation; M8R gates later publication |
-| M9 | Durable FactStore, ProvenanceStore, run bindings, history, stale state, and budgeted Explain | Planned prerequisite |
-| M10A | Recursive security-domain relations such as global flow, unknown effects, range propagation, and soundness coverage | Planned; detailed specification is still required |
-| M10B | FlowSlice, EvidenceQueryService, range and alias lookup, dominating checks, provenance refs, and deterministic diagnostic JSON | Planned first Evidence Builder milestone |
-| M10C | Claim-oriented EIR-L0/L1/L2 packaging, validation, canonical identity, and EIR-T/Protobuf/full-EIR JSON serialization | Planned; depends on M10B |
-| Review Agent | Prompt assembly, schema validation, evidence expansion, hypothesis admission, verifier dispatch, and final review rendering | Planned |
-
-The implemented [CpgQuery traversal](../../src/cpg/CpgQuery.cpp) already makes
-depth, node, and path limits visible. The implemented fact construction path
-already assigns stable fact identities and retains immediate derivation inputs.
-M9 is still needed to persist and explain complete rooted witness DAGs, and
-M10B is still needed to assemble those facts into an Evidence Builder slice.
+| Layer | Current readiness and remaining boundary |
+| --- | --- |
+| M6 | Thin CPG exists; containment needed for Evidence scope remains tracked by #149. |
+| M8R/M9 | Production Souffle and provenance publication delivered; operational invalidation remains #143. |
+| M10A | Recursive domains delivered; local range/capacity/alias/positive-check producers remain #124. |
+| M10B | Typed bounded inputs delivered; call-site scoping and documented handoff gaps remain #132/#149. |
+| M10C | EIR model/validation/serialization delivered; completeness and summary handoff gaps remain #149. |
+| Review Agent | #79 and the review proposal define pending controller/backend delivery and qualification. |
 
 Each use case below has a readiness note so implementation plans can separate
 the near-term M10B input demonstration, M10C serialization, and later Agent or
@@ -140,9 +137,12 @@ checks before calling the underlying service.
 
 ## 3.2 Candidate generation comes first
 
-An Evidence Case begins with a deterministic or policy-defined candidate seed,
-not with a request for the LLM to search the repository. Typical seeders scan
-stable semantic relations for patterns such as:
+Under the proposed review direction, candidates come from deterministic seeds
+and LLM concerns over bounded diffs/source/test/doc context. The controller
+validates snapshot-bound anchors before analytical case construction; an LLM
+candidate is never an authoritative fact. Context-led discovery is a separate
+pre-case phase and does not remove EIR-L0-first disclosure for admitted cases.
+Typical deterministic seeders scan stable semantic relations for patterns such as:
 
 * an externally influenced value reaching a size-sensitive memory operation;
 * a dereference reachable from a nullable result without a dominating success
@@ -328,10 +328,11 @@ remaining_budget:
 This preserves context while making the new evidence and remaining limits
 obvious.
 
-## 3.8 Source text is exceptional and untrusted
+## 3.8 Bounded source context is available and untrusted
 
-Source is requested by entity or source-anchor reference only when semantic
-facts are insufficient. The Agent should:
+The proposed review begins with bounded diff and source/test/doc context and
+may retrieve further excerpts through validated snapshot-bound references. EIR
+expansion and source retrieval complement each other. The Agent should:
 
 * return the smallest enclosing expression, statement, or function fragment;
 * label it as untrusted artifact data;
@@ -341,7 +342,9 @@ facts are insufficient. The Agent should:
 * never expose repository credentials or unrestricted file tools; and
 * charge source lines against a separate budget.
 
-The normal path should remain evidence-first.
+Analytical conclusions remain evidence-backed. Source-backed semantic concerns
+are labeled review observations, not verified program facts. Their report
+contract is defined by the review-driven analysis proposal.
 
 ## 3.9 Completion rule
 

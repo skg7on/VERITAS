@@ -1,6 +1,6 @@
 # `veritas-build analyze` Round 4 Performance Design Specification
 
-**Status:** Draft for review
+**Status:** Measured/reverted arena design; canonicalizer optimization delivered in PR #150
 
 **Tracking issue:** [#133](https://github.com/skg7on/VERITAS/issues/133), still
 open. Its successor [#136](https://github.com/skg7on/VERITAS/issues/136) closed
