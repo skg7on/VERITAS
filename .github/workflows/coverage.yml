@@ -1,0 +1,527 @@
+# Copyright 2026 VERITAS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Code Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Read-only by default. The coverage job widens `contents` to write so it can
+# publish the `badges` branch; pull-request runs never take that path.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: Ubuntu 24.04 / LLVM 24 / llvm-cov
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout VERITAS
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install system dependencies
+        timeout-minutes: 10
+        run: |
+          # Same mirror hardening as ci.yml: the Azure runner image routes apt
+          # through azure.archive.ubuntu.com, which intermittently hangs.
+          echo 'Acquire::http::Timeout "30";'  | sudo tee /etc/apt/apt.conf.d/99veritas-apt >/dev/null
+          echo 'Acquire::https::Timeout "30";' | sudo tee -a /etc/apt/apt.conf.d/99veritas-apt >/dev/null
+          echo 'Acquire::Retries "2";'         | sudo tee -a /etc/apt/apt.conf.d/99veritas-apt >/dev/null
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i 's/priority:1/priority:9/' /etc/apt/apt-mirrors.txt || true
+          fi
+
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt: apt-get update"
+            if sudo apt-get update; then
+              break
+            fi
+            if [ $attempt -lt 3 ]; then
+              echo "apt-get update failed, retrying in 10 seconds..."
+              sleep 10
+            else
+              echo "apt-get update failed after 3 attempts"
+              exit 1
+            fi
+          done
+
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential \
+            bison \
+            cmake \
+            flex \
+            git \
+            libedit-dev \
+            libffi-dev \
+            libgtest-dev \
+            libprotobuf-dev \
+            libsqlite3-dev \
+            libtinfo-dev \
+            libxml2-dev \
+            libzstd-dev \
+            ninja-build \
+            pkg-config \
+            protobuf-compiler \
+            python3 \
+            zlib1g-dev
+
+      # The toolchain caches are populated by ci.yml. This workflow only
+      # restores them, so it never races ci.yml on a cache save. A cache miss
+      # rebuilds from source below.
+      - name: Restore Z3 cache
+        id: z3-cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/z3-install
+          key: veritas-ubuntu-24.04-x86_64-z3-ddb49568d3520e99799e364fb22f35fc67d887b1-r1
+
+      - name: Checkout Z3 source
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Z3Prover/z3
+          ref: ddb49568d3520e99799e364fb22f35fc67d887b1
+          path: z3
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build and install Z3
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S z3 -B "$RUNNER_TEMP/z3-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/z3-install" \
+            -DZ3_BUILD_LIBZ3_SHARED=ON \
+            -DZ3_BUILD_PYTHON_BINDINGS=OFF \
+            -DZ3_BUILD_DOCUMENTATION=OFF
+          cmake --build "$RUNNER_TEMP/z3-build" --target install --parallel $(nproc)
+          cmake -E remove_directory "$GITHUB_WORKSPACE/z3"
+          cmake -E remove_directory "$RUNNER_TEMP/z3-build"
+
+      - name: Validate Z3 installation
+        run: |
+          test -f "$RUNNER_TEMP/z3-install/include/z3++.h"
+          test -f "$RUNNER_TEMP/z3-install/lib/libz3.so"
+          test -f "$RUNNER_TEMP/z3-install/lib/cmake/z3/Z3Config.cmake"
+
+      - name: Restore RocksDB cache
+        id: rocksdb-cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/rocksdb-install
+          key: veritas-ubuntu-24.04-x86_64-rocksdb-v9.11.1-r3
+
+      - name: Checkout RocksDB source
+        if: steps.rocksdb-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: facebook/rocksdb
+          ref: v9.11.1
+          path: rocksdb
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build and install RocksDB
+        if: steps.rocksdb-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S rocksdb -B "$RUNNER_TEMP/rocksdb-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/rocksdb-install" \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DPORTABLE=1 \
+            -DUSE_RTTI=ON \
+            -DWITH_TESTS=OFF \
+            -DWITH_TOOLS=OFF \
+            -DWITH_BENCHMARK_TOOLS=OFF \
+            -DWITH_GFLAGS=OFF
+          cmake --build "$RUNNER_TEMP/rocksdb-build" --target install --parallel $(nproc)
+          cmake -E remove_directory "$GITHUB_WORKSPACE/rocksdb"
+          cmake -E remove_directory "$RUNNER_TEMP/rocksdb-build"
+
+      - name: Validate RocksDB installation
+        run: |
+          test -f "$RUNNER_TEMP/rocksdb-install/include/rocksdb/db.h"
+          test -f "$RUNNER_TEMP/rocksdb-install/lib/librocksdb.a"
+          test -f "$RUNNER_TEMP/rocksdb-install/lib/cmake/rocksdb/RocksDBConfig.cmake"
+
+      - name: Restore LLVM cache
+        id: llvm-cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/llvm-install
+          key: veritas-ubuntu-24.04-x86_64-llvm-f9bda52e57a759d20224cd581f73f61ee3220e74-r5
+
+      - name: Checkout LLVM source
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: llvm/llvm-project
+          ref: f9bda52e57a759d20224cd581f73f61ee3220e74
+          path: llvm-project
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S llvm-project/llvm -B "$RUNNER_TEMP/llvm-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/llvm-install" \
+            -DLLVM_BUILD_LLVM_DYLIB=ON \
+            -DLLVM_LINK_LLVM_DYLIB=ON \
+            -DCLANG_LINK_CLANG_DYLIB=ON \
+            -DLLVM_ENABLE_PROJECTS=clang \
+            -DLLVM_TARGETS_TO_BUILD=X86 \
+            -DLLVM_ENABLE_RTTI=ON \
+            -DLLVM_ENABLE_EH=ON \
+            -DLLVM_INCLUDE_TESTS=OFF \
+            -DCLANG_INCLUDE_TESTS=OFF \
+            -DLLVM_INCLUDE_EXAMPLES=OFF \
+            -DLLVM_INCLUDE_BENCHMARKS=OFF \
+            -DLLVM_INCLUDE_DOCS=OFF \
+            -DLLVM_ENABLE_BINDINGS=OFF \
+            -DLLVM_BUILD_UTILS=OFF \
+            -DLLVM_OPTIMIZED_TABLEGEN=ON
+
+      - name: Build and install LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake --build "$RUNNER_TEMP/llvm-build" --target install --parallel $(nproc)
+          cmake -E remove_directory "$GITHUB_WORKSPACE/llvm-project"
+          cmake -E remove_directory "$RUNNER_TEMP/llvm-build"
+
+      - name: Validate LLVM installation
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib
+        run: |
+          test -x "$RUNNER_TEMP/llvm-install/bin/llvm-config"
+          test -x "$RUNNER_TEMP/llvm-install/bin/clang"
+          test -x "$RUNNER_TEMP/llvm-install/bin/llvm-profdata"
+          test -x "$RUNNER_TEMP/llvm-install/bin/llvm-cov"
+          test -f "$RUNNER_TEMP/llvm-install/lib/cmake/llvm/LLVMConfig.cmake"
+          test -f "$RUNNER_TEMP/llvm-install/lib/cmake/clang/ClangConfig.cmake"
+          test "$("$RUNNER_TEMP/llvm-install/bin/llvm-config" --version)" = "24.0.0git"
+          "$RUNNER_TEMP/llvm-install/bin/clang" --version
+
+      # The LLVM cache is built with LLVM_ENABLE_PROJECTS=clang only, so it has
+      # no compiler-rt and therefore no libclang_rt.profile. Every Clang
+      # coverage mode (-fprofile-instr-generate, --coverage, -fprofile-arcs)
+      # needs that runtime at link time, so build just the profile runtime for
+      # the pinned LLVM. It is cached separately; a cache hit skips both the
+      # llvm-project checkout and the build.
+      - name: Restore compiler-rt cache
+        id: compiler-rt-cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/compiler-rt-install
+          key: veritas-ubuntu-24.04-x86_64-compiler-rt-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
+
+      - name: Checkout LLVM source for compiler-rt
+        if: steps.compiler-rt-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: llvm/llvm-project
+          ref: f9bda52e57a759d20224cd581f73f61ee3220e74
+          path: llvm-project
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build compiler-rt profile runtime
+        if: steps.compiler-rt-cache.outputs.cache-hit != 'true'
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib
+        run: |
+          llvm_major="$(
+            "$RUNNER_TEMP/llvm-install/bin/llvm-config" --version | cut -d. -f1
+          )"
+          target_triple="$(
+            "$RUNNER_TEMP/llvm-install/bin/clang" --print-target-triple
+          )"
+          # COMPILER_RT_INSTALL_PATH must be absolute: CMake turns a relative
+          # PATH cache entry into an absolute path under the configure
+          # directory, which would install the runtime outside the cache tree.
+          cmake -S llvm-project/compiler-rt -B "$RUNNER_TEMP/compiler-rt-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="$RUNNER_TEMP/llvm-install/bin/clang" \
+            -DCMAKE_CXX_COMPILER="$RUNNER_TEMP/llvm-install/bin/clang++" \
+            -DCMAKE_C_COMPILER_TARGET="$target_triple" \
+            -DLLVM_CONFIG_PATH="$RUNNER_TEMP/llvm-install/bin/llvm-config" \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/compiler-rt-install" \
+            -DCOMPILER_RT_INSTALL_PATH="$RUNNER_TEMP/compiler-rt-install/lib/clang/${llvm_major}" \
+            -DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF \
+            -DCOMPILER_RT_BUILD_BUILTINS=OFF \
+            -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
+            -DCOMPILER_RT_BUILD_XRAY=OFF \
+            -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
+            -DCOMPILER_RT_BUILD_PROFILE=ON \
+            -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
+          cmake --build "$RUNNER_TEMP/compiler-rt-build" --target install --parallel $(nproc)
+          cmake -E remove_directory "$GITHUB_WORKSPACE/llvm-project"
+          cmake -E remove_directory "$RUNNER_TEMP/compiler-rt-build"
+
+      # Another run may populate the key first; a cache-save race must not take
+      # coverage down.
+      - name: Save compiler-rt cache
+        if: steps.compiler-rt-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/compiler-rt-install
+          key: veritas-ubuntu-24.04-x86_64-compiler-rt-f9bda52e57a759d20224cd581f73f61ee3220e74-r1
+
+      # The runtime is installed under the run-local LLVM prefix so the clang
+      # driver resolves it from its own resource directory.
+      - name: Validate profile runtime
+        run: |
+          llvm_major="$(
+            "$RUNNER_TEMP/llvm-install/bin/llvm-config" --version | cut -d. -f1
+          )"
+          mkdir -p "$RUNNER_TEMP/llvm-install/lib/clang/${llvm_major}/lib"
+          cp -R "$RUNNER_TEMP/compiler-rt-install/lib/clang/${llvm_major}/lib/." \
+            "$RUNNER_TEMP/llvm-install/lib/clang/${llvm_major}/lib/"
+          runtime_dir="$("$RUNNER_TEMP/llvm-install/bin/clang" -print-runtime-dir)"
+          runtime_arch="$(
+            "$RUNNER_TEMP/llvm-install/bin/clang" --print-target-triple |
+              cut -d- -f1
+          )"
+          profile_runtime="${runtime_dir}/libclang_rt.profile-${runtime_arch}.a"
+          if [ ! -f "$profile_runtime" ]; then
+            echo "missing Clang profile runtime: ${profile_runtime}" >&2
+            find "$RUNNER_TEMP/compiler-rt-install" -name '*profile*' >&2
+            exit 1
+          fi
+
+      # Debug keeps the instrumented build as small and fast to compile as
+      # possible; optimization is irrelevant to coverage mapping. The profile
+      # runtime flags must be present at both compile and link time, including
+      # for the in-tree SVF and Souffle sub-builds, or the instrumented objects
+      # fail to link.
+      - name: Configure VERITAS with coverage instrumentation
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON \
+            -DCMAKE_C_COMPILER="$RUNNER_TEMP/llvm-install/bin/clang" \
+            -DCMAKE_CXX_COMPILER="$RUNNER_TEMP/llvm-install/bin/clang++" \
+            -DLLVM_PROJECT_BUILD_DIR="$RUNNER_TEMP/llvm-install" \
+            -DZ3_DIR="$RUNNER_TEMP/z3-install/lib/cmake/z3" \
+            -DRocksDB_DIR="$RUNNER_TEMP/rocksdb-install/lib/cmake/rocksdb" \
+            -DVERITAS_BUILD_TESTS=ON \
+            -DVERITAS_BUILD_TOOLS=ON \
+            -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping" \
+            -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fprofile-instr-generate" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fprofile-instr-generate" \
+            -DCMAKE_MODULE_LINKER_FLAGS="-fprofile-instr-generate"
+
+      - name: Build VERITAS
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Build SVF
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
+        run: cmake --build build --target SvfCore SvfLLVM --parallel $(nproc)
+
+      # `%p-%m` gives every process/module pair its own profile file, which is
+      # required because the test suite shares one instrumented fused binary
+      # set across many subprocesses. The performance qualification test is
+      # excluded: its wall-clock ceiling is calibrated for an optimized,
+      # uninstrumented build and instrumentation is not the subject of that
+      # gate (the regular CI job still runs it).
+      - name: Run tests under coverage
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib
+          LLVM_PROFILE_FILE: ${{ github.workspace }}/coverage/profiles/%p-%m.profraw
+        run: |
+          mkdir -p coverage/profiles
+          ctest --test-dir build --output-on-failure \
+            -E '^WpaPerformanceQualificationTest$'
+          test -n "$(find coverage/profiles -name '*.profraw' -print -quit)"
+
+      - name: Merge profiles
+        run: |
+          find coverage/profiles -name '*.profraw' -print > coverage/profiles.list
+          "$RUNNER_TEMP/llvm-install/bin/llvm-profdata" merge -sparse \
+            --input-files=coverage/profiles.list \
+            -o coverage/coverage.profdata
+
+      # Coverage mapping lives in every instrumented module: the first-party
+      # shared libraries plus the CLI and test executables. Restrict objects to
+      # real ELF binaries, since llvm-cov rejects archives and scripts.
+      - name: Build instrumented object list
+        run: |
+          LLVM_BIN="$RUNNER_TEMP/llvm-install/bin"
+          OBJECTS=()
+          while IFS= read -r -d '' file; do
+            # Capture the headers instead of piping into `grep -q`: GitHub's
+            # default shell enables pipefail, so an early-exiting grep could
+            # turn a normal readelf SIGPIPE into a spurious "not instrumented".
+            sections=$("$LLVM_BIN/llvm-readelf" --section-headers "$file" 2>/dev/null || true)
+            if [[ "$sections" == *llvm_covmap* ]]; then
+              OBJECTS+=("-object" "$file")
+            fi
+          done < <(
+            find build/bin -maxdepth 1 -type f -perm -u+x -print0
+            find build/lib -maxdepth 1 -type f \( -name '*.so' -o -name '*.so.*' \) -print0
+          )
+          if [ "${#OBJECTS[@]}" -eq 0 ]; then
+            echo "no instrumented modules found" >&2
+            exit 1
+          fi
+          printf '%s\n' "${OBJECTS[@]}" > coverage/objects.txt
+
+      - name: Generate coverage reports
+        run: |
+          LLVM_BIN="$RUNNER_TEMP/llvm-install/bin"
+          mapfile -t OBJECTS < coverage/objects.txt
+          IGNORE='(^|/)(build|tests|third_party)/'
+          "$LLVM_BIN/llvm-cov" export "${OBJECTS[@]}" \
+            -instr-profile coverage/coverage.profdata \
+            -ignore-filename-regex="$IGNORE" \
+            -format=lcov > coverage/coverage.lcov
+          "$LLVM_BIN/llvm-cov" export --summary-only "${OBJECTS[@]}" \
+            -instr-profile coverage/coverage.profdata \
+            -ignore-filename-regex="$IGNORE" > coverage/summary.json
+          "$LLVM_BIN/llvm-cov" show "${OBJECTS[@]}" \
+            -instr-profile coverage/coverage.profdata \
+            -ignore-filename-regex="$IGNORE" \
+            -format=html -output-dir coverage/html \
+            --show-line-counts-or-regions --show-instantiations=false
+
+      - name: Summarize coverage and build badge data
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          with open("coverage/summary.json", encoding="utf-8") as handle:
+              report = json.load(handle)
+
+          entries = report["data"]
+          if len(entries) != 1:
+              raise SystemExit(
+                  f"expected one llvm-cov data entry, found {len(entries)}"
+              )
+
+          totals = entries[0]["totals"]
+          lines = totals["lines"]
+          if lines["count"] == 0:
+              raise SystemExit("coverage report contains no measurable lines")
+
+          percent = lines["percent"]
+          if percent >= 90:
+              color = "brightgreen"
+          elif percent >= 80:
+              color = "green"
+          elif percent >= 70:
+              color = "yellowgreen"
+          elif percent >= 60:
+              color = "yellow"
+          elif percent >= 50:
+              color = "orange"
+          else:
+              color = "red"
+
+          badge = {
+              "schemaVersion": 1,
+              "label": "coverage",
+              "message": f"{percent:.1f}%",
+              "color": color,
+              "cacheSeconds": 3600,
+          }
+          with open("coverage/badge.json", "w", encoding="utf-8") as handle:
+              json.dump(badge, handle)
+              handle.write("\n")
+
+          def row(name):
+              item = totals[name]
+              return (
+                  f"| {name} | {item['percent']:.1f}% | "
+                  f"{item['covered']}/{item['count']} |"
+              )
+
+          summary = [
+              "## Code coverage",
+              "",
+              f"**Line coverage: {percent:.1f}%**",
+              "",
+              "| Metric | Percentage | Covered |",
+              "| --- | --- | --- |",
+              row("lines"),
+              row("functions"),
+              row("regions"),
+              row("branches"),
+              "",
+              "The HTML report and `coverage.lcov` are attached to this run as "
+              "the `coverage-report` artifact.",
+          ]
+          text = "\n".join(summary) + "\n"
+          print(text)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              handle.write(text)
+          PY
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report
+          path: |
+            coverage/coverage.lcov
+            coverage/summary.json
+            coverage/html
+          if-no-files-found: warn
+          retention-days: 14
+
+      # The badge endpoint reads this file from the `badges` branch:
+      # https://raw.githubusercontent.com/skg7on/VERITAS/badges/coverage.json
+      # Pull-request runs must not publish, and fork PRs receive a read-only
+      # token regardless.
+      - name: Publish coverage badge
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          badge_dir="$RUNNER_TEMP/coverage-badge"
+          rm -rf "$badge_dir"
+          mkdir -p "$badge_dir"
+          cp coverage/badge.json "$badge_dir/coverage.json"
+          cd "$badge_dir"
+          git init --quiet
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add coverage.json
+          git commit --quiet -m "chore: update coverage badge"
+          git push --quiet --force \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:refs/heads/badges

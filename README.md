@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/skg7on/VERITAS/actions/workflows/ci.yml"><img src="https://github.com/skg7on/VERITAS/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Build"></a>
+  <a href="https://github.com/skg7on/VERITAS/actions/workflows/coverage.yml"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fskg7on%2FVERITAS%2Fbadges%2Fcoverage.json" alt="Code Coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache-2.0"></a>
 </p>
 
@@ -156,6 +157,14 @@ git config core.hooksPath .githooks
 The hook requires `clang-format` on `PATH` and rejects commits whose staged
 C or C++ content is not formatted. It checks the Git index without modifying
 the working tree, so partially staged changes remain intact.
+
+Line coverage is measured by the
+[Code Coverage workflow](https://github.com/skg7on/VERITAS/actions/workflows/coverage.yml)
+with LLVM source-based coverage. It runs on pull requests and on `main`, writes
+an HTML report and `coverage.lcov` to the run artifacts, and publishes the
+badge data to the `badges` branch. The README badge reflects the latest run on
+`main`; the WPA performance qualification test is excluded there because its
+wall-clock ceiling assumes an optimized, uninstrumented build.
 
 ---
 
