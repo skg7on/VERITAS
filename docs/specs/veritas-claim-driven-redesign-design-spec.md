@@ -507,6 +507,14 @@ runs and state swap/load conditions; report wall time only with those limits.
 
 ## 9. Decisions to revisit and implementation handoff
 
+The requested detailed handoff is now the
+[redesign program implementation plan](../plans/veritas-redesign-program-implementation-plan.md)
+and its four focused spec/plan pairs. Native-specific integrity work gates the
+native-EIR capability; a separately identified local-only profile can qualify
+P1 without using that capability. The detailed profile makes this gate precise
+without weakening any native acceptance criteria. Native authority admission and conservative unresolved-call projection
+are implemented in this delivery; other tasks stay open.
+
 Before product implementation, review the reconciled scope and extend the
 canonical direction merged in PR #152 as needed. Early LLM discovery, broader context-artifact
 admission, the structural/local provider, and later scoped publication need
@@ -520,7 +528,7 @@ or hosted service has been selected. Selection must honor the user's source
 disclosure preferences; this planning task sends no reviewed source to a new
 model service.
 
-After design approval, write focused P0 and P1 executable plans in `docs/plans/`:
+After detailed-contract review, execute the focused P0 and P1 plans in `docs/plans/`:
 regressions for the audited integrity gaps; a frozen real-change corpus;
 snapshot/context and candidate APIs; minimal local evidence/annotation schemas;
 the replay request/result and authority transition; exact test/build commands;

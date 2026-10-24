@@ -1,5 +1,12 @@
 # VERITAS Whole-Program Analysis
 
+> **Detailed redesign boundary:** [Demand query execution](../specs/veritas-demand-analysis-lifecycle-design-spec.md)
+> uses separately registered seeded kernels, conservative boundary summaries,
+> explicit SCC/frontier coverage and selected rooted proofs. It does not change
+> this native command's mandatory SVF/Soufflé ownership or claim that SVF demand
+> queries avoid global bootstrap. Operational native invalidation remains #143;
+> review-level exact-snapshot reuse cannot close that acceptance contract.
+
 > **Review direction (2026-10-03):** The proposed product path is a bounded LLM investigation with selective analysis. See the
 > [review-driven analysis proposal](../specs/veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
 > acceptance contracts remain unchanged until their implementation amendments

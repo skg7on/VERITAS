@@ -18,7 +18,7 @@ library, its executables, its tests, and third-party dependencies — several
 
 This specification defines:
 
-- the concept of a **link unit** and how it is inferred from `compile_commands.json`;
+- the concept of a **link unit**, explicit membership, and non-authoritative grouping hints from `compile_commands.json`;
 - where link-unit identity sits in VERITAS's `RepositoryID → … → FunctionSummaryID`
   chain;
 - the M1 schema, `ProjectIrBuilder`, and WPA-orchestration changes that make
@@ -86,13 +86,13 @@ flow across `db_bench`, `c_test`, and the library as if they were one program.
 
 **Non-goals**
 
-- Reconstruct link commands from `compile_commands.json` (the database records
-  compilation, not linking). Link-unit inference is from the `output` field, not
-  from linker invocations.
+- Reconstruct link commands from `compile_commands.json` alone (the database
+  records compilation, not linking). Resolve explicit/build-link membership
+  where available; output-only grouping remains OPEN.
 - Cross-program interprocedural analysis (a query that spans two programs is a
   separate, future concern).
-- Inferring the library/executable distinction from source semantics; that comes
-  from the target's `output` shape and entry-point presence, not from scanning.
+- Inferring authoritative library/executable membership from source or object
+  path shape; use the selected target manifest and retain unresolved boundaries.
 
 ## 5. Terminology
 
@@ -103,32 +103,34 @@ flow across `db_bench`, `c_test`, and the library as if they were one program.
 - **Entry point:** a `main` definition; present in executables, absent in
   libraries.
 
-## 6. Inferring link units from `compile_commands.json`
+## 6. Resolve membership; keep output paths as hints
 
-The `output` field is the reliable signal. CMake writes it as:
+**Proposed detailed amendment (2026-10-24):** object-output paths can group TUs,
+but cannot establish a complete program. A library may be linked into several
+executables; generated objects, link flags and transitive dependencies are not
+fully described by the compile database. A `CMakeFiles/<target>.dir` name is a
+useful candidate key, not authoritative semantic membership.
 
-```text
-<build>/CMakeFiles/<target>.dir/<source-relative-path>.o
-```
+Resolve an explicit selected-program manifest or a build/link artifact. Record
+member TU digests, dependency artifacts, canonical target/configuration, origin
+(`BUILD_LINK_ARTIFACT`, `EXPLICIT_DECLARATION`, `OUTPUT_HINT`), coverage
+(`DECLARED_CLOSED`, `OPEN`, `UNRESOLVED`), assumptions and frontier. A human
+declaration is a recorded assumption, not compiler proof of closed-world scope.
 
-The `<target>` segment is the link-unit key. The inference rule:
+Without explicit/build-link membership, preserve deterministic grouping but
+mark it OPEN. Missing `output` creates an anonymous OPEN group; the implemented
+multiple-main guard still applies. Local predicates may be answered within
+their declared scope. Universal interprocedural absence/safety must refuse or
+carry the unresolved boundary. Do not treat a database-wide fallback as complete.
 
-1. If an entry carries a non-empty `output`, derive the link unit from the
-   object's directory relative to the build root: strip a trailing
-   `CMakeFiles/<target>.dir` (CMake convention) when present, else take the
-   object's parent directory. Entries sharing a link-unit key form one program.
-2. If an entry has no `output`, fall back to a single anonymous link unit keyed
-   by the whole database (preserving today's behavior), with the §9 guardrail
-   still catching multiple entry points.
-
-The `output` field is optional per the spec, so inference must degrade
-gracefully. Because VERITAS's primary ingestion target is CMake (the
-`compile_commands.json` generator in the canonical build path), the
-`CMakeFiles/<target>.dir` convention is a strong, deterministic signal.
+The exact lightweight binding and capture contract is in
+[the runtime specification](veritas-lightweight-review-runtime-design-spec.md#3-snapshot-and-membership).
+This amendment changes proposed resolution rules; it does not claim the native
+pipeline's full link-unit implementation is delivered.
 
 ## 7. Identity model
 
-Insert a **LinkUnitID** into the chain between `BuildVariantID` and
+For a separately versioned future native migration, insert a **LinkUnitID** into the chain between `BuildVariantID` and
 `FunctionSymbolID`:
 
 ```text
@@ -144,9 +146,12 @@ Rationale:
   canonical-member-TU-id-set ‖ link-kind)` so identity is stable under TU
   reordering and survives moving a target between databases.
 
-Every downstream fact — function summaries, SVF points-to, Soufflé relations —
-becomes scoped by `LinkUnitID`. `BuildVariantID` remains the parent; a link
-unit belongs to exactly one build variant.
+That migration must version every affected downstream identity and retain old
+readers/artifacts; it is not a P1 prerequisite. Lightweight review instead uses
+the separate `program-scope` artifact in ReviewBinding and does not manufacture
+new native IDs. For the native target, LinkUnitID belongs to one build variant
+and its canonical preimage must also include declared dependency/target scope;
+the TU set alone does not establish equivalent linked semantics.
 
 ## 8. Schema and pipeline changes
 
@@ -155,8 +160,10 @@ unit belongs to exactly one build variant.
 - Capture the `output` field from each database entry.
 - Add to `TranslationUnitCommand`: `std::string output_path` (absolute or
   build-root-relative) and `std::string link_unit_id`.
-- Add to `AnalysisManifest`: an ordered `std::vector<LinkUnit>` where
-  `LinkUnit { link_unit_id, kind, member_tu_ids, entry_point_count }`.
+- Add to `AnalysisManifest`: an ordered `std::vector<LinkUnit>` with ID, kind,
+  member TU/dependency artifact digests, entry-point count, membership origin,
+  coverage, assumptions and frontier. A TU set inferred from outputs is not
+  closed-world membership.
 - Extend `ToCanonicalBytes` / `ToDiagnosticJson` to encode the new fields with
   stable, ordering-independent serialization (link units sorted by id; member TU
   ids sorted).
@@ -203,19 +210,21 @@ still analyzes correctly.
 ## 10. Implementation ordering
 
 1. **Guardrail** (done): clear failure on multiple `main`s.
-2. **M1 schema**: capture `output`, derive `link_unit_id`, serialize link units.
-3. **IR builder**: per-link-unit module building and linking.
-4. **WPA**: per-link-unit orchestration and link-unit-scoped facts.
-5. **CLI**: link-unit selection; multi-unit deterministic sweep.
-6. **Regression fixtures**: `multiple_mains` (guardrail) plus a mixed
+2. **Review membership/capture**: implement explicit/build-link manifests and OPEN output hints under the lightweight runtime plan.
+3. **Versioned M1 schema**: capture membership evidence and plan native LinkUnitID migration separately; no silent changes to existing IDs.
+4. **IR builder**: per-link-unit module building and linking.
+5. **WPA**: per-link-unit orchestration and link-unit-scoped facts.
+6. **CLI**: link-unit selection; multi-unit deterministic sweep.
+7. **Regression fixtures**: `multiple_mains` (guardrail) plus a mixed
    library+executable fixture proving per-unit isolation.
 
-## 11. Open questions
+## 11. Decisions and remaining native migration work
 
 - Should `LinkUnitID` be a new node in the identity chain (§7), or should the
   link unit be folded into a widened `BuildVariantID`? This spec recommends a
   new node to keep "compiler+options" and "program" orthogonal.
-- When a database has no `output` fields at all, is single-link-unit fallback the
-  right default, or should ingestion require an explicit `--link-unit` mode?
-- Should cross-program facts (e.g., a call from an executable into the library)
-  ever be materialized, or is the library's own link unit the analysis scope?
+- Missing output/membership yields an OPEN group; no implicit closed-world fallback.
+- A selected program includes its declared linked dependency artifacts; another
+  program's independent execution is outside scope. Shared source is not proof
+  of shared linked state. Native cross-program fact materialization remains a
+  separately reviewed capability.

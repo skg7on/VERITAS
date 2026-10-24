@@ -7,6 +7,14 @@
 
 ## 1. Sequencing rule
 
+The [detailed program implementation plan](veritas-redesign-program-implementation-plan.md)
+now supplies the focused specs, file/interface/test tasks, existing-work
+disposition and tracked execution batch. R0–R5 below remain historical product
+gates; P0–P4 in that plan map them without renumbering native milestones.
+Local-only production review is qualified by its snapshot/authority/provider/
+replay gates; the native integrity gate applies when `native-eir` is selected.
+No local-only result is an assertion that all native M10 gaps are repaired.
+
 Prioritize a real, inspectable review loop and measure whether additional program
 analysis improves it. Existing milestone numbers retain their delivery history.
 The stages below are product gates, not new M-number assignments or claims that

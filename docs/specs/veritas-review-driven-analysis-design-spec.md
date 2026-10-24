@@ -9,6 +9,13 @@ evaluation and disposition of existing work
 
 ## 1. Design brief
 
+**Detailed design and execution:** the [redesign program plan](../plans/veritas-redesign-program-implementation-plan.md)
+links four focused design/plan pairs for native integrity, lightweight runtime,
+demand lifecycle, and verification/qualification. It refines this product brief
+with versioned interfaces and an issue/dependency map; it does not claim the
+new controller or storage runtime has shipped. Native relation-authority admission and conservative unresolved-call projection
+are the first implemented P0 slice.
+
 Build an LLM combined with static analysis code review agent. Use the LLM's
 semantic understanding to interpret changes, infer candidate contracts and
 select investigations. Use deterministic tools to establish structural and

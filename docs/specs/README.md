@@ -16,6 +16,16 @@ publication, caching, and semantic-contract gates.
 
 ## Cross-Cutting Specifications
 
+Detailed redesign contracts (proposed; runtime status is per task):
+
+- [Native Evidence integrity](veritas-native-evidence-integrity-design-spec.md)
+- [Lightweight review runtime and backend v2](veritas-lightweight-review-runtime-design-spec.md)
+- [Demand analysis, publication and lifecycle](veritas-demand-analysis-lifecycle-design-spec.md)
+- [Verification, semantic contracts and qualification](veritas-review-verification-qualification-design-spec.md)
+
+The [program execution map](../plans/veritas-redesign-program-implementation-plan.md)
+links their focused plans, issues, dependencies and current-document revisions.
+
 - [GitHub Actions CI build](github-actions-ci-build-design-spec.md)
 - [Documentation information architecture](veritas-documentation-information-architecture-design-specification.md)
 - [Engineering backbone](veritas-engineering-backbone-design-specification.md)

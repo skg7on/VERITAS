@@ -62,6 +62,16 @@ Issue #125 is a known identity-portability defect: `FunctionVariantID` still has
 
 ## Build
 
+Detailed redesign execution is tracked by
+[#154](https://github.com/skg7on/VERITAS/issues/154) and the
+[program implementation plan](docs/plans/veritas-redesign-program-implementation-plan.md),
+with four focused spec/plan pairs and sixteen work packages. The first runtime
+slice enforces relation epistemic allowlists at stable/dense row boundaries and
+conservatively projects unresolved call targets; WPA configuration identity is
+`veritas.wpa.config.v2` so old receipts do not impersonate the corrected policy.
+This does not deliver the planned lightweight backend/controller or repair all
+native Evidence gaps. Native SVF/Soufflé requirements remain unchanged.
+
 Canonical configure and build (uses `CMakePresets.json` at repo root):
 
 ```bash

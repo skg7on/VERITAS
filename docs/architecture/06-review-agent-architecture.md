@@ -112,6 +112,21 @@ It never means that the repository or even the whole changed function is safe.
 
 ## 7. Direction and precedence
 
+Detailed proposed contracts now separate
+[native integrity](../specs/veritas-native-evidence-integrity-design-spec.md),
+[lightweight runtime/backend v2](../specs/veritas-lightweight-review-runtime-design-spec.md),
+[demand storage/lifecycle](../specs/veritas-demand-analysis-lifecycle-design-spec.md), and
+[verification/qualification](../specs/veritas-review-verification-qualification-design-spec.md).
+The [program implementation plan](../plans/veritas-redesign-program-implementation-plan.md)
+maps their executable tasks, capability gates, existing owners and issue batch.
+
+The local provider returns separately identified local evidence and a review
+binding with no native run. A native-EIR adapter returns an existing validated
+case only after native integrity qualification. This distinction lets P1 run
+without a full WPA store while preserving the native acceptance contract.
+Only the native authority-admission and unresolved-call projection corrections
+are implemented in this delivery; the other detailed contracts remain planned work.
+
 This proposal refines product goal, context access, candidate origins and work
 priority in architecture documents 01–04. Their data/engine contracts, the EIR
 formal specification, approved milestone acceptance tests and schema versions

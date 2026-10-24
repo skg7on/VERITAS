@@ -29,7 +29,32 @@ configuration, MCP JSON-RPC over stdio, Python 3.11+ standard library,
 
 **Spec:** `docs/specs/veritas-claude-code-evidence-review-plugin-design-spec.md`
 
-**Status:** Ready for implementation
+**Status:** v1 baseline retained; redesign execution uses the detailed v2 amendment
+
+## Redesign task selection and amendments
+
+Use the [lightweight runtime plan](veritas-lightweight-review-runtime-implementation-plan.md)
+and [verification plan](veritas-review-verification-qualification-implementation-plan.md)
+for the proposed review product. Do not execute these historical Create steps
+over existing files or implement a second controller for a different host.
+At baseline `99d3130` the plugin package itself is absent. Retained v1
+scaffold/security/transport requirements must be implemented through the focused
+plan's Create tasks, not skipped as already delivered. Historical instructions
+are superseded only where the task mapping below explicitly replaces behavior.
+
+| Baseline tasks | Redesign disposition |
+| --- | --- |
+| 1–3 scaffold/models/backend | Reuse packaging and bounded-process enforcement; runtime Tasks 1–4 add v2 models, local binding and real public backend |
+| 4–5 admission/capability/budget/audit | Preserve authority checks and invocation capability; runtime Task 5 adds pre-case candidates, context refs, aggregate accounting and idempotent requests |
+| 6–7 stdio transport/runner/manual skill | Reuse exact two-tool isolation; runtime Task 6 wires the one controller and behaviorally qualifies v2 |
+| 8–9 start/advance | Replace forced native-EIR-first flow for v2; keep v1 behind explicit negotiation |
+| 10 reports | Add typed semantic observations and local-evidence refs without introducing EIR states or fabricated FactIDs |
+| 11–12 practice/real gate | Keep practice tests; qualify real local-only and native-EIR profiles separately with corpus, replay and skip inspection |
+
+The baseline's required native run/projection binding and ten/twelve-task issue
+history do not define v2. Issue #79 remains the plugin/host owner; the redesign
+issues own shared controller/backend/provider work. Amend their acceptance
+mapping together, retaining actual v1 compatibility tests.
 
 ## Global Constraints
 

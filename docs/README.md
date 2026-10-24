@@ -21,6 +21,12 @@ proposed follow-up work; existing runtime contracts remain binding.
 
 ## Primary Reading Order
 
+For detailed redesign work, use the
+[program implementation plan](plans/veritas-redesign-program-implementation-plan.md):
+four precise specification/plan pairs, current-design amendments, issue owners,
+dependency order and qualification gates. The native authority and unresolved-call projection corrections
+are implemented in this delivery; the new runtime/storage contracts remain proposed.
+
 1. [Platform architecture](architecture/01-platform-architecture.md) — system
    context, pipeline, and core principles.
 2. [Whole-program analysis architecture](architecture/02-whole-program-analysis-architecture.md)

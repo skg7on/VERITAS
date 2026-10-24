@@ -1,5 +1,12 @@
 # M10C Evidence IR Semantic Model and Serialization Implementation Plan
 
+> **Execution amendment (2026-10-24):** The model/codecs are delivered; native
+> integrity Tasks 3–6 now own coverage/omission behavior, real summary members,
+> rooted provenance and proof-domain regressions. See the
+> [focused plan](../veritas-native-evidence-integrity-implementation-plan.md).
+> Keep all original test IDs live; intentionally changed Evidence identities
+> require an explained amendment/golden review, not a broad comparison mask.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Convert M10B evidence inputs into validated, canonical, content-addressed Evidence IR and emit equivalent EIR-T, Protobuf, and full-EIR diagnostic JSON.

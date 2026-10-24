@@ -1,5 +1,11 @@
 # M10C Evidence IR Semantic Model and Serialization Design Spec
 
+> **Detailed refinement:** Use the [native integrity amendment](../veritas-native-evidence-integrity-design-spec.md)
+> for coverage truth tables, summary references, actual provenance limits and
+> non-vacuous proof domains. Keep this document's `eir.v1` model and codec
+> contract. Model/controller report annotations and local-evidence artifacts
+> remain outside M10C; they do not become facts through an implicit adapter.
+
 > **Review direction (2026-10-03):** This capability is retained; its place in the first review delivery is defined by the new proposal. See the
 > [review-driven analysis proposal](../veritas-review-driven-analysis-design-spec.md). Existing runtime, schema and
 > acceptance contracts remain unchanged until their implementation amendments
