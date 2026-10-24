@@ -17,11 +17,23 @@
 # Root of the VERITAS test tree. Only added when VERITAS_BUILD_TESTS=ON, and
 # only after enable_testing() has been called from the top-level CMake file.
 
-# Registers one aggregate M9 gate member: a CTest test named after its
-# executable, carrying the composite m9-entry label and its criterion label.
-# The executable must already exist (created via add_executable).
-function(veritas_m9_entry_test NAME CRITERION)
-  add_test(NAME ${NAME} COMMAND $<TARGET_FILE:${NAME}>)
+# Registers one aggregate M9 gate member: a CTest test named after the suite it
+# covers, carrying the composite m9-entry label and its criterion label. TARGET
+# is the executable that contains the suite; several gate members normally share
+# one target now that tests are consolidated per directory.
+#
+# Remaining arguments are additional gtest filter patterns, for suites that live
+# in the same translation unit as NAME but do not name a gate member. When none
+# are given, the filter is NAME.*. The CTest test name never changes with the
+# target layout, so tools/check_m9_entry.py keeps its exact membership contract.
+function(veritas_m9_entry_test NAME CRITERION TARGET)
+  set(filters ${ARGN})
+  if(NOT filters)
+    set(filters "${NAME}.*")
+  endif()
+  list(JOIN filters ":" filter_expression)
+  add_test(NAME ${NAME}
+    COMMAND $<TARGET_FILE:${TARGET}> --gtest_filter=${filter_expression})
   set_tests_properties(${NAME} PROPERTIES LABELS "m9-entry;${CRITERION}")
 endfunction()
 

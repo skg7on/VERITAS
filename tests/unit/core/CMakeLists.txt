@@ -17,59 +17,22 @@
 # Unit tests for veritas_core. GoogleTest was included from Dependencies.cmake
 # (which pulls in the GoogleTest CMake helper module), so gtest_discover_tests
 # is available here.
+#
+# The suites share one executable: they all link only veritas_core, and
+# gtest_discover_tests still registers every case as its own CTest entry.
 
-add_executable(StatusTest StatusTest.cpp)
-target_link_libraries(StatusTest PRIVATE
+add_executable(veritas_unit_core_tests
+  StatusTest.cpp
+  VersionTest.cpp
+  HashTest.cpp
+  IdsTest.cpp
+  CanonicalValueTest.cpp
+  AtomicFileTest.cpp
+  RunMetricsTest.cpp
+)
+target_link_libraries(veritas_unit_core_tests PRIVATE
   veritas_core
   GTest::gtest_main
 )
-veritas_add_warnings(StatusTest)
-gtest_discover_tests(StatusTest DISCOVERY_TIMEOUT 60)
-
-add_executable(VersionTest VersionTest.cpp)
-target_link_libraries(VersionTest PRIVATE
-  veritas_core
-  GTest::gtest_main
-)
-veritas_add_warnings(VersionTest)
-gtest_discover_tests(VersionTest DISCOVERY_TIMEOUT 60)
-
-add_executable(HashTest HashTest.cpp)
-target_link_libraries(HashTest PRIVATE
-  veritas_core
-  GTest::gtest_main
-)
-veritas_add_warnings(HashTest)
-gtest_discover_tests(HashTest DISCOVERY_TIMEOUT 60)
-
-add_executable(IdsTest IdsTest.cpp)
-target_link_libraries(IdsTest PRIVATE
-  veritas_core
-  GTest::gtest_main
-)
-veritas_add_warnings(IdsTest)
-gtest_discover_tests(IdsTest DISCOVERY_TIMEOUT 60)
-
-add_executable(CanonicalValueTest CanonicalValueTest.cpp)
-target_link_libraries(CanonicalValueTest PRIVATE
-  veritas_core
-  GTest::gtest_main
-)
-veritas_add_warnings(CanonicalValueTest)
-gtest_discover_tests(CanonicalValueTest DISCOVERY_TIMEOUT 60)
-
-add_executable(AtomicFileTest AtomicFileTest.cpp)
-target_link_libraries(AtomicFileTest PRIVATE
-  veritas_core
-  GTest::gtest_main
-)
-veritas_add_warnings(AtomicFileTest)
-gtest_discover_tests(AtomicFileTest DISCOVERY_TIMEOUT 60)
-
-add_executable(RunMetricsTest RunMetricsTest.cpp)
-target_link_libraries(RunMetricsTest PRIVATE
-  veritas_core
-  GTest::gtest_main
-)
-veritas_add_warnings(RunMetricsTest)
-gtest_discover_tests(RunMetricsTest DISCOVERY_TIMEOUT 60)
+veritas_add_warnings(veritas_unit_core_tests)
+gtest_discover_tests(veritas_unit_core_tests DISCOVERY_TIMEOUT 60)

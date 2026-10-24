@@ -12,30 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(StableValueMapperTest
+# tests/unit/analysis/llvm/CMakeLists.txt
+
+add_executable(veritas_unit_analysis_llvm_tests
   StableValueMapperTest.cpp
-)
-
-target_link_libraries(StableValueMapperTest PRIVATE
-  veritas_analysis_llvm
-  LLVM
-  GTest::gtest_main
-)
-
-veritas_add_warnings(StableValueMapperTest)
-gtest_discover_tests(StableValueMapperTest DISCOVERY_TIMEOUT 60)
-veritas_m9_entry_test(StableValueMapperTest stable-identity)
-
-add_executable(AbstractMemoryBuilderTest
   AbstractMemoryBuilderTest.cpp
 )
 
-target_link_libraries(AbstractMemoryBuilderTest PRIVATE
+target_link_libraries(veritas_unit_analysis_llvm_tests PRIVATE
   veritas_analysis_llvm
   LLVM
   GTest::gtest_main
 )
 
-veritas_add_warnings(AbstractMemoryBuilderTest)
-gtest_discover_tests(AbstractMemoryBuilderTest DISCOVERY_TIMEOUT 60)
-veritas_m9_entry_test(AbstractMemoryBuilderTest stable-identity)
+veritas_add_warnings(veritas_unit_analysis_llvm_tests)
+gtest_discover_tests(veritas_unit_analysis_llvm_tests DISCOVERY_TIMEOUT 60)
+veritas_m9_entry_test(StableValueMapperTest stable-identity
+  veritas_unit_analysis_llvm_tests)
+veritas_m9_entry_test(AbstractMemoryBuilderTest stable-identity
+  veritas_unit_analysis_llvm_tests)

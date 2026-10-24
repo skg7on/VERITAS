@@ -12,14 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(WpaEndToEndTest WpaEndToEndTest.cpp)
-target_link_libraries(WpaEndToEndTest PRIVATE
-  veritas::summarydb
-  veritas::wpa
-  GTest::gtest_main
-)
-veritas_add_warnings(WpaEndToEndTest)
-gtest_discover_tests(WpaEndToEndTest DISCOVERY_TIMEOUT 60)
+# tests/integration/wpa/CMakeLists.txt
+#
+# The two worker programs stay separate executables: they are subprocess
+# entry points, not tests. Everything else shares one executable.
 
 if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   add_executable(WpaEmptyOutputWorker WpaEmptyOutputWorker.cpp)
@@ -30,42 +26,45 @@ if(VERITAS_WPA_ENGINE STREQUAL "souffle")
     VERITAS_EXPECTED_MEMORY_BYTES=17179869184ULL
   )
   veritas_add_warnings(WpaLimitProbeWorker)
+endif()
 
-  add_executable(WpaExecutorConformanceTest WpaExecutorConformanceTest.cpp)
-  target_link_libraries(WpaExecutorConformanceTest PRIVATE
-    veritas::wpa
-    GTest::gtest_main
+set(veritas_integration_wpa_sources WpaEndToEndTest.cpp)
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  list(APPEND veritas_integration_wpa_sources
+    WpaExecutorConformanceTest.cpp
+    SouffleWpaExecutorTest.cpp
   )
-  target_compile_definitions(WpaExecutorConformanceTest PRIVATE
-    VERITAS_SOUFFLE_WORKER="$<TARGET_FILE:veritas_souffle_worker>"
-  )
-  add_dependencies(WpaExecutorConformanceTest
-    veritas_souffle_worker
-    veritas_souffle_provenance
-  )
-  veritas_add_warnings(WpaExecutorConformanceTest)
-  gtest_discover_tests(WpaExecutorConformanceTest DISCOVERY_TIMEOUT 60)
-veritas_m9_entry_test(WpaExecutorConformanceTest engine-conformance)
+endif()
 
-  add_executable(SouffleWpaExecutorTest SouffleWpaExecutorTest.cpp)
-  target_link_libraries(SouffleWpaExecutorTest PRIVATE
-    veritas::wpa
-    GTest::gtest_main
-  )
-  target_compile_definitions(SouffleWpaExecutorTest PRIVATE
+add_executable(veritas_integration_wpa_tests ${veritas_integration_wpa_sources})
+target_link_libraries(veritas_integration_wpa_tests PRIVATE
+  veritas::summarydb
+  veritas::wpa
+  GTest::gtest_main
+)
+
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  target_compile_definitions(veritas_integration_wpa_tests PRIVATE
     VERITAS_SOUFFLE_WORKER="$<TARGET_FILE:veritas_souffle_worker>"
     VERITAS_EMPTY_OUTPUT_WORKER="$<TARGET_FILE:WpaEmptyOutputWorker>"
     VERITAS_LIMIT_PROBE_WORKER="$<TARGET_FILE:WpaLimitProbeWorker>"
   )
-  add_dependencies(SouffleWpaExecutorTest
+  add_dependencies(veritas_integration_wpa_tests
     veritas_souffle_worker
     veritas_souffle_provenance
     WpaEmptyOutputWorker
     WpaLimitProbeWorker
   )
-  veritas_add_warnings(SouffleWpaExecutorTest)
-  gtest_discover_tests(SouffleWpaExecutorTest DISCOVERY_TIMEOUT 60)
-veritas_m9_entry_test(SouffleWpaExecutorTest souffle-production)
+endif()
+
+veritas_add_warnings(veritas_integration_wpa_tests)
+gtest_discover_tests(veritas_integration_wpa_tests DISCOVERY_TIMEOUT 60)
+
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  veritas_m9_entry_test(WpaExecutorConformanceTest engine-conformance
+    veritas_integration_wpa_tests)
+  veritas_m9_entry_test(SouffleWpaExecutorTest souffle-production
+    veritas_integration_wpa_tests)
 
   add_test(NAME SouffleProvenanceTest
     COMMAND ${CMAKE_COMMAND}

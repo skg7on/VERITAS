@@ -12,186 +12,105 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(project_analyzer_integration_test
-  ProjectAnalyzerTest.cpp
-)
+# tests/integration/analysis/CMakeLists.txt
 
-target_link_libraries(project_analyzer_integration_test
+set(veritas_integration_analysis_sources
+  ProjectAnalyzerTest.cpp
+  LocalAnalysisStageTest.cpp
+  SummaryV2PipelineTest.cpp
+  SouffleProvenanceTest.cpp
+  WpaEmergencyModeTest.cpp
+  SemanticMemorySvfTest.cpp
+  SemanticMemorySummaryDbTest.cpp
+  SemanticDispatchSvfTest.cpp
+  SemanticZooFixtureTest.cpp
+  PhaseObservabilityIdentityTest.cpp
+)
+if(VERITAS_WPA_ENGINE STREQUAL "souffle")
+  list(APPEND veritas_integration_analysis_sources ProjectAnalyzerWpaTest.cpp)
+endif()
+
+add_executable(veritas_integration_analysis_tests
+  ${veritas_integration_analysis_sources}
+)
+target_include_directories(veritas_integration_analysis_tests PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+)
+# `veritas_summarydb` is named explicitly because the published-table digest
+# case opens `<output_root>/metadata.db` itself to dump the four published
+# tables; `veritas_analysis` links it PRIVATE, so it is not reachable through it.
+target_link_libraries(veritas_integration_analysis_tests
   PRIVATE
     veritas_analysis
+    veritas_analysis_pipeline
+    veritas_build
+    veritas_summarydb
+    veritas_wpa
+    veritas_wpa_fixture_support
     veritas_test_support
     veritas_unit_test_support
 )
+veritas_add_warnings(veritas_integration_analysis_tests)
 
-add_test(NAME ProjectAnalyzerTest COMMAND project_analyzer_integration_test)
+# Suites that were registered through discovery keep one CTest entry per case.
+# The whole-file suites below are excluded here and registered explicitly so
+# their per-suite timeout and labels stay intact.
+# SemanticDispatchSvfTest.cpp also defines the CallGraphTest and SccGraphTest
+# suites; they were discovered by its old per-file binary and must stay
+# registered here.
+gtest_discover_tests(veritas_integration_analysis_tests DISCOVERY_TIMEOUT 180
+  TEST_FILTER "SouffleProvenanceTest.*:SemanticMemorySvfTest.*:SemanticMemorySummaryDbTest.*:SemanticDispatchSvfTest.*:SemanticZooFixtureTest.*:CallGraphTest.*:SccGraphTest.*"
+)
+
+add_test(NAME ProjectAnalyzerTest
+  COMMAND veritas_integration_analysis_tests
+    --gtest_filter=ProjectAnalyzerTest.*)
 set_tests_properties(ProjectAnalyzerTest PROPERTIES
   TIMEOUT 30
   LABELS "integration;analysis"
 )
 
-add_executable(local_analysis_stage_integration_test
-  LocalAnalysisStageTest.cpp
-)
-
-target_link_libraries(local_analysis_stage_integration_test
-  PRIVATE
-    veritas_analysis_pipeline
-    veritas_build
-    veritas_test_support
-    GTest::gtest_main
-)
-
 add_test(NAME LocalAnalysisStageTest
-  COMMAND local_analysis_stage_integration_test)
+  COMMAND veritas_integration_analysis_tests
+    --gtest_filter=LocalAnalysisStageTest.*)
 set_tests_properties(LocalAnalysisStageTest PROPERTIES
   TIMEOUT 120
   LABELS "integration;analysis"
 )
 
-add_executable(summary_v2_pipeline_integration_test
-  SummaryV2PipelineTest.cpp
-)
-
-target_link_libraries(summary_v2_pipeline_integration_test
-  PRIVATE
-    veritas_analysis
-    veritas_summarydb
-    veritas_test_support
-    GTest::gtest_main
-)
-
 add_test(NAME SummaryV2PipelineTest
-  COMMAND summary_v2_pipeline_integration_test)
+  COMMAND veritas_integration_analysis_tests
+    --gtest_filter=SummaryV2PipelineTest.*)
 set_tests_properties(SummaryV2PipelineTest PROPERTIES
   TIMEOUT 180
   LABELS "integration;analysis"
 )
 
-add_executable(souffle_provenance_test
-  SouffleProvenanceTest.cpp
-)
-target_include_directories(souffle_provenance_test PRIVATE
-  "${PROJECT_SOURCE_DIR}/src"
-)
-target_link_libraries(souffle_provenance_test
-  PRIVATE
-    veritas_analysis
-    GTest::gtest_main
-)
-veritas_add_warnings(souffle_provenance_test)
-gtest_discover_tests(souffle_provenance_test DISCOVERY_TIMEOUT 60)
-
-add_subdirectory(svf)
-add_subdirectory(cpg)
-
-add_executable(WpaEmergencyModeTest
-  WpaEmergencyModeTest.cpp
-)
-target_link_libraries(WpaEmergencyModeTest
-  PRIVATE
-    veritas_analysis
-    veritas_wpa
-    veritas_test_support
-    veritas_unit_test_support
-)
-add_test(NAME WpaEmergencyModeTest COMMAND WpaEmergencyModeTest)
+add_test(NAME WpaEmergencyModeTest
+  COMMAND veritas_integration_analysis_tests
+    --gtest_filter=WpaEmergencyModeTest.*)
 set_tests_properties(WpaEmergencyModeTest PROPERTIES
   TIMEOUT 180
   LABELS "integration;analysis;wpa"
 )
 
-add_executable(SemanticMemorySvfTest
-  SemanticMemorySvfTest.cpp
+add_test(NAME PhaseObservabilityIdentityTest
+  COMMAND veritas_integration_analysis_tests
+    --gtest_filter=PhaseObservabilityIdentityTest.*)
+set_tests_properties(PhaseObservabilityIdentityTest PROPERTIES
+  TIMEOUT 180
+  LABELS "integration;analysis"
 )
-target_link_libraries(SemanticMemorySvfTest
-  PRIVATE
-    veritas_wpa_fixture_support
-    veritas_test_support
-    GTest::gtest_main
-)
-veritas_add_warnings(SemanticMemorySvfTest)
-gtest_discover_tests(SemanticMemorySvfTest DISCOVERY_TIMEOUT 180)
-
-add_executable(SemanticMemorySummaryDbTest
-  SemanticMemorySummaryDbTest.cpp
-)
-target_link_libraries(SemanticMemorySummaryDbTest
-  PRIVATE
-    veritas_wpa_fixture_support
-    veritas_test_support
-    GTest::gtest_main
-)
-veritas_add_warnings(SemanticMemorySummaryDbTest)
-gtest_discover_tests(SemanticMemorySummaryDbTest DISCOVERY_TIMEOUT 180)
-
-add_executable(SemanticDispatchSvfTest
-  SemanticDispatchSvfTest.cpp
-)
-target_link_libraries(SemanticDispatchSvfTest
-  PRIVATE
-    veritas_wpa_fixture_support
-    veritas_wpa
-    veritas_test_support
-    GTest::gtest_main
-)
-target_include_directories(SemanticDispatchSvfTest PRIVATE
-  "${PROJECT_SOURCE_DIR}/src"
-)
-veritas_add_warnings(SemanticDispatchSvfTest)
-gtest_discover_tests(SemanticDispatchSvfTest DISCOVERY_TIMEOUT 180)
-
-add_executable(SemanticZooFixtureTest
-  SemanticZooFixtureTest.cpp
-)
-target_include_directories(SemanticZooFixtureTest PRIVATE
-  "${PROJECT_SOURCE_DIR}/src"
-)
-target_link_libraries(SemanticZooFixtureTest
-  PRIVATE
-    veritas_analysis_pipeline
-    veritas_build
-    veritas_test_support
-    GTest::gtest_main
-)
-veritas_add_warnings(SemanticZooFixtureTest)
-gtest_discover_tests(SemanticZooFixtureTest DISCOVERY_TIMEOUT 180)
 
 if(VERITAS_WPA_ENGINE STREQUAL "souffle")
-  add_executable(project_analyzer_wpa_integration_test
-    ProjectAnalyzerWpaTest.cpp
-  )
-
-  target_link_libraries(project_analyzer_wpa_integration_test
-    PRIVATE
-      veritas_analysis
-      veritas_test_support
-      veritas_unit_test_support
-  )
-
   add_test(NAME ProjectAnalyzerWpaTest
-    COMMAND project_analyzer_wpa_integration_test)
+    COMMAND veritas_integration_analysis_tests
+      --gtest_filter=ProjectAnalyzerWpaTest.*)
   set_tests_properties(ProjectAnalyzerWpaTest PROPERTIES
     TIMEOUT 120
     LABELS "integration;analysis;m9-entry;souffle-production"
   )
 endif()
 
-# `veritas_summarydb` is named explicitly because the published-table digest
-# case opens `<output_root>/metadata.db` itself to dump the four published
-# tables; `veritas_analysis` links it PRIVATE, so it is not reachable through it.
-add_executable(phase_observability_identity_integration_test
-  PhaseObservabilityIdentityTest.cpp
-)
-target_link_libraries(phase_observability_identity_integration_test
-  PRIVATE
-    veritas_analysis
-    veritas_summarydb
-    veritas_test_support
-    veritas_unit_test_support
-)
-add_test(NAME PhaseObservabilityIdentityTest
-  COMMAND phase_observability_identity_integration_test)
-set_tests_properties(PhaseObservabilityIdentityTest PROPERTIES
-  TIMEOUT 180
-  LABELS "integration;analysis"
-)
+add_subdirectory(svf)
+add_subdirectory(cpg)

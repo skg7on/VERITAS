@@ -12,170 +12,75 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(EvidenceContractTest EvidenceContractTest.cpp)
-target_link_libraries(EvidenceContractTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EvidenceContractTest)
-gtest_discover_tests(EvidenceContractTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-contract")
+# tests/unit/evidence/CMakeLists.txt
+#
+# One executable for the evidence suites. Discovery is split into one call per
+# label set so each case keeps the labels it had when every suite had its own
+# binary; TEST_FILTER keeps the calls disjoint.
 
-add_executable(EvidenceQueryServiceTest EvidenceQueryServiceTest.cpp)
-target_link_libraries(EvidenceQueryServiceTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
+add_executable(veritas_unit_evidence_tests
+  EvidenceContractTest.cpp
+  EvidenceQueryServiceTest.cpp
+  EvidenceHandoffTest.cpp
+  EvidenceCaseTest.cpp
+  EvidenceCanonicalizerTest.cpp
+  EvidenceValidatorTest.cpp
+  EvidenceProtoTest.cpp
+  EirLexerTest.cpp
+  EirParserTest.cpp
+  EirWriterTest.cpp
+  EvidencePredicateMapperTest.cpp
+  EvidenceCaseBuilderTest.cpp
+  EvidenceJsonTest.cpp
 )
-veritas_add_warnings(EvidenceQueryServiceTest)
-gtest_discover_tests(EvidenceQueryServiceTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit")
-
-add_executable(EvidenceHandoffTest EvidenceHandoffTest.cpp)
-target_link_libraries(EvidenceHandoffTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EvidenceHandoffTest)
-gtest_discover_tests(EvidenceHandoffTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-contract")
-
-add_executable(EvidenceCaseTest EvidenceCaseTest.cpp)
-target_link_libraries(EvidenceCaseTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EvidenceCaseTest)
-gtest_discover_tests(EvidenceCaseTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-contract")
-
-add_executable(EvidenceCanonicalizerTest EvidenceCanonicalizerTest.cpp)
-target_link_libraries(EvidenceCanonicalizerTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EvidenceCanonicalizerTest)
-gtest_discover_tests(EvidenceCanonicalizerTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-contract")
-
-add_executable(EvidenceValidatorTest EvidenceValidatorTest.cpp)
-target_link_libraries(EvidenceValidatorTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EvidenceValidatorTest)
-gtest_discover_tests(EvidenceValidatorTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-contract")
-
-add_executable(EvidenceProtoTest EvidenceProtoTest.cpp)
-target_link_libraries(EvidenceProtoTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EvidenceProtoTest)
-gtest_discover_tests(EvidenceProtoTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-roundtrip")
-
-add_executable(EirLexerTest EirLexerTest.cpp)
-# The token model and the lexer are private to src/evidence; only
+# The token model and the lexer/parser are private to src/evidence; only
 # `EirParseError` is installed under include/.
-target_include_directories(EirLexerTest PRIVATE
+target_include_directories(veritas_unit_evidence_tests PRIVATE
   "${PROJECT_SOURCE_DIR}/src"
 )
-target_link_libraries(EirLexerTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EirLexerTest)
-gtest_discover_tests(EirLexerTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-eir-text")
-
-add_executable(EirParserTest EirParserTest.cpp)
-# The token model, the lexer, and the parser are private to src/evidence; only
-# `EirParseError` is installed under include/. The integer-range test drives
-# `EirParser` from a lexed token vector, so the test needs the same private
-# include the lexer suite uses.
-target_include_directories(EirParserTest PRIVATE
-  "${PROJECT_SOURCE_DIR}/src"
-)
-target_link_libraries(EirParserTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EirParserTest)
-gtest_discover_tests(EirParserTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-eir-text")
-
-add_executable(EirWriterTest EirWriterTest.cpp)
-# The canonical writer consumes only public headers: `ParseEirText`,
-# `WriteEirText`, the validator, and the canonicalizer. The lexer's token model
-# is deliberately not part of the contract this suite asserts against.
-target_link_libraries(EirWriterTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EirWriterTest)
-gtest_discover_tests(EirWriterTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-eir-text")
-
-add_executable(EvidencePredicateMapperTest EvidencePredicateMapperTest.cpp)
-target_link_libraries(EvidencePredicateMapperTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EvidencePredicateMapperTest)
-gtest_discover_tests(EvidencePredicateMapperTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-contract")
-
-add_executable(EvidenceCaseBuilderTest EvidenceCaseBuilderTest.cpp)
-target_link_libraries(EvidenceCaseBuilderTest PRIVATE
-  veritas::evidence
-  veritas::test_support
-  GTest::gtest_main
-)
-veritas_add_warnings(EvidenceCaseBuilderTest)
-gtest_discover_tests(EvidenceCaseBuilderTest DISCOVERY_TIMEOUT 60
-  NO_PRETTY_VALUES
-  PROPERTIES LABELS "evidence-unit\;evidence-contract")
-
-add_executable(EvidenceJsonTest EvidenceJsonTest.cpp)
-# `LLVMSupport` is named directly because `veritas_evidence` links it PRIVATE,
-# so nothing propagates it: this suite calls `llvm::json::parse` to read the
-# document back, which is the only way to assert that an escaped string survives
-# to the original bytes rather than merely appearing escaped. The include tree
-# is SYSTEM for the same reason it is in src/evidence — upstream headers are not
-# held to this project's warning contract.
-target_include_directories(EvidenceJsonTest SYSTEM PRIVATE
+# `LLVMSupport` is named directly because `veritas_evidence` links it PRIVATE:
+# EvidenceJsonTest calls `llvm::json::parse` to read the document back. The
+# include tree is SYSTEM for the same reason it is in src/evidence — upstream
+# headers are not held to this project's warning contract.
+target_include_directories(veritas_unit_evidence_tests SYSTEM PRIVATE
   ${LLVM_INCLUDE_DIRS}
 )
-target_link_libraries(EvidenceJsonTest PRIVATE
+target_link_libraries(veritas_unit_evidence_tests PRIVATE
   veritas::evidence
   veritas::test_support
   GTest::gtest_main
   LLVMSupport
 )
-veritas_add_warnings(EvidenceJsonTest)
-gtest_discover_tests(EvidenceJsonTest DISCOVERY_TIMEOUT 60
+veritas_add_warnings(veritas_unit_evidence_tests)
+
+gtest_discover_tests(veritas_unit_evidence_tests DISCOVERY_TIMEOUT 60
   NO_PRETTY_VALUES
+  # EvidenceContractTest.cpp also instantiates the value-parameterized
+  # InvalidQueryResultMetadataTest suite under the InvalidMetadata prefix.
+  TEST_FILTER "EvidenceContractTest.*:InvalidMetadata/*"
+  PROPERTIES LABELS "evidence-contract")
+
+gtest_discover_tests(veritas_unit_evidence_tests DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  TEST_FILTER "EvidenceQueryServiceTest.*"
+  PROPERTIES LABELS "evidence-unit")
+
+gtest_discover_tests(veritas_unit_evidence_tests DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  TEST_FILTER "EvidenceHandoffTest.*:EvidenceCaseTest.*:EvidenceCanonicalizerTest.*:EvidenceValidatorTest.*:EvidencePredicateMapperTest.*:EvidenceCaseBuilderTest.*"
+  PROPERTIES LABELS "evidence-unit\;evidence-contract")
+
+gtest_discover_tests(veritas_unit_evidence_tests DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  TEST_FILTER "EvidenceProtoTest.*"
+  PROPERTIES LABELS "evidence-unit\;evidence-roundtrip")
+
+gtest_discover_tests(veritas_unit_evidence_tests DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  TEST_FILTER "EirLexerTest.*:EirParserTest.*:EirWriterTest.*"
+  PROPERTIES LABELS "evidence-unit\;evidence-eir-text")
+
+gtest_discover_tests(veritas_unit_evidence_tests DISCOVERY_TIMEOUT 60
+  NO_PRETTY_VALUES
+  TEST_FILTER "EvidenceJsonTest.*"
   PROPERTIES LABELS "evidence-unit\;evidence-json")

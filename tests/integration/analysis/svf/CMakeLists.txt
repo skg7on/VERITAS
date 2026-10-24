@@ -12,33 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(svf_session_integration_test
+# tests/integration/analysis/svf/CMakeLists.txt
+#
+# One executable for the SVF integration suites. Each former binary keeps its
+# CTest test name, filter, timeout, and labels.
+
+add_executable(veritas_integration_analysis_svf_tests
   SvfSessionTest.cpp
-)
-
-target_link_libraries(svf_session_integration_test
-  PRIVATE
-    veritas_svf_analysis
-    veritas_analysis_pipeline
-    veritas_unit_test_support
-    LLVM
-)
-
-target_include_directories(svf_session_integration_test
-  PRIVATE "${PROJECT_SOURCE_DIR}/src"
-)
-
-add_test(NAME SvfSessionTest COMMAND svf_session_integration_test)
-set_tests_properties(SvfSessionTest PROPERTIES
-  TIMEOUT 30
-  LABELS "integration;svf"
-)
-
-add_executable(svf_fact_mapper_integration_test
   SvfFactMapperTest.cpp
+  SvfIndirectCallTest.cpp
+  SvfAliasKindsTest.cpp
+  SvfTruncationTest.cpp
+  RepeatedProjectAnalysisTest.cpp
+  RequiredSvfBoundaryTest.cpp
 )
 
-target_link_libraries(svf_fact_mapper_integration_test
+target_link_libraries(veritas_integration_analysis_svf_tests
   PRIVATE
     veritas_svf_analysis
     veritas_analysis_pipeline
@@ -48,115 +37,63 @@ target_link_libraries(svf_fact_mapper_integration_test
     LLVM
 )
 
-target_include_directories(svf_fact_mapper_integration_test
+target_include_directories(veritas_integration_analysis_svf_tests
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
 )
 
-add_test(NAME SvfFactMapperTest COMMAND svf_fact_mapper_integration_test)
+add_test(NAME SvfSessionTest
+  COMMAND veritas_integration_analysis_svf_tests
+    --gtest_filter=SvfSessionTest.*)
+set_tests_properties(SvfSessionTest PROPERTIES
+  TIMEOUT 30
+  LABELS "integration;svf"
+)
+
+# `SvfMergeTest` lives in SvfFactMapperTest.cpp and was covered by this test
+# when it ran the whole binary, so the filter names both suites.
+add_test(NAME SvfFactMapperTest
+  COMMAND veritas_integration_analysis_svf_tests
+    --gtest_filter=SvfFactMapperTest.*:SvfMergeTest.*)
 set_tests_properties(SvfFactMapperTest PROPERTIES
   TIMEOUT 30
   LABELS "integration;svf;m9-entry;indirect-calls"
 )
 
-add_executable(svf_indirect_call_integration_test
-  SvfIndirectCallTest.cpp
-)
-
-target_link_libraries(svf_indirect_call_integration_test
-  PRIVATE
-    veritas_svf_analysis
-    veritas_analysis_pipeline
-    veritas_unit_test_support
-    LLVM
-)
-
-target_include_directories(svf_indirect_call_integration_test
-  PRIVATE "${PROJECT_SOURCE_DIR}/src"
-)
-
-add_test(NAME SvfIndirectCallTest COMMAND svf_indirect_call_integration_test)
+add_test(NAME SvfIndirectCallTest
+  COMMAND veritas_integration_analysis_svf_tests
+    --gtest_filter=SvfIndirectCallTest.*)
 set_tests_properties(SvfIndirectCallTest PROPERTIES
   TIMEOUT 30
   LABELS "integration;svf"
 )
 
-add_executable(svf_alias_kinds_integration_test
-  SvfAliasKindsTest.cpp
-)
-
-target_link_libraries(svf_alias_kinds_integration_test
-  PRIVATE
-    veritas_svf_analysis
-    veritas_analysis_pipeline
-    veritas_unit_test_support
-    LLVM
-)
-
-target_include_directories(svf_alias_kinds_integration_test
-  PRIVATE "${PROJECT_SOURCE_DIR}/src"
-)
-
-add_test(NAME SvfAliasKindsTest COMMAND svf_alias_kinds_integration_test)
+add_test(NAME SvfAliasKindsTest
+  COMMAND veritas_integration_analysis_svf_tests
+    --gtest_filter=SvfAliasKindsTest.*)
 set_tests_properties(SvfAliasKindsTest PROPERTIES
   TIMEOUT 30
   LABELS "integration;svf"
 )
 
-add_executable(svf_truncation_integration_test
-  SvfTruncationTest.cpp
-)
-
-target_link_libraries(svf_truncation_integration_test
-  PRIVATE
-    veritas_svf_analysis
-    veritas_analysis_pipeline
-    veritas_unit_test_support
-    LLVM
-)
-
-target_include_directories(svf_truncation_integration_test
-  PRIVATE "${PROJECT_SOURCE_DIR}/src"
-)
-
-add_test(NAME SvfTruncationTest COMMAND svf_truncation_integration_test)
+add_test(NAME SvfTruncationTest
+  COMMAND veritas_integration_analysis_svf_tests
+    --gtest_filter=SvfTruncationTest.*)
 set_tests_properties(SvfTruncationTest PROPERTIES
   TIMEOUT 30
   LABELS "integration;svf"
 )
 
-add_executable(repeated_project_analysis_test
-  RepeatedProjectAnalysisTest.cpp
-)
-
-target_link_libraries(repeated_project_analysis_test
-  PRIVATE
-    veritas_svf_analysis
-    veritas_analysis_pipeline
-    veritas_unit_test_support
-    LLVM
-)
-
-target_include_directories(repeated_project_analysis_test
-  PRIVATE "${PROJECT_SOURCE_DIR}/src"
-)
-
-add_test(NAME RepeatedProjectAnalysisTest COMMAND repeated_project_analysis_test)
+add_test(NAME RepeatedProjectAnalysisTest
+  COMMAND veritas_integration_analysis_svf_tests
+    --gtest_filter=RepeatedProjectAnalysisTest.*)
 set_tests_properties(RepeatedProjectAnalysisTest PROPERTIES
   TIMEOUT 30
   LABELS "integration;svf"
 )
 
-add_executable(required_svf_boundary_test
-  RequiredSvfBoundaryTest.cpp
-)
-
-target_link_libraries(required_svf_boundary_test
-  PRIVATE
-    veritas_test_support
-    veritas_unit_test_support
-)
-
-add_test(NAME RequiredSvfBoundaryTest COMMAND required_svf_boundary_test)
+add_test(NAME RequiredSvfBoundaryTest
+  COMMAND veritas_integration_analysis_svf_tests
+    --gtest_filter=RequiredSvfBoundaryTest.*)
 set_tests_properties(RequiredSvfBoundaryTest PROPERTIES
   TIMEOUT 10
   LABELS "integration;svf;boundary"
