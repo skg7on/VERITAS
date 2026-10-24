@@ -2,7 +2,8 @@
 
 **Status:** Proposed design and staged redesign plan; not approved for implementation.
 
-**Reviewed:** 2026-10-24, against local `main` at `e10fbc1`.
+**Reviewed:** 2026-10-24, against native-runtime baseline `e10fbc1`, then
+reconciled with merged PR #152 at `940e9de` (documentation-only changes).
 
 **Purpose:** Make a useful review possible without first materializing the
 whole program's derived closure, and let an LLM participate in discovery,
@@ -23,13 +24,14 @@ Its key sequencing decision is to deliver a real lightweight review loop
 before the full storage/scaling programme. The copied reference is retained
 unchanged as a historical review, not a live status authority.
 
-Open [PR #152](https://github.com/skg7on/VERITAS/pull/152), branch
-`codex/review-agent-design` at `5d62e18`, already proposes architecture 06,
-a review-driven analysis specification, and a Review Agent delivery roadmap.
-Those documents are not on local `main`. This document reconciles the supplied
-review with that existing direction and adds concrete runtime/storage gates;
-it is not a competing replacement for PR #152. Reconcile approved changes into
-its canonical architecture/spec/roadmap rather than implementing two plans.
+[PR #152](https://github.com/skg7on/VERITAS/pull/152) merged on 2026-10-24 as
+`940e9de`. Its proposed [architecture 06](../architecture/06-review-agent-architecture.md),
+[review-driven analysis specification](veritas-review-driven-analysis-design-spec.md),
+and [Review Agent delivery roadmap](../plans/veritas-review-agent-milestone-roadmap.md)
+are now on remote `main`. This document reconciles the supplied review with
+that direction and adds concrete runtime/storage gates; it is a follow-up,
+not a competing architecture. Incorporate approved refinements into those
+canonical documents rather than implementing two plans.
 
 The user supplied the goals above. The supplied review recommends the hybrid
 architecture and P0–P4 sequencing. The detailed scope, initial budgets,
@@ -67,13 +69,14 @@ Sources: [project orchestration](../../src/analysis/ProjectAnalyzer.cpp),
 [Agent tutorial](../guides/tutorial-agent-code-review.md), and
 [portable identity architecture](../architecture/05-portable-analysis-target-identity-architecture.md).
 
-`CLAUDE.md` and the milestone indexes are behind the implementation in several
-places: M10B/M10C are described as planned, and the plan matrix still labels
-M8R.3–M8R.5 outstanding and M9 planned. Conversely, the Agent tutorial describes
-the delivered Evidence boundary and its producer deferrals. The newly merged
-M10B sink-resolution amendment is still marked proposed/not yet applied; it
-must not be mistaken for an approved or implemented callsite resolver. Status
-reconciliation belongs in stage P0. GitHub state checked on 2026-10-24 shows
+At the pre-#152 baseline, `CLAUDE.md` and milestone indexes lagged the code:
+M10B/M10C were described as planned, and the plan matrix labeled M8R.3–M8R.5
+outstanding and M9 planned. PR #152 reconciles those delivery labels and
+historical performance figures while preserving explicit producer and semantic
+gaps. P0 should verify those gaps, not repeat completed status-only edits.
+The M10B sink-resolution amendment remains marked proposed/not yet applied;
+its presence is not an implemented callsite resolver. GitHub state checked on
+2026-10-24 shows
 #133 and #132 closed, while #124, #125, #140, #143, #144, #149, and #151 remain
 open. Closure alone does not prove that the current local source implements
 the acceptance criteria. In particular, #133's historical numerical limits
@@ -97,7 +100,7 @@ These are repository records, not fresh measurements of `e10fbc1`.
 | Same profile | 418.702 s CPU; publication 119.998 s; WPA orchestration 157.318 s, including canonicalization 66.056 s and execution 42.034 s | Soufflé execution alone is not the dominant measured cost; nested spans must not be added twice |
 | Same profile | CPG projection 2.180 s; SVF 74.847 s; post-SVF resident floor recorded around 3.21 GiB | Neither deleting CPG projection nor changing only the Datalog executor removes the whole cost |
 | Round 4 arena experiment | Equivalent results, but CPU +70.151 s; no measurable process-peak reduction; arena reverted | Do not repeat compact storage with decode/render overhead in every consumer |
-| Surviving round 4 canonicalizer | Recorded worst-of-three CPU 420.231 → 390.855 s; instructions −7.5%; no established RSS improvement | `CLAUDE.md`'s 421.67 s figure predates the retained change; this is still a cross-session comparison, not a current benchmark |
+| Surviving round 4 canonicalizer | Recorded worst-of-three CPU 420.231 → 390.855 s; instructions −7.5%; no established RSS improvement | The older 421.67 s headline predates the retained change; PR #152 corrects that status prose, but this remains a cross-session comparison, not a current benchmark |
 | Overall store size | Scaling roadmap reports a user observation of 4–7 GiB, explicitly unmeasured; the 2.82 GiB SQLite file above is measured separately | Do not claim a measured total-store size or extrapolate a measured 1 MLOC footprint |
 
 See [round 4 §§2, 9.5, 9.6](veritas-build-analyze-round4-performance-design-spec.md),
@@ -504,8 +507,8 @@ runs and state swap/load conditions; report wall time only with those limits.
 
 ## 9. Decisions to revisit and implementation handoff
 
-Before product implementation, review the reconciled scope and amend PR #152's
-canonical direction as needed. Early LLM discovery, broader context-artifact
+Before product implementation, review the reconciled scope and extend the
+canonical direction merged in PR #152 as needed. Early LLM discovery, broader context-artifact
 admission, the structural/local provider, and later scoped publication need
 explicit contracts. Bounded `request_source` and non-authoritative supported
 concerns already have a basis in the approved plugin design.
