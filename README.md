@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/skg7on/VERITAS/actions/workflows/ci.yml"><img src="https://github.com/skg7on/VERITAS/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Build"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache-2.0"></a>
 </p>
 
 ---
