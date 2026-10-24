@@ -29,7 +29,7 @@ gate the `native-eir` capability; local-only review can qualify independently
 when snapshot/authority/local/replay gates pass and native EIR is disabled.
 This capability-specific refinement does not weaken native M10B/M10C acceptance.
 
-This delivery includes the real stable/dense authority and unresolved-call projection fixes with their tests.
+This delivery includes the real stable/dense authority and unresolved-call projection fixes with their tests. RDX02 now also supplies compiler-owned containment and exact callsite bindings, captured before SVF normalization.
 All other tasks remain tracked work unless their implementation evidence says
 otherwise. No undocumented delivery dates, model provider or public source
 disclosure is assumed. Before external-model use, apply the operator's approved
@@ -109,7 +109,7 @@ Focused plans: [native](veritas-native-evidence-integrity-implementation-plan.md
 | Architecture 06; review-driven spec and roadmap | Point to precise v2/local/native profiles, execution map and real qualification gates | Product target, not implemented |
 | Plugin spec and 12-task plan | Preserve v1 baseline; define v2 initial context/candidate path, nullable native binding and task reuse/replacement map | New v2 implementation tasks pending |
 | Link-unit spec | Replace output-path authority with explicit/build-link membership, OPEN fallback and separately versioned identity | Existing multiple-main guard retained |
-| M10B/M10C specs and plans | Identify delivered baseline; route authority/coverage/ownership/provenance/summary repairs to the focused native plan | RDX01 admission/projection fixes included here |
+| M10B/M10C specs and plans | Identify delivered baseline; route authority/coverage/ownership/provenance/summary repairs to the focused native plan | RDX01 authority fixes and RDX02 compiler/callsite repairs included; coverage/provenance/summary work pending |
 | SummaryDB/WPA architecture and scaling roadmap | Separate native whole-run receipts from query manifests, review cache from native worklist, and P1 from scaling prerequisites | Schema-v5/query kernels pending |
 | High-level claim-driven spec | Replace its future-plan handoff with these focused plans and capability-specific native integrity gate | Proposed detailed contracts |
 
@@ -135,3 +135,27 @@ coverage. P1 requires real corpus and replay evidence; P2 requires scoped
 answer/coverage/proof comparison; representation-only baseline work uses M13's
 exact equivalence instrument. Model-only claims and two empty equal stores
 cannot satisfy these gates.
+
+### RDX02 / #156 execution qualification (2026-10-24)
+
+Runtime commit `3c636e2` implements native Task 2. The final clean Debug build
+completed **656/656 steps**, zero errors and one existing duplicate-library
+linker warning. Full CTest passed **908/908** in **340.16 s**, with zero failures,
+errors or skips, including JUnit/internal GoogleTest skip inspection. Host:
+Apple Clang 21 with LLVM/Clang 24 libraries and pinned SVF/Soufflé.
+
+Eighteen projection tests and six query tests cover real native two-caller/two-
+external binding, pre-SVF identities, exact selection/constant scope, foreign
+source refusal, typed persistence/rollback/tamper, legacy coverage and rejected
+ABI/scalable-memory forms. Valid native identity and differential suites remain
+exact. The restored unsafe slice keeps five flow nodes, four edges and seventeen
+GlobalFlow supports and now includes two actual caller-scoped unknowns. Explained
+CPG, query, finding and EIR artifact changes are documented in the native spec.
+
+Independent whole-branch review found three Important issues; each was observed
+RED and fixed: foreign source substitution, new scalable-size assertion paths
+and incompatible byval ABI classification. One Minor remains deferred: validate
+ownership of optional `result_ref` before any result-consuming backend is
+qualified. The native producer supplies the correct result; current consumers do
+not use it. This does not close #124/#157/#158, enable automatic qualifying
+fan-out, fix portable identities (#125), or qualify the entire reviewer.

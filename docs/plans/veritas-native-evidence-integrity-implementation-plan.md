@@ -59,8 +59,8 @@ and `DeriveFactId` signatures, with invalid-state refusal.
 - [x] Complete final clean build (655 steps) and CTest (904/904, 339.90 s, zero
   failures/errors/skips); commit this runtime slice with its regressions.
 
-Task 1 is included in the current redesign delivery. The remaining tasks are
-tracked implementation work, not claimed complete by these checked steps.
+Task 1 was merged in #171. Task 2 is now implemented below; Tasks 3–6 remain
+tracked work and are not claimed complete by these checked steps.
 
 ## Task 2: Produce compiler-owned containment and exact callsites
 
@@ -82,24 +82,26 @@ callsite/operand identities from post-SVF instructions is forbidden.
 flow endpoints. **Produces:** `CollectEntityOwners(const ProgramIr&) ->
 StatusOr<std::vector<EntityOwner>>`, `thin-cpg.v2` containment and callsite bindings.
 
-- [ ] Add `OwnsLocalValuesButNotForeignFlowEndpoints`: local value has exactly
+- [x] Add `OwnsLocalValuesButNotForeignFlowEndpoints`: local value has exactly
   its compiler owner, imported/global endpoint has no invented owner. Add
   `TwoCallersKeepDistinctMemcpyArguments` with two external functions; inserting
   an unrelated lower-sorting caller must not change existing seed operands.
-- [ ] Run `ctest --test-dir build -R 'CpgProjectionStageTest|VeritasQueryEvidenceTest' --output-on-failure`;
+- [x] Run `ctest --test-dir build -R 'CpgProjectionStageTest|VeritasQueryEvidenceTest' --output-on-failure`;
   demonstrate missing containment/callsite-local resolution on baseline.
-- [ ] Implement the owner collector and caller-local argument-index binding.
+- [x] Implement the owner collector and caller-local argument-index binding.
   Emit `kContains` only for declared uniquely owned local entities; reject
   conflicts. Version the projection producer; keep old projection readers.
-- [ ] Run the same tests plus `CpgCanonicalizerTest`; require deterministic
+- [x] Run the same tests plus `CpgCanonicalizerTest`; require deterministic
   reorderings, explicit old-projection coverage and no whole-program exit guess.
-- [ ] Review intentional projection/golden changes, update only explained
+- [x] Review intentional projection/golden changes, update only explained
   expectations, and commit without enabling producer-gated multi-claim fan-out.
 
 Task 2 regression record: missing ownership/calls, lost persisted bindings,
 external-exit-dependent seed selection, foreign caller operands, incomplete
 bindings, missing CLI selection and constant-extent scope were observed RED.
-Final qualification evidence is recorded in the program plan when complete.
+Runtime commit `3c636e2` passes a final 656-step clean build and full CTest
+908/908 in 340.16 s, with zero failures/errors/skips including internal GoogleTest
+skip inspection. The program plan records the remaining scope and review minor.
 
 ## Task 3: Make unsupported/open/truncated coverage explicit
 
