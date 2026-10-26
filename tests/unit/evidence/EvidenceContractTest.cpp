@@ -395,3 +395,118 @@ TEST(EvidenceContractTest, EvidenceBuildInputJsonIsDeterministicAndComplete) {
   EXPECT_EQ(first.find('\n'), first.size() - 1);
   EXPECT_EQ(first.rfind('\n'), first.size() - 1);
 }
+
+TEST(EvidenceContractTest,
+     CoverageValidationRejectsMalformedSemanticGuarantees) {
+  EvidenceScenarioBuilder scenario;
+  QueryCoverage good;
+  good.completion_fact_id = scenario.Id(core::IdKind::kFact, "completion");
+  good.analysis_run_id = scenario.Id(core::IdKind::kAnalysisRun, "run");
+  good.query_kind = "dominating_check";
+  good.producer_version = "test.v1";
+  ASSERT_TRUE(ValidateQueryCoverage(good).ok());
+  auto bad = good;
+  bad.schema_version = "evidence.coverage.future";
+  EXPECT_FALSE(ValidateQueryCoverage(bad).ok());
+  bad = good;
+  bad.producer_version.clear();
+  EXPECT_FALSE(ValidateQueryCoverage(bad).ok());
+  bad = good;
+  bad.query_kind = "unadmitted_predicate";
+  EXPECT_FALSE(ValidateQueryCoverage(bad).ok());
+  bad = good;
+  bad.completion_fact_id = good.analysis_run_id;
+  EXPECT_FALSE(ValidateQueryCoverage(bad).ok());
+  bad = good;
+  bad.analysis_run_id = good.completion_fact_id;
+  EXPECT_FALSE(ValidateQueryCoverage(bad).ok());
+  bad = good;
+  bad.scope_resolution = ScopeResolution::kUnresolvedScope;
+  bad.scope_closed = true;
+  EXPECT_FALSE(ValidateQueryCoverage(bad).ok());
+  bad = good;
+  bad.scope_resolution = static_cast<ScopeResolution>(999);
+  EXPECT_FALSE(ValidateQueryCoverage(bad).ok());
+  const auto frontier = scenario.Id(core::IdKind::kUnknownNode, "frontier");
+  bad = good;
+  bad.frontier_refs = {frontier, frontier};
+  EXPECT_FALSE(ValidateQueryCoverage(bad).ok());
+  bad = good;
+  bad.scope_closed = true;
+  bad.frontier_refs = {frontier};
+  EXPECT_FALSE(ValidateQueryCoverage(bad).ok());
+}
+
+TEST(EvidenceContractTest,
+     HandoffDigestCoversSidecarsAndPayloadWithoutChangingFactIds) {
+  EvidenceScenarioBuilder scenario;
+  auto input = scenario.BuildRequest(EvidenceLevel::kL1).input;
+  const auto original_facts = input.query_completion_facts;
+  const auto legacy_json = ToDiagnosticJson(input);
+  EXPECT_TRUE(IsLegacyEvidenceHandoff(input));
+  EXPECT_EQ(legacy_json.find("handoff_version"), std::string::npos);
+  input.handoff_version = kEvidenceHandoffVersion;
+  for (const auto &fact : original_facts) {
+    QueryCoverage record;
+    record.completion_fact_id = fact.fact_id;
+    record.analysis_run_id = input.flow_slice.metadata.analysis_run_id;
+    record.query_kind = std::get<std::string>(fact.row.cells[0]);
+    record.predicate_supported = true;
+    record.producer_version = "test.v1";
+    record.frontier_refs = {scenario.Id(core::IdKind::kUnknownNode, "b"),
+                            scenario.Id(core::IdKind::kUnknownNode, "a")};
+    input.query_coverage.push_back(record);
+  }
+  input.handoff_digest = ComputeEvidenceHandoffDigest(input);
+  ASSERT_TRUE(ValidateEvidenceHandoffCoverage(input).ok());
+  const auto digest = input.handoff_digest;
+  const auto json = ToDiagnosticJson(input);
+  EXPECT_NE(json.find("evidence.coverage.v1"), std::string::npos);
+  EXPECT_NE(json.find(digest), std::string::npos);
+  EXPECT_EQ(input.query_completion_facts, original_facts);
+  auto permuted = input;
+  std::reverse(permuted.query_coverage.begin(), permuted.query_coverage.end());
+  for (auto &record : permuted.query_coverage)
+    std::reverse(record.frontier_refs.begin(), record.frontier_refs.end());
+  std::reverse(permuted.query_completion_facts.begin(),
+               permuted.query_completion_facts.end());
+  std::reverse(permuted.query_completion_bindings.begin(),
+               permuted.query_completion_bindings.end());
+  EXPECT_EQ(ComputeEvidenceHandoffDigest(permuted), digest);
+  EXPECT_EQ(ToDiagnosticJson(permuted), json);
+  for (int mutation = 0; mutation < 9; ++mutation) {
+    auto changed = input;
+    auto &record = changed.query_coverage.front();
+    switch (mutation) {
+    case 0:
+      record.schema_version += ".future";
+      break;
+    case 1:
+      record.predicate_supported = false;
+      break;
+    case 2:
+      record.scope_closed = true;
+      break;
+    case 3:
+      record.frontier_refs.pop_back();
+      break;
+    case 4:
+      record.producer_version += ".new";
+      break;
+    case 5:
+      record.scope_resolution = ScopeResolution::kUnresolvedScope;
+      break;
+    case 6:
+      changed.claim_seed.source_ref = record.frontier_refs.front();
+      break;
+    case 7:
+      changed.flow_slice.nodes.front().label += "changed";
+      break;
+    case 8:
+      changed.provenance.set_truncated(true);
+      break;
+    }
+    EXPECT_NE(ComputeEvidenceHandoffDigest(changed), digest) << mutation;
+    EXPECT_FALSE(ValidateEvidenceHandoffCoverage(changed).ok()) << mutation;
+  }
+}

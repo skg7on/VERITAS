@@ -15,8 +15,10 @@
 #include "veritas/evidence/SliceTypes.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -26,6 +28,7 @@
 #include <vector>
 
 #include "veritas/analysis/semantic/SemanticTypes.h"
+#include "veritas/core/Hash.h"
 #include "veritas/facts/RelationSchema.h"
 
 namespace veritas::evidence {
@@ -386,14 +389,29 @@ void AppendClaimSeed(std::string* out, const ClaimSeed& seed) {
   out->push_back('}');
 }
 
-void AppendBinding(std::string* out, const facts::RunFactBinding& binding) {
+void AppendConfidence(std::string *out, double value, bool precise) {
+  if (!precise) {
+    out->append(std::to_string(value));
+    return;
+  }
+  // Locale independent and round-trip safe for every finite IEEE double.
+  // General format needs fewer than 32 bytes even at the extreme exponents.
+  char buffer[64];
+  const auto converted = std::to_chars(
+      buffer, buffer + sizeof(buffer), value, std::chars_format::general,
+      std::numeric_limits<double>::max_digits10);
+  out->append(buffer, converted.ptr);
+}
+
+void AppendBinding(std::string *out, const facts::RunFactBinding &binding,
+                   bool precise) {
   out->append("{\"run_id\":");
   AppendStableIdValue(out, binding.run_id);
   out->append(",\"fact_id\":");
   AppendStableIdValue(out, binding.fact_id);
   out->append(",\"confidence\":");
   if (binding.confidence.has_value()) {
-    out->append(std::to_string(*binding.confidence));
+    AppendConfidence(out, *binding.confidence, precise);
   } else {
     out->append("null");
   }
@@ -507,14 +525,15 @@ void AppendProtoFact(std::string* out, const fp::Fact& fact) {
   out->append("]}");
 }
 
-void AppendProtoBinding(std::string* out, const fp::RunFactBinding& binding) {
+void AppendProtoBinding(std::string *out, const fp::RunFactBinding &binding,
+                        bool precise) {
   out->append("{\"analysis_run_id\":");
   AppendStringValue(out, binding.analysis_run_id());
   out->append(",\"fact_id\":");
   AppendStringValue(out, binding.fact_id());
   out->append(",\"confidence\":");
   if (binding.has_confidence()) {
-    out->append(std::to_string(binding.confidence()));
+    AppendConfidence(out, binding.confidence(), precise);
   } else {
     out->append("null");
   }
@@ -577,8 +596,8 @@ void AppendProtoEdge(std::string* out, const fp::FactWitnessEdge& edge) {
   out->push_back('}');
 }
 
-void AppendProvenanceGraph(std::string* out,
-                           const fp::ProvenanceGraph& graph) {
+void AppendProvenanceGraph(std::string *out, const fp::ProvenanceGraph &graph,
+                           bool precise) {
   std::vector<const fp::FactWitness*> nodes;
   nodes.reserve(static_cast<std::size_t>(graph.nodes_size()));
   for (const auto& node : graph.nodes()) nodes.push_back(&node);
@@ -608,7 +627,7 @@ void AppendProvenanceGraph(std::string* out,
   out->append(",\"fact\":");
   AppendProtoFact(out, graph.fact());
   out->append(",\"binding\":");
-  AppendProtoBinding(out, graph.binding());
+  AppendProtoBinding(out, graph.binding(), precise);
   out->append(",\"nodes\":[");
   for (std::size_t i = 0; i < nodes.size(); ++i) {
     if (i != 0) out->push_back(',');
@@ -804,7 +823,11 @@ std::string ToDiagnosticJson(const EvidenceFactSet& set) {
   return out;
 }
 
-std::string ToDiagnosticJson(const EvidenceBuildInput& input) {
+namespace {
+
+std::string BuildInputJson(const EvidenceBuildInput &input,
+                           bool include_digest) {
+  const bool precise = !IsLegacyEvidenceHandoff(input);
   std::vector<facts::AnalysisFact> completion_facts =
       input.query_completion_facts;
   std::sort(completion_facts.begin(), completion_facts.end(),
@@ -839,13 +862,68 @@ std::string ToDiagnosticJson(const EvidenceBuildInput& input) {
   out.append(",\"query_completion_bindings\":[");
   for (std::size_t i = 0; i < bindings.size(); ++i) {
     if (i != 0) out.push_back(',');
-    AppendBinding(&out, bindings[i]);
+    AppendBinding(&out, bindings[i], precise);
   }
   out.append("],\"provenance\":");
-  AppendProvenanceGraph(&out, input.provenance);
+  AppendProvenanceGraph(&out, input.provenance, precise);
+  if (!input.handoff_version.empty() || !input.query_coverage.empty() ||
+      !input.handoff_digest.empty()) {
+    out.append(",\"handoff_version\":");
+    AppendStringValue(&out, input.handoff_version);
+    out.append(",\"query_coverage\":[");
+    auto coverage = input.query_coverage;
+    std::sort(coverage.begin(), coverage.end());
+    for (std::size_t i = 0; i < coverage.size(); ++i) {
+      if (i != 0)
+        out.push_back(',');
+      const auto &record = coverage[i];
+      out.append("{\"schema_version\":");
+      AppendStringValue(&out, record.schema_version);
+      out.append(",\"completion_fact_id\":");
+      AppendStableIdValue(&out, record.completion_fact_id);
+      out.append(",\"analysis_run_id\":");
+      AppendStableIdValue(&out, record.analysis_run_id);
+      out.append(",\"query_kind\":");
+      AppendStringValue(&out, record.query_kind);
+      out.append(",\"predicate_supported\":");
+      out.append(record.predicate_supported ? "true" : "false");
+      out.append(",\"scope_closed\":");
+      out.append(record.scope_closed ? "true" : "false");
+      out.append(",\"scope_resolution\":");
+      AppendStringValue(&out, ToString(record.scope_resolution));
+      out.append(",\"frontier_refs\":[");
+      auto frontier = record.frontier_refs;
+      std::sort(frontier.begin(), frontier.end());
+      for (std::size_t j = 0; j < frontier.size(); ++j) {
+        if (j != 0)
+          out.push_back(',');
+        AppendStableIdValue(&out, frontier[j]);
+      }
+      out.append("],\"producer_version\":");
+      AppendStringValue(&out, record.producer_version);
+      out.push_back('}');
+    }
+    out.push_back(']');
+    if (include_digest) {
+      out.append(",\"handoff_digest\":");
+      AppendStringValue(&out, input.handoff_digest);
+    }
+  }
   out.push_back('}');
   out.push_back('\n');
   return out;
+}
+
+} // namespace
+
+std::string ToDiagnosticJson(const EvidenceBuildInput &input) {
+  return BuildInputJson(input, true);
+}
+
+std::string ComputeEvidenceHandoffDigest(const EvidenceBuildInput &input) {
+  const std::string canonical = BuildInputJson(input, false);
+  return core::DigestToHex(core::ComputeSHA256(std::as_bytes(
+      std::span<const char>(canonical.data(), canonical.size()))));
 }
 
 }  // namespace veritas::evidence

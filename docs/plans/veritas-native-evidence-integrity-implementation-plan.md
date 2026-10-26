@@ -114,19 +114,39 @@ skip inspection. The program plan records the remaining scope and review minor.
 `QueryCoverage`, `ValidateQueryCoverage(const QueryCoverage&) -> Status`,
 versioned handoff digest and claim-scoped unknown/omission members.
 
-- [ ] Add table-driven `UnsupportedEmptyIsNotNegative`,
+- [x] Add table-driven `UnsupportedEmptyIsNotNegative`,
   `CompleteOpenScopeRemainsUnknown`, `TruncatedEmptyRetainsReason`, and
   `MissingOwnerIsUnresolvedScope`; assert concrete EIR unknown/omission members
   and forbid `MUST_NOT` for unsupported/open/truncated inputs.
-- [ ] Run `ctest --test-dir build -R 'EvidenceContractTest|EvidenceCaseBuilderTest|EvidenceHandoffIntegrationTest' --output-on-failure`;
+- [x] Run `ctest --test-dir build -R 'EvidenceContractTest|EvidenceCaseBuilderTest|EvidenceHandoffIntegrationTest' --output-on-failure`;
   observe the current incomplete/empty handoff loses distinctions.
-- [ ] Implement the exact truth table in the spec and bind coverage to the
+- [x] Implement the exact truth table in the spec and bind coverage to the
   completion ID/digest. Treat absent legacy sidecars explicitly; do not change
   existing completion-fact cells under their old IDs.
-- [ ] Run those tests plus EIR codecs; require L0/L1/L2 preserve the new omissions
+- [x] Run those tests plus EIR codecs; require L0/L1/L2 preserve the new omissions
   and single-snapshot refusal remains effective.
-- [ ] Commit the coverage amendment, its schema/producer version and reviewed
+- [x] Commit the coverage amendment, its schema/producer version and reviewed
   fixture changes together.
+
+Task 3 execution: versioned coverage/digest, native conservative support profile,
+explicit unresolved ownership, claim-scoped gaps and legacy admission are
+implemented. RED reproduced false native absence, missing flow truncation and
+unresolved scope; five coverage/builder regressions failed before the gate.
+The reviewed native artifacts remove the unsupported negative derivation and
+retain all real flow facts. Evidence/codec suite: 412/412 passing, including
+L0/L1/L2 truth-table round trips, unchanged completion rows, mixed-run/snapshot
+refusal and the existing single-snapshot retry contract. Final clean build,
+whole-suite verification: 572-step clean `homebrew-clang` build and 926/926
+CTest tests in 323.72 s, with zero failures/errors/skips, including internal
+GoogleTest skip inspection. Independent review's malformed-row hashing and
+confidence-precision findings have four RED→GREEN regressions; semantic rows
+are checked before hashing, and modern confidence is finite and round-trip safe.
+Legacy diagnostic formatting remains intact.
+
+The acceptance run follows CI's serial CTest command. A parallel experiment
+exposed the existing shared temporary database in `CpgQueryTest::OpenQuery`;
+`ReportsCallees` passed ten serial repeats and the complete serial suite. The
+parallel test harness needs isolated temporary paths; no test was disabled.
 
 ## Task 4: Carry fact provenance with enforced depth and member limits
 

@@ -1048,6 +1048,38 @@ StatusOr<EvidenceBuildInput> EvidenceQueryService::BuildEvidenceInput(
   }
   provenance.set_truncated(false);
 
+  // Coverage describes this implementation's semantic guarantees, never a
+  // conclusion inferred from whether the bounded traversal returned rows.
+  // No native producer currently establishes an exhaustive closed world. In
+  // particular, the positive dominating-check producer is still deferred.
+  input.handoff_version = kEvidenceHandoffVersion;
+  std::vector<core::StableId> frontier;
+  for (const auto &fact : input.unknowns.facts)
+    frontier.push_back(fact.fact_id);
+  for (const auto &fact : input.flow_slice.unknowns)
+    frontier.push_back(fact.fact_id);
+  std::sort(frontier.begin(), frontier.end());
+  frontier.erase(std::unique(frontier.begin(), frontier.end()), frontier.end());
+  for (const auto &certificate : input.query_completion_facts) {
+    QueryCoverage coverage;
+    coverage.completion_fact_id = certificate.fact_id;
+    coverage.analysis_run_id = run_id_;
+    coverage.query_kind = *StringCell(certificate.row, 0);
+    coverage.predicate_supported = coverage.query_kind == kKindValueFlow ||
+                                   coverage.query_kind == kKindUnknown;
+    coverage.scope_closed = false;
+    coverage.scope_resolution =
+        coverage.query_kind == kKindUnknown && !function_scope
+            ? ScopeResolution::kUnresolvedScope
+            : ScopeResolution::kResolved;
+    coverage.frontier_refs = frontier;
+    coverage.producer_version = kNativeCoverageProducerVersion;
+    input.query_coverage.push_back(std::move(coverage));
+  }
+  input.handoff_digest = ComputeEvidenceHandoffDigest(input);
+  if (Status s = ValidateEvidenceHandoffCoverage(input); !s.ok())
+    return s;
+
   return input;
 }
 

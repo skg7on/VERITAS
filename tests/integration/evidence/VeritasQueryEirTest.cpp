@@ -98,50 +98,16 @@
 //
 // DEVIATION FROM THE DESIGN SPEC'S §14.3, RECORDED HERE BECAUSE IT IS A FINDING
 //
-// The spec's truncation demo names `--max-paths 1`, and the plan expected
-// `overflow_truncated.l1.eir` to carry "the stable path-budget reason and no
-// negative fact". Neither is reachable from this CLI, and the reasons are
-// structural rather than incidental:
+// The unsafe fixture has one value-flow path, so --max-paths 1 does not
+// truncate it. The truncated golden uses --max-nodes 1 and carries the exact
+// value_flow/max_nodes coverage gap even though no path remains. RDX03 keeps
+// traversal completion separate from predicate support and semantic closure.
 //
-//   * The unsafe fixture's flow slice holds exactly ONE value-flow path, so
-//     `--max-paths 1` cannot bind. Measured: byte-identical output to the
-//     default in size and identical in fact set.
-//   * The only truncation the builder records in a case is the dominating-check
-//     query's, in `BuildDominatingCheck` (`OM_truncated_query_*` plus an
-//     `Unknown`). It fires on `QueryCompleteness::kTruncated`, and
-//     `EvidenceQueryService::RunDominatingChecks` reports `kTruncated` only
-//     when more than `max_facts_per_query` facts carry
-//     `coverage_kind == "dominating_check"`. No producer emits that kind today
-//     — M10A emits the negative `"dominating_check_absence"` certificate — so
-//     that query is complete-empty by construction and the branch is
-//     unreachable from the CLI. #156 restores two independently scoped
-//     analyzer unknowns/omissions; none represents the missing flow-truncation
-//     reason. #157 owns that remaining distinction.
-//   * `BuildPaths` reads only the flow slice's edges; it never consults
-//     `flow_slice.metadata.completeness`. A truncated flow slice is therefore
-//     not recorded in the case at all — no omission, no unknown, just a
-//     missing path.
-//
-// So `overflow_truncated.l1.eir` is generated from the unsafe store with
-// `--max-nodes 1`, the only CLI-reachable input that genuinely truncates a
-// query, and the test asserts what that case actually contains: a genuine loss
-// of the value-flow path, with no marker for it anywhere. The gap is asserted
-// rather than papered over, and the goldens pin it so a later fix is visible.
-//
-// WHAT THE THREE GOLDENS ACTUALLY DIFFER BY
-//
-//   * `overflow_unsafe.l1.eir` and `overflow_safe.l1.eir` are both
-//     `POSSIBLE_DEFECT` and both carry the derived `MUST_NOT
-//     dominates_bounds_check(sink, sink)`. The safe fixture does NOT reach
-//     `VERIFIED_SAFE` and does NOT carry positive dominating-check
-//     counterevidence: `dominating_checks` is the same complete-empty query in
-//     both (M9/M10A derives no positive check fact). Exact extent selection
-//     permits the same five-node length path in both; guard-related fact
-//     populations and semantic identities differ, while the verdict does not.
-//   * `overflow_truncated.l1.eir` is the same store as the unsafe default with
-//     the flow slice truncated to no nodes: 0 edges, 0 paths, and the same
-//     `MUST_NOT` fact as the default. It is the "partial evidence is not
-//     marked" case above.
+// Unsafe and safe both remain POSSIBLE_DEFECT. They differ in guard-related
+// facts and semantic identities; neither acquires positive dominating-check
+// evidence or a closed-world absence from an unavailable native producer.
+// Both retain explicit unsupported/open query coverage. The truncated case
+// adds an incomplete-flow marker to those same gaps.
 //
 // The fixtures compile with `-fdebug-prefix-map=@PROJECT_ROOT@=.`, so the
 // materialization root cannot leak into debug info and the two DEM-006 stores
@@ -1122,11 +1088,16 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
   std::set<std::string> named;
   for (const ev::Omission& omission : l0.omissions) {
     if (omission.kind != "level_projection") {
-      EXPECT_EQ(omission.kind, "analyzer_expansion");
       EXPECT_FALSE(omission.expandable);
-      EXPECT_TRUE(std::ranges::any_of(l0.unknowns, [&](const auto &unknown) {
-        return unknown.id == omission.subject;
-      }));
+      if (omission.kind == "analyzer_expansion") {
+        EXPECT_TRUE(std::ranges::any_of(l0.unknowns, [&](const auto &unknown) {
+          return unknown.id == omission.subject;
+        }));
+      } else {
+        EXPECT_TRUE(omission.kind == "open_frontier" ||
+                    omission.kind == "unsupported_predicate");
+        EXPECT_EQ(omission.subject, l0.primary_claim.id);
+      }
       continue;
     }
     EXPECT_TRUE(omission.expandable);
@@ -1171,12 +1142,32 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
   // L1 withholds nothing: no level-projection marker survives at the causal
   // level, so the projection is one-way and cannot be mistaken for a case that
   // simply lost members.
-  EXPECT_EQ(l1.omissions.size(), 2u);
-  EXPECT_EQ(l1.unknowns.size(), 2u);
+  // Six open query scopes and four missing native producers coexist with the
+  // two analyzer unknowns. L0 retains every coverage gap rather than replacing
+  // it with a projection marker. #124 still owns those missing producers.
+  EXPECT_EQ(l1.omissions.size(), 12u);
+  EXPECT_EQ(l1.unknowns.size(), 12u);
+  EXPECT_EQ(
+      std::ranges::count(l1.omissions, "open_frontier", &ev::Omission::kind),
+      6);
+  EXPECT_EQ(std::ranges::count(l1.omissions, "unsupported_predicate",
+                               &ev::Omission::kind),
+            4);
+  EXPECT_EQ(std::ranges::count(l1.omissions, "analyzer_expansion",
+                               &ev::Omission::kind),
+            2);
   for (const auto &omission : l1.omissions) {
-    EXPECT_EQ(omission.kind, "analyzer_expansion");
     EXPECT_FALSE(omission.expandable);
+    if (omission.kind != "analyzer_expansion") {
+      EXPECT_EQ(omission.subject, l1.primary_claim.id);
+      EXPECT_TRUE(std::ranges::any_of(l0.omissions, [&](const auto &retained) {
+        return retained.id == omission.id && retained.reason == omission.reason;
+      }));
+    }
   }
+  EXPECT_TRUE(std::ranges::none_of(l1.facts, [](const auto &fact) {
+    return fact.predicate.text == "dominates_bounds_check";
+  }));
 
   // L2 preserves L1 and now exposes the existing missing-summary omission:
   // scoped unknowns introduce a real Function entity. #158 owns supplying its
@@ -1631,11 +1622,8 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
 
   // The differences themselves, asserted rather than assumed.
   //
-  // Safe and unsafe carry the SAME verdict and the same derived negative
-  // absence: the safe fixture's difference is the flow shape it was built
-  // around, not a promotion to `VERIFIED_SAFE` and not positive
-  // dominating-check counterevidence (`dominating_checks` is the same
-  // complete-empty query on both — M9/M10A derives no positive check fact).
+  // Both fixtures retain their actual authority: POSSIBLE_DEFECT, with
+  // unsupported/open checks. Their independent native flow facts differ.
   EXPECT_EQ(unsafe_case.verification_state, ev::VerificationState::kPossibleDefect);
   EXPECT_EQ(safe_case.verification_state, ev::VerificationState::kPossibleDefect);
   EXPECT_EQ(unsafe_case.verification_state, safe_case.verification_state);
@@ -1648,33 +1636,18 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   // no longer allowed to manufacture a path-length difference.
   EXPECT_NE(unsafe_case.facts.size(), safe_case.facts.size());
 
-  // The truncated case still lacks a marker for flow partiality (#157).
-  // Its two independently scoped analyzer unknowns/omissions are preserved:
-  // the flow slice's nodes and edges are gone, so there is no path to emit, and
-  // `BuildPaths` never consults the slice's completeness, so nothing records
-  // that the path was cut rather than absent. The derived negative absence
-  // survives, because the dominating-check query is a different query and is
-  // still complete.
-  //
-  // DELIBERATELY CONTRADICTS THE IMPLEMENTATION BRIEF, DO NOT "FIX" THIS BACK.
-  // The brief's Step 6 described this golden as carrying "the stable reason and
-  // NO negative fact". The assertions below require the opposite:
-  // `has_negative_absence(truncated_case)` is TRUE. The observation is the
-  // correct one, and the derivation is why. Truncation removes the FLOW slice's
-  // nodes and edges, which is the query that would have produced the path; it
-  // does not touch the dominating-check query, which is a different query over
-  // a different relation and is still complete, so its derived negative
-  // certificate is still produced. A negative certificate is a fact about the
-  // query that produced it, and that query did run to completion. Suppressing
-  // it here would be the case claiming an unknown it did not observe.
+  // Flow truncation is explicit even without a path. Its exact reason stays
+  // separate from the unsupported/open dominating-check query.
   EXPECT_GT(unsafe_case.paths.size(), 0u);
   EXPECT_EQ(truncated_case.paths.size(), 0u);
   EXPECT_EQ(truncated_case.edges.size(), 0u);
-  EXPECT_EQ(truncated_case.omissions.size(), 2u);
-  EXPECT_EQ(truncated_case.unknowns.size(), 2u);
-  for (const auto &omission : truncated_case.omissions) {
-    EXPECT_EQ(omission.kind, "analyzer_expansion");
-  }
+  EXPECT_EQ(truncated_case.omissions.size(), unsafe_case.omissions.size() + 1);
+  EXPECT_EQ(truncated_case.unknowns.size(), unsafe_case.unknowns.size() + 1);
+  EXPECT_TRUE(std::ranges::any_of(truncated_case.omissions, [](const auto& omission) {
+    return omission.kind == "truncated_query" &&
+           omission.reason.find("value_flow") != std::string::npos &&
+           omission.reason.find("max_nodes") != std::string::npos;
+  }));
   EXPECT_EQ(truncated_case.primary_claim.kind,
             unsafe_case.primary_claim.kind);
   EXPECT_EQ(truncated_case.verification_state, unsafe_case.verification_state);
@@ -1689,9 +1662,9 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
     }
     return false;
   };
-  EXPECT_TRUE(has_negative_absence(unsafe_case));
-  EXPECT_TRUE(has_negative_absence(safe_case));
-  EXPECT_TRUE(has_negative_absence(truncated_case));
+  EXPECT_FALSE(has_negative_absence(unsafe_case));
+  EXPECT_FALSE(has_negative_absence(safe_case));
+  EXPECT_FALSE(has_negative_absence(truncated_case));
 
   // Three distinct content addresses. Same build, so the addresses are
   // comparable — and this is what makes "the goldens are distinct cases" a

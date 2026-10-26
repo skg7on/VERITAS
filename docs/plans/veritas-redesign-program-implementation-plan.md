@@ -29,7 +29,7 @@ gate the `native-eir` capability; local-only review can qualify independently
 when snapshot/authority/local/replay gates pass and native EIR is disabled.
 This capability-specific refinement does not weaken native M10B/M10C acceptance.
 
-This delivery includes the real stable/dense authority and unresolved-call projection fixes with their tests. RDX02 now also supplies compiler-owned containment and exact callsite bindings, captured before SVF normalization.
+This delivery includes the real stable/dense authority and unresolved-call projection fixes with their tests. RDX02 supplies compiler-owned containment and exact callsite bindings, captured before SVF normalization. RDX03 adds completion-bound semantic coverage and a versioned handoff digest, preserves coverage gaps at L0/L1/L2, and prevents native unsupported empty checks from asserting absence. #124 still owns the missing native producers; #158 owns provenance depth and summary handoff.
 All other tasks remain tracked work unless their implementation evidence says
 otherwise. No undocumented delivery dates, model provider or public source
 disclosure is assumed. Before external-model use, apply the operator's approved

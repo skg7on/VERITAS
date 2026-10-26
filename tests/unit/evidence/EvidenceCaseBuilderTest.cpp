@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -38,8 +39,10 @@
 #include "evidence/EvidenceScenario.h"
 #include "veritas/core/Ids.h"
 #include "veritas/cpg/CpgTypes.h"
+#include "veritas/evidence/EirText.h"
 #include "veritas/evidence/EvidenceCanonicalizer.h"
 #include "veritas/evidence/EvidenceCaseBuilder.h"
+#include "veritas/evidence/EvidenceProto.h"
 #include "veritas/evidence/EvidenceQueryService.h"
 #include "veritas/evidence/EvidenceValidator.h"
 #include "veritas/facts/AnalysisFact.h"
@@ -135,6 +138,282 @@ std::vector<const Omission*> FindOmissions(const EvidenceCase& value,
     }
   }
   return found;
+}
+
+// A deliberately exhaustive test oracle. Production currently never marks a
+// native predicate closed; these finite fixtures exercise the admission gate.
+EvidenceBuildRequest CoveredRequest(EvidenceLevel level, bool truncated = false,
+                                    bool found = false) {
+  EvidenceScenarioBuilder scenario;
+  if (truncated)
+    scenario.WithTruncatedDominatingChecks(TruncationReason::kMaxPaths);
+  if (found)
+    scenario.WithDominatingCheckFound();
+  auto request = scenario.BuildRequest(level);
+  auto &input = request.input;
+  input.handoff_version = kEvidenceHandoffVersion;
+  for (const auto &completion : input.query_completion_facts) {
+    QueryCoverage record;
+    record.completion_fact_id = completion.fact_id;
+    record.analysis_run_id = input.flow_slice.metadata.analysis_run_id;
+    record.query_kind = std::get<std::string>(completion.row.cells[0]);
+    record.predicate_supported = true;
+    record.scope_closed = true;
+    record.producer_version = "test-exhaustive.v1";
+    input.query_coverage.push_back(record);
+  }
+  input.handoff_digest = ComputeEvidenceHandoffDigest(input);
+  return request;
+}
+
+QueryCoverage &CheckCoverage(EvidenceBuildInput &input) {
+  return *std::ranges::find(input.query_coverage, "dominating_check",
+                            &QueryCoverage::query_kind);
+}
+
+TEST(EvidenceCaseBuilderTest, UnsupportedEmptyIsNotNegative) {
+  for (auto level :
+       {EvidenceLevel::kL0, EvidenceLevel::kL1, EvidenceLevel::kL2}) {
+    for (bool closed : {false, true}) {
+      auto request = CoveredRequest(level);
+      auto &record = CheckCoverage(request.input);
+      record.predicate_supported = false;
+      record.scope_closed = closed;
+      request.input.handoff_digest =
+          ComputeEvidenceHandoffDigest(request.input);
+      auto built = BuildOrFail(request);
+      EXPECT_EQ(
+          FindFactWith(built, kAbsencePredicate, EpistemicState::kMustNot),
+          nullptr);
+      const auto omissions = FindOmissions(built, "unsupported_predicate");
+      ASSERT_EQ(omissions.size(), 1U);
+      EXPECT_EQ(omissions.front()->subject, built.primary_claim.id);
+      EXPECT_NE(omissions.front()->reason.find("dominating_check"),
+                std::string::npos);
+      EXPECT_TRUE(std::ranges::any_of(built.unknowns, [](const auto &unknown) {
+        return unknown.reason.find("UNSUPPORTED_PREDICATE") !=
+               std::string::npos;
+      }));
+    }
+  }
+}
+
+TEST(EvidenceCaseBuilderTest, CompleteOpenScopeRemainsUnknown) {
+  for (auto level :
+       {EvidenceLevel::kL0, EvidenceLevel::kL1, EvidenceLevel::kL2}) {
+    auto request = CoveredRequest(level);
+    auto &record = CheckCoverage(request.input);
+    record.scope_closed = false;
+    const auto frontier =
+        EvidenceScenarioBuilder().Id(core::IdKind::kUnknownNode, "open-call");
+    record.frontier_refs = {frontier};
+    request.input.handoff_digest = ComputeEvidenceHandoffDigest(request.input);
+    auto built = BuildOrFail(request);
+    EXPECT_EQ(FindFactWith(built, kAbsencePredicate, EpistemicState::kMustNot),
+              nullptr);
+    const auto omissions = FindOmissions(built, "open_frontier");
+    ASSERT_EQ(omissions.size(), 1U);
+    EXPECT_NE(omissions.front()->reason.find(core::ToString(frontier)),
+              std::string::npos);
+    EXPECT_TRUE(std::ranges::any_of(built.unknowns, [](const auto &unknown) {
+      return unknown.reason.find("OPEN_FRONTIER") != std::string::npos;
+    }));
+  }
+}
+
+TEST(EvidenceCaseBuilderTest, TruncatedEmptyRetainsReason) {
+  for (auto level :
+       {EvidenceLevel::kL0, EvidenceLevel::kL1, EvidenceLevel::kL2}) {
+    auto request = CoveredRequest(level, true);
+    auto built = BuildOrFail(request);
+    EXPECT_EQ(FindFactWith(built, kAbsencePredicate, EpistemicState::kMustNot),
+              nullptr);
+    EXPECT_TRUE(std::ranges::any_of(built.omissions, [](const auto &omission) {
+      return omission.kind == "truncated_query" &&
+             omission.reason.find("max_paths") != std::string::npos &&
+             omission.reason.find("dominating_check") != std::string::npos;
+    }));
+  }
+}
+
+TEST(EvidenceCaseBuilderTest, OnlySupportedClosedCompleteEmptyAdmitsAbsence) {
+  const auto request = CoveredRequest(EvidenceLevel::kL1);
+  ASSERT_TRUE(ValidateEvidenceHandoffCoverage(request.input).ok());
+  const auto built = BuildOrFail(request);
+  EXPECT_NE(FindFactWith(built, kAbsencePredicate, EpistemicState::kMustNot),
+            nullptr);
+}
+
+TEST(EvidenceCaseBuilderTest, PartialCoverageKeepsPositiveCheckEvidence) {
+  auto request = CoveredRequest(EvidenceLevel::kL1, true, true);
+  auto &coverage = CheckCoverage(request.input);
+  coverage.predicate_supported = false;
+  coverage.scope_closed = false;
+  request.input.handoff_digest = ComputeEvidenceHandoffDigest(request.input);
+  ASSERT_EQ(request.input.dominating_checks.facts.size(), 1U);
+  const auto built = BuildOrFail(request);
+  EXPECT_NE(FindFactWith(built, kAbsencePredicate, EpistemicState::kMust),
+            nullptr);
+  EXPECT_EQ(FindFactWith(built, kAbsencePredicate, EpistemicState::kMustNot),
+            nullptr);
+  EXPECT_EQ(FindOmissions(built, "unsupported_predicate").size(), 1U);
+  EXPECT_EQ(FindOmissions(built, "truncated_query").size(), 1U);
+}
+
+TEST(EvidenceCaseBuilderTest, RejectsPartialTamperedAndMixedRunCoverage) {
+  const auto pristine = CoveredRequest(EvidenceLevel::kL1);
+  auto changed = pristine;
+  CheckCoverage(changed.input).predicate_supported = false;
+  EXPECT_FALSE(BuildStatus(changed).ok()) << "stale digest";
+  changed = pristine;
+  changed.input.query_coverage.pop_back();
+  changed.input.handoff_digest = ComputeEvidenceHandoffDigest(changed.input);
+  EXPECT_FALSE(BuildStatus(changed).ok()) << "partial envelope";
+  changed = pristine;
+  CheckCoverage(changed.input).analysis_run_id =
+      EvidenceScenarioBuilder().Id(core::IdKind::kAnalysisRun, "other-run");
+  changed.input.handoff_digest = ComputeEvidenceHandoffDigest(changed.input);
+  EXPECT_FALSE(BuildStatus(changed).ok())
+      << "mixed run, even with recomputed digest";
+  changed = pristine;
+  CheckCoverage(changed.input).completion_fact_id =
+      changed.input.ranges.metadata.query_provenance_id;
+  changed.input.handoff_digest = ComputeEvidenceHandoffDigest(changed.input);
+  EXPECT_FALSE(BuildStatus(changed).ok()) << "sidecar rebound to another query";
+}
+
+TEST(EvidenceCaseBuilderTest, RejectsSameRunCompletionsFromDifferentSnapshots) {
+  auto request = CoveredRequest(EvidenceLevel::kL1);
+  auto& input = request.input;
+  const auto old_id = input.ranges.metadata.query_provenance_id;
+  auto completion = std::ranges::find(input.query_completion_facts, old_id,
+                                      &facts::AnalysisFact::fact_id);
+  completion->row.cells[4] = std::string("different-snapshot");
+  auto new_id = facts::DeriveFactId(completion->row);
+  ASSERT_TRUE(new_id.ok());
+  completion->fact_id = *new_id;
+  input.ranges.metadata.query_provenance_id = *new_id;
+  std::ranges::find(input.query_coverage, old_id,
+                    &QueryCoverage::completion_fact_id)->completion_fact_id = *new_id;
+  std::ranges::find(input.query_completion_bindings, old_id,
+                    &facts::RunFactBinding::fact_id)->fact_id = *new_id;
+  input.handoff_digest = ComputeEvidenceHandoffDigest(input);
+  const auto status = BuildStatus(request);
+  EXPECT_FALSE(status.ok());
+  EXPECT_NE(status.message().find("mixes input snapshots"), std::string::npos);
+}
+
+TEST(EvidenceCaseBuilderTest, MalformedPayloadRelationIsRejectedBeforeDigest) {
+  auto request = CoveredRequest(EvidenceLevel::kL1);
+  request.input.ranges.facts.front().row.relation =
+      static_cast<facts::RelationId>(65535);
+  const auto status = BuildStatus(request);
+  EXPECT_EQ(status.code(), StatusCode::kInvalidArgument);
+  EXPECT_EQ(status.message(), "unknown relation id");
+}
+
+TEST(EvidenceCaseBuilderTest,
+     MalformedCompletionRelationIsRejectedBeforeDigest) {
+  auto request = CoveredRequest(EvidenceLevel::kL1);
+  request.input.query_completion_facts.front().row.relation =
+      static_cast<facts::RelationId>(65535);
+  const auto status = BuildStatus(request);
+  EXPECT_EQ(status.code(), StatusCode::kInvalidArgument);
+  EXPECT_EQ(status.message(), "unknown relation id");
+}
+
+TEST(EvidenceCaseBuilderTest,
+     HandoffDigestPreservesBindingConfidencePrecision) {
+  for (bool proto : {false, true}) {
+    auto request = CoveredRequest(EvidenceLevel::kL1);
+    auto &input = request.input;
+    if (proto)
+      input.provenance.mutable_binding()->set_confidence(0.5000001);
+    else
+      input.query_completion_bindings.front().confidence = 0.5000001;
+    input.handoff_digest = ComputeEvidenceHandoffDigest(input);
+    ASSERT_TRUE(BuildStatus(request).ok());
+    if (proto)
+      input.provenance.mutable_binding()->set_confidence(0.5000002);
+    else
+      input.query_completion_bindings.front().confidence = 0.5000002;
+    EXPECT_NE(ComputeEvidenceHandoffDigest(input), input.handoff_digest);
+    EXPECT_FALSE(BuildStatus(request).ok())
+        << "changed confidence, stale digest";
+  }
+  auto legacy = PristineRequest(EvidenceLevel::kL1).input;
+  legacy.query_completion_bindings.front().confidence = 0.5000001;
+  EXPECT_NE(ToDiagnosticJson(legacy).find("\"confidence\":0.500000"),
+            std::string::npos);
+}
+
+TEST(EvidenceCaseBuilderTest, NonfiniteModernConfidenceIsRejected) {
+  for (bool proto : {false, true}) {
+    auto request = CoveredRequest(EvidenceLevel::kL1);
+    if (proto)
+      request.input.provenance.mutable_binding()->set_confidence(
+          std::numeric_limits<double>::quiet_NaN());
+    else
+      request.input.query_completion_bindings.front().confidence =
+          std::numeric_limits<double>::quiet_NaN();
+    request.input.handoff_digest = ComputeEvidenceHandoffDigest(request.input);
+    EXPECT_FALSE(BuildStatus(request).ok());
+  }
+}
+
+TEST(EvidenceCaseBuilderTest, LegacyCoverageIsExplicitlyLabeledAtEveryLevel) {
+  for (auto level :
+       {EvidenceLevel::kL0, EvidenceLevel::kL1, EvidenceLevel::kL2}) {
+    const auto built = BuildOrFail(PristineRequest(level));
+    EXPECT_EQ(FindOmissions(built, "legacy_coverage").size(), 1U);
+  }
+}
+
+TEST(EvidenceCaseBuilderTest, CoverageTruthTableAndCodecsPreserveEveryMarker) {
+  for (bool supported : {false, true}) {
+    for (bool closed : {false, true}) {
+      for (bool truncated : {false, true}) {
+        for (auto level :
+             {EvidenceLevel::kL0, EvidenceLevel::kL1, EvidenceLevel::kL2}) {
+          auto request = CoveredRequest(level, truncated);
+          auto &coverage = CheckCoverage(request.input);
+          coverage.predicate_supported = supported;
+          coverage.scope_closed = closed;
+          request.input.handoff_digest =
+              ComputeEvidenceHandoffDigest(request.input);
+          const auto built = BuildOrFail(request);
+          const bool negative =
+              FindFactWith(built, kAbsencePredicate,
+                           EpistemicState::kMustNot) != nullptr;
+          // L0 may withhold the check fact, but it may never create a negative.
+          if (!supported || !closed || truncated)
+            EXPECT_FALSE(negative);
+          if (level != EvidenceLevel::kL0 && supported && closed && !truncated)
+            EXPECT_TRUE(negative);
+          if (!supported)
+            EXPECT_FALSE(FindOmissions(built, "unsupported_predicate").empty());
+          if (!closed)
+            EXPECT_FALSE(FindOmissions(built, "open_frontier").empty());
+          if (truncated)
+            EXPECT_FALSE(FindOmissions(built, "truncated_query").empty());
+          auto text = WriteEirText(built, EirTextStyle::kCanonical);
+          ASSERT_TRUE(text.ok()) << text.status().message();
+          auto parsed = ParseEirText(*text, nullptr);
+          ASSERT_TRUE(parsed.ok()) << parsed.status().message();
+          EXPECT_EQ(parsed->unknowns, built.unknowns);
+          EXPECT_EQ(parsed->omissions, built.omissions);
+          EXPECT_EQ(parsed->evidence_id, built.evidence_id);
+          auto bytes = EncodeEvidenceProto(built);
+          ASSERT_TRUE(bytes.ok()) << bytes.status().message();
+          auto decoded = DecodeEvidenceProto(*bytes);
+          ASSERT_TRUE(decoded.ok()) << decoded.status().message();
+          EXPECT_EQ(decoded->unknowns, built.unknowns);
+          EXPECT_EQ(decoded->omissions, built.omissions);
+          EXPECT_EQ(decoded->evidence_id, built.evidence_id);
+        }
+      }
+    }
+  }
 }
 
 const Provenance* FindProvenance(const EvidenceCase& value,

@@ -30,9 +30,9 @@ fixpoint, or survive into the content-addressed bytes and change every
 | `overflow_unsafe.l0.eir` | The unsafe fixture projected at `l0`, with the member-withholding omissions a level projection is required to name. |
 | `overflow_unsafe.l1.eir` | The same case at `l1`: the level M10B's demo target actually emits. |
 | `overflow_unsafe.l1.eir.json` | The full-fidelity JSON rendering of `overflow_unsafe.l1.eir`. **Read** by DEM-005 and required to be byte-identical to `ToEvidenceJson` of the case the `.eir` beside it parses into, so the two halves of one case cannot drift apart. (M10C ships no JSON *reader*, so this golden is never parsed back into a case; the comparison runs from the text side.) |
-| `overflow_safe.l1.eir` | The safe fixture at `l1`. The difference from unsafe is flow shape, not verdict — both are `POSSIBLE_DEFECT` and both carry the derived `MUST_NOT dominates_bounds_check`. |
+| `overflow_safe.l1.eir` | The safe fixture at `l1`. Its flow shape differs from unsafe; both remain `POSSIBLE_DEFECT` with explicit unsupported/open coverage and no invented negative check. |
 | `overflow_truncated.l1.eir` | The unsafe fixture analysed with `--max-nodes 1`. |
-| `overflow_unsafe.slice.json` | **Not an EIR artefact.** The M10B diagnostic `EvidenceInput` slice, including the additive exact `callsite_ref` when supplied. |
+| `overflow_unsafe.slice.json` | **Not an EIR artefact.** The M10B diagnostic `EvidenceInput` slice, including exact `callsite_ref`, `evidence.handoff.v2`, six `evidence.coverage.v1` records and its digest. |
 
 ## How they are used
 
@@ -56,3 +56,18 @@ legitimately change. The truncated golden still records the independent
 complete dominating-check query; fixing flow truncation semantics belongs to
 #157. EIR-T/JSON pairs are regenerated from the same real CLI execution and
 remain subject to round-trip, identity and typed semantic checks.
+
+## #157 regeneration rationale
+
+RDX03 replaces the native unsupported complete-empty dominating-check absence
+with explicit coverage gaps. The unsafe L1 case retains its seventeen real
+GlobalFlow facts and one flow path, removes the query-completion/negative-check
+pair and closed-world derivation, and gains ten coverage unknowns/omissions:
+six open scopes and four unsupported producers (range, capacity, alias and
+positive dominating check). The two existing analyzer unknowns remain. L0 keeps
+every coverage marker. The `--max-nodes 1` case additionally retains the exact
+`value_flow` truncation reason even though it has no path. All remain
+`POSSIBLE_DEFECT`; these artifacts do not qualify missing producers or prove
+safe behavior. The slice envelope and digest change independently of the
+unchanged v1 completion row format. EIR-T and JSON companions come from the same
+CLI/store, with existing semantic and same-build codec checks kept intact.

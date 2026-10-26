@@ -23,7 +23,9 @@
 // "dominating_check_absence" SoundnessCoverage certificate. Value-range,
 // capacity, alias, and positive dominating-check facts are DEFERRED to a later
 // milestone (M9/M10A does not emit them); the query service therefore returns
-// complete-empty open-world results for those queries.
+// mechanically complete-empty results for those queries. The assembled v2
+// handoff explicitly marks their native predicates unsupported and scopes open;
+// traversal completeness never establishes semantic closure.
 
 #ifndef VERITAS_TESTING_REAL_EVIDENCE_PIPELINE_H_
 #define VERITAS_TESTING_REAL_EVIDENCE_PIPELINE_H_
