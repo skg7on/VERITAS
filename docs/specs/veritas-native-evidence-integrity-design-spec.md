@@ -178,6 +178,56 @@ controller refuses legacy coverage for decisions requiring the new guarantee.
 An absent function scope is `UNRESOLVED_SCOPE`, with an omission attached to the
 claim, not an empty successful function-scoped unknown query.
 
+### Task 3 execution amendment (#157 / RDX03)
+
+`EvidenceBuildInput` now has an additive `evidence.handoff.v2` envelope:
+`handoff_version`, six `QueryCoverage` sidecars, and `handoff_digest`. Each
+`evidence.coverage.v1` record binds its completion FactID, analysis run and query
+kind, supported/closed flags, `RESOLVED` or `UNRESOLVED_SCOPE`, diagnostic frontier
+refs and producer version. The sidecar does not alter any of the nine cells of
+`evidence.query_completion.v1` or the IDs of unchanged completion facts.
+
+`ComputeEvidenceHandoffDigest` hashes the canonical diagnostic handoff, including
+all payload and sidecars, excluding only the digest field. Sidecars and frontier
+sets are canonically ordered. `ValidateQueryCoverage` rejects unknown versions,
+malformed identities, unknown query kinds, duplicate frontiers, and a closed scope
+with an unresolved owner or frontier. `ValidateEvidenceHandoffCoverage` requires
+one sidecar per result, matching completion/result kind, traversal state/reasons,
+examined count and member digest, same-run bindings, one input snapshot fingerprint
+and a matching envelope digest. The builder also retains its existing completion
+identity and selected-witness validation. This digest detects corruption and
+mixed handoffs; it is not a signature authenticating an untrusted producer.
+
+The native service uses producer `veritas-evidence-query.coverage.v1`. Value flow
+and unknown-effect queries are supported but open. Native range, capacity, alias
+and positive dominating-check producers remain unavailable (#124), so their
+coverage is explicitly unsupported, including when traversal completes empty.
+No native query currently asserts scope closure. Known selected unknown-effect
+FactIDs are diagnostic frontier refs; an empty frontier list never establishes
+closure. A missing sink owner yields `UNRESOLVED_SCOPE` for the function-scoped
+unknown query. Traversal metadata still describes the bounded scan independently;
+standalone query APIs do not claim the assembled envelope's semantic guarantee.
+
+The builder emits claim-scoped `unsupported_predicate`, `open_frontier`,
+`unresolved_scope` and `truncated_query` omissions plus existing-type unknowns.
+Multiple gaps may coexist: an unsupported or open traversal can also truncate,
+and every exact truncation reason survives. Positive facts remain evidence at
+their supplied authority. Only an admitted dominating-check predicate with
+supported, resolved, closed, complete-empty coverage can derive `MUST_NOT`.
+The exhaustive closed-world fixtures are test oracles, not native qualification.
+L0 retains every new coverage unknown and omission; L1/L2 retain them unchanged.
+EIR-T and protobuf round trips preserve their content and EvidenceID without any
+`eir.v1` grammar or enum extension.
+
+All three envelope fields absent is the explicit legacy path, with a
+claim-scoped `legacy_coverage` omission at every level. Its old admitted behavior
+remains; any partial envelope is refused. A future controller requiring modern
+guarantees must reject the legacy path. Intentionally changed native artifacts
+gain coverage unknowns/omissions and lose the unsupported complete-empty negative
+dominating-check fact. Historical handoff JSON with no envelope keeps its bytes.
+
+### Remaining handoff work (#158 / RDX04)
+
 Add `std::vector<summary::SummaryArtifact> summaries` and explicit component
 selection to the immutable input. Query assembly obtains them from the same
 read snapshot; M10C never opens the database again. Validate summary IDs,

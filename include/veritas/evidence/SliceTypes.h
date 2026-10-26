@@ -32,15 +32,17 @@
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 #include "veritas/cpg/CpgTypes.h"
+#include "veritas/evidence/QueryCoverage.h"
 #include "veritas/fact/v1/fact.pb.h"
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/FactStore.h"
 
 namespace veritas::evidence {
 
-// QueryCompleteness distinguishes a complete result (the backend proved no
-// additional matching member exists) from a truncated one (a budget cut the
-// result short). kUnspecified is invalid at every public boundary.
+// QueryCompleteness describes traversal of the selected snapshot, not semantic
+// predicate support or scope closure (those are QueryCoverage guarantees).
+// Complete means no further matching stored member remains in that traversal;
+// truncated means a budget cut it short. kUnspecified is invalid at boundaries.
 enum class QueryCompleteness {
   kUnspecified,
   kComplete,
@@ -173,6 +175,10 @@ struct EvidenceBuildInput {
   std::vector<facts::AnalysisFact> query_completion_facts;
   std::vector<facts::RunFactBinding> query_completion_bindings;
   veritas::fact::v1::ProvenanceGraph provenance;
+  // Absent together on admitted legacy handoffs; all required for v2.
+  std::string handoff_version;
+  std::vector<QueryCoverage> query_coverage;
+  std::string handoff_digest;
 };
 
 // Builds an empty fact set whose metadata validates for its declared state:

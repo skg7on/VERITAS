@@ -55,6 +55,7 @@ protobuf_generate(
 add_library(veritas_evidence
   SliceTypes.cpp
   QueryCompletion.cpp
+  QueryCoverage.cpp
   EvidenceQueryService.cpp
   EvidenceCase.cpp
   EvidencePredicateMapper.cpp

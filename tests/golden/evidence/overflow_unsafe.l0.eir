@@ -3,200 +3,270 @@ evidence {
     level = l0;
     state = POSSIBLE_DEFECT;
     context {
-        repository = "repo:sha256:9cf4a5fc4424925e9db376bd55e5acb5490e6af610a2e097c5a75a849fa6297e";
+        repository = "repo:sha256:d4417fea02fc2b01d88f91e4d3b199959c1ed0bfa84ad0219d784ececf9574bf";
         revision = "rev:sha256:84f3bda564256f40cf84d1cb034817cce7a1fcfbeec6be4dab550c8793dd16f2";
-        build_variant = "bv:sha256:dedb6131edfecfc0a854c56e8c30e0e009c483698365625831365cb00e448b2d";
+        build_variant = "bv:sha256:8e60c5e468c9795ca73f0f3b5817d43b524551bbda2510e1f6b1343b9c5895fa";
         target = "arm64-apple-darwin27.0.0";
         analyzer_configuration = "veritas-analysis-config.v1";
         type_layout = "layout:sha256:14e6f30051511f358aab870986b698c5a29498151c463d0833e51493639c58ad";
-        analysis_run = "run:sha256:357a21fd04db48e7e7cf49477067d2fd12bb7fdd37642e41286b178fdb632ed5";
+        analysis_run = "run:sha256:15c26cf33dbfc195593426952dd3e1ecb8b10e8b9b8f5cd1dbde053701742348";
     }
-    entity E_function_13464bda : function {
-        stable_id = "funcvar:sha256:13464bda2bcf6c1f6e7ecda60e178ebc17f966a76c1436929fcb55ef3ba59692";
+    entity E_function_0e7189aa : function {
+        stable_id = "funcvar:sha256:0e7189aa467b73d01e43a4a42f1dff50c3809bd0403b535ba196784951659081";
     }
-    entity E_memory_object_535c07fa : memory_object {
-        stable_id = "memref:sha256:535c07fa09ec87d86dcc103c2727f71195ef4a848d839bc5ca37b45fc3e6b833";
+    entity E_memory_object_c0ad3909 : memory_object {
+        stable_id = "memref:sha256:c0ad390975da633d3e3fb91cc033febb39817f7d4f45b2155ecc8ba403c6f8c0";
     }
-    entity E_valref_sha256_0ec71bf5b0218eb71a447510bf2b399f4b96750eddda3a917bc5424f3ea7e4de : value {
-        stable_id = "valref:sha256:0ec71bf5b0218eb71a447510bf2b399f4b96750eddda3a917bc5424f3ea7e4de";
+    entity E_value_059d1084 : value {
+        stable_id = "valref:sha256:059d1084061ba0c7c6e5ad09bd4e98d6efceef6568b16fe7cd2b61c3c3d08b82";
     }
-    entity E_valref_sha256_1026f492e87a8da2efa5f663e47812338d723f7232713b02aa2fe7e77a68daa6 : value {
-        stable_id = "valref:sha256:1026f492e87a8da2efa5f663e47812338d723f7232713b02aa2fe7e77a68daa6";
-    }
-    entity E_value_353abb3d : value {
-        stable_id = "valref:sha256:353abb3df4b87e8ec56974c2ab868b1116016897b34112fc67ba5bba4a30871c";
+    entity E_value_172e7e70 : value {
+        stable_id = "valref:sha256:172e7e70655c0f4139a8a043fe52873d4f4eedfaab49afec2af26a3b55cba08a";
     }
     entity E_value_3cdbc934 : value {
         stable_id = "valref:sha256:3cdbc93445406123f068401abbf472066161222a054da94c5d6c0ae685d64507";
     }
-    entity E_value_5a4f7c71 : value {
-        stable_id = "valref:sha256:5a4f7c713b2f1ee9145216d253b81c4e7eef5a91e763e46a8ab4cb48674a008f";
+    entity E_valref_sha256_4269812ddd12f6d809b08c7063d32832ce0bce61e2a9fa6f98c2921df7838790 : value {
+        stable_id = "valref:sha256:4269812ddd12f6d809b08c7063d32832ce0bce61e2a9fa6f98c2921df7838790";
     }
-    entity E_valref_sha256_6a0991e24376212053f213f51686d3227af09a26bfdd382556f2215634136b03 : value {
-        stable_id = "valref:sha256:6a0991e24376212053f213f51686d3227af09a26bfdd382556f2215634136b03";
+    entity E_valref_sha256_5a015e20f5f001b2cd8b4867e764669110c06aa6bfb719e78be3946ff3daa78b : value {
+        stable_id = "valref:sha256:5a015e20f5f001b2cd8b4867e764669110c06aa6bfb719e78be3946ff3daa78b";
     }
-    entity E_valref_sha256_7b37f240ce5b643978aa7777737456d98569de681316d3ec16024b9fe7edd269 : value {
-        stable_id = "valref:sha256:7b37f240ce5b643978aa7777737456d98569de681316d3ec16024b9fe7edd269";
+    entity E_value_5f7aca5a : value {
+        stable_id = "valref:sha256:5f7aca5a055b50b8d7d4c0477425d8bf730a3fb07e8c2a37a952957e38ab0d88";
+    }
+    entity E_value_6b7ec72f : value {
+        stable_id = "valref:sha256:6b7ec72fdcaf7841e6ea6889c0f80f63e6462423cdd980faf6bcbb43e56c1c39";
     }
     entity E_value_8ede4cb4 : value {
         stable_id = "valref:sha256:8ede4cb4667772a0b061fe1272588e6a497deee9c2365a035b31161f130353b6";
     }
-    entity E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87 : value {
-        stable_id = "valref:sha256:8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87";
+    entity E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d : value {
+        stable_id = "valref:sha256:92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d";
     }
-    entity E_value_9818bba6 : value {
-        stable_id = "valref:sha256:9818bba6797ed3dcc4fab58bed65782b6497ec2aed910ed05f41d60dd218a1f8";
+    entity E_valref_sha256_ac39fd5054932af095a151673eb9e55d16a32b83fd801c43289f0f3d4f6a9dc0 : value {
+        stable_id = "valref:sha256:ac39fd5054932af095a151673eb9e55d16a32b83fd801c43289f0f3d4f6a9dc0";
     }
-    entity E_value_bd92b706 : value {
-        stable_id = "valref:sha256:bd92b706dfe34d8034013c00fae7d8a87df10647bcc4c342660bfda0130e2a9f";
+    entity E_valref_sha256_b1b9e11d630316e6426efbcf9efb52e014f8d0878029b9a9cb0359229f73c8a0 : value {
+        stable_id = "valref:sha256:b1b9e11d630316e6426efbcf9efb52e014f8d0878029b9a9cb0359229f73c8a0";
     }
-    entity E_value_f367a456 : value {
-        stable_id = "valref:sha256:f367a456f29bd2196ad24c35a09387114b363022848b56f68bbd386c7075cf89";
+    entity E_value_b701cb76 : value {
+        stable_id = "valref:sha256:b701cb769478bb21bf9e1673464ec19cac5fe498f1b334a12d725822517fc4be";
     }
     claim C1 {
         kind = buffer_overflow;
-        subject = @E_memory_object_535c07fa;
-        predicate = value(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87) > capacity(@E_memory_object_535c07fa);
+        subject = @E_memory_object_c0ad3909;
+        predicate = value(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d) > capacity(@E_memory_object_c0ad3909);
         severity = high;
         description = "the copied length is not bounded by the destination capacity at the sink call";
     }
     fact F_reachable {
-        stable_id = "fact:sha256:0880bb3e00541313e77fc5cbe244fd396dba9d965603497f16a3bf4365d87c7d";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_value_353abb3d);
+        stable_id = "fact:sha256:02d119bca74a407ca07cc006942a9f9e307f0b3307e1b93d11099074990ba7a4";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_valref_sha256_b1b9e11d630316e6426efbcf9efb52e014f8d0878029b9a9cb0359229f73c8a0);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
         provenance = @PR_value_flow;
     }
-    fact F_reachable_2 {
-        stable_id = "fact:sha256:40861d5e1ff29bbdb6b343c6a11193ce7791cd93f8f967de94822de3fb1f2ff6";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_valref_sha256_1026f492e87a8da2efa5f663e47812338d723f7232713b02aa2fe7e77a68daa6);
+    fact F_reachable_3 {
+        stable_id = "fact:sha256:161aace0473e3a9501a30ab5ecf4a69a754c302a4650b99299d39d1c16116a92";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_valref_sha256_4269812ddd12f6d809b08c7063d32832ce0bce61e2a9fa6f98c2921df7838790);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
         provenance = @PR_value_flow;
     }
     fact F_reachable_4 {
-        stable_id = "fact:sha256:599d75e1697edad7635439b77fbe1cc000b3ecaf074b14e343cb1296022b98e5";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_value_9818bba6);
-        epistemic = must;
-        confidence = exact;
-        source = analysis.value_flow;
-        provenance = @PR_value_flow;
-    }
-    fact F_reachable_5 {
-        stable_id = "fact:sha256:5a22849bfc661b07659e77592189077fb7c555bb2783bb5f7fb667ab4f7f0574";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_value_3cdbc934);
+        stable_id = "fact:sha256:224191e942c362ed526a7b5bec3e20bac10aac6a65a1791119dcc9907e008e79";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_value_6b7ec72f);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
         provenance = @PR_value_flow;
     }
     fact F_reachable_6 {
-        stable_id = "fact:sha256:91a966494023d834192ac4a7be2cc4e8548d1b0304de83ad666d45fd17655f81";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_value_f367a456);
+        stable_id = "fact:sha256:2a07d80c3cc04e7a9967b9c779809729bec28aa5637f49cc854d22c4c8be3507";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_valref_sha256_ac39fd5054932af095a151673eb9e55d16a32b83fd801c43289f0f3d4f6a9dc0);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
         provenance = @PR_value_flow;
     }
     fact F_reachable_7 {
-        stable_id = "fact:sha256:9a6a132d069150e715cc1f86eb9c80b63c5d8341e049db2cf27beb5e7c598832";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_valref_sha256_0ec71bf5b0218eb71a447510bf2b399f4b96750eddda3a917bc5424f3ea7e4de);
-        epistemic = must;
-        confidence = exact;
-        source = analysis.value_flow;
-        provenance = @PR_value_flow;
-    }
-    fact F_reachable_8 {
-        stable_id = "fact:sha256:a1f26fde1b8c8c39151b631bac41d18ed28ee58cf44c4c447b9df554eda87e5c";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_valref_sha256_7b37f240ce5b643978aa7777737456d98569de681316d3ec16024b9fe7edd269);
+        stable_id = "fact:sha256:4a6bd996b325db270799b48e6ba6cd3a1b6d2fd7571642fb8937bf7aa6b9e8dd";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_value_3cdbc934);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
         provenance = @PR_value_flow;
     }
     fact F_reachable_9 {
-        stable_id = "fact:sha256:a60ca2d45f2c47383b5ced1afe8a648f964faf0149a982d152d1a26522ea670c";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_value_bd92b706);
+        stable_id = "fact:sha256:7766b9ffce5114ec45704a5b61f91202b5ab92e541d27c0a91182d90d09b59c8";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_valref_sha256_5a015e20f5f001b2cd8b4867e764669110c06aa6bfb719e78be3946ff3daa78b);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
         provenance = @PR_value_flow;
     }
     fact F_reachable_10 {
-        stable_id = "fact:sha256:b8db8e462211d2c2f3df4f52198d2a4e9db93f8e54f8c41da0901e31cbb7c3fc";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_value_8ede4cb4);
+        stable_id = "fact:sha256:8b22faae81b69eb9db6491c968fab13d960ee54537ef1a83502d81ca684b29ed";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_value_b701cb76);
+        epistemic = must;
+        confidence = exact;
+        source = analysis.value_flow;
+        provenance = @PR_value_flow;
+    }
+    fact F_reachable_11 {
+        stable_id = "fact:sha256:8c68c041c43f2dd3d1f9f30399c7293111579817e84013a592437c1f75eda845";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_value_5f7aca5a);
+        epistemic = must;
+        confidence = exact;
+        source = analysis.value_flow;
+        provenance = @PR_value_flow;
+    }
+    fact F_reachable_12 {
+        stable_id = "fact:sha256:c2b8d7837f62605aaaef02c144f2d27c5aaf081a4ce478667aa84475efce6d3a";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_value_8ede4cb4);
+        epistemic = must;
+        confidence = exact;
+        source = analysis.value_flow;
+        provenance = @PR_value_flow;
+    }
+    fact F_reachable_13 {
+        stable_id = "fact:sha256:cfe2a9871613566feba427cee01d1bf94f643f9b625fa20e8a0004a7b8dd4f36";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_value_059d1084);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
         provenance = @PR_value_flow;
     }
     fact F_reachable_15 {
-        stable_id = "fact:sha256:e1b46f918656e7be469f033b1b183e6b6d7407973b82636240ef4ba2861039ab";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_valref_sha256_6a0991e24376212053f213f51686d3227af09a26bfdd382556f2215634136b03);
+        stable_id = "fact:sha256:d13a50710645d5da213c904c813b560a7f816257720728c7cb482429f59a6007";
+        predicate = reachable(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_value_172e7e70);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
         provenance = @PR_value_flow;
     }
-    fact F_reachable_16 {
-        stable_id = "fact:sha256:e5ca0c4f1127b8f54ca3cb3e2bf25fbcf032effb90fd99d49cda6158c8202427";
-        predicate = reachable(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_value_5a4f7c71);
-        epistemic = must;
-        confidence = exact;
-        source = analysis.value_flow;
-        provenance = @PR_value_flow;
-    }
-    unknown U_callsite_sha256_0150c415cd06436e7d7a93f5129f6db4f8bb9418f8f30ff3681be73507b78f69_UNRESOLVED_CALL {
-        property = effect_of(@E_function_13464bda);
-        reason = UNRESOLVED_CALL;
-        detail = "llvm.memcpy.p0.p0.i64";
+    unknown U_coverage_alias_open_frontier {
+        property = query_coverage("alias");
+        reason = MISSING_SPECIFICATION;
+        detail = "OPEN_FRONTIER: alias has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:1de3c70ae42d03227f7aebb5720a250e0f2913e18827f0922804d8403f53e439; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
-        suggested_resolution = infer_effect(E_function_13464bda);
+        suggested_resolution = resolve_query_coverage(alias);
     }
-    edge ED_valref_sha256_1026f492e87a8da2efa5f663e47812338d723f7232713b02aa2fe7e77a68daa6_valref_sha256_7b37f240ce5b643978aa7777737456d98569de681316d3ec16024b9fe7edd269 {
-        from = @E_valref_sha256_1026f492e87a8da2efa5f663e47812338d723f7232713b02aa2fe7e77a68daa6;
-        to = @E_valref_sha256_7b37f240ce5b643978aa7777737456d98569de681316d3ec16024b9fe7edd269;
+    unknown U_coverage_alias_unsupported_predicate {
+        property = query_coverage("alias");
+        reason = MISSING_SPECIFICATION;
+        detail = "UNSUPPORTED_PREDICATE: alias has no supported native predicate producer; completion=fact:sha256:1de3c70ae42d03227f7aebb5720a250e0f2913e18827f0922804d8403f53e439; producer=veritas-evidence-query.coverage.v1";
+        blocking = [@C1];
+        suggested_resolution = resolve_query_coverage(alias);
+    }
+    unknown U_coverage_capacity_open_frontier {
+        property = query_coverage("capacity");
+        reason = MISSING_SPECIFICATION;
+        detail = "OPEN_FRONTIER: capacity has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:5c93c23b0f37ad371c6954567486580e31efa6406c34661836d4a8ed82ef081f; producer=veritas-evidence-query.coverage.v1";
+        blocking = [@C1];
+        suggested_resolution = resolve_query_coverage(capacity);
+    }
+    unknown U_coverage_capacity_unsupported_predicate {
+        property = query_coverage("capacity");
+        reason = MISSING_SPECIFICATION;
+        detail = "UNSUPPORTED_PREDICATE: capacity has no supported native predicate producer; completion=fact:sha256:5c93c23b0f37ad371c6954567486580e31efa6406c34661836d4a8ed82ef081f; producer=veritas-evidence-query.coverage.v1";
+        blocking = [@C1];
+        suggested_resolution = resolve_query_coverage(capacity);
+    }
+    unknown U_coverage_dominating_check_open_frontier {
+        property = query_coverage("dominating_check");
+        reason = MISSING_SPECIFICATION;
+        detail = "OPEN_FRONTIER: dominating_check has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:cac8ee7835e3e3d585cae89711ac18d74348fe28b911664a63efed58dd0d3b8f; producer=veritas-evidence-query.coverage.v1";
+        blocking = [@C1];
+        suggested_resolution = resolve_query_coverage(dominating_check);
+    }
+    unknown U_coverage_dominating_check_unsupported_predicate {
+        property = query_coverage("dominating_check");
+        reason = MISSING_SPECIFICATION;
+        detail = "UNSUPPORTED_PREDICATE: dominating_check has no supported native predicate producer; completion=fact:sha256:cac8ee7835e3e3d585cae89711ac18d74348fe28b911664a63efed58dd0d3b8f; producer=veritas-evidence-query.coverage.v1";
+        blocking = [@C1];
+        suggested_resolution = resolve_query_coverage(dominating_check);
+    }
+    unknown U_coverage_range_open_frontier {
+        property = query_coverage("range");
+        reason = MISSING_SPECIFICATION;
+        detail = "OPEN_FRONTIER: range has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:d08c2af5a006859e330ce1a8b3254ee567f430416325f5bea80ee78a49fbf6f1; producer=veritas-evidence-query.coverage.v1";
+        blocking = [@C1];
+        suggested_resolution = resolve_query_coverage(range);
+    }
+    unknown U_coverage_range_unsupported_predicate {
+        property = query_coverage("range");
+        reason = MISSING_SPECIFICATION;
+        detail = "UNSUPPORTED_PREDICATE: range has no supported native predicate producer; completion=fact:sha256:d08c2af5a006859e330ce1a8b3254ee567f430416325f5bea80ee78a49fbf6f1; producer=veritas-evidence-query.coverage.v1";
+        blocking = [@C1];
+        suggested_resolution = resolve_query_coverage(range);
+    }
+    unknown U_coverage_unknown_open_frontier {
+        property = query_coverage("unknown");
+        reason = MISSING_SPECIFICATION;
+        detail = "OPEN_FRONTIER: unknown has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:82d2dfb143a07d77015fe912e387ad9d4f93d2b8df57fc11a3124545e2d37730; producer=veritas-evidence-query.coverage.v1";
+        blocking = [@C1];
+        suggested_resolution = resolve_query_coverage(unknown);
+    }
+    unknown U_coverage_value_flow_open_frontier {
+        property = query_coverage("value_flow");
+        reason = MISSING_SPECIFICATION;
+        detail = "OPEN_FRONTIER: value_flow has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:a65372ef93a9e2e002bbd2d9007ec8dbaff06a9d487b43b99b367178d5b90ffa; producer=veritas-evidence-query.coverage.v1";
+        blocking = [@C1];
+        suggested_resolution = resolve_query_coverage(value_flow);
+    }
+    unknown U_svf_UNRESOLVED_CALL {
+        property = effect_of(@E_function_0e7189aa);
+        reason = UNRESOLVED_CALL;
+        detail = "unsupported_feature";
+        blocking = [@C1];
+        suggested_resolution = infer_effect(E_function_0e7189aa);
+    }
+    edge ED_valref_sha256_4269812ddd12f6d809b08c7063d32832ce0bce61e2a9fa6f98c2921df7838790_valref_sha256_ac39fd5054932af095a151673eb9e55d16a32b83fd801c43289f0f3d4f6a9dc0 {
+        from = @E_valref_sha256_4269812ddd12f6d809b08c7063d32832ce0bce61e2a9fa6f98c2921df7838790;
+        to = @E_valref_sha256_ac39fd5054932af095a151673eb9e55d16a32b83fd801c43289f0f3d4f6a9dc0;
         kind = FLOWS_TO;
         epistemic = must;
         provenance = @PR_value_flow;
     }
-    edge ED_valref_sha256_6a0991e24376212053f213f51686d3227af09a26bfdd382556f2215634136b03_valref_sha256_0ec71bf5b0218eb71a447510bf2b399f4b96750eddda3a917bc5424f3ea7e4de {
-        from = @E_valref_sha256_6a0991e24376212053f213f51686d3227af09a26bfdd382556f2215634136b03;
-        to = @E_valref_sha256_0ec71bf5b0218eb71a447510bf2b399f4b96750eddda3a917bc5424f3ea7e4de;
+    edge ED_valref_sha256_5a015e20f5f001b2cd8b4867e764669110c06aa6bfb719e78be3946ff3daa78b_valref_sha256_b1b9e11d630316e6426efbcf9efb52e014f8d0878029b9a9cb0359229f73c8a0 {
+        from = @E_valref_sha256_5a015e20f5f001b2cd8b4867e764669110c06aa6bfb719e78be3946ff3daa78b;
+        to = @E_valref_sha256_b1b9e11d630316e6426efbcf9efb52e014f8d0878029b9a9cb0359229f73c8a0;
         kind = FLOWS_TO;
         epistemic = must;
         provenance = @PR_value_flow;
     }
-    edge ED_valref_sha256_7b37f240ce5b643978aa7777737456d98569de681316d3ec16024b9fe7edd269_valref_sha256_6a0991e24376212053f213f51686d3227af09a26bfdd382556f2215634136b03 {
-        from = @E_valref_sha256_7b37f240ce5b643978aa7777737456d98569de681316d3ec16024b9fe7edd269;
-        to = @E_valref_sha256_6a0991e24376212053f213f51686d3227af09a26bfdd382556f2215634136b03;
+    edge ED_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d_valref_sha256_4269812ddd12f6d809b08c7063d32832ce0bce61e2a9fa6f98c2921df7838790 {
+        from = @E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d;
+        to = @E_valref_sha256_4269812ddd12f6d809b08c7063d32832ce0bce61e2a9fa6f98c2921df7838790;
         kind = FLOWS_TO;
         epistemic = must;
         provenance = @PR_value_flow;
     }
-    edge ED_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87_valref_sha256_1026f492e87a8da2efa5f663e47812338d723f7232713b02aa2fe7e77a68daa6 {
-        from = @E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87;
-        to = @E_valref_sha256_1026f492e87a8da2efa5f663e47812338d723f7232713b02aa2fe7e77a68daa6;
+    edge ED_valref_sha256_ac39fd5054932af095a151673eb9e55d16a32b83fd801c43289f0f3d4f6a9dc0_valref_sha256_5a015e20f5f001b2cd8b4867e764669110c06aa6bfb719e78be3946ff3daa78b {
+        from = @E_valref_sha256_ac39fd5054932af095a151673eb9e55d16a32b83fd801c43289f0f3d4f6a9dc0;
+        to = @E_valref_sha256_5a015e20f5f001b2cd8b4867e764669110c06aa6bfb719e78be3946ff3daa78b;
         kind = FLOWS_TO;
         epistemic = must;
         provenance = @PR_value_flow;
     }
     path P_value_flow value_flow {
-        @E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87 -> @E_valref_sha256_1026f492e87a8da2efa5f663e47812338d723f7232713b02aa2fe7e77a68daa6 -> @E_valref_sha256_7b37f240ce5b643978aa7777737456d98569de681316d3ec16024b9fe7edd269 -> @E_valref_sha256_6a0991e24376212053f213f51686d3227af09a26bfdd382556f2215634136b03 -> @E_valref_sha256_0ec71bf5b0218eb71a447510bf2b399f4b96750eddda3a917bc5424f3ea7e4de;
+        @E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d -> @E_valref_sha256_4269812ddd12f6d809b08c7063d32832ce0bce61e2a9fa6f98c2921df7838790 -> @E_valref_sha256_ac39fd5054932af095a151673eb9e55d16a32b83fd801c43289f0f3d4f6a9dc0 -> @E_valref_sha256_5a015e20f5f001b2cd8b4867e764669110c06aa6bfb719e78be3946ff3daa78b -> @E_valref_sha256_b1b9e11d630316e6426efbcf9efb52e014f8d0878029b9a9cb0359229f73c8a0;
         feasible = UNKNOWN;
         provenance = @PR_value_flow;
     }
     provenance PR_value_flow {
         producer = evidence.query;
         rule = "evidence.query_completion.v1";
-        analysis_run = "run:sha256:357a21fd04db48e7e7cf49477067d2fd12bb7fdd37642e41286b178fdb632ed5";
+        analysis_run = "run:sha256:15c26cf33dbfc195593426952dd3e1ecb8b10e8b9b8f5cd1dbde053701742348";
         version = "v1";
         configuration = "veritas-analysis-config.v1";
     }
     verify O1 {
-        prove = forall path in feasible_paths(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87, @E_valref_sha256_0ec71bf5b0218eb71a447510bf2b399f4b96750eddda3a917bc5424f3ea7e4de): value(@E_valref_sha256_8fc212e95c89d5f32a4ef8f9b45bd97d0d819f852a613bab66a037cd88282c87) <= capacity(@E_memory_object_535c07fa);
+        prove = forall path in feasible_paths(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d, @E_valref_sha256_b1b9e11d630316e6426efbcf9efb52e014f8d0878029b9a9cb0359229f73c8a0): value(@E_valref_sha256_92805044f3e91cf5d4044e3953b1007b1a53008ab7dc83db088c429f82c8ac9d) <= capacity(@E_memory_object_c0ad3909);
         using = [range_analysis, smt, symbolic_execution];
         status = PENDING;
     }
@@ -206,52 +276,88 @@ evidence {
     }
     dependency DEP_fact {
         kind = fact;
-        stable_id = "fact:sha256:77dd1b5f2181610221c2a34cbcc348593fb4ee28bf309a53decab908bd911d07";
+        stable_id = "fact:sha256:cac8ee7835e3e3d585cae89711ac18d74348fe28b911664a63efed58dd0d3b8f";
     }
     dependency DEP_type_layout {
         kind = type_layout;
         stable_id = "model:sha256:7033fccd9631c54232d30d719a9012664953a9e1c0adc32b07e666421407e393";
     }
-    omission OM_analyzer_expansion_callsite_sha256_0150c415cd06436e7d7a93f5129f6db4f8bb9418f8f30ff3681be73507b78f69 {
+    omission OM_analyzer_expansion_svf {
         kind = analyzer_expansion;
-        subject = @U_callsite_sha256_0150c415cd06436e7d7a93f5129f6db4f8bb9418f8f30ff3681be73507b78f69_UNRESOLVED_CALL;
+        subject = @U_svf_UNRESOLVED_CALL;
         reason = "the analysis did not model this function's effect";
         expandable = false;
     }
-    omission OM_level_projection_F_dominates_bounds_check {
-        kind = level_projection;
+    omission OM_coverage_alias_open_frontier {
+        kind = open_frontier;
         subject = @C1;
-        reason = "the member F_dominates_bounds_check is withheld at l0; a higher level can recover it";
-        expandable = true;
+        reason = "OPEN_FRONTIER: alias has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:1de3c70ae42d03227f7aebb5720a250e0f2913e18827f0922804d8403f53e439; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
     }
-    omission OM_level_projection_F_query_completion {
-        kind = level_projection;
+    omission OM_coverage_alias_unsupported_predicate {
+        kind = unsupported_predicate;
         subject = @C1;
-        reason = "the member F_query_completion is withheld at l0; a higher level can recover it";
-        expandable = true;
+        reason = "UNSUPPORTED_PREDICATE: alias has no supported native predicate producer; completion=fact:sha256:1de3c70ae42d03227f7aebb5720a250e0f2913e18827f0922804d8403f53e439; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
     }
-    omission OM_level_projection_F_reachable_11 {
-        kind = level_projection;
+    omission OM_coverage_capacity_open_frontier {
+        kind = open_frontier;
         subject = @C1;
-        reason = "the member F_reachable_11 is withheld at l0; a higher level can recover it";
-        expandable = true;
+        reason = "OPEN_FRONTIER: capacity has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:5c93c23b0f37ad371c6954567486580e31efa6406c34661836d4a8ed82ef081f; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
     }
-    omission OM_level_projection_F_reachable_12 {
-        kind = level_projection;
+    omission OM_coverage_capacity_unsupported_predicate {
+        kind = unsupported_predicate;
         subject = @C1;
-        reason = "the member F_reachable_12 is withheld at l0; a higher level can recover it";
-        expandable = true;
+        reason = "UNSUPPORTED_PREDICATE: capacity has no supported native predicate producer; completion=fact:sha256:5c93c23b0f37ad371c6954567486580e31efa6406c34661836d4a8ed82ef081f; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
     }
-    omission OM_level_projection_F_reachable_13 {
-        kind = level_projection;
+    omission OM_coverage_dominating_check_open_frontier {
+        kind = open_frontier;
         subject = @C1;
-        reason = "the member F_reachable_13 is withheld at l0; a higher level can recover it";
-        expandable = true;
+        reason = "OPEN_FRONTIER: dominating_check has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:cac8ee7835e3e3d585cae89711ac18d74348fe28b911664a63efed58dd0d3b8f; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
+    }
+    omission OM_coverage_dominating_check_unsupported_predicate {
+        kind = unsupported_predicate;
+        subject = @C1;
+        reason = "UNSUPPORTED_PREDICATE: dominating_check has no supported native predicate producer; completion=fact:sha256:cac8ee7835e3e3d585cae89711ac18d74348fe28b911664a63efed58dd0d3b8f; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
+    }
+    omission OM_coverage_range_open_frontier {
+        kind = open_frontier;
+        subject = @C1;
+        reason = "OPEN_FRONTIER: range has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:d08c2af5a006859e330ce1a8b3254ee567f430416325f5bea80ee78a49fbf6f1; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
+    }
+    omission OM_coverage_range_unsupported_predicate {
+        kind = unsupported_predicate;
+        subject = @C1;
+        reason = "UNSUPPORTED_PREDICATE: range has no supported native predicate producer; completion=fact:sha256:d08c2af5a006859e330ce1a8b3254ee567f430416325f5bea80ee78a49fbf6f1; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
+    }
+    omission OM_coverage_unknown_open_frontier {
+        kind = open_frontier;
+        subject = @C1;
+        reason = "OPEN_FRONTIER: unknown has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:82d2dfb143a07d77015fe912e387ad9d4f93d2b8df57fc11a3124545e2d37730; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
+    }
+    omission OM_coverage_value_flow_open_frontier {
+        kind = open_frontier;
+        subject = @C1;
+        reason = "OPEN_FRONTIER: value_flow has no closed-world scope guarantee; frontier_refs=fact:sha256:16565da6ba0f1360e812c581c4adebccf6e0f0d6dec8404d79f4151c473c438b,fact:sha256:449a70de97a623c3a538c03feacfabbed945710c5d8224251a46b89c1fd058c6,; completion=fact:sha256:a65372ef93a9e2e002bbd2d9007ec8dbaff06a9d487b43b99b367178d5b90ffa; producer=veritas-evidence-query.coverage.v1";
+        expandable = false;
     }
     omission OM_level_projection_F_reachable_14 {
         kind = level_projection;
         subject = @C1;
         reason = "the member F_reachable_14 is withheld at l0; a higher level can recover it";
+        expandable = true;
+    }
+    omission OM_level_projection_F_reachable_16 {
+        kind = level_projection;
+        subject = @C1;
+        reason = "the member F_reachable_16 is withheld at l0; a higher level can recover it";
         expandable = true;
     }
     omission OM_level_projection_F_reachable_17 {
@@ -260,10 +366,22 @@ evidence {
         reason = "the member F_reachable_17 is withheld at l0; a higher level can recover it";
         expandable = true;
     }
-    omission OM_level_projection_F_reachable_3 {
+    omission OM_level_projection_F_reachable_2 {
         kind = level_projection;
         subject = @C1;
-        reason = "the member F_reachable_3 is withheld at l0; a higher level can recover it";
+        reason = "the member F_reachable_2 is withheld at l0; a higher level can recover it";
+        expandable = true;
+    }
+    omission OM_level_projection_F_reachable_5 {
+        kind = level_projection;
+        subject = @C1;
+        reason = "the member F_reachable_5 is withheld at l0; a higher level can recover it";
+        expandable = true;
+    }
+    omission OM_level_projection_F_reachable_8 {
+        kind = level_projection;
+        subject = @C1;
+        reason = "the member F_reachable_8 is withheld at l0; a higher level can recover it";
         expandable = true;
     }
     omission OM_level_projection_K_path_safety {
@@ -272,10 +390,10 @@ evidence {
         reason = "the member K_path_safety is withheld at l0; a higher level can recover it";
         expandable = true;
     }
-    omission OM_level_projection_OM_analyzer_expansion_svf {
+    omission OM_level_projection_OM_analyzer_expansion_callsite_sha256_0ac4e659f21554b7057e37b431f4f32638bf9bc16f70a1fbb5670b1b05db2830 {
         kind = level_projection;
         subject = @C1;
-        reason = "the member OM_analyzer_expansion_svf is withheld at l0; a higher level can recover it";
+        reason = "the member OM_analyzer_expansion_callsite_sha256_0ac4e659f21554b7057e37b431f4f32638bf9bc16f70a1fbb5670b1b05db2830 is withheld at l0; a higher level can recover it";
         expandable = true;
     }
     omission OM_level_projection_PR_alias {
@@ -288,12 +406,6 @@ evidence {
         kind = level_projection;
         subject = @C1;
         reason = "the member PR_capacity is withheld at l0; a higher level can recover it";
-        expandable = true;
-    }
-    omission OM_level_projection_PR_closed_world_absence {
-        kind = level_projection;
-        subject = @C1;
-        reason = "the member PR_closed_world_absence is withheld at l0; a higher level can recover it";
         expandable = true;
     }
     omission OM_level_projection_PR_dominating_check {
@@ -314,10 +426,10 @@ evidence {
         reason = "the member PR_unknown is withheld at l0; a higher level can recover it";
         expandable = true;
     }
-    omission OM_level_projection_U_svf_UNRESOLVED_CALL {
+    omission OM_level_projection_U_callsite_sha256_0ac4e659f21554b7057e37b431f4f32638bf9bc16f70a1fbb5670b1b05db2830_UNRESOLVED_CALL {
         kind = level_projection;
         subject = @C1;
-        reason = "the member U_svf_UNRESOLVED_CALL is withheld at l0; a higher level can recover it";
+        reason = "the member U_callsite_sha256_0ac4e659f21554b7057e37b431f4f32638bf9bc16f70a1fbb5670b1b05db2830_UNRESOLVED_CALL is withheld at l0; a higher level can recover it";
         expandable = true;
     }
 }

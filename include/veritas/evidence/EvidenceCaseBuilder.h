@@ -36,7 +36,7 @@
 //
 // THE BUILDER NEVER RESOLVES AN OPEN QUESTION BY ASSERTING ITS NEGATION.
 //
-// A complete, empty, correctly-scoped closed-world query may derive
+// A supported, scope-closed, complete, empty, correctly-scoped query may derive
 // `MUST_NOT dominates_bounds_check(...)`. Everything weaker — a truncated
 // result, a mismatched scope or run, a certificate the handoff does not carry,
 // a missing selected witness — leaves the question open and becomes an explicit
@@ -46,6 +46,9 @@
 // cells no longer re-derive their own content-addressed identity was patched
 // after publication, and no case may rest on one; that is refused outright for
 // every certificate the handoff carries, before any of them is used.
+// Modern handoffs additionally validate the v2 envelope digest and six semantic
+// coverage sidecars. Legacy handoffs retain their admitted behavior with an
+// explicit legacy_coverage omission; they make no modern coverage guarantee.
 
 #ifndef VERITAS_EVIDENCE_EVIDENCE_CASE_BUILDER_H_
 #define VERITAS_EVIDENCE_EVIDENCE_CASE_BUILDER_H_

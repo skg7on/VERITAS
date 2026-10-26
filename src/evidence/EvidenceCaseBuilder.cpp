@@ -485,6 +485,9 @@ class Builder {
     if (!status.ok()) return status;
     status = RouteFacts();
     if (!status.ok()) return status;
+    status = BuildCoverage();
+    if (!status.ok())
+      return status;
     status = BuildGraph();
     if (!status.ok()) return status;
     status = BuildDominatingCheck();
@@ -528,6 +531,9 @@ class Builder {
   // --- Request-level checks ------------------------------------------------
 
   Status CheckRequest() const {
+    if (auto status = ValidateEvidenceHandoffCoverage(request_.input);
+        !status.ok())
+      return status;
     if (request_.level == EvidenceLevel::kUnspecified) {
       return Status::InvalidArgument(
           "the build request declares no evidence level");
@@ -965,6 +971,94 @@ class Builder {
     return Status::Ok();
   }
 
+  // Coverage gaps belong to the claim and survive every detail level. They
+  // describe the query, not a fabricated native analysis fact or verdict.
+  Status BuildCoverage() {
+    const auto &input = request_.input;
+    const bool legacy = IsLegacyEvidenceHandoff(input);
+    if (legacy) {
+      Omission omission;
+      omission.id = omission_ids_.Allocate("OM_legacy_coverage");
+      omission.kind = "legacy_coverage";
+      omission.subject = std::string(kClaimLocalId);
+      omission.reason =
+          "legacy handoff has no evidence.coverage.v1 sidecars; "
+          "semantic predicate support and scope closure are unspecified";
+      omission.expandable = false;
+      omissions_.push_back(std::move(omission));
+    }
+    const std::pair<std::string_view, const QueryResultMetadata *> slots[] = {
+        {"value_flow", &input.flow_slice.metadata},
+        {"range", &input.ranges.metadata},
+        {"capacity", &input.capacities.metadata},
+        {"alias", &input.aliases.metadata},
+        {"unknown", &input.unknowns.metadata},
+        {"dominating_check", &input.dominating_checks.metadata}};
+    for (const auto &[kind, metadata] : slots) {
+      const auto coverage =
+          std::ranges::find(input.query_coverage, metadata->query_provenance_id,
+                            &QueryCoverage::completion_fact_id);
+      auto gap = [&](std::string_view code, std::string_view omission_kind,
+                     std::string detail) {
+        Unknown unknown;
+        unknown.id = unknown_ids_.Allocate("U_coverage_" + std::string(kind) +
+                                           "_" + std::string(omission_kind));
+        unknown.property =
+            Call("query_coverage", {StringLiteral(std::string(kind))});
+        unknown.reason_code = UnknownReasonCode::kMissingSpecification;
+        unknown.reason =
+            std::string(code) + ": " + std::string(kind) + " " + detail +
+            "; completion=" + StableText(metadata->query_provenance_id);
+        if (!legacy)
+          unknown.reason += "; producer=" + coverage->producer_version;
+        unknown.suggested_resolution =
+            "resolve_query_coverage(" + std::string(kind) + ")";
+        coverage_unknown_ids_.insert(unknown.id);
+        Omission omission;
+        omission.id =
+            omission_ids_.Allocate("OM_coverage_" + std::string(kind) + "_" +
+                                   std::string(omission_kind));
+        omission.kind = omission_kind;
+        omission.subject = std::string(kClaimLocalId);
+        omission.reason = unknown.reason;
+        omission.expandable = false;
+        unknowns_.push_back(std::move(unknown));
+        omissions_.push_back(std::move(omission));
+      };
+      if (!legacy) {
+        if (coverage->scope_resolution == ScopeResolution::kUnresolvedScope) {
+          gap("UNRESOLVED_SCOPE", "unresolved_scope",
+              "has no resolved containing function");
+        }
+        if (!coverage->predicate_supported) {
+          gap("UNSUPPORTED_PREDICATE", "unsupported_predicate",
+              "has no supported native predicate producer");
+        }
+        if (!coverage->scope_closed &&
+            coverage->scope_resolution == ScopeResolution::kResolved) {
+          std::string detail =
+              "has no closed-world scope guarantee; frontier_refs=";
+          auto frontier = coverage->frontier_refs;
+          std::sort(frontier.begin(), frontier.end());
+          for (const auto &ref : frontier)
+            detail += StableText(ref) + ",";
+          gap("OPEN_FRONTIER", "open_frontier", std::move(detail));
+        }
+      }
+      // The legacy check path already carries its historic truncation marker.
+      if (metadata->completeness == QueryCompleteness::kTruncated &&
+          (!legacy || kind != "dominating_check")) {
+        std::string detail = "traversal is incomplete: ";
+        auto reasons = metadata->truncation_reasons;
+        std::sort(reasons.begin(), reasons.end());
+        for (const auto reason : reasons)
+          detail += std::string(ToString(reason)) + ",";
+        gap("TRUNCATED", "truncated_query", std::move(detail));
+      }
+    }
+    return Status::Ok();
+  }
+
   // --- Graph ---------------------------------------------------------------
 
   Status BuildGraph() {
@@ -1282,7 +1376,8 @@ class Builder {
     const std::string* provenance_local =
         ProvenanceForFact(input.dominating_checks.metadata.query_provenance_id);
 
-    if (descriptor.value().completeness == QueryCompleteness::kTruncated) {
+    if (IsLegacyEvidenceHandoff(input) &&
+        descriptor.value().completeness == QueryCompleteness::kTruncated) {
       // BLD-006: a truncated empty result is a withheld answer, never negative
       // evidence. It becomes an explicit unknown naming the budget that cut it
       // short, plus the omission that can recover it.
@@ -1340,6 +1435,19 @@ class Builder {
         facts_.push_back(std::move(evidence));
       }
       return Status::Ok();
+    }
+
+    if (!IsLegacyEvidenceHandoff(input)) {
+      const auto coverage =
+          std::ranges::find(input.query_coverage, certificate,
+                            &QueryCoverage::completion_fact_id);
+      // The validated envelope guarantees this record exists. Traversal alone
+      // is not a closed-world certificate. BuildCoverage keeps every reason.
+      if (!coverage->predicate_supported || !coverage->scope_closed ||
+          coverage->scope_resolution != ScopeResolution::kResolved ||
+          descriptor->completeness != QueryCompleteness::kComplete) {
+        return Status::Ok();
+      }
     }
 
     // BLD-007: the one derivation the builder performs. Complete, empty,
@@ -1595,8 +1703,10 @@ class Builder {
     // A retained unknown and a retained fact still name entities, so those
     // entities stay: dropping one would leave a reference the projection cannot
     // resolve.
-    if (!unknowns_.empty()) {
-      CollectReferences(unknowns_.front().property, &retained_entities);
+    for (const auto &unknown : unknowns_) {
+      if (&unknown == &unknowns_.front() ||
+          coverage_unknown_ids_.contains(unknown.id))
+        CollectReferences(unknown.property, &retained_entities);
     }
     for (const Fact& fact : facts_) {
       if (retained_facts.count(fact.id) != 0) {
@@ -1626,7 +1736,8 @@ class Builder {
     }
     if (unknowns_.size() > 1) {
       for (std::size_t i = 1; i < unknowns_.size(); ++i) {
-        withheld.push_back(unknowns_[i].id);
+        if (!coverage_unknown_ids_.contains(unknowns_[i].id))
+          withheld.push_back(unknowns_[i].id);
       }
     }
     for (const Constraint& constraint : constraints_) {
@@ -1655,7 +1766,11 @@ class Builder {
                        }),
         value->facts.end());
     if (!value->unknowns.empty()) {
-      value->unknowns.resize(1);
+      const auto first = value->unknowns.front().id;
+      std::erase_if(value->unknowns, [&](const auto &unknown) {
+        return unknown.id != first &&
+               !coverage_unknown_ids_.contains(unknown.id);
+      });
     }
     value->constraints.clear();
 
@@ -1687,6 +1802,7 @@ class Builder {
     // it. A dropped marker is never allowed to disappear silently: that is the
     // whole of BLD-008.
     std::set<std::string> surviving;
+    surviving.insert(claim_.id);
     for (const Entity& entity : value->entities) surviving.insert(entity.id);
     for (const Edge& edge : value->edges) surviving.insert(edge.id);
     for (const Path& path : value->paths) surviving.insert(path.id);
@@ -1787,6 +1903,7 @@ class Builder {
   std::vector<Path> paths_;
   std::vector<Fact> facts_;
   std::vector<Unknown> unknowns_;
+  std::set<std::string> coverage_unknown_ids_;
   std::vector<Constraint> constraints_;
   std::vector<ProofObligation> obligations_;
   std::vector<Dependency> dependencies_;

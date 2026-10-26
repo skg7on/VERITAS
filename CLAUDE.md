@@ -74,7 +74,11 @@ captured before SVF can rewrite LLVM instructions. Exact copy seeds retain their
 callsite for constant-extent scope; the CLI accepts optional `--callsite` while
 ambiguous family lookup still refuses. Legacy projections remain readable with
 explicit missing ownership capability. Native identities and `eir.v1` stay intact;
-#124/#157/#158 retain producer/coverage/handoff gaps. This does not deliver the
+#157/RDX03 adds versioned semantic coverage and a handoff digest; unsupported,
+open, unresolved and truncated queries retain EIR gaps at every level. Native
+complete-empty checks cannot assert absence without a supported closed scope.
+Legacy handoffs are explicitly labeled. #124/#158 retain producer/provenance/summary
+handoff gaps. This does not deliver the
 planned lightweight backend/controller or repair all native Evidence gaps. Native SVF/Soufflé requirements remain unchanged.
 
 Canonical configure and build (uses `CMakePresets.json` at repo root):

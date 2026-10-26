@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "veritas/analysis/semantic/SemanticTypes.h"
+#include "veritas/core/Hash.h"
 #include "veritas/facts/RelationSchema.h"
 
 namespace veritas::evidence {
@@ -804,7 +805,10 @@ std::string ToDiagnosticJson(const EvidenceFactSet& set) {
   return out;
 }
 
-std::string ToDiagnosticJson(const EvidenceBuildInput& input) {
+namespace {
+
+std::string BuildInputJson(const EvidenceBuildInput &input,
+                           bool include_digest) {
   std::vector<facts::AnalysisFact> completion_facts =
       input.query_completion_facts;
   std::sort(completion_facts.begin(), completion_facts.end(),
@@ -843,9 +847,64 @@ std::string ToDiagnosticJson(const EvidenceBuildInput& input) {
   }
   out.append("],\"provenance\":");
   AppendProvenanceGraph(&out, input.provenance);
+  if (!input.handoff_version.empty() || !input.query_coverage.empty() ||
+      !input.handoff_digest.empty()) {
+    out.append(",\"handoff_version\":");
+    AppendStringValue(&out, input.handoff_version);
+    out.append(",\"query_coverage\":[");
+    auto coverage = input.query_coverage;
+    std::sort(coverage.begin(), coverage.end());
+    for (std::size_t i = 0; i < coverage.size(); ++i) {
+      if (i != 0)
+        out.push_back(',');
+      const auto &record = coverage[i];
+      out.append("{\"schema_version\":");
+      AppendStringValue(&out, record.schema_version);
+      out.append(",\"completion_fact_id\":");
+      AppendStableIdValue(&out, record.completion_fact_id);
+      out.append(",\"analysis_run_id\":");
+      AppendStableIdValue(&out, record.analysis_run_id);
+      out.append(",\"query_kind\":");
+      AppendStringValue(&out, record.query_kind);
+      out.append(",\"predicate_supported\":");
+      out.append(record.predicate_supported ? "true" : "false");
+      out.append(",\"scope_closed\":");
+      out.append(record.scope_closed ? "true" : "false");
+      out.append(",\"scope_resolution\":");
+      AppendStringValue(&out, ToString(record.scope_resolution));
+      out.append(",\"frontier_refs\":[");
+      auto frontier = record.frontier_refs;
+      std::sort(frontier.begin(), frontier.end());
+      for (std::size_t j = 0; j < frontier.size(); ++j) {
+        if (j != 0)
+          out.push_back(',');
+        AppendStableIdValue(&out, frontier[j]);
+      }
+      out.append("],\"producer_version\":");
+      AppendStringValue(&out, record.producer_version);
+      out.push_back('}');
+    }
+    out.push_back(']');
+    if (include_digest) {
+      out.append(",\"handoff_digest\":");
+      AppendStringValue(&out, input.handoff_digest);
+    }
+  }
   out.push_back('}');
   out.push_back('\n');
   return out;
+}
+
+} // namespace
+
+std::string ToDiagnosticJson(const EvidenceBuildInput &input) {
+  return BuildInputJson(input, true);
+}
+
+std::string ComputeEvidenceHandoffDigest(const EvidenceBuildInput &input) {
+  const std::string canonical = BuildInputJson(input, false);
+  return core::DigestToHex(core::ComputeSHA256(std::as_bytes(
+      std::span<const char>(canonical.data(), canonical.size()))));
 }
 
 }  // namespace veritas::evidence

@@ -27,9 +27,12 @@
 
 #include <gtest/gtest.h>
 
-#include "veritas/evidence/FactStoreEvidenceBackend.h"
+#include "evidence/EvidenceScenario.h"
 #include "evidence/RealEvidencePipeline.h"
 #include "veritas/core/Ids.h"
+#include "veritas/evidence/EvidenceCaseBuilder.h"
+#include "veritas/evidence/FactStoreEvidenceBackend.h"
+#include "veritas/evidence/OverflowClaimSeed.h"
 #include "veritas/facts/ProvenanceStore.h"
 #include "veritas/facts/RelationSchema.h"
 
@@ -55,6 +58,82 @@ bool HasRelation(const std::vector<facts::AnalysisFact>& facts,
     }
   }
   return false;
+}
+
+TEST(EvidenceHandoffIntegrationTest, NativeUnsupportedEmptyIsNotNegative) {
+  auto snapshot = AnalyzeRealFixture("evidence_overflow_unsafe");
+  ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
+  auto current = snapshot->fact_store.GetCurrentFacts(snapshot->run_id);
+  ASSERT_TRUE(current.ok());
+  auto seed =
+      evidence::ResolveOverflowClaimSeed(snapshot->cpg, *current, "memcpy");
+  ASSERT_TRUE(seed.ok()) << seed.status().message();
+  evidence::FactStoreEvidenceBackend backend(snapshot->fact_store,
+                                             snapshot->descriptor);
+  evidence::EvidenceQueryService service(snapshot->cpg, backend,
+                                         snapshot->run_id);
+  const evidence::EvidenceQueryBudget budget{16, 256, 16, 256, 16};
+  auto input = service.BuildEvidenceInput(*seed, budget);
+  ASSERT_TRUE(input.ok()) << input.status().message();
+  ASSERT_TRUE(input->dominating_checks.facts.empty());
+  ASSERT_EQ(input->dominating_checks.metadata.completeness,
+            evidence::QueryCompleteness::kComplete);
+  auto request =
+      EvidenceScenarioBuilder().BuildRequest(evidence::EvidenceLevel::kL1);
+  request.input = *input;
+  auto built = evidence::EvidenceCaseBuilder().Build(request);
+  ASSERT_TRUE(built.ok()) << built.status().message();
+  EXPECT_TRUE(std::ranges::none_of(built->facts, [](const auto &fact) {
+    return fact.predicate.text == "dominates_bounds_check" &&
+           fact.epistemic == evidence::EpistemicState::kMustNot;
+  }));
+  EXPECT_TRUE(std::ranges::any_of(built->omissions, [](const auto &omission) {
+    return omission.kind == "unsupported_predicate" &&
+           omission.reason.find("dominating_check") != std::string::npos;
+  }));
+
+  // The same real producer, cut before it can publish a path, must retain why.
+  auto small = budget;
+  small.max_nodes = 1;
+  auto truncated = service.BuildEvidenceInput(*seed, small);
+  ASSERT_TRUE(truncated.ok()) << truncated.status().message();
+  ASSERT_EQ(truncated->flow_slice.metadata.completeness,
+            evidence::QueryCompleteness::kTruncated);
+  request.input = *truncated;
+  auto partial = evidence::EvidenceCaseBuilder().Build(request);
+  ASSERT_TRUE(partial.ok()) << partial.status().message();
+  EXPECT_TRUE(std::ranges::any_of(partial->omissions, [](const auto &omission) {
+    return omission.kind == "truncated_query" &&
+           omission.reason.find("value_flow") != std::string::npos &&
+           omission.reason.find("max_nodes") != std::string::npos;
+  }));
+}
+
+TEST(EvidenceHandoffIntegrationTest, MissingOwnerIsUnresolvedScope) {
+  auto snapshot = AnalyzeRealFixture("evidence_overflow_unsafe");
+  ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
+  EvidenceScenarioBuilder scenario;
+  auto request = scenario.BuildRequest(evidence::EvidenceLevel::kL1);
+  auto seed = request.input.claim_seed;
+  seed.callsite_ref.reset();
+  seed.sink_ref = scenario.Id(core::IdKind::kValueRef, "unowned-sink");
+  evidence::FactStoreEvidenceBackend backend(snapshot->fact_store,
+                                             snapshot->descriptor);
+  evidence::EvidenceQueryService service(snapshot->cpg, backend,
+                                         snapshot->run_id);
+  auto input = service.BuildEvidenceInput(seed, {16, 256, 16, 256, 16});
+  ASSERT_TRUE(input.ok()) << input.status().message();
+  ASSERT_TRUE(input->unknowns.facts.empty());
+  request.input = *input;
+  auto built = evidence::EvidenceCaseBuilder().Build(request);
+  ASSERT_TRUE(built.ok()) << built.status().message();
+  EXPECT_TRUE(std::ranges::any_of(built->unknowns, [](const auto &unknown) {
+    return unknown.reason.find("UNRESOLVED_SCOPE") != std::string::npos;
+  }));
+  EXPECT_TRUE(std::ranges::any_of(built->omissions, [&](const auto &omission) {
+    return omission.kind == "unresolved_scope" &&
+           omission.subject == built->primary_claim.id;
+  }));
 }
 
 TEST(EvidenceHandoffIntegrationTest, SummaryFixtureIsDeterministicAcrossRoots) {
