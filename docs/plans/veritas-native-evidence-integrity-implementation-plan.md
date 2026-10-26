@@ -136,7 +136,17 @@ The reviewed native artifacts remove the unsupported negative derivation and
 retain all real flow facts. Evidence/codec suite: 412/412 passing, including
 L0/L1/L2 truth-table round trips, unchanged completion rows, mixed-run/snapshot
 refusal and the existing single-snapshot retry contract. Final clean build,
-whole-suite verification and independent review are recorded with the PR.
+whole-suite verification: 572-step clean `homebrew-clang` build and 926/926
+CTest tests in 323.72 s, with zero failures/errors/skips, including internal
+GoogleTest skip inspection. Independent review's malformed-row hashing and
+confidence-precision findings have four RED→GREEN regressions; semantic rows
+are checked before hashing, and modern confidence is finite and round-trip safe.
+Legacy diagnostic formatting remains intact.
+
+The acceptance run follows CI's serial CTest command. A parallel experiment
+exposed the existing shared temporary database in `CpgQueryTest::OpenQuery`;
+`ReportsCallees` passed ten serial repeats and the complete serial suite. The
+parallel test harness needs isolated temporary paths; no test was disabled.
 
 ## Task 4: Carry fact provenance with enforced depth and member limits
 

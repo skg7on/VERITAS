@@ -56,6 +56,8 @@ Status ValidateQueryCoverage(const QueryCoverage &coverage);
 struct EvidenceBuildInput;
 // The canonical diagnostic payload, excluding the digest field itself, is
 // hashed with its version and all six sidecars. No completion FactID changes.
+// Requires schema-valid rows; the handoff validator checks untrusted rows
+// before invoking this serializer.
 std::string ComputeEvidenceHandoffDigest(const EvidenceBuildInput &input);
 // Legacy = all three envelope fields absent. Partial or malformed envelopes,
 // mismatched completion/result bindings, and mixed runs are refused.

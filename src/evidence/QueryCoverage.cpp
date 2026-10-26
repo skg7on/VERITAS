@@ -15,6 +15,7 @@
 #include "veritas/evidence/QueryCoverage.h"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <set>
 #include <string>
@@ -90,11 +91,34 @@ Status ValidateEvidenceHandoffCoverage(const EvidenceBuildInput &input) {
   if (input.handoff_version != kEvidenceHandoffVersion ||
       input.query_coverage.size() != 6 ||
       input.query_completion_facts.size() != 6 ||
-      input.query_completion_bindings.size() != 6 ||
-      input.handoff_digest != ComputeEvidenceHandoffDigest(input)) {
+      input.query_completion_bindings.size() != 6) {
     return Status::InvalidArgument(
         "invalid evidence handoff coverage envelope or digest");
   }
+  // The diagnostic serializer assumes schema-valid rows when naming relations.
+  // Refuse malformed payloads before hashing can reach its unchecked registry
+  // lookup. This also keeps non-finite annotations out of the modern JSON.
+  for (const auto *rows :
+       {&input.query_completion_facts, &input.ranges.facts,
+        &input.capacities.facts, &input.aliases.facts,
+        &input.dominating_checks.facts, &input.unknowns.facts,
+        &input.flow_slice.supporting_facts,
+        &input.flow_slice.contradicting_facts, &input.flow_slice.unknowns}) {
+    for (const auto &fact : *rows) {
+      if (auto status = facts::ValidateSemanticRow(fact.row); !status.ok())
+        return status;
+    }
+  }
+  for (const auto &binding : input.query_completion_bindings) {
+    if (binding.confidence && !std::isfinite(*binding.confidence))
+      return Status::InvalidArgument("nonfinite handoff binding confidence");
+  }
+  if (input.provenance.binding().has_confidence() &&
+      !std::isfinite(input.provenance.binding().confidence()))
+    return Status::InvalidArgument("nonfinite handoff provenance confidence");
+  if (input.handoff_digest != ComputeEvidenceHandoffDigest(input))
+    return Status::InvalidArgument(
+        "invalid evidence handoff coverage envelope or digest");
   const auto &run = input.flow_slice.metadata.analysis_run_id;
   if (input.provenance.run_id() != core::ToString(run)) {
     return Status::InvalidArgument("query coverage mixes analysis runs");

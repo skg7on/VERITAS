@@ -189,7 +189,10 @@ refs and producer version. The sidecar does not alter any of the nine cells of
 
 `ComputeEvidenceHandoffDigest` hashes the canonical diagnostic handoff, including
 all payload and sidecars, excluding only the digest field. Sidecars and frontier
-sets are canonically ordered. `ValidateQueryCoverage` rejects unknown versions,
+sets are canonically ordered. Modern binding confidence uses locale-independent,
+round-trip-safe floating-point text; legacy diagnostic formatting is retained.
+The validator rejects malformed semantic rows and nonfinite confidence before
+hashing. `ValidateQueryCoverage` rejects unknown versions,
 malformed identities, unknown query kinds, duplicate frontiers, and a closed scope
 with an unresolved owner or frontier. `ValidateEvidenceHandoffCoverage` requires
 one sidecar per result, matching completion/result kind, traversal state/reasons,

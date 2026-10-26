@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -300,6 +301,64 @@ TEST(EvidenceCaseBuilderTest, RejectsSameRunCompletionsFromDifferentSnapshots) {
   const auto status = BuildStatus(request);
   EXPECT_FALSE(status.ok());
   EXPECT_NE(status.message().find("mixes input snapshots"), std::string::npos);
+}
+
+TEST(EvidenceCaseBuilderTest, MalformedPayloadRelationIsRejectedBeforeDigest) {
+  auto request = CoveredRequest(EvidenceLevel::kL1);
+  request.input.ranges.facts.front().row.relation =
+      static_cast<facts::RelationId>(65535);
+  const auto status = BuildStatus(request);
+  EXPECT_EQ(status.code(), StatusCode::kInvalidArgument);
+  EXPECT_EQ(status.message(), "unknown relation id");
+}
+
+TEST(EvidenceCaseBuilderTest,
+     MalformedCompletionRelationIsRejectedBeforeDigest) {
+  auto request = CoveredRequest(EvidenceLevel::kL1);
+  request.input.query_completion_facts.front().row.relation =
+      static_cast<facts::RelationId>(65535);
+  const auto status = BuildStatus(request);
+  EXPECT_EQ(status.code(), StatusCode::kInvalidArgument);
+  EXPECT_EQ(status.message(), "unknown relation id");
+}
+
+TEST(EvidenceCaseBuilderTest,
+     HandoffDigestPreservesBindingConfidencePrecision) {
+  for (bool proto : {false, true}) {
+    auto request = CoveredRequest(EvidenceLevel::kL1);
+    auto &input = request.input;
+    if (proto)
+      input.provenance.mutable_binding()->set_confidence(0.5000001);
+    else
+      input.query_completion_bindings.front().confidence = 0.5000001;
+    input.handoff_digest = ComputeEvidenceHandoffDigest(input);
+    ASSERT_TRUE(BuildStatus(request).ok());
+    if (proto)
+      input.provenance.mutable_binding()->set_confidence(0.5000002);
+    else
+      input.query_completion_bindings.front().confidence = 0.5000002;
+    EXPECT_NE(ComputeEvidenceHandoffDigest(input), input.handoff_digest);
+    EXPECT_FALSE(BuildStatus(request).ok())
+        << "changed confidence, stale digest";
+  }
+  auto legacy = PristineRequest(EvidenceLevel::kL1).input;
+  legacy.query_completion_bindings.front().confidence = 0.5000001;
+  EXPECT_NE(ToDiagnosticJson(legacy).find("\"confidence\":0.500000"),
+            std::string::npos);
+}
+
+TEST(EvidenceCaseBuilderTest, NonfiniteModernConfidenceIsRejected) {
+  for (bool proto : {false, true}) {
+    auto request = CoveredRequest(EvidenceLevel::kL1);
+    if (proto)
+      request.input.provenance.mutable_binding()->set_confidence(
+          std::numeric_limits<double>::quiet_NaN());
+    else
+      request.input.query_completion_bindings.front().confidence =
+          std::numeric_limits<double>::quiet_NaN();
+    request.input.handoff_digest = ComputeEvidenceHandoffDigest(request.input);
+    EXPECT_FALSE(BuildStatus(request).ok());
+  }
 }
 
 TEST(EvidenceCaseBuilderTest, LegacyCoverageIsExplicitlyLabeledAtEveryLevel) {

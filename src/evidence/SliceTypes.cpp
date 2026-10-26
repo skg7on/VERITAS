@@ -15,8 +15,10 @@
 #include "veritas/evidence/SliceTypes.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -387,14 +389,29 @@ void AppendClaimSeed(std::string* out, const ClaimSeed& seed) {
   out->push_back('}');
 }
 
-void AppendBinding(std::string* out, const facts::RunFactBinding& binding) {
+void AppendConfidence(std::string *out, double value, bool precise) {
+  if (!precise) {
+    out->append(std::to_string(value));
+    return;
+  }
+  // Locale independent and round-trip safe for every finite IEEE double.
+  // General format needs fewer than 32 bytes even at the extreme exponents.
+  char buffer[64];
+  const auto converted = std::to_chars(
+      buffer, buffer + sizeof(buffer), value, std::chars_format::general,
+      std::numeric_limits<double>::max_digits10);
+  out->append(buffer, converted.ptr);
+}
+
+void AppendBinding(std::string *out, const facts::RunFactBinding &binding,
+                   bool precise) {
   out->append("{\"run_id\":");
   AppendStableIdValue(out, binding.run_id);
   out->append(",\"fact_id\":");
   AppendStableIdValue(out, binding.fact_id);
   out->append(",\"confidence\":");
   if (binding.confidence.has_value()) {
-    out->append(std::to_string(*binding.confidence));
+    AppendConfidence(out, *binding.confidence, precise);
   } else {
     out->append("null");
   }
@@ -508,14 +525,15 @@ void AppendProtoFact(std::string* out, const fp::Fact& fact) {
   out->append("]}");
 }
 
-void AppendProtoBinding(std::string* out, const fp::RunFactBinding& binding) {
+void AppendProtoBinding(std::string *out, const fp::RunFactBinding &binding,
+                        bool precise) {
   out->append("{\"analysis_run_id\":");
   AppendStringValue(out, binding.analysis_run_id());
   out->append(",\"fact_id\":");
   AppendStringValue(out, binding.fact_id());
   out->append(",\"confidence\":");
   if (binding.has_confidence()) {
-    out->append(std::to_string(binding.confidence()));
+    AppendConfidence(out, binding.confidence(), precise);
   } else {
     out->append("null");
   }
@@ -578,8 +596,8 @@ void AppendProtoEdge(std::string* out, const fp::FactWitnessEdge& edge) {
   out->push_back('}');
 }
 
-void AppendProvenanceGraph(std::string* out,
-                           const fp::ProvenanceGraph& graph) {
+void AppendProvenanceGraph(std::string *out, const fp::ProvenanceGraph &graph,
+                           bool precise) {
   std::vector<const fp::FactWitness*> nodes;
   nodes.reserve(static_cast<std::size_t>(graph.nodes_size()));
   for (const auto& node : graph.nodes()) nodes.push_back(&node);
@@ -609,7 +627,7 @@ void AppendProvenanceGraph(std::string* out,
   out->append(",\"fact\":");
   AppendProtoFact(out, graph.fact());
   out->append(",\"binding\":");
-  AppendProtoBinding(out, graph.binding());
+  AppendProtoBinding(out, graph.binding(), precise);
   out->append(",\"nodes\":[");
   for (std::size_t i = 0; i < nodes.size(); ++i) {
     if (i != 0) out->push_back(',');
@@ -809,6 +827,7 @@ namespace {
 
 std::string BuildInputJson(const EvidenceBuildInput &input,
                            bool include_digest) {
+  const bool precise = !IsLegacyEvidenceHandoff(input);
   std::vector<facts::AnalysisFact> completion_facts =
       input.query_completion_facts;
   std::sort(completion_facts.begin(), completion_facts.end(),
@@ -843,10 +862,10 @@ std::string BuildInputJson(const EvidenceBuildInput &input,
   out.append(",\"query_completion_bindings\":[");
   for (std::size_t i = 0; i < bindings.size(); ++i) {
     if (i != 0) out.push_back(',');
-    AppendBinding(&out, bindings[i]);
+    AppendBinding(&out, bindings[i], precise);
   }
   out.append("],\"provenance\":");
-  AppendProvenanceGraph(&out, input.provenance);
+  AppendProvenanceGraph(&out, input.provenance, precise);
   if (!input.handoff_version.empty() || !input.query_coverage.empty() ||
       !input.handoff_digest.empty()) {
     out.append(",\"handoff_version\":");
