@@ -230,12 +230,31 @@ Tasks 4–6 execution record (#158 / RDX04, 2026-10-26–27):
   compared with durable binding/component rows; EIR-T/protobuf round trips pass.
 - Unsafe/safe/truncated native goldens are regenerated and their new provenance,
   premise/frontier, summary and execution-domain members are explained in the
-  spec. DEM-005 also passes with Clang 24 fixture compilation; its existing
-  cross-host comparison masks are unchanged.
+  spec. Initial local DEM-005 qualification also passed with Clang 24 fixture
+  compilation. The subsequent Linux CI portability correction is recorded below.
 
 Final clean-build/whole-suite qualification and independent review are recorded
 in the following entry before publication. Producer deferrals under #124,
 portable identity under #125 and the #149 owner map remain explicit.
+
+Linux CI follow-up (2026-10-27, PR #179): both build and coverage jobs compiled
+successfully but failed the two durable-store fixtures on hard-coded
+`/private/tmp`, plus DEM-005 on native selected-witness multiplicity. Use the
+platform temporary directory. Compare native witness metadata/counts, exact Fact
+dependencies and premise/frontier metadata against the pinned input on each
+host; keep the remaining query contract strict against goldens. A local explicit
+Linux-target run reproduced the golden failure before the correction and passed
+afterward; mutation checks reject rule, dependency and gap corruption. No runtime
+code or golden artifacts change in this follow-up.
+
+Follow-up local qualification: fresh configure and 572-step clean build passed;
+serial CTest passed **937/937** in **348.28 s**, with no failures, errors, CTest
+skips or internal GoogleTest skips. Native engine conformance executed, and the
+performance gate recorded median **1843 ms**, peak RSS **255 MB**, within its
+unchanged ceilings. The first whole-suite attempt was interrupted by a recorded
+191-second host idle sleep during that gate; the repeated clean verification
+used command-scoped sleep prevention. The explicit Linux-target DEM-005 check
+also passed after the clean rebuild. Diff and Apache-2.0 header checks passed.
 
 Independent final review found two Important issues and no Critical or Minor
 findings. The single fix pass observed and repaired both: aggregate-cut facts

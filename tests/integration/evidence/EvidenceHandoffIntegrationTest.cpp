@@ -100,7 +100,9 @@ TEST(EvidenceHandoffIntegrationTest,
       {facts::SemanticKey{a.row}, "root", {}, facts::SemanticKey{root.row}, 0},
       {facts::SemanticKey{b.row}, "step", {}, facts::SemanticKey{a.row}, 0},
       {facts::SemanticKey{tip.row}, "step", {}, facts::SemanticKey{b.row}, 0}};
-  std::string path = "/private/tmp/veritas-evidence-depth-XXXXXX";
+  std::string path =
+      (std::filesystem::temp_directory_path() / "veritas-evidence-depth-XXXXXX")
+          .string();
   ASSERT_NE(::mkdtemp(path.data()), nullptr);
   auto store = facts::FactStore::Open(path);
   ASSERT_TRUE(store.ok());
@@ -331,7 +333,9 @@ TEST(EvidenceHandoffIntegrationTest,
                                facts::SemanticKey{root.row},
                                0});
   }
-  std::string path = "/private/tmp/veritas-evidence-may-cut-XXXXXX";
+  std::string path = (std::filesystem::temp_directory_path() /
+                      "veritas-evidence-may-cut-XXXXXX")
+                         .string();
   ASSERT_NE(::mkdtemp(path.data()), nullptr);
   auto store = facts::FactStore::Open(path);
   ASSERT_TRUE(store.ok());

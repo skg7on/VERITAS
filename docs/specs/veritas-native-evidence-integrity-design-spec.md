@@ -362,6 +362,13 @@ portable count guarantees. L2 replaces its summary handle with the actual
 reference. The truncated case additionally cuts provenance under the shared
 member limit, so its provenance omission count is not inferred by adding one
 to the untruncated case. Existing golden identity masks are not broadened.
+Linux CI subsequently exposed host-dependent selected-witness multiplicity and
+budget selection as well: native witness records, Fact dependencies and exact
+premise/frontier metadata are now compared against the pinned input on each
+host, independently of the EIR builder. The cross-host golden comparison keeps
+the query contract strict while those native sections use the same-run oracle.
+This changes structural comparison scope, not identity masking or product
+semantics; deliberate rule/dependency/gap corruption must fail the native check.
 Native range/capacity/alias/positive-check production remains under #124; no
 unsupported or open query has acquired negative or verified authority.
 

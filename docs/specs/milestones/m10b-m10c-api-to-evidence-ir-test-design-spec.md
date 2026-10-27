@@ -561,6 +561,18 @@ digest equality — is asserted separately and only *within* one build (CLI
 versus the typed oracle, store re-ordered by fact-binding insertion, second
 materialization in a different checkout root).
 
+For native EIR after RDX04, the cross-host structural comparison also separates
+the selected-witness closure from the stable query contract. Linux CI exposed
+additional transitive witnesses and premises; targeting Linux locally reproduced
+the mismatch, including a different budget-selected witness at `max_nodes=1`.
+DEM-005 now independently compares witness metadata/counts, Fact dependency IDs,
+premise ordinals and frontier reasons with the pinned native input on each host.
+Mutated rules, removed dependencies and corrupted gap reasons must fail that
+comparison. Query certificates, coverage, pending obligations and summary handles
+retain their strict cross-host golden comparison. Same-build byte/determinism
+checks remain unchanged. The durable provenance fixtures must use the platform
+temporary directory, rather than a macOS-specific path.
+
 ---
 
 # 7. Contract Test Catalog (`AC`)

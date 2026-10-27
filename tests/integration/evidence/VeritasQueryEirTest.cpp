@@ -67,6 +67,14 @@
 //     weaker check than the one it replaces, taken deliberately. See
 //     `IsIrDerivedMember` and `ExpectHostStableMatch`.
 //
+//     RDX04 also exposes the native selected-witness closure. Host-dependent
+//     facts change both the closure's size and which witness fits a tight
+//     budget. DEM-005 checks those records, Fact dependencies and exact
+//     premise/frontier metadata against the current pinned native input,
+//     independently of EvidenceCaseBuilder. Corrupting a rule, dependency or
+//     gap must fail that comparison. The cross-host golden comparison retains
+//     exact query-certificate, coverage, obligation and summary-handle labels.
+//
 //     The masking helper the M10B test (`VeritasQueryEvidenceTest.cpp`) uses,
 //     `StabilizeDigests`, is NOT structurally reusable here, and this is worth
 //     recording because the plan expected it might be. `StabilizeDigests`
@@ -122,6 +130,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -144,6 +153,8 @@
 #include "veritas/evidence/EvidenceJson.h"
 #include "veritas/evidence/EvidenceProto.h"
 #include "veritas/evidence/EvidenceValidator.h"
+#include "veritas/evidence/OverflowClaimSeed.h"
+#include "veritas/summarydb/SummaryRepository.h"
 
 #ifndef VERITAS_QUERY_BINARY
 #error "VERITAS_QUERY_BINARY must be defined by the build system"
@@ -235,22 +246,53 @@ std::filesystem::path GoldenPath(std::string_view name) {
 // Materialized stores
 // ---------------------------------------------------------------------------
 
-// Runs the real pipeline for `fixture` once per process and hands back the
-// store root. `FixtureProject` allocates a unique temporary directory that
-// outlives the call, so the path stays valid for every later test.
-StatusOr<std::filesystem::path> MaterializedStore(std::string_view fixture) {
-  static std::map<std::string, std::filesystem::path> cache;
+// Runs the real pipeline once per process and retains its snapshot so the CLI
+// and the independent native-provenance assertions read the same durable run.
+StatusOr<RealEvidenceSnapshot *>
+MaterializedSnapshot(std::string_view fixture) {
+  static std::map<std::string, std::unique_ptr<RealEvidenceSnapshot>> cache;
   const std::string key(fixture);
   const auto cached = cache.find(key);
   if (cached != cache.end()) {
-    return cached->second;
+    return cached->second.get();
   }
   auto snapshot = AnalyzeRealFixture(fixture);
   if (!snapshot.ok()) {
     return snapshot.status();
   }
-  auto inserted = cache.emplace(key, snapshot->output_root);
-  return inserted.first->second;
+  auto inserted = cache.emplace(
+      key, std::make_unique<RealEvidenceSnapshot>(std::move(*snapshot)));
+  return inserted.first->second.get();
+}
+
+StatusOr<std::filesystem::path> MaterializedStore(std::string_view fixture) {
+  auto snapshot = MaterializedSnapshot(fixture);
+  if (!snapshot.ok())
+    return snapshot.status();
+  return (*snapshot)->output_root;
+}
+
+StatusOr<ev::EvidenceBuildInput> NativeInput(std::string_view fixture,
+                                             bool truncated) {
+  auto snapshot = MaterializedSnapshot(fixture);
+  if (!snapshot.ok())
+    return snapshot.status();
+  auto &native = **snapshot;
+  auto facts = native.fact_store.GetCurrentFacts(native.run_id);
+  if (!facts.ok())
+    return facts.status();
+  auto seed = ev::ResolveOverflowClaimSeed(native.cpg, *facts, "memcpy");
+  if (!seed.ok())
+    return seed.status();
+  auto summaries =
+      summarydb::SummaryRepository::Open(native.output_root.string());
+  if (!summaries.ok())
+    return summaries.status();
+  ev::FactStoreEvidenceBackend backend(native.fact_store, native.descriptor,
+                                       summaries->get());
+  ev::EvidenceQueryService service(native.cpg, backend, native.run_id);
+  return service.BuildEvidenceInput(*seed,
+                                    {8, truncated ? 1u : 256u, 5, 64, 8});
 }
 
 // ---------------------------------------------------------------------------
@@ -897,11 +939,24 @@ struct HostStableProjection {
   std::multiset<std::string> ir_derived;
 };
 
+// Native witnesses, their premise dependencies and their budget frontiers are
+// checked exactly against the pinned input below. Their counts and even the
+// selected rule under a tight budget depend on host-derived semantic IDs.
+bool IsNativeProvenanceMember(const std::string &label) {
+  return (label.starts_with("provenance::") &&
+          !label.starts_with("provenance::producer=evidence.query;")) ||
+         label.starts_with("dependency::kind=fact;") ||
+         label.starts_with("omission::kind=provenance_premise;") ||
+         label.starts_with("omission::kind=provenance_frontier;");
+}
+
 HostStableProjection SplitHostStable(const ev::EvidenceCase& value) {
   HostStableProjection projection;
   for (const std::string& line : StableSignature(value)) {
     const std::string label = SignatureLabel(line);
-    if (IsIrDerivedMember(label)) {
+    if (IsNativeProvenanceMember(label)) {
+      continue;
+    } else if (IsIrDerivedMember(label)) {
       projection.ir_derived.insert(label);
     } else {
       projection.contract.insert(label);
@@ -919,9 +974,123 @@ std::string JoinLines(const std::multiset<std::string>& values) {
   return out;
 }
 
+struct NativeProjection {
+  std::multiset<std::string> witnesses;
+  std::multiset<std::string> dependencies;
+  std::multiset<std::string> premises;
+  std::multiset<std::string> frontiers;
+
+  bool operator==(const NativeProjection &) const = default;
+};
+
+std::string WitnessLabel(std::string_view producer, std::string_view rule,
+                         std::string_view version, std::string_view anchor,
+                         std::string_view run, std::string_view config) {
+  return std::string(producer) + ";" + std::string(rule) + ";" +
+         std::string(version) + ";" + std::string(anchor) + ";" +
+         std::string(run) + ";" + std::string(config);
+}
+
+NativeProjection NativeProjectionOf(const ev::EvidenceCase &value) {
+  NativeProjection out;
+  std::map<std::string, std::string> witnesses;
+  for (const auto &record : value.provenance) {
+    const auto label = WitnessLabel(
+        record.producer, record.rule, record.version, record.source_anchor_id,
+        IdText(record.analysis_run_id), record.configuration);
+    witnesses.emplace(record.id, label);
+    if (record.producer != "evidence.query")
+      out.witnesses.insert(label);
+  }
+  for (const auto &dependency : value.dependencies) {
+    if (dependency.kind == ev::DependencyKind::kFact)
+      out.dependencies.insert(core::ToString(dependency.stable_id));
+  }
+  for (const auto &omission : value.omissions) {
+    if (omission.kind == "provenance_premise") {
+      const auto subject = witnesses.find(omission.subject);
+      out.premises.insert(
+          omission.reason + ";" + Bool(omission.expandable) + ";" +
+          (subject == witnesses.end() ? omission.subject : subject->second));
+    } else if (omission.kind == "provenance_frontier") {
+      out.frontiers.insert(
+          omission.reason + ";" + Bool(omission.expandable) + ";" +
+          (omission.subject == value.primary_claim.id ? "claim"
+                                                      : omission.subject));
+    }
+  }
+  return out;
+}
+
+// This is an independent projection of native graph fields, not an invocation
+// of EvidenceCaseBuilder. Counts, exact IDs, witness metadata, premise ordinals
+// and frontier reasons must all agree on the same host, including at
+// max_nodes=1.
+NativeProjection ExpectedNativeProjection(const ev::EvidenceBuildInput &input,
+                                          const ev::EvidenceCase &value) {
+  NativeProjection out;
+  std::set<std::string> certificates, dependencies, mapped;
+  std::map<std::string, std::string> witnesses;
+  for (const auto &fact : input.query_completion_facts)
+    certificates.insert(core::ToString(fact.fact_id));
+  for (const auto &fact : value.facts)
+    if (fact.stable_id)
+      mapped.insert(core::ToString(*fact.stable_id));
+  const auto run = core::ToString(input.flow_slice.metadata.analysis_run_id);
+  for (const auto &node : input.provenance.nodes()) {
+    if (!node.selected() || certificates.contains(node.output_fact_id()))
+      continue;
+    const auto label = WitnessLabel(
+        node.producer_id().empty() ? "analysis.souffle" : node.producer_id(),
+        node.rule_id(), node.rule_version(), node.source_anchor_id(), run,
+        value.program.analysis_configuration_id);
+    witnesses.emplace(node.output_fact_id(), label);
+    out.witnesses.insert(label);
+  }
+  for (const auto &explanation : input.fact_explanations) {
+    const auto id = core::ToString(explanation.binding.fact_id);
+    dependencies.insert(id);
+    if (!witnesses.contains(id)) {
+      const auto label = WitnessLabel("analysis.souffle", "", "", "", run,
+                                      value.program.analysis_configuration_id);
+      witnesses.emplace(id, label);
+      out.witnesses.insert(label);
+    }
+    if (!explanation.truncation_reason.empty()) {
+      std::string reason =
+          id + ": " + explanation.truncation_reason +
+          "; selected_witness=" + explanation.binding.selected_witness_id +
+          "; frontier=";
+      for (const auto &ref : explanation.frontier_refs)
+        reason += core::ToString(ref) + ";";
+      out.frontiers.insert(reason + ";1;claim");
+    }
+  }
+  for (const auto &edge : input.provenance.edges()) {
+    dependencies.insert(edge.output_fact_id());
+    dependencies.insert(edge.input_id());
+    if (!mapped.contains(edge.input_id())) {
+      const auto subject = witnesses.find(edge.output_fact_id());
+      out.premises.insert(
+          edge.input_kind() + " input " + edge.input_id() + " at ordinal " +
+          std::to_string(edge.input_ordinal()) + " of " +
+          edge.output_fact_id() + "; witness=" + edge.witness_id() +
+          "; semantic premise body is not projected into this case;1;" +
+          (subject == witnesses.end() ? "missing witness" : subject->second));
+    }
+  }
+  out.dependencies.insert(dependencies.begin(), dependencies.end());
+  // The safety obligation separately depends on the dominating-check query
+  // certificate, in addition to the native fact/premise dependency union.
+  out.dependencies.insert(
+      core::ToString(input.dominating_checks.metadata.query_provenance_id));
+  return out;
+}
+
 // Compares a live case against a checked-in golden at the strength a
-// cross-toolchain comparison can actually support: every member the query
-// contract determines must agree exactly, down to its count, and the
+// cross-toolchain comparison can actually support: query-contract members
+// agree exactly, down to their count; native provenance is checked separately
+// against the same-run input. The remaining
 // host-determined members must be present and free of a member kind the golden
 // does not carry. Their counts are deliberately not compared — see
 // `IsIrDerivedMember` for what that gives up.
@@ -1472,12 +1641,15 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
     std::string name;
     const std::string* cli_text;
     std::string json_name;
+    std::string fixture;
+    bool truncated = false;
   };
   const std::vector<Golden> goldens = {
       {"overflow_unsafe.l1.eir", &unsafe.stdout_text,
-       "overflow_unsafe.l1.eir.json"},
-      {"overflow_safe.l1.eir", &safe.stdout_text, ""},
-      {"overflow_truncated.l1.eir", &truncated.stdout_text, ""},
+       "overflow_unsafe.l1.eir.json", "evidence_overflow_unsafe"},
+      {"overflow_safe.l1.eir", &safe.stdout_text, "", "evidence_overflow_safe"},
+      {"overflow_truncated.l1.eir", &truncated.stdout_text, "",
+       "evidence_overflow_unsafe", true},
   };
   std::map<std::string, ev::EvidenceCase> cases;
   for (const Golden& golden : goldens) {
@@ -1521,6 +1693,42 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
            "host-derived handle";
     const CaseGraph cli_graph = BuildGraph(*from_cli);
     EXPECT_TRUE(ReferencesResolve(cli_graph)) << golden.name;
+
+    auto input = NativeInput(golden.fixture, golden.truncated);
+    ASSERT_TRUE(input.ok()) << input.status().message();
+    const auto expected_native = ExpectedNativeProjection(*input, *from_cli);
+    const auto actual_native = NativeProjectionOf(*from_cli);
+    EXPECT_EQ(actual_native.witnesses, expected_native.witnesses)
+        << golden.name;
+    EXPECT_EQ(actual_native.dependencies, expected_native.dependencies)
+        << golden.name;
+    EXPECT_EQ(actual_native.premises, expected_native.premises) << golden.name;
+    EXPECT_EQ(actual_native.frontiers, expected_native.frontiers)
+        << golden.name;
+
+    // The exact native comparison must notice corruption in every class that
+    // the cross-host golden comparison no longer pins by multiplicity.
+    auto changed = *from_cli;
+    auto record = std::ranges::find_if(changed.provenance, [](const auto &p) {
+      return p.producer != "evidence.query";
+    });
+    ASSERT_NE(record, changed.provenance.end());
+    record->rule += ".wrong";
+    EXPECT_FALSE(NativeProjectionOf(changed) == expected_native);
+    changed = *from_cli;
+    auto dependency = std::ranges::find(
+        changed.dependencies, ev::DependencyKind::kFact, &ev::Dependency::kind);
+    ASSERT_NE(dependency, changed.dependencies.end());
+    changed.dependencies.erase(dependency);
+    EXPECT_FALSE(NativeProjectionOf(changed) == expected_native);
+    changed = *from_cli;
+    auto gap = std::ranges::find(changed.omissions,
+                                 golden.truncated ? "provenance_frontier"
+                                                  : "provenance_premise",
+                                 &ev::Omission::kind);
+    ASSERT_NE(gap, changed.omissions.end());
+    gap->reason += ".wrong";
+    EXPECT_FALSE(NativeProjectionOf(changed) == expected_native);
 
     // The CLI's output and the checked-in golden carry the same semantics, at
     // the strength a comparison across host toolchains can support. See
