@@ -1090,16 +1090,15 @@ TEST(EvidenceCaseBuilderTest, Bld008L0DeclaresAnOmissionForEveryRemovedMember) {
 
 // --- BLD-009 -----------------------------------------------------------------
 
-// L2 retains L1's detail and adds an explicit marker for each expansion it
-// could not perform; L1 carries no such marker, because it never claims the
-// detail a marker would withhold.
+// L2 retains L1's detail. RDX04 keeps the missing-summary capability and
+// function expansion handles explicit at both levels.
 TEST(EvidenceCaseBuilderTest, Bld009L2RetainsDetailAndMarksUnavailableExpansion) {
   const EvidenceCase l1 = BuildOrFail(PristineRequest(EvidenceLevel::kL1));
   const EvidenceCase l2 = BuildOrFail(PristineRequest(EvidenceLevel::kL2));
   EXPECT_TRUE(RequireValidEvidenceCase(l2).ok());
 
-  EXPECT_TRUE(FindOmissions(l1, "summary_expansion").empty())
-      << "l1 claims no detail it would have to withhold";
+  EXPECT_EQ(FindOmissions(l1, "summary_expansion").size(),
+            FindOmissions(l2, "summary_expansion").size());
 
   ASSERT_EQ(l2.entities.size(), l1.entities.size());
   ASSERT_EQ(l2.edges.size(), l1.edges.size());
@@ -1119,6 +1118,23 @@ TEST(EvidenceCaseBuilderTest, Bld009L2RetainsDetailAndMarksUnavailableExpansion)
   for (const Omission* omission : expansions) {
     EXPECT_TRUE(omission->expandable);
     EXPECT_NE(AllMemberIds(l2).count(omission->subject), 0u);
+  }
+}
+
+TEST(EvidenceCaseBuilderTest,
+     MissingSummaryRetainsExpansionHandleAtEveryLevel) {
+  for (auto level :
+       {EvidenceLevel::kL0, EvidenceLevel::kL1, EvidenceLevel::kL2}) {
+    const auto value = BuildOrFail(PristineRequest(level));
+    for (const auto &entity : value.entities) {
+      if (entity.kind != EntityKind::kFunction)
+        continue;
+      EXPECT_TRUE(
+          std::ranges::any_of(value.omissions, [&](const auto &omission) {
+            return omission.kind == "summary_expansion" &&
+                   omission.subject == entity.id && omission.expandable;
+          }));
+    }
   }
 }
 

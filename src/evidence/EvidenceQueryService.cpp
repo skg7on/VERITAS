@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -885,6 +886,7 @@ StatusOr<EvidenceBuildInput> EvidenceQueryService::BuildEvidenceInput(
 
   EvidenceBuildInput input;
   input.claim_seed = claim_seed;
+  input.provenance_version = kEvidenceProvenanceVersion;
 
   std::vector<QueryCertificate> certificates;
 
@@ -1048,6 +1050,144 @@ StatusOr<EvidenceBuildInput> EvidenceQueryService::BuildEvidenceInput(
   }
   provenance.set_truncated(false);
 
+  // Explain every selected semantic fact in the same run. Certificates prove
+  // query traversal, not the derivation of the rows the query returned.
+  std::set<core::StableId> selected;
+  for (const auto *bucket :
+       {&input.flow_slice.supporting_facts,
+        &input.flow_slice.contradicting_facts, &input.flow_slice.unknowns,
+        &input.ranges.facts, &input.capacities.facts, &input.aliases.facts,
+        &input.dominating_checks.facts, &input.unknowns.facts})
+    for (const auto &fact : *bucket)
+      selected.insert(fact.fact_id);
+  std::map<std::string, fp::FactWitness> nodes;
+  std::map<std::string, fp::FactWitnessEdge> edges;
+  std::size_t members = 0;
+  for (const auto &fact_id : selected) {
+    facts::ExplainBudget explain_budget;
+    const auto narrow = [](std::size_t value) {
+      return static_cast<std::uint32_t>(std::min<std::size_t>(
+          value, std::numeric_limits<std::uint32_t>::max()));
+    };
+    explain_budget.max_depth = narrow(budget.max_provenance_depth);
+    explain_budget.max_nodes = narrow(budget.max_nodes);
+    explain_budget.max_edges = narrow(budget.max_nodes);
+    explain_budget.selected_only = true;
+    auto graph = (*snapshot)->Explain(fact_id, explain_budget);
+    if (!graph.ok())
+      return graph.status();
+    auto explained_fact = facts::FromProtoFact(graph->fact());
+    if (!explained_fact.ok())
+      return explained_fact.status();
+    if (explained_fact->fact_id != fact_id)
+      return Status::InvalidArgument(
+          "explanation returned another semantic fact");
+    const auto &binding = graph->binding();
+    if (graph->run_id() != core::ToString(run_id_) ||
+        graph->fact_id() != core::ToString(fact_id) ||
+        binding.analysis_run_id() != core::ToString(run_id_) ||
+        binding.fact_id() != core::ToString(fact_id) || !binding.is_current())
+      return Status::FailedPrecondition("evidence snapshot changed; retry");
+    FactExplanation explanation;
+    explanation.binding = facts::RunFactBinding{
+        .run_id = run_id_,
+        .fact_id = fact_id,
+        .selected_witness_id = binding.selected_witness_id()};
+    if (binding.has_confidence())
+      explanation.binding.confidence = binding.confidence();
+    switch (binding.producer_kind()) {
+    case fp::PRODUCER_WPA_SOUFFLE:
+      explanation.binding.producer_kind = facts::ProducerKind::kWpaSouffle;
+      break;
+    case fp::PRODUCER_WPA_CPP_CONFORMANCE:
+      explanation.binding.producer_kind =
+          facts::ProducerKind::kWpaCppConformance;
+      break;
+    case fp::PRODUCER_WPA_CPP_EMERGENCY:
+      explanation.binding.producer_kind = facts::ProducerKind::kWpaCppEmergency;
+      break;
+    default:
+      explanation.binding.producer_kind = facts::ProducerKind::kExternal;
+      break;
+    }
+    explanation.binding.analyzer_run_id = binding.analyzer_run_id();
+    explanation.binding.scope_kind = binding.scope_kind();
+    explanation.binding.scope_id = binding.scope_id();
+    explanation.truncation_reason = graph->truncation_reason();
+    if (graph->truncated() && explanation.truncation_reason.empty())
+      return Status::InvalidArgument("truncated provenance has no reason");
+    std::set<std::string> expanded;
+    std::set<std::string> frontier(graph->frontier_fact_ids().begin(),
+                                   graph->frontier_fact_ids().end());
+    bool aggregate_cut = false;
+    for (const auto &node : graph->nodes()) {
+      if (!node.selected())
+        continue;
+      if (node.analysis_run_id() != graph->run_id())
+        return Status::InvalidArgument("provenance witness mixes runs");
+      const std::string key = node.output_fact_id() + "/" + node.witness_id();
+      if (!nodes.contains(key) && members >= budget.max_nodes) {
+        frontier.insert(node.output_fact_id());
+        aggregate_cut = true;
+        continue;
+      }
+      const auto [position, inserted] = nodes.emplace(key, node);
+      if (!inserted &&
+          position->second.SerializeAsString() != node.SerializeAsString())
+        return Status::FailedPrecondition("evidence snapshot changed; retry");
+      if (inserted)
+        ++members;
+      expanded.insert(node.output_fact_id());
+    }
+    for (const auto &edge : graph->edges()) {
+      if (edge.analysis_run_id() != graph->run_id())
+        return Status::InvalidArgument("provenance edge mixes runs");
+      const std::string key = edge.output_fact_id() + "/" + edge.witness_id() +
+                              "/" + std::to_string(edge.input_ordinal());
+      if (!expanded.contains(edge.output_fact_id()) ||
+          (!edges.contains(key) && members >= budget.max_nodes)) {
+        frontier.insert(edge.output_fact_id());
+        aggregate_cut = true;
+        continue;
+      }
+      const auto [position, inserted] = edges.emplace(key, edge);
+      if (!inserted &&
+          position->second.SerializeAsString() != edge.SerializeAsString())
+        return Status::FailedPrecondition("evidence snapshot changed; retry");
+      if (inserted)
+        ++members;
+      if (edge.input_kind() == "derived" && !expanded.contains(edge.input_id()))
+        frontier.insert(edge.input_id());
+    }
+    if (!expanded.contains(core::ToString(fact_id))) {
+      frontier.insert(core::ToString(fact_id));
+      if (explanation.truncation_reason.empty())
+        explanation.truncation_reason = "missing_selected_witness";
+    }
+    if (aggregate_cut) {
+      if (!explanation.truncation_reason.empty())
+        explanation.truncation_reason += ",";
+      explanation.truncation_reason += "max_provenance_members";
+    }
+    if (!explanation.truncation_reason.empty()) {
+      if (frontier.empty())
+        frontier.insert(core::ToString(fact_id));
+      provenance.set_truncated(true);
+      provenance.set_truncation_reason("selected_fact_provenance");
+    }
+    for (const auto &ref : frontier) {
+      auto parsed = core::ParseStableId(ref);
+      if (!parsed.ok())
+        return parsed.status();
+      explanation.frontier_refs.push_back(*parsed);
+    }
+    input.fact_explanations.push_back(std::move(explanation));
+  }
+  for (const auto &[key, node] : nodes)
+    *provenance.add_nodes() = node;
+  for (const auto &[key, edge] : edges)
+    *provenance.add_edges() = edge;
+
   // Coverage describes this implementation's semantic guarantees, never a
   // conclusion inferred from whether the bounded traversal returned rows.
   // No native producer currently establishes an exhaustive closed world. In
@@ -1075,6 +1215,39 @@ StatusOr<EvidenceBuildInput> EvidenceQueryService::BuildEvidenceInput(
     coverage.frontier_refs = frontier;
     coverage.producer_version = kNativeCoverageProducerVersion;
     input.query_coverage.push_back(std::move(coverage));
+  }
+  std::set<core::StableId> summary_refs;
+  if (function_scope)
+    summary_refs.insert(*function_scope);
+  for (const auto &node : input.flow_slice.nodes) {
+    if (auto owner = FindContainingFunction(*cpg_, node.node_id))
+      summary_refs.insert(*owner);
+    if (node.node_id.kind == core::IdKind::kFunctionVariant)
+      summary_refs.insert(node.node_id);
+  }
+  for (const auto &node : input.provenance.nodes()) {
+    if (node.summary_id().empty())
+      continue;
+    auto id = core::ParseStableId(node.summary_id());
+    if (!id.ok())
+      return id.status();
+    summary_refs.insert(*id);
+  }
+  auto summaries = (*snapshot)->ReadSummaries(
+      std::vector<core::StableId>(summary_refs.begin(), summary_refs.end()));
+  if (!summaries.ok())
+    return summaries.status();
+  input.summaries = std::move(*summaries);
+  for (const auto &artifact : input.summaries) {
+    auto id = summary::ComputeFunctionSummaryId(artifact);
+    if (!id.ok())
+      return id.status();
+    auto function =
+        core::ParseStableId(summary::Identity(artifact).function_variant_id());
+    if (!function.ok())
+      return function.status();
+    input.summary_selections.push_back(SummarySelection{
+        run_id_, *function, *id, summary::ComputeComponentDigests(artifact)});
   }
   input.handoff_digest = ComputeEvidenceHandoffDigest(input);
   if (Status s = ValidateEvidenceHandoffCoverage(input); !s.ok())

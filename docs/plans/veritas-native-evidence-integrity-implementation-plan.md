@@ -157,16 +157,16 @@ parallel test harness needs isolated temporary paths; no test was disabled.
 **Produces:** immutable union of selected fact/certificate provenance plus
 explicit per-fact frontier and aggregate truncation in `EvidenceBuildInput`.
 
-- [ ] Add `DepthOneAndTwoYieldDifferentRootedFrontiers` and
+- [x] Add `DepthOneAndTwoYieldDifferentRootedFrontiers` and
   `CompletionWitnessDoesNotReplaceFactWitness`; use a real three-level rooted
   derivation, budgets 1 and 2, and assert the exact missing premise IDs.
-- [ ] Run `ctest --test-dir build -R 'EvidenceHandoffIntegrationTest|ProvenanceStoreTest' --output-on-failure`;
+- [x] Run `ctest --test-dir build -R 'EvidenceHandoffIntegrationTest|ProvenanceStoreTest' --output-on-failure`;
   show that the existing assembly ignores the requested depth.
-- [ ] Pass depth/member limits into actual Explain calls, canonical-union the
+- [x] Pass depth/member limits into actual Explain calls, canonical-union the
   returned graphs and retain each truncated frontier. Never query a newer run.
-- [ ] Verify exact-boundary completion, repeated shared premises, cycles/errors,
+- [x] Verify exact-boundary completion, repeated shared premises, cycles/errors,
   and a backend whose binding changes midway; require explicit error/incomplete.
-- [ ] Commit the handoff and tests with no unbounded per-fact accumulation.
+- [x] Commit the handoff and tests with no unbounded per-fact accumulation.
 
 ## Task 5: Supply real summary references in the immutable handoff
 
@@ -177,16 +177,16 @@ test `EvidenceHandoffIntegrationTest.cpp`, `VeritasQueryEirTest.cpp`.
 **Produces:** `ReadSummaries(function_refs)` on the pinned backend and actual
 EIR `SummaryReference` mappings; no extra database read in M10C.
 
-- [ ] Add `L2CarriesCurrentSummaryComponents` and `RejectsStaleSummaryBinding`;
+- [x] Add `L2CarriesCurrentSummaryComponents` and `RejectsStaleSummaryBinding`;
   assert the real summary ID/component hashes, and forbid summary-copy expansion
   or an old run's artifact masquerading as current.
-- [ ] Run `ctest --test-dir build -R 'EvidenceHandoffIntegrationTest|VeritasQueryEirTest' --output-on-failure`;
+- [x] Run `ctest --test-dir build -R 'EvidenceHandoffIntegrationTest|VeritasQueryEirTest' --output-on-failure`;
   baseline emits only `summary not supplied` omissions.
-- [ ] Extend immutable assembly, validate the reference set, and map L2 members.
+- [x] Extend immutable assembly, validate the reference set, and map L2 members.
   L0/L1 retain expansion handles and omissions when no summary is available.
-- [ ] Verify source/summary reordering preserves identity and a semantic
+- [x] Verify source/summary reordering preserves identity and a semantic
   component change moves it; rerun codec round trips.
-- [ ] Commit without falsely marking the remaining #124 producers delivered.
+- [x] Commit without falsely marking the remaining #124 producers delivered.
 
 ## Task 6: Qualify the repaired native boundary
 
@@ -194,13 +194,81 @@ EIR `SummaryReference` mappings; no extra database read in M10C.
 fixture/golden records; record results in the redesign program plan.
 **Consumes:** Tasks 1–5. **Produces:** checked acceptance record, not a new verifier.
 
-- [ ] Add `UnknownFeasibilityDoesNotProveEmptyUniversalDomain` at the authority
+- [x] Add `UnknownFeasibilityDoesNotProveEmptyUniversalDomain` at the authority
   consumer; preserve unknowns for absent/mixed paths and unsupported producers.
-- [ ] Run all native fixture families, unchanged identity goldens and conformance;
+- [x] Run all native fixture families, unchanged identity goldens and conformance;
   inspect assertion-level outcomes rather than merely CTest's green summary.
-- [ ] Document every changed CPG/Evidence identity and map each #149 gap to its
+- [x] Document every changed CPG/Evidence identity and map each #149 gap to its
   issue, delivered commit or explicit deferral.
-- [ ] Run a clean configure/build, full CTest with JUnit skip inspection,
+- [x] Run a clean configure/build, full CTest with JUnit skip inspection,
   `git diff --check`, license and worktree checks before pushing.
-- [ ] Commit the acceptance record. Only mark an issue implemented when its
+- [x] Commit the acceptance record. Only mark an issue implemented when its
   exact required/forbidden outcomes are exercised by real producers.
+
+
+Tasks 4–6 execution record (#158 / RDX04, 2026-10-26–27):
+
+- RED: three-level depth 1/2 handoff lost all fact derivation/frontiers; native
+  selected flow facts had only completion witnesses. GREEN includes exact
+  member boundaries, shared closure union, stale intermediate binding refusal,
+  cyclic input refusal and frontier preservation at L0/L1/L2.
+- RED: L2 supplied no summaries; native rooted-input `summary_id` was actually a
+  FunctionVariantID. GREEN carries real FunctionSummaryIDs/current components,
+  refuses stale bindings and preserves an already captured immutable input.
+  `WpaSummaryIndex` memoizes actual IDs; native configuration is v3. Semantic
+  FactIDs and existing valid identity/conformance goldens are unchanged.
+- RED: EIR dropped rooted premises and L0 retained dangling mapped premise refs.
+  GREEN carries native Fact dependencies, mapped provenance inputs and explicit
+  unprojected-body handles; no opaque predicate is invented.
+- RED: missing summary capability had no L0/L1 expansion marker. Every level
+  now retains the function handle and explicit missing expansion.
+- RED: absent/unknown feasible paths plus a bare decided universal were accepted
+  as verified-safe. The pending goal and authority consumer now require a
+  complete, nonempty-or-infeasible execution domain for the exact same scope.
+- Reordering summaries/components preserves digest/EvidenceID; a consistent
+  semantic summary delta changes both. Native current IDs/hashes are separately
+  compared with durable binding/component rows; EIR-T/protobuf round trips pass.
+- Unsafe/safe/truncated native goldens are regenerated and their new provenance,
+  premise/frontier, summary and execution-domain members are explained in the
+  spec. DEM-005 also passes with Clang 24 fixture compilation; its existing
+  cross-host comparison masks are unchanged.
+
+Final clean-build/whole-suite qualification and independent review are recorded
+in the following entry before publication. Producer deferrals under #124,
+portable identity under #125 and the #149 owner map remain explicit.
+
+Independent final review found two Important issues and no Critical or Minor
+findings. The single fix pass observed and repaired both: aggregate-cut facts
+now retain real binding-only occurrence provenance (no invented rule/anchor),
+and the digest-bound `evidence.provenance.v1` capability requires every selected
+explanation even when the supplied vector is empty. Native and durable MAY
+regressions plus modern-carrier stripping were observed RED, then GREEN. Older
+v2 inputs instead carry explicit all-level legacy-provenance omissions.
+
+The reviewer did not qualify verifier authenticity/claim-to-proof registration
+(#161), large-workload performance or concurrent use of one shared connection
+(#140/#166). This delivery makes no such claims; shared FactStore snapshot use
+is serialized and overlapping transactions are explicitly refused. Final build
+and execution evidence is supplied by the coordinator rather than inferred from
+the read-only review.
+
+
+Final qualification (2026-10-27): fresh `homebrew-clang` configure and
+`cmake --build --preset homebrew-clang --clean-first -j 8` passed all **572**
+steps with zero errors and one existing duplicate-library linker warning.
+Serial full CTest passed **937/937** in **390.20 s**, with zero failures, errors
+or skips in JUnit and internal GoogleTest output.
+`WpaExecutorConformanceTest.EnginesProduceSameCanonicalFacts` actually ran and
+passed; the native differential qualification corpus remained live.
+`git diff --check`, modified-source license checks, intended-diff inspection and
+primary-checkout isolation checks passed. Both review findings were fixed with
+observed RED→GREEN regressions; the final stale-binding case additionally checks
+the actual persisted run revision/build, not just a caller-supplied descriptor.
+
+Rulings: provenance witness/edge union uses existing `max_nodes`, with six fixed
+query-certificate witnesses and query-bounded per-fact occurrence metadata; this
+can cut provenance earlier than a separate larger limit. Tasks 4–6 are delivered
+in one coherent commit, trading per-task bisect granularity for an always-green
+qualified boundary. The verifier-registry and performance/concurrency exclusions
+from the review remain explicitly owned by #161 and #140/#166; final execution
+evidence was checked by the coordinator, not rerun by the read-only reviewer.

@@ -355,7 +355,11 @@ int RunEvidenceOverflow(const std::vector<std::string>& args) {
       *cpg, *current_facts, options.sink, options.callsite);
   if (!seed.ok()) return ReportError(seed.status().message());
 
-  veritas::evidence::FactStoreEvidenceBackend backend(*fact_store, descriptor);
+  auto summaries = veritas::summarydb::SummaryRepository::Open(options.db_path);
+  if (!summaries.ok())
+    return ReportError(summaries.status().message());
+  veritas::evidence::FactStoreEvidenceBackend backend(*fact_store, descriptor,
+                                                      summaries->get());
   veritas::evidence::EvidenceQueryService service(*cpg, backend, *run_id);
   auto input = service.BuildEvidenceInput(*seed, options.budget);
   if (!input.ok()) return ReportError(input.status().message());

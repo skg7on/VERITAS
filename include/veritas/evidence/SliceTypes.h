@@ -36,8 +36,12 @@
 #include "veritas/fact/v1/fact.pb.h"
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/FactStore.h"
+#include "veritas/summary/SummaryArtifact.h"
 
 namespace veritas::evidence {
+
+inline constexpr std::string_view kEvidenceProvenanceVersion =
+    "evidence.provenance.v1";
 
 // QueryCompleteness describes traversal of the selected snapshot, not semantic
 // predicate support or scope closure (those are QueryCoverage guarantees).
@@ -160,10 +164,24 @@ struct ClaimSeed {
   std::optional<core::StableId> callsite_ref = std::nullopt;
 };
 
-// EvidenceBuildInput is the single immutable handoff M10C consumes. Summary and
-// source-anchor references ride inside FlowSlice (CPG nodes/edges and their
-// support) and the provenance graph; there are no separate top-level
-// summaries/source-anchor collections.
+// Per selected fact, independent of the shared graph union. A frontier names
+// an unexpanded derived fact, or a fact whose inputs were only partly read.
+struct FactExplanation {
+  facts::RunFactBinding binding;
+  std::vector<core::StableId> frontier_refs;
+  std::string truncation_reason;
+};
+
+struct SummarySelection {
+  core::StableId analysis_run_id;
+  core::StableId function_variant_id;
+  core::StableId summary_id;
+  std::vector<summary::ComponentDigestInfo> components;
+};
+
+// EvidenceBuildInput is the single immutable handoff M10C consumes. Selected
+// fact bindings/frontiers and current summary artifacts/components are pinned
+// with the query results. M10C never opens a store to expand these carriers.
 struct EvidenceBuildInput {
   ClaimSeed claim_seed;
   FlowSlice flow_slice;
@@ -175,6 +193,11 @@ struct EvidenceBuildInput {
   std::vector<facts::AnalysisFact> query_completion_facts;
   std::vector<facts::RunFactBinding> query_completion_bindings;
   veritas::fact::v1::ProvenanceGraph provenance;
+  // Absence identifies pre-RDX04 inputs and must be labeled explicitly in EIR.
+  std::string provenance_version;
+  std::vector<FactExplanation> fact_explanations;
+  std::vector<summary::SummaryArtifact> summaries;
+  std::vector<SummarySelection> summary_selections;
   // Absent together on admitted legacy handoffs; all required for v2.
   std::string handoff_version;
   std::vector<QueryCoverage> query_coverage;

@@ -43,12 +43,14 @@ class WpaSummaryIndex {
 
   bool Covers(std::span<const summary::SummaryArtifact> summaries) const;
   const summary::SummaryArtifact* Lookup(core::StableId function_id) const;
+  const core::StableId *SummaryId(core::StableId function_id) const;
   bool Contains(core::StableId function_id) const;
 
  private:
   const summary::SummaryArtifact* source_data_ = nullptr;
   std::size_t source_size_ = 0;
   std::map<core::StableId, const summary::SummaryArtifact*> by_function_;
+  std::map<core::StableId, core::StableId> summary_ids_;
 };
 
 class WpaInputMaterializer {

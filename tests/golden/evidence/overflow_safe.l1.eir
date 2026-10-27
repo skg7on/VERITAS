@@ -3,384 +3,384 @@ evidence {
     level = l1;
     state = POSSIBLE_DEFECT;
     context {
-        repository = "repo:sha256:9942256c6324c5ac174676d81071c8aa65c3c3f712e721d037cc0d6b052ae5d0";
+        repository = "repo:sha256:80a9595eaaf718667d3314d7d2de301e37036fc0894255f7b2d0de7cd009674f";
         revision = "rev:sha256:d14d33e9d115102acb81a4ef9b92b8e14e6e22b5a320759d677e2f65d27eeb40";
-        build_variant = "bv:sha256:f29e6333a7aca048c975637c61c8d6b1d800c47134e95e48907dadfffc8f31d9";
+        build_variant = "bv:sha256:f7fb9303c6fde0a180628eafe74e9ed71b1e801915eaac70dd3460cd28c3bf71";
         target = "arm64-apple-darwin27.0.0";
         analyzer_configuration = "veritas-analysis-config.v1";
         type_layout = "layout:sha256:14e6f30051511f358aab870986b698c5a29498151c463d0833e51493639c58ad";
-        analysis_run = "run:sha256:91e89718b11f506f3e12457433dc6b9405e56a44ac5d78d87a7e6a733bc9505c";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
     }
-    entity E_function_8c60baca : function {
-        stable_id = "funcvar:sha256:8c60baca767c4df3f0cbf1281569f9f4dc096e3823e46912b5c20eab22d1a918";
+    entity E_function_ed44aaac : function {
+        stable_id = "funcvar:sha256:ed44aaac27cad478cecf219bb66c49f335706afa35f27aad8e36fbadd2502aef";
     }
-    entity E_memory_object_7b97aee3 : memory_object {
-        stable_id = "memref:sha256:7b97aee3b6f0a0d666ad10157faadafcf18318986d0c298cc65bac761c68c0a9";
+    entity E_memory_object_632aad82 : memory_object {
+        stable_id = "memref:sha256:632aad822728e7f2969601a540b2dc39a5baf325b3cf2f3132a5e28caab3bad3";
     }
-    entity E_valref_sha256_13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db : value {
-        stable_id = "valref:sha256:13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db";
+    entity E_value_0016080e : value {
+        stable_id = "valref:sha256:0016080e801cc5d90f48455c92031f5841dac3efe83396b2bd243f3a87dc7a84";
     }
-    entity E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c : value {
-        stable_id = "valref:sha256:1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c";
+    entity E_value_1728fd2f : value {
+        stable_id = "valref:sha256:1728fd2f636708e08a2f4590a5d6931e50fb65e4d32e87adb4544aa6257bc8a5";
     }
-    entity E_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316 : value {
-        stable_id = "valref:sha256:1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316";
+    entity E_value_25cbdf31 : value {
+        stable_id = "valref:sha256:25cbdf31ff210c74c4139009ec32d411731571cc87bf6b7eb1b56b44fe11471d";
     }
-    entity E_value_2415aec8 : value {
-        stable_id = "valref:sha256:2415aec8dc508d9ffd258d9129d231b3892079b5b8b131aa17c14447fe26f14e";
+    entity E_value_2692611d : value {
+        stable_id = "valref:sha256:2692611d90ff6d8f0c800832623c7dbf13f3c4e70ce44d8fc9267961f69856e0";
     }
-    entity E_value_2d0069c4 : value {
-        stable_id = "valref:sha256:2d0069c499431d19c5936e6d4e66897c65a2b16285d8195da3e3847595899bca";
-    }
-    entity E_value_372d1376 : value {
-        stable_id = "valref:sha256:372d1376e3ecb95f2a4a3ded115d996acd9f2c07845910d379894d6e471ba2fa";
-    }
-    entity E_value_39f95251 : value {
-        stable_id = "valref:sha256:39f9525112941fdccb4f99b49b59f7989d3a2d9fca73988f19cef6a0d0d27888";
+    entity E_value_2b3f398b : value {
+        stable_id = "valref:sha256:2b3f398b88f51697d05ef81d658a323a91a4dc9c96e84b462c44637aa53c58f7";
     }
     entity E_value_3cdbc934 : value {
         stable_id = "valref:sha256:3cdbc93445406123f068401abbf472066161222a054da94c5d6c0ae685d64507";
     }
-    entity E_value_45a8515a : value {
-        stable_id = "valref:sha256:45a8515aaac965271d5c99ad7ff1598ebd28f3e94218516e3e44a19b05824406";
+    entity E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65 : value {
+        stable_id = "valref:sha256:45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65";
     }
-    entity E_value_4b1676f7 : value {
-        stable_id = "valref:sha256:4b1676f74babcc86c0b6cc910313e748746d4a84c85af2e5e3ac0c03fcf35d4f";
+    entity E_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3 : value {
+        stable_id = "valref:sha256:4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3";
     }
-    entity E_value_6e49bf73 : value {
-        stable_id = "valref:sha256:6e49bf73c3f48de43a1cad8f7224bc641058ed808eefbb5230eaae32cff42b4f";
+    entity E_value_7b4b075d : value {
+        stable_id = "valref:sha256:7b4b075d30d1ada3bb533e3acab08351d4e78af765aebc2cc5c0acbf216e437f";
     }
     entity E_value_8ede4cb4 : value {
         stable_id = "valref:sha256:8ede4cb4667772a0b061fe1272588e6a497deee9c2365a035b31161f130353b6";
     }
-    entity E_value_9518eba6 : value {
-        stable_id = "valref:sha256:9518eba6bb8985719e7d327f939f4bb00dee597858a8eb24c7420990fdfa6551";
+    entity E_value_9daf5c08 : value {
+        stable_id = "valref:sha256:9daf5c0805f7f12b4455251a8a1f5f576fcefd5aa6c9a4ef651a0d411073e9fc";
     }
-    entity E_value_95ceb1e2 : value {
-        stable_id = "valref:sha256:95ceb1e259f28f9bdce8105a1f18c81bac8f57829221dedf21d545844a7226d2";
+    entity E_value_af6ed2bc : value {
+        stable_id = "valref:sha256:af6ed2bc6e9c57f981cacd17bf86df48c07870084570d3199ca0283c6ba52f2c";
     }
-    entity E_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d : value {
-        stable_id = "valref:sha256:c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d";
+    entity E_value_bf8ae211 : value {
+        stable_id = "valref:sha256:bf8ae2118b39783074de75cb5ec3ef3cd600d75a56d77d9fefff498035cab05e";
     }
-    entity E_value_dc2ae798 : value {
-        stable_id = "valref:sha256:dc2ae7980dc7a3a69f957fc21c22d443a8c24cfd5da49335875fb840076191b6";
+    entity E_value_c3f71903 : value {
+        stable_id = "valref:sha256:c3f71903ef18b5b45bd250dbda1e4685b21955cab95e8efb589c486c8f00bbc0";
     }
-    entity E_value_f3dade3c : value {
-        stable_id = "valref:sha256:f3dade3c19864f34b4e0e4aa05b9ac082ec2c8940b98dd26a51d592c9ed3b398";
+    entity E_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1 : value {
+        stable_id = "valref:sha256:e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1";
     }
-    entity E_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685 : value {
-        stable_id = "valref:sha256:ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685";
+    entity E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3 : value {
+        stable_id = "valref:sha256:edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3";
+    }
+    entity E_value_f0710eae : value {
+        stable_id = "valref:sha256:f0710eae618fc2f1117796e6d076c73af39431fa4d2853950c5e427a0daa7d6a";
+    }
+    entity E_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf : value {
+        stable_id = "valref:sha256:fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf";
     }
     claim C1 {
         kind = buffer_overflow;
-        subject = @E_memory_object_7b97aee3;
-        predicate = value(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c) > capacity(@E_memory_object_7b97aee3);
+        subject = @E_memory_object_632aad82;
+        predicate = value(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65) > capacity(@E_memory_object_632aad82);
         severity = high;
         description = "the copied length is not bounded by the destination capacity at the sink call";
     }
     fact F_reachable {
-        stable_id = "fact:sha256:06ea99523560d62df2c69d1059c7b6765148de6ada3a6af15d4b228ceb7a4586";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_9518eba6);
+        stable_id = "fact:sha256:0827ef0b1c239966c2b32057f4dd1cd997934622f8eba337080469a7abde28f2";
+        predicate = reachable(@E_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1, @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_0827ef0b;
     }
     fact F_reachable_2 {
-        stable_id = "fact:sha256:1d8ff7dd68f135775e163d9dc0464abb9b0c82d94844db0e1ab6fe5bd82f927a";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_6e49bf73);
+        stable_id = "fact:sha256:0cbb96ba94a4eb3e8bd6b0ae9c3c9fb970508cb584c1c2223add7bb9c2ea5025";
+        predicate = reachable(@E_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf, @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_0cbb96ba;
     }
     fact F_reachable_3 {
-        stable_id = "fact:sha256:22856da7a60509c791dd8b0cc871d39c744645ac14e626100951e8dc11567b4c";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_8ede4cb4);
+        stable_id = "fact:sha256:12b51bc71cd4415e5b6f22f9488116dbd76ef32d8691f70ff190233bb6efe92f";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_12b51bc7;
     }
     fact F_reachable_4 {
-        stable_id = "fact:sha256:38e529714da76839f30f4c6483a0422e5eedb637c0e4deab00fead8b62ac263f";
-        predicate = reachable(@E_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316, @E_valref_sha256_13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db);
+        stable_id = "fact:sha256:1569a0a0cf336e62e4f13d664f750c7c9674100e817b2fa4751b194793c10a50";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_bf8ae211);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_1569a0a0;
     }
     fact F_reachable_5 {
-        stable_id = "fact:sha256:3b85ed44232bec211fde793217aae7297ec47d7bd1fa2f08d17eba83d7f86f7e";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d);
+        stable_id = "fact:sha256:15cbaa5909125601236cdbc93cdb4b51c9fa8d8da21bd0302bafae82cb33cfb3";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_0016080e);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_15cbaa59;
     }
     fact F_reachable_6 {
-        stable_id = "fact:sha256:3e69a6a61a6830fe6e8e9ba285383ad5623f946402e1e6a7e8f7413c17b7ef99";
-        predicate = reachable(@E_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685, @E_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d);
+        stable_id = "fact:sha256:16e9efff6ab4a54627b5763f70328e88d170363249a46d14ae28cdba9634852e";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_1728fd2f);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_16e9efff;
     }
     fact F_reachable_7 {
-        stable_id = "fact:sha256:446c16fc01e0ee21b9cbbb9ebbf3d589f1f47f49e38708ea7597a0e643ba3896";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_95ceb1e2);
+        stable_id = "fact:sha256:23fdc9ef5a13d93b9c3e96c4b2d92eb957faf43efd000687690c718ad400126b";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_7b4b075d);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_23fdc9ef;
     }
     fact F_reachable_8 {
-        stable_id = "fact:sha256:45f0cf26532c0cd7f889b31d2012597dccd405c1ddd5992252bbe2fa790a59dc";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_3cdbc934);
+        stable_id = "fact:sha256:2dc491f644f3f0e0da3929c64c1c6d054c3d38144bd9280d5f1dbeb134d66910";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_af6ed2bc);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_2dc491f6;
     }
     fact F_reachable_9 {
-        stable_id = "fact:sha256:593a614ec11fcbe86027bda9c65ad5d2a9f1abcb43d1c0c98c9aad497f3ee8bb";
-        predicate = reachable(@E_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316, @E_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d);
+        stable_id = "fact:sha256:3616b6207017cc045612600bfc5ef50d22407431179c5cf344294263018698be";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_2b3f398b);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_3616b620;
     }
     fact F_reachable_10 {
-        stable_id = "fact:sha256:64193e41a2e3002044e9531d675f5527903011efddd734e4e935dbeebe799d51";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_f3dade3c);
+        stable_id = "fact:sha256:4231d8e2325a2d31420b652ee1117acea3b6954d315457203152412e5df45e36";
+        predicate = reachable(@E_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3, @E_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_4231d8e2;
     }
     fact F_reachable_11 {
-        stable_id = "fact:sha256:77cf6e9f8482661d7c4abffb81fbc30b98c9c51756269c4c9939540e9f485ce3";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_dc2ae798);
+        stable_id = "fact:sha256:8c202dd0b7bb299b53e64897258ff94afdfae1dc3df31be8098e077dac7375cd";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_3cdbc934);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_8c202dd0;
     }
     fact F_reachable_12 {
-        stable_id = "fact:sha256:82c1f03f6005fa6d3c82513158394c58901ffc6be62825c6bc483b10abfc9ea2";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_4b1676f7);
+        stable_id = "fact:sha256:9ed3a34c116f504ed7076d3c979572713a5bcfe87626776728f0a712a4ccf704";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_2692611d);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_9ed3a34c;
     }
     fact F_reachable_13 {
-        stable_id = "fact:sha256:891dc6aca830b462b91f8ad5ba447a41b3585f7c4f57a52c14ea93dac960029c";
-        predicate = reachable(@E_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d, @E_valref_sha256_13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db);
+        stable_id = "fact:sha256:a0fc5aaae024ecea17ed7da4a1687e4021316a5836d9c066b056a4e10340ee66";
+        predicate = reachable(@E_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3, @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_a0fc5aaa;
     }
     fact F_reachable_14 {
-        stable_id = "fact:sha256:9cdab4fb1d11827b6a53dbd981ad74778fc8ef2707e193d17b059946f8f007c2";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_39f95251);
+        stable_id = "fact:sha256:a9505c46fd2a811fef8f7f228f52dc51188c808209a8023b2b0cbc825eacc798";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_8ede4cb4);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_a9505c46;
     }
     fact F_reachable_15 {
-        stable_id = "fact:sha256:a3ceca75c30d8fe092a147681182904cf1b9c5ba839372a69d64a8a2e8486b55";
-        predicate = reachable(@E_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685, @E_valref_sha256_13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db);
+        stable_id = "fact:sha256:aa5883d580cc95b258a3b6b666e60e726d589ba08669c7db01b90dd708439546";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_aa5883d5;
     }
     fact F_reachable_16 {
-        stable_id = "fact:sha256:b816d86ff2887b590ff91ec164f61abf35d25908573673c5ce16bd66fde9ac4e";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_45a8515a);
+        stable_id = "fact:sha256:aeb016991684e05fba85459efb354f9e20e0f775007492f241fffc27d14ad64b";
+        predicate = reachable(@E_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3, @E_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_aeb01699;
     }
     fact F_reachable_17 {
-        stable_id = "fact:sha256:b909e7880df480a7a81fdc5e9d090c32421d1fa8b363980187e928a14b77c0d6";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_valref_sha256_13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db);
+        stable_id = "fact:sha256:b2a953a3e754fd0c1c055d58af295529eb5dd43a824a739d2e99614e917177c9";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_b2a953a3;
     }
     fact F_reachable_18 {
-        stable_id = "fact:sha256:c3ca7708d14d4ee5337b715c014df488ffdf51823f589ce42da628b8e6bc61fc";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685);
+        stable_id = "fact:sha256:b6617b1d30bb149850b83f6539dcb6961fb544ea1fefba7cec13c5dd36272707";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_c3f71903);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_b6617b1d;
     }
     fact F_reachable_19 {
-        stable_id = "fact:sha256:c6271748145f94251f773d77f91b1075ce9d589776f3762e6c977809ea04eba9";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_2d0069c4);
+        stable_id = "fact:sha256:b85f5085a59957533c0cb12fa01340d744407d67c95c35f0b600fd182e83ae80";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_25cbdf31);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_b85f5085;
     }
     fact F_reachable_20 {
-        stable_id = "fact:sha256:cb35a08fc812a345646d578e23b849896dec0058eb87b70dd568647fdb98e7f4";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_372d1376);
+        stable_id = "fact:sha256:c0f5fc689e2435e1e4513ce13c1a415ca64253a39793e5b3fa8e44e8d1edaac4";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_9daf5c08);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_c0f5fc68;
     }
     fact F_reachable_21 {
-        stable_id = "fact:sha256:d4834059db8c68b5d818bfd60f1f1287ac6b132fefa4ea6edf11501a5576af1a";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_value_2415aec8);
+        stable_id = "fact:sha256:c410f9794ed3707eea42ead0db7b7861e45ad20f1653783162d8d37a1fee6d04";
+        predicate = reachable(@E_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf, @E_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_c410f979;
     }
     fact F_reachable_22 {
-        stable_id = "fact:sha256:d874be7169c33389ef38c73486c0ad9af0700b2662030cab29351d64a5436e46";
-        predicate = reachable(@E_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685, @E_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316);
+        stable_id = "fact:sha256:e3d3c37b5bbc8edf079f49c153a0d16f2465b8ccc5204b5e47d14f3c530155ef";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_value_f0710eae);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_e3d3c37b;
     }
     fact F_reachable_23 {
-        stable_id = "fact:sha256:fc7c10490e966e361556b1308b8bc73158ea92a6714a00351afe2c989831ee09";
-        predicate = reachable(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316);
+        stable_id = "fact:sha256:ee76f7aac3c14a5b3cd05d589259200ed6ad0a637abd4709cee5ac8a726ff3e9";
+        predicate = reachable(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf);
         epistemic = must;
         confidence = exact;
         source = analysis.value_flow;
-        provenance = @PR_value_flow;
+        provenance = @PR_fact_ee76f7aa;
     }
-    unknown U_callsite_sha256_84b5b403c50a2e38f1f9e45d369ae3c5564860ac58463b8a8c3b55c93c733596_UNRESOLVED_CALL {
-        property = effect_of(@E_function_8c60baca);
+    unknown U_callsite_sha256_8fac68374c2166504d444d348a5b666615f2556e63fb8c420fa1ff77f2fdac44_UNRESOLVED_CALL {
+        property = effect_of(@E_function_ed44aaac);
         reason = UNRESOLVED_CALL;
         detail = "llvm.memcpy.p0.p0.i64";
         blocking = [@C1];
-        suggested_resolution = infer_effect(E_function_8c60baca);
+        suggested_resolution = infer_effect(E_function_ed44aaac);
     }
     unknown U_coverage_alias_open_frontier {
         property = query_coverage("alias");
         reason = MISSING_SPECIFICATION;
-        detail = "OPEN_FRONTIER: alias has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:1fa7e333e83cd51c0362f193af3de64e04a2b1626a7382e6328028737ca2f86a; producer=veritas-evidence-query.coverage.v1";
+        detail = "OPEN_FRONTIER: alias has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:e94f8a52d33baba219a3219c18ad37c320c90355eee153d3dfac4b7306797e4c; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(alias);
     }
     unknown U_coverage_alias_unsupported_predicate {
         property = query_coverage("alias");
         reason = MISSING_SPECIFICATION;
-        detail = "UNSUPPORTED_PREDICATE: alias has no supported native predicate producer; completion=fact:sha256:1fa7e333e83cd51c0362f193af3de64e04a2b1626a7382e6328028737ca2f86a; producer=veritas-evidence-query.coverage.v1";
+        detail = "UNSUPPORTED_PREDICATE: alias has no supported native predicate producer; completion=fact:sha256:e94f8a52d33baba219a3219c18ad37c320c90355eee153d3dfac4b7306797e4c; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(alias);
     }
     unknown U_coverage_capacity_open_frontier {
         property = query_coverage("capacity");
         reason = MISSING_SPECIFICATION;
-        detail = "OPEN_FRONTIER: capacity has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:8549f1c2826705311c2258acf230ce5a0bc4891e13f1c76eafb2c5702d565e9a; producer=veritas-evidence-query.coverage.v1";
+        detail = "OPEN_FRONTIER: capacity has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:9b8606d7828c6a2ad357410716322778d4aaa1a404615bdb2ef76cea41da6f16; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(capacity);
     }
     unknown U_coverage_capacity_unsupported_predicate {
         property = query_coverage("capacity");
         reason = MISSING_SPECIFICATION;
-        detail = "UNSUPPORTED_PREDICATE: capacity has no supported native predicate producer; completion=fact:sha256:8549f1c2826705311c2258acf230ce5a0bc4891e13f1c76eafb2c5702d565e9a; producer=veritas-evidence-query.coverage.v1";
+        detail = "UNSUPPORTED_PREDICATE: capacity has no supported native predicate producer; completion=fact:sha256:9b8606d7828c6a2ad357410716322778d4aaa1a404615bdb2ef76cea41da6f16; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(capacity);
     }
     unknown U_coverage_dominating_check_open_frontier {
         property = query_coverage("dominating_check");
         reason = MISSING_SPECIFICATION;
-        detail = "OPEN_FRONTIER: dominating_check has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:ef800c8ceefbebd36b29cfc8c3d23d042e6d6623eda19db10389b18427e54905; producer=veritas-evidence-query.coverage.v1";
+        detail = "OPEN_FRONTIER: dominating_check has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:1655760a3a62c02623ba46588ed77432122e8a010a62f474a4363e3544de2f2c; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(dominating_check);
     }
     unknown U_coverage_dominating_check_unsupported_predicate {
         property = query_coverage("dominating_check");
         reason = MISSING_SPECIFICATION;
-        detail = "UNSUPPORTED_PREDICATE: dominating_check has no supported native predicate producer; completion=fact:sha256:ef800c8ceefbebd36b29cfc8c3d23d042e6d6623eda19db10389b18427e54905; producer=veritas-evidence-query.coverage.v1";
+        detail = "UNSUPPORTED_PREDICATE: dominating_check has no supported native predicate producer; completion=fact:sha256:1655760a3a62c02623ba46588ed77432122e8a010a62f474a4363e3544de2f2c; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(dominating_check);
     }
     unknown U_coverage_range_open_frontier {
         property = query_coverage("range");
         reason = MISSING_SPECIFICATION;
-        detail = "OPEN_FRONTIER: range has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:e8ee1671e2d5966212c98ce8b60fce656b308a4ce81333fbff19b4a47079f36a; producer=veritas-evidence-query.coverage.v1";
+        detail = "OPEN_FRONTIER: range has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:7b1c91fb4b9f058eb76854b6df7745fb0b39e9e7a5891d033307f0be2140e947; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(range);
     }
     unknown U_coverage_range_unsupported_predicate {
         property = query_coverage("range");
         reason = MISSING_SPECIFICATION;
-        detail = "UNSUPPORTED_PREDICATE: range has no supported native predicate producer; completion=fact:sha256:e8ee1671e2d5966212c98ce8b60fce656b308a4ce81333fbff19b4a47079f36a; producer=veritas-evidence-query.coverage.v1";
+        detail = "UNSUPPORTED_PREDICATE: range has no supported native predicate producer; completion=fact:sha256:7b1c91fb4b9f058eb76854b6df7745fb0b39e9e7a5891d033307f0be2140e947; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(range);
     }
     unknown U_coverage_unknown_open_frontier {
         property = query_coverage("unknown");
         reason = MISSING_SPECIFICATION;
-        detail = "OPEN_FRONTIER: unknown has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:5fa375d9e0283065a5f0500321597aebf152f3b38dbcc6b323b15121a5592d14; producer=veritas-evidence-query.coverage.v1";
+        detail = "OPEN_FRONTIER: unknown has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:42a9f987376e70f20858011c440b3161e4a417aa9a4854545822b1c76e74ac9e; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(unknown);
     }
     unknown U_coverage_value_flow_open_frontier {
         property = query_coverage("value_flow");
         reason = MISSING_SPECIFICATION;
-        detail = "OPEN_FRONTIER: value_flow has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:86c1a4f7ba997d23a787318a96ef5409cfb0dfec23c08d800bcddc16162b60d5; producer=veritas-evidence-query.coverage.v1";
+        detail = "OPEN_FRONTIER: value_flow has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:d168a12e78767dc14da6c282e18ca65a11d065af920ad1f5cce62c6a0296fc7c; producer=veritas-evidence-query.coverage.v1";
         blocking = [@C1];
         suggested_resolution = resolve_query_coverage(value_flow);
     }
     unknown U_svf_UNRESOLVED_CALL {
-        property = effect_of(@E_function_8c60baca);
+        property = effect_of(@E_function_ed44aaac);
         reason = UNRESOLVED_CALL;
         detail = "unsupported_feature";
         blocking = [@C1];
-        suggested_resolution = infer_effect(E_function_8c60baca);
+        suggested_resolution = infer_effect(E_function_ed44aaac);
     }
-    edge ED_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685 {
-        from = @E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c;
-        to = @E_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685;
+    edge ED_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3 {
+        from = @E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65;
+        to = @E_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3;
         kind = FLOWS_TO;
         epistemic = must;
         provenance = @PR_value_flow;
     }
-    edge ED_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d {
-        from = @E_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316;
-        to = @E_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d;
+    edge ED_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf {
+        from = @E_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3;
+        to = @E_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf;
         kind = FLOWS_TO;
         epistemic = must;
         provenance = @PR_value_flow;
     }
-    edge ED_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d_valref_sha256_13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db {
-        from = @E_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d;
-        to = @E_valref_sha256_13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db;
+    edge ED_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3 {
+        from = @E_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1;
+        to = @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3;
         kind = FLOWS_TO;
         epistemic = must;
         provenance = @PR_value_flow;
     }
-    edge ED_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316 {
-        from = @E_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685;
-        to = @E_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316;
+    edge ED_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1 {
+        from = @E_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf;
+        to = @E_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1;
         kind = FLOWS_TO;
         epistemic = must;
         provenance = @PR_value_flow;
     }
     path P_value_flow value_flow {
-        @E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c -> @E_valref_sha256_ff4850446272e926a956d25805c9f13afb38af64ccfbee50c8cdcc62cb769685 -> @E_valref_sha256_1a18811bd5c48c21d0b95266a24ae2a8892e78194113aedf0784cc83c2e2c316 -> @E_valref_sha256_c118c4d89fb6dfe5f65ee9c7ca9747f91466b84f674d5bc819105d0b88c19e6d -> @E_valref_sha256_13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db;
+        @E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65 -> @E_valref_sha256_4a5030ad8790e7497a41a66e4d62fbcbef9a5e46e2b05ecf969f6fadb28190e3 -> @E_valref_sha256_fdad2a3d694651d90b837cfb8fa0b7194e33346b093a941c22da2f5dcf5fedaf -> @E_valref_sha256_e6547346400a166981ea8615ae9efaa1498df2a10fb83617e7719bd6d75854f1 -> @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3;
         feasible = UNKNOWN;
         provenance = @PR_value_flow;
     }
     constraint K_path_safety {
-        expr = value(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c) <= capacity(@E_memory_object_7b97aee3);
+        expr = value(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65) <= capacity(@E_memory_object_632aad82);
         scope = path;
         epistemic = may;
         provenance = @PR_value_flow;
@@ -388,47 +388,305 @@ evidence {
     provenance PR_alias {
         producer = evidence.query;
         rule = "evidence.query_completion.v1";
-        analysis_run = "run:sha256:91e89718b11f506f3e12457433dc6b9405e56a44ac5d78d87a7e6a733bc9505c";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
         version = "v1";
         configuration = "veritas-analysis-config.v1";
     }
     provenance PR_capacity {
         producer = evidence.query;
         rule = "evidence.query_completion.v1";
-        analysis_run = "run:sha256:91e89718b11f506f3e12457433dc6b9405e56a44ac5d78d87a7e6a733bc9505c";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
         version = "v1";
         configuration = "veritas-analysis-config.v1";
     }
     provenance PR_dominating_check {
         producer = evidence.query;
         rule = "evidence.query_completion.v1";
-        analysis_run = "run:sha256:91e89718b11f506f3e12457433dc6b9405e56a44ac5d78d87a7e6a733bc9505c";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
         version = "v1";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_0827ef0b {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_0cbb96ba {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable, $F_reachable_21];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_10585926 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_12b51bc7 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_13, $F_reachable_17];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_1569a0a0 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_20];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_15cbaa59 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_19];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_16e9efff {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_20];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_23fdc9ef {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_19];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_2dc491f6 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_9];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_3616b620 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_3bd125b1 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_3e713cd6 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_4231d8e2 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_559b5d37 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_670f290f {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_6ba7a332 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_859e482e {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_16];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_8c202dd0 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_6];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_8dee5b9a {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_975a9ae6 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_9ad50f98 {
+        producer = veritas;
+        rule = "wpa.flow.global.parameter.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_9ed3a34c {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_5];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_a0fc5aaa {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable, $F_reachable_16];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_a9505c46 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_17];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_aa5883d5 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_16, $F_reachable_17];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_ad0e6b93 {
+        producer = veritas;
+        rule = "wpa.flow.global.parameter.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_aeb01699 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_10, $F_reachable_21];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_b2a953a3 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_b6617b1d {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_b7173879 {
+        producer = veritas;
+        rule = "wpa.effect.unknown.feature.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_b85f5085 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_9];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_c0f5fc68 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_c410f979 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_dc4e6fd7 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_e3d3c37b {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_6];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_eda21ea8 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_ee76f7aa {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        inputs = [$F_reachable_10, $F_reachable_17];
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_f4cad285 {
+        producer = veritas;
+        rule = "wpa.effect.unknown.call.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_fbfc0bf8 {
+        producer = analysis.souffle;
+        rule = "wpa.flow.global.transitive.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
+        configuration = "veritas-analysis-config.v1";
+    }
+    provenance PR_fact_fdc2a363 {
+        producer = veritas;
+        rule = "wpa.flow.global.local.v2";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
         configuration = "veritas-analysis-config.v1";
     }
     provenance PR_range {
         producer = evidence.query;
         rule = "evidence.query_completion.v1";
-        analysis_run = "run:sha256:91e89718b11f506f3e12457433dc6b9405e56a44ac5d78d87a7e6a733bc9505c";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
         version = "v1";
         configuration = "veritas-analysis-config.v1";
     }
     provenance PR_unknown {
         producer = evidence.query;
         rule = "evidence.query_completion.v1";
-        analysis_run = "run:sha256:91e89718b11f506f3e12457433dc6b9405e56a44ac5d78d87a7e6a733bc9505c";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
         version = "v1";
         configuration = "veritas-analysis-config.v1";
     }
     provenance PR_value_flow {
         producer = evidence.query;
         rule = "evidence.query_completion.v1";
-        analysis_run = "run:sha256:91e89718b11f506f3e12457433dc6b9405e56a44ac5d78d87a7e6a733bc9505c";
+        analysis_run = "run:sha256:7d04007bb5e86cdc6ad09c13304108950946e610c82a5102c6a172d25416d58b";
         version = "v1";
         configuration = "veritas-analysis-config.v1";
     }
     verify O1 {
-        prove = forall path in feasible_paths(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c, @E_valref_sha256_13f548bc7b460ec7affa4df7e53ba1c688567a135db7d194c1d515c67cda08db): value(@E_valref_sha256_1533d2dd56c84cc70d84ec2badc8920f3eb4ad81518caf8e5618d1a258e4215c) <= capacity(@E_memory_object_7b97aee3);
+        prove = execution_domain_complete(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3) and ((exists path in feasible_paths(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3): true) or entry_infeasible(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3)) and (forall path in feasible_paths(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65, @E_valref_sha256_edf8ade78727c85b96f05bf87a7860b8076bba26d3e23c51d9f2dee56feeb5b3): value(@E_valref_sha256_45fe4f39e4bbfb6b1afe5f0b0c30e5d153918b471a6d9464eefde357c0e24d65) <= capacity(@E_memory_object_632aad82));
         using = [range_analysis, smt, symbolic_execution];
         status = PENDING;
     }
@@ -438,15 +696,251 @@ evidence {
     }
     dependency DEP_fact {
         kind = fact;
-        stable_id = "fact:sha256:ef800c8ceefbebd36b29cfc8c3d23d042e6d6623eda19db10389b18427e54905";
+        stable_id = "fact:sha256:1655760a3a62c02623ba46588ed77432122e8a010a62f474a4363e3544de2f2c";
+    }
+    dependency DEP_provenance_0827ef0b1c239966c2b32057f4dd1cd997934622f8eba337080469a7abde28f2 {
+        kind = fact;
+        stable_id = "fact:sha256:0827ef0b1c239966c2b32057f4dd1cd997934622f8eba337080469a7abde28f2";
+    }
+    dependency DEP_provenance_0cbb96ba94a4eb3e8bd6b0ae9c3c9fb970508cb584c1c2223add7bb9c2ea5025 {
+        kind = fact;
+        stable_id = "fact:sha256:0cbb96ba94a4eb3e8bd6b0ae9c3c9fb970508cb584c1c2223add7bb9c2ea5025";
+    }
+    dependency DEP_provenance_0f0a64d811306484b376dc7ab55dbdec49961c0d58bdc26d733f3660d8cc347f {
+        kind = fact;
+        stable_id = "fact:sha256:0f0a64d811306484b376dc7ab55dbdec49961c0d58bdc26d733f3660d8cc347f";
+    }
+    dependency DEP_provenance_10585926ef0c4a469cfe91189aa66836c7a696d4f24846fc4c1032aa629cebf8 {
+        kind = fact;
+        stable_id = "fact:sha256:10585926ef0c4a469cfe91189aa66836c7a696d4f24846fc4c1032aa629cebf8";
+    }
+    dependency DEP_provenance_12b51bc71cd4415e5b6f22f9488116dbd76ef32d8691f70ff190233bb6efe92f {
+        kind = fact;
+        stable_id = "fact:sha256:12b51bc71cd4415e5b6f22f9488116dbd76ef32d8691f70ff190233bb6efe92f";
+    }
+    dependency DEP_provenance_1569a0a0cf336e62e4f13d664f750c7c9674100e817b2fa4751b194793c10a50 {
+        kind = fact;
+        stable_id = "fact:sha256:1569a0a0cf336e62e4f13d664f750c7c9674100e817b2fa4751b194793c10a50";
+    }
+    dependency DEP_provenance_15cbaa5909125601236cdbc93cdb4b51c9fa8d8da21bd0302bafae82cb33cfb3 {
+        kind = fact;
+        stable_id = "fact:sha256:15cbaa5909125601236cdbc93cdb4b51c9fa8d8da21bd0302bafae82cb33cfb3";
+    }
+    dependency DEP_provenance_166e3c1dc9015a0ba40a9bd56e7ecc6d08a94751461a3a8e1cd74770578aa354 {
+        kind = fact;
+        stable_id = "fact:sha256:166e3c1dc9015a0ba40a9bd56e7ecc6d08a94751461a3a8e1cd74770578aa354";
+    }
+    dependency DEP_provenance_16e9efff6ab4a54627b5763f70328e88d170363249a46d14ae28cdba9634852e {
+        kind = fact;
+        stable_id = "fact:sha256:16e9efff6ab4a54627b5763f70328e88d170363249a46d14ae28cdba9634852e";
+    }
+    dependency DEP_provenance_23fdc9ef5a13d93b9c3e96c4b2d92eb957faf43efd000687690c718ad400126b {
+        kind = fact;
+        stable_id = "fact:sha256:23fdc9ef5a13d93b9c3e96c4b2d92eb957faf43efd000687690c718ad400126b";
+    }
+    dependency DEP_provenance_2dc491f644f3f0e0da3929c64c1c6d054c3d38144bd9280d5f1dbeb134d66910 {
+        kind = fact;
+        stable_id = "fact:sha256:2dc491f644f3f0e0da3929c64c1c6d054c3d38144bd9280d5f1dbeb134d66910";
+    }
+    dependency DEP_provenance_3616b6207017cc045612600bfc5ef50d22407431179c5cf344294263018698be {
+        kind = fact;
+        stable_id = "fact:sha256:3616b6207017cc045612600bfc5ef50d22407431179c5cf344294263018698be";
+    }
+    dependency DEP_provenance_3bd125b1fa5a03c5a9d2cda0a76c1beeaab4fdc7bae58682f59f90559895bb30 {
+        kind = fact;
+        stable_id = "fact:sha256:3bd125b1fa5a03c5a9d2cda0a76c1beeaab4fdc7bae58682f59f90559895bb30";
+    }
+    dependency DEP_provenance_3e713cd67af385d93a90a1bb90b433211fd975593b14f06baf1193215ca003c8 {
+        kind = fact;
+        stable_id = "fact:sha256:3e713cd67af385d93a90a1bb90b433211fd975593b14f06baf1193215ca003c8";
+    }
+    dependency DEP_provenance_3ed2dbd573932cbab0300f63b38e93970167ce0b0e581f23b4eaefddc6605074 {
+        kind = fact;
+        stable_id = "fact:sha256:3ed2dbd573932cbab0300f63b38e93970167ce0b0e581f23b4eaefddc6605074";
+    }
+    dependency DEP_provenance_3fd19000ebeaca61456f8366fab290b8dc65f70f1bf6c5747f27ba9a038ffa56 {
+        kind = fact;
+        stable_id = "fact:sha256:3fd19000ebeaca61456f8366fab290b8dc65f70f1bf6c5747f27ba9a038ffa56";
+    }
+    dependency DEP_provenance_4231d8e2325a2d31420b652ee1117acea3b6954d315457203152412e5df45e36 {
+        kind = fact;
+        stable_id = "fact:sha256:4231d8e2325a2d31420b652ee1117acea3b6954d315457203152412e5df45e36";
+    }
+    dependency DEP_provenance_4ccae9e48dc755337b4a6a28c849e22a58949789062c12bc770e384edd679cd5 {
+        kind = fact;
+        stable_id = "fact:sha256:4ccae9e48dc755337b4a6a28c849e22a58949789062c12bc770e384edd679cd5";
+    }
+    dependency DEP_provenance_559b5d372662f1cb95006286036af3b58994db2caaa1a29fd2a6f5c7a75b8bc2 {
+        kind = fact;
+        stable_id = "fact:sha256:559b5d372662f1cb95006286036af3b58994db2caaa1a29fd2a6f5c7a75b8bc2";
+    }
+    dependency DEP_provenance_56c9568a2e1fa1d79dd22f84906fe5cd961f31523a680ae080d2fc69bd092c53 {
+        kind = fact;
+        stable_id = "fact:sha256:56c9568a2e1fa1d79dd22f84906fe5cd961f31523a680ae080d2fc69bd092c53";
+    }
+    dependency DEP_provenance_5d022e1291e908baf2b9da05cec34d1d11c42b79704f651c1f075a8b139e5306 {
+        kind = fact;
+        stable_id = "fact:sha256:5d022e1291e908baf2b9da05cec34d1d11c42b79704f651c1f075a8b139e5306";
+    }
+    dependency DEP_provenance_5feadee0d351c580630c2ff60d96d8b185b3f66ffaea8650618a51563aebdcad {
+        kind = fact;
+        stable_id = "fact:sha256:5feadee0d351c580630c2ff60d96d8b185b3f66ffaea8650618a51563aebdcad";
+    }
+    dependency DEP_provenance_670f290f58ba08ba319112183628dcee0e0b8bb91cbe96159f805935cd79bfdf {
+        kind = fact;
+        stable_id = "fact:sha256:670f290f58ba08ba319112183628dcee0e0b8bb91cbe96159f805935cd79bfdf";
+    }
+    dependency DEP_provenance_6ba7a3324ad881766c0cba645387ebf183b53665c38840ceaa1a1ad6695c8bc7 {
+        kind = fact;
+        stable_id = "fact:sha256:6ba7a3324ad881766c0cba645387ebf183b53665c38840ceaa1a1ad6695c8bc7";
+    }
+    dependency DEP_provenance_76bd6d6e62c2687900fc4785675f2a77f52cfc5b120888d43fef541bd0afe437 {
+        kind = fact;
+        stable_id = "fact:sha256:76bd6d6e62c2687900fc4785675f2a77f52cfc5b120888d43fef541bd0afe437";
+    }
+    dependency DEP_provenance_7c96cb31bf1cec911535990ad7323bf1f1e6c8184bb2f2208498da4d0d7e1412 {
+        kind = fact;
+        stable_id = "fact:sha256:7c96cb31bf1cec911535990ad7323bf1f1e6c8184bb2f2208498da4d0d7e1412";
+    }
+    dependency DEP_provenance_7eef4e01d4ddab85f413fb41fe549666dc6422209b13b5757631c6006e562ea9 {
+        kind = fact;
+        stable_id = "fact:sha256:7eef4e01d4ddab85f413fb41fe549666dc6422209b13b5757631c6006e562ea9";
+    }
+    dependency DEP_provenance_859e482e81a524ab105400572ddc29ab6f896e716a3a3fb660fb614430880fbb {
+        kind = fact;
+        stable_id = "fact:sha256:859e482e81a524ab105400572ddc29ab6f896e716a3a3fb660fb614430880fbb";
+    }
+    dependency DEP_provenance_8c202dd0b7bb299b53e64897258ff94afdfae1dc3df31be8098e077dac7375cd {
+        kind = fact;
+        stable_id = "fact:sha256:8c202dd0b7bb299b53e64897258ff94afdfae1dc3df31be8098e077dac7375cd";
+    }
+    dependency DEP_provenance_8dee5b9af4939978877dc1b33f0de65352c11c8001069e1dd5ba5d693b9702b8 {
+        kind = fact;
+        stable_id = "fact:sha256:8dee5b9af4939978877dc1b33f0de65352c11c8001069e1dd5ba5d693b9702b8";
+    }
+    dependency DEP_provenance_975a9ae699532c7d7e12162367b92628c447e2f3d95e8d4db3923dd9b89dbf01 {
+        kind = fact;
+        stable_id = "fact:sha256:975a9ae699532c7d7e12162367b92628c447e2f3d95e8d4db3923dd9b89dbf01";
+    }
+    dependency DEP_provenance_9ad50f9838cd66146e8311c537a36ef44dd11b9321804374b0851c72072e71cc {
+        kind = fact;
+        stable_id = "fact:sha256:9ad50f9838cd66146e8311c537a36ef44dd11b9321804374b0851c72072e71cc";
+    }
+    dependency DEP_provenance_9b4284fc5d9b360e40db64b4ebd3d4240bd8fdb8979b8913cefc10eaa03da2da {
+        kind = fact;
+        stable_id = "fact:sha256:9b4284fc5d9b360e40db64b4ebd3d4240bd8fdb8979b8913cefc10eaa03da2da";
+    }
+    dependency DEP_provenance_9df6a73d62e288bb634517c689326559b51ca2d1ba0e9c82ea5f50e47bf8a1b4 {
+        kind = fact;
+        stable_id = "fact:sha256:9df6a73d62e288bb634517c689326559b51ca2d1ba0e9c82ea5f50e47bf8a1b4";
+    }
+    dependency DEP_provenance_9ed3a34c116f504ed7076d3c979572713a5bcfe87626776728f0a712a4ccf704 {
+        kind = fact;
+        stable_id = "fact:sha256:9ed3a34c116f504ed7076d3c979572713a5bcfe87626776728f0a712a4ccf704";
+    }
+    dependency DEP_provenance_a0fc5aaae024ecea17ed7da4a1687e4021316a5836d9c066b056a4e10340ee66 {
+        kind = fact;
+        stable_id = "fact:sha256:a0fc5aaae024ecea17ed7da4a1687e4021316a5836d9c066b056a4e10340ee66";
+    }
+    dependency DEP_provenance_a9505c46fd2a811fef8f7f228f52dc51188c808209a8023b2b0cbc825eacc798 {
+        kind = fact;
+        stable_id = "fact:sha256:a9505c46fd2a811fef8f7f228f52dc51188c808209a8023b2b0cbc825eacc798";
+    }
+    dependency DEP_provenance_aa5883d580cc95b258a3b6b666e60e726d589ba08669c7db01b90dd708439546 {
+        kind = fact;
+        stable_id = "fact:sha256:aa5883d580cc95b258a3b6b666e60e726d589ba08669c7db01b90dd708439546";
+    }
+    dependency DEP_provenance_ad0e6b93b78d9cd21c4a73c31c4620959169f7480cfd2627372f7abed68c01b5 {
+        kind = fact;
+        stable_id = "fact:sha256:ad0e6b93b78d9cd21c4a73c31c4620959169f7480cfd2627372f7abed68c01b5";
+    }
+    dependency DEP_provenance_ae53381d722d8c9c59650be48ab16f28a24928a7518525ca750fd1651bb8535f {
+        kind = fact;
+        stable_id = "fact:sha256:ae53381d722d8c9c59650be48ab16f28a24928a7518525ca750fd1651bb8535f";
+    }
+    dependency DEP_provenance_aeb016991684e05fba85459efb354f9e20e0f775007492f241fffc27d14ad64b {
+        kind = fact;
+        stable_id = "fact:sha256:aeb016991684e05fba85459efb354f9e20e0f775007492f241fffc27d14ad64b";
+    }
+    dependency DEP_provenance_b2a953a3e754fd0c1c055d58af295529eb5dd43a824a739d2e99614e917177c9 {
+        kind = fact;
+        stable_id = "fact:sha256:b2a953a3e754fd0c1c055d58af295529eb5dd43a824a739d2e99614e917177c9";
+    }
+    dependency DEP_provenance_b6617b1d30bb149850b83f6539dcb6961fb544ea1fefba7cec13c5dd36272707 {
+        kind = fact;
+        stable_id = "fact:sha256:b6617b1d30bb149850b83f6539dcb6961fb544ea1fefba7cec13c5dd36272707";
+    }
+    dependency DEP_provenance_b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354 {
+        kind = fact;
+        stable_id = "fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354";
+    }
+    dependency DEP_provenance_b85f5085a59957533c0cb12fa01340d744407d67c95c35f0b600fd182e83ae80 {
+        kind = fact;
+        stable_id = "fact:sha256:b85f5085a59957533c0cb12fa01340d744407d67c95c35f0b600fd182e83ae80";
+    }
+    dependency DEP_provenance_beac29c71c0a48af5323a6b7195673b6ddd42f30dce61932385dbe9d22df50f2 {
+        kind = fact;
+        stable_id = "fact:sha256:beac29c71c0a48af5323a6b7195673b6ddd42f30dce61932385dbe9d22df50f2";
+    }
+    dependency DEP_provenance_c0f5fc689e2435e1e4513ce13c1a415ca64253a39793e5b3fa8e44e8d1edaac4 {
+        kind = fact;
+        stable_id = "fact:sha256:c0f5fc689e2435e1e4513ce13c1a415ca64253a39793e5b3fa8e44e8d1edaac4";
+    }
+    dependency DEP_provenance_c410f9794ed3707eea42ead0db7b7861e45ad20f1653783162d8d37a1fee6d04 {
+        kind = fact;
+        stable_id = "fact:sha256:c410f9794ed3707eea42ead0db7b7861e45ad20f1653783162d8d37a1fee6d04";
+    }
+    dependency DEP_provenance_d914d262c50fd6ab27f71f48224008135fc6bfc09f614c3aa6546de2b9429e17 {
+        kind = fact;
+        stable_id = "fact:sha256:d914d262c50fd6ab27f71f48224008135fc6bfc09f614c3aa6546de2b9429e17";
+    }
+    dependency DEP_provenance_da896cb4f2b0c53aeb9958be461eca2f95d429e80fd2e62c18fdd58a01e7cb78 {
+        kind = fact;
+        stable_id = "fact:sha256:da896cb4f2b0c53aeb9958be461eca2f95d429e80fd2e62c18fdd58a01e7cb78";
+    }
+    dependency DEP_provenance_dc4e6fd716a1281db88e6768f8beb39fd67f3a7c7dcf6553f714ca4cc4339a87 {
+        kind = fact;
+        stable_id = "fact:sha256:dc4e6fd716a1281db88e6768f8beb39fd67f3a7c7dcf6553f714ca4cc4339a87";
+    }
+    dependency DEP_provenance_e3d3c37b5bbc8edf079f49c153a0d16f2465b8ccc5204b5e47d14f3c530155ef {
+        kind = fact;
+        stable_id = "fact:sha256:e3d3c37b5bbc8edf079f49c153a0d16f2465b8ccc5204b5e47d14f3c530155ef";
+    }
+    dependency DEP_provenance_eda21ea8f12629e1992b9c396090dea2cf6119bc9ba573159ff6678fd4ad3182 {
+        kind = fact;
+        stable_id = "fact:sha256:eda21ea8f12629e1992b9c396090dea2cf6119bc9ba573159ff6678fd4ad3182";
+    }
+    dependency DEP_provenance_ee76f7aac3c14a5b3cd05d589259200ed6ad0a637abd4709cee5ac8a726ff3e9 {
+        kind = fact;
+        stable_id = "fact:sha256:ee76f7aac3c14a5b3cd05d589259200ed6ad0a637abd4709cee5ac8a726ff3e9";
+    }
+    dependency DEP_provenance_f1b0d91fe56f751db2a83fb8f347ee0037def9f3c6321f8b00d9cb260a617bdf {
+        kind = fact;
+        stable_id = "fact:sha256:f1b0d91fe56f751db2a83fb8f347ee0037def9f3c6321f8b00d9cb260a617bdf";
+    }
+    dependency DEP_provenance_f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b {
+        kind = fact;
+        stable_id = "fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b";
+    }
+    dependency DEP_provenance_f7d934fc0c4015e1097827c111b2f71d5056a1dd467de55e77f4e493b0476ea8 {
+        kind = fact;
+        stable_id = "fact:sha256:f7d934fc0c4015e1097827c111b2f71d5056a1dd467de55e77f4e493b0476ea8";
+    }
+    dependency DEP_provenance_fbfc0bf8ddcaeb8a19b36c6c4a11dbe7c16c544d57eadc2a1a31032d8d7ec44d {
+        kind = fact;
+        stable_id = "fact:sha256:fbfc0bf8ddcaeb8a19b36c6c4a11dbe7c16c544d57eadc2a1a31032d8d7ec44d";
+    }
+    dependency DEP_provenance_fdc2a36315683fcfe8784cc7915ede6019f525973a54b0c17039fef9386613de {
+        kind = fact;
+        stable_id = "fact:sha256:fdc2a36315683fcfe8784cc7915ede6019f525973a54b0c17039fef9386613de";
     }
     dependency DEP_type_layout {
         kind = type_layout;
         stable_id = "model:sha256:7033fccd9631c54232d30d719a9012664953a9e1c0adc32b07e666421407e393";
     }
-    omission OM_analyzer_expansion_callsite_sha256_84b5b403c50a2e38f1f9e45d369ae3c5564860ac58463b8a8c3b55c93c733596 {
+    omission OM_analyzer_expansion_callsite_sha256_8fac68374c2166504d444d348a5b666615f2556e63fb8c420fa1ff77f2fdac44 {
         kind = analyzer_expansion;
-        subject = @U_callsite_sha256_84b5b403c50a2e38f1f9e45d369ae3c5564860ac58463b8a8c3b55c93c733596_UNRESOLVED_CALL;
+        subject = @U_callsite_sha256_8fac68374c2166504d444d348a5b666615f2556e63fb8c420fa1ff77f2fdac44_UNRESOLVED_CALL;
         reason = "the analysis did not model this function's effect";
         expandable = false;
     }
@@ -459,61 +953,289 @@ evidence {
     omission OM_coverage_alias_open_frontier {
         kind = open_frontier;
         subject = @C1;
-        reason = "OPEN_FRONTIER: alias has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:1fa7e333e83cd51c0362f193af3de64e04a2b1626a7382e6328028737ca2f86a; producer=veritas-evidence-query.coverage.v1";
+        reason = "OPEN_FRONTIER: alias has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:e94f8a52d33baba219a3219c18ad37c320c90355eee153d3dfac4b7306797e4c; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
     }
     omission OM_coverage_alias_unsupported_predicate {
         kind = unsupported_predicate;
         subject = @C1;
-        reason = "UNSUPPORTED_PREDICATE: alias has no supported native predicate producer; completion=fact:sha256:1fa7e333e83cd51c0362f193af3de64e04a2b1626a7382e6328028737ca2f86a; producer=veritas-evidence-query.coverage.v1";
+        reason = "UNSUPPORTED_PREDICATE: alias has no supported native predicate producer; completion=fact:sha256:e94f8a52d33baba219a3219c18ad37c320c90355eee153d3dfac4b7306797e4c; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
     }
     omission OM_coverage_capacity_open_frontier {
         kind = open_frontier;
         subject = @C1;
-        reason = "OPEN_FRONTIER: capacity has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:8549f1c2826705311c2258acf230ce5a0bc4891e13f1c76eafb2c5702d565e9a; producer=veritas-evidence-query.coverage.v1";
+        reason = "OPEN_FRONTIER: capacity has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:9b8606d7828c6a2ad357410716322778d4aaa1a404615bdb2ef76cea41da6f16; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
     }
     omission OM_coverage_capacity_unsupported_predicate {
         kind = unsupported_predicate;
         subject = @C1;
-        reason = "UNSUPPORTED_PREDICATE: capacity has no supported native predicate producer; completion=fact:sha256:8549f1c2826705311c2258acf230ce5a0bc4891e13f1c76eafb2c5702d565e9a; producer=veritas-evidence-query.coverage.v1";
+        reason = "UNSUPPORTED_PREDICATE: capacity has no supported native predicate producer; completion=fact:sha256:9b8606d7828c6a2ad357410716322778d4aaa1a404615bdb2ef76cea41da6f16; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
     }
     omission OM_coverage_dominating_check_open_frontier {
         kind = open_frontier;
         subject = @C1;
-        reason = "OPEN_FRONTIER: dominating_check has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:ef800c8ceefbebd36b29cfc8c3d23d042e6d6623eda19db10389b18427e54905; producer=veritas-evidence-query.coverage.v1";
+        reason = "OPEN_FRONTIER: dominating_check has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:1655760a3a62c02623ba46588ed77432122e8a010a62f474a4363e3544de2f2c; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
     }
     omission OM_coverage_dominating_check_unsupported_predicate {
         kind = unsupported_predicate;
         subject = @C1;
-        reason = "UNSUPPORTED_PREDICATE: dominating_check has no supported native predicate producer; completion=fact:sha256:ef800c8ceefbebd36b29cfc8c3d23d042e6d6623eda19db10389b18427e54905; producer=veritas-evidence-query.coverage.v1";
+        reason = "UNSUPPORTED_PREDICATE: dominating_check has no supported native predicate producer; completion=fact:sha256:1655760a3a62c02623ba46588ed77432122e8a010a62f474a4363e3544de2f2c; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
     }
     omission OM_coverage_range_open_frontier {
         kind = open_frontier;
         subject = @C1;
-        reason = "OPEN_FRONTIER: range has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:e8ee1671e2d5966212c98ce8b60fce656b308a4ce81333fbff19b4a47079f36a; producer=veritas-evidence-query.coverage.v1";
+        reason = "OPEN_FRONTIER: range has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:7b1c91fb4b9f058eb76854b6df7745fb0b39e9e7a5891d033307f0be2140e947; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
     }
     omission OM_coverage_range_unsupported_predicate {
         kind = unsupported_predicate;
         subject = @C1;
-        reason = "UNSUPPORTED_PREDICATE: range has no supported native predicate producer; completion=fact:sha256:e8ee1671e2d5966212c98ce8b60fce656b308a4ce81333fbff19b4a47079f36a; producer=veritas-evidence-query.coverage.v1";
+        reason = "UNSUPPORTED_PREDICATE: range has no supported native predicate producer; completion=fact:sha256:7b1c91fb4b9f058eb76854b6df7745fb0b39e9e7a5891d033307f0be2140e947; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
     }
     omission OM_coverage_unknown_open_frontier {
         kind = open_frontier;
         subject = @C1;
-        reason = "OPEN_FRONTIER: unknown has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:5fa375d9e0283065a5f0500321597aebf152f3b38dbcc6b323b15121a5592d14; producer=veritas-evidence-query.coverage.v1";
+        reason = "OPEN_FRONTIER: unknown has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:42a9f987376e70f20858011c440b3161e4a417aa9a4854545822b1c76e74ac9e; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
     }
     omission OM_coverage_value_flow_open_frontier {
         kind = open_frontier;
         subject = @C1;
-        reason = "OPEN_FRONTIER: value_flow has no closed-world scope guarantee; frontier_refs=fact:sha256:02411ebfa8c41fc5454f6082ecbd902bd14f8d45452b7e44e933a7eb74f241c7,fact:sha256:0bdefe31ad393a5111a7118544e47ec6c39289fb0267698b64cff84d6c41c642,; completion=fact:sha256:86c1a4f7ba997d23a787318a96ef5409cfb0dfec23c08d800bcddc16162b60d5; producer=veritas-evidence-query.coverage.v1";
+        reason = "OPEN_FRONTIER: value_flow has no closed-world scope guarantee; frontier_refs=fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354,fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b,; completion=fact:sha256:d168a12e78767dc14da6c282e18ca65a11d065af920ad1f5cce62c6a0296fc7c; producer=veritas-evidence-query.coverage.v1";
         expandable = false;
+    }
+    omission OM_premise_PR_fact_0827ef0b_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_0827ef0b;
+        reason = "rooted input fact:sha256:9df6a73d62e288bb634517c689326559b51ca2d1ba0e9c82ea5f50e47bf8a1b4 at ordinal 0 of fact:sha256:0827ef0b1c239966c2b32057f4dd1cd997934622f8eba337080469a7abde28f2; witness=804ea75c025d61ccf6ae37e693af98cd9f324ae63f9b6ae52bfa77ca3c4da4ec; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_10585926_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_10585926;
+        reason = "rooted input fact:sha256:f1b0d91fe56f751db2a83fb8f347ee0037def9f3c6321f8b00d9cb260a617bdf at ordinal 0 of fact:sha256:10585926ef0c4a469cfe91189aa66836c7a696d4f24846fc4c1032aa629cebf8; witness=aff090ef4d0ed546975527e9e2ab0c2a7d56732f5e348270348474473700a3ab; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_1569a0a0_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_1569a0a0;
+        reason = "derived input fact:sha256:3bd125b1fa5a03c5a9d2cda0a76c1beeaab4fdc7bae58682f59f90559895bb30 at ordinal 1 of fact:sha256:1569a0a0cf336e62e4f13d664f750c7c9674100e817b2fa4751b194793c10a50; witness=ee355eddbc6c3409e2b8904326a7848c26d6e6019718cfc6eb417b1a45bca817; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_15cbaa59_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_15cbaa59;
+        reason = "derived input fact:sha256:670f290f58ba08ba319112183628dcee0e0b8bb91cbe96159f805935cd79bfdf at ordinal 1 of fact:sha256:15cbaa5909125601236cdbc93cdb4b51c9fa8d8da21bd0302bafae82cb33cfb3; witness=b84b371090206cd190a89904ef0ebe73fd11179e23a7f63162d68cabc67d4a3e; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_16e9efff_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_16e9efff;
+        reason = "derived input fact:sha256:8dee5b9af4939978877dc1b33f0de65352c11c8001069e1dd5ba5d693b9702b8 at ordinal 1 of fact:sha256:16e9efff6ab4a54627b5763f70328e88d170363249a46d14ae28cdba9634852e; witness=379933e8dd40dd259b0a9200b5f4eb521149a24e8d8422d614c9e43188dbb751; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_23fdc9ef_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_23fdc9ef;
+        reason = "derived input fact:sha256:eda21ea8f12629e1992b9c396090dea2cf6119bc9ba573159ff6678fd4ad3182 at ordinal 1 of fact:sha256:23fdc9ef5a13d93b9c3e96c4b2d92eb957faf43efd000687690c718ad400126b; witness=ea29c3e1ed35b61f88a44b9ad942c764689c1452e50b22559d56f18ebfe30cd3; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_2dc491f6_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_2dc491f6;
+        reason = "derived input fact:sha256:dc4e6fd716a1281db88e6768f8beb39fd67f3a7c7dcf6553f714ca4cc4339a87 at ordinal 1 of fact:sha256:2dc491f644f3f0e0da3929c64c1c6d054c3d38144bd9280d5f1dbeb134d66910; witness=a6f99b5857d7fad10c8c9babac05afc4a7911154aef8366c66fe22cd437505b0; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_3616b620_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_3616b620;
+        reason = "rooted input fact:sha256:0f0a64d811306484b376dc7ab55dbdec49961c0d58bdc26d733f3660d8cc347f at ordinal 0 of fact:sha256:3616b6207017cc045612600bfc5ef50d22407431179c5cf344294263018698be; witness=2c446e884dac791b81e777b1ea8d0d365fc2a7bbd8c9a10f2f885b5d73284187; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_3bd125b1_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_3bd125b1;
+        reason = "rooted input fact:sha256:3ed2dbd573932cbab0300f63b38e93970167ce0b0e581f23b4eaefddc6605074 at ordinal 0 of fact:sha256:3bd125b1fa5a03c5a9d2cda0a76c1beeaab4fdc7bae58682f59f90559895bb30; witness=715da8a8baa9fcdf3bc3b9d6c82092a613524c7cb4f33d3fd2c84b3dfc9e9b5b; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_3e713cd6_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_3e713cd6;
+        reason = "rooted input fact:sha256:d914d262c50fd6ab27f71f48224008135fc6bfc09f614c3aa6546de2b9429e17 at ordinal 0 of fact:sha256:3e713cd67af385d93a90a1bb90b433211fd975593b14f06baf1193215ca003c8; witness=758a5e5f473c7c9ac2502dad467360a6fcd916464294600e5012c4beee89001b; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_4231d8e2_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_4231d8e2;
+        reason = "rooted input fact:sha256:3fd19000ebeaca61456f8366fab290b8dc65f70f1bf6c5747f27ba9a038ffa56 at ordinal 0 of fact:sha256:4231d8e2325a2d31420b652ee1117acea3b6954d315457203152412e5df45e36; witness=18bcfeede21d02372ddbf27f382db2203702a6d4ad3021ca15e3bca1133592fd; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_559b5d37_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_559b5d37;
+        reason = "derived input fact:sha256:9ad50f9838cd66146e8311c537a36ef44dd11b9321804374b0851c72072e71cc at ordinal 1 of fact:sha256:559b5d372662f1cb95006286036af3b58994db2caaa1a29fd2a6f5c7a75b8bc2; witness=a4f7b3457874d813167c7d1c70ea6db032ffa6e36f2e59e437bbcdac3b828961; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_670f290f_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_670f290f;
+        reason = "derived input fact:sha256:eda21ea8f12629e1992b9c396090dea2cf6119bc9ba573159ff6678fd4ad3182 at ordinal 0 of fact:sha256:670f290f58ba08ba319112183628dcee0e0b8bb91cbe96159f805935cd79bfdf; witness=9fd7ef135778bae5dda780347c0e0d4c1b18cc810f9b4f090fcded869750870a; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_670f290f_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_670f290f;
+        reason = "derived input fact:sha256:10585926ef0c4a469cfe91189aa66836c7a696d4f24846fc4c1032aa629cebf8 at ordinal 1 of fact:sha256:670f290f58ba08ba319112183628dcee0e0b8bb91cbe96159f805935cd79bfdf; witness=9fd7ef135778bae5dda780347c0e0d4c1b18cc810f9b4f090fcded869750870a; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_6ba7a332_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_6ba7a332;
+        reason = "rooted input fact:sha256:56c9568a2e1fa1d79dd22f84906fe5cd961f31523a680ae080d2fc69bd092c53 at ordinal 0 of fact:sha256:6ba7a3324ad881766c0cba645387ebf183b53665c38840ceaa1a1ad6695c8bc7; witness=73fd769fdb9ba4f0b4dc8aa9b1743e4b54302891b4ddd0c942cf86afefdc3059; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_859e482e_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_859e482e;
+        reason = "derived input fact:sha256:559b5d372662f1cb95006286036af3b58994db2caaa1a29fd2a6f5c7a75b8bc2 at ordinal 1 of fact:sha256:859e482e81a524ab105400572ddc29ab6f896e716a3a3fb660fb614430880fbb; witness=50063526f6d96c7331f0a9538f2302113896a180c8eea6d84e5d975607de0189; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_8c202dd0_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_8c202dd0;
+        reason = "derived input fact:sha256:ad0e6b93b78d9cd21c4a73c31c4620959169f7480cfd2627372f7abed68c01b5 at ordinal 1 of fact:sha256:8c202dd0b7bb299b53e64897258ff94afdfae1dc3df31be8098e077dac7375cd; witness=709577358f1f377b13dc9e9365ad13603882c26aaefee98b8538a15849914cca; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_8dee5b9a_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_8dee5b9a;
+        reason = "derived input fact:sha256:3bd125b1fa5a03c5a9d2cda0a76c1beeaab4fdc7bae58682f59f90559895bb30 at ordinal 0 of fact:sha256:8dee5b9af4939978877dc1b33f0de65352c11c8001069e1dd5ba5d693b9702b8; witness=1b7f4a253495217e9d8530596e68875395d0b2993705a4e103d08226089ab473; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_8dee5b9a_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_8dee5b9a;
+        reason = "derived input fact:sha256:6ba7a3324ad881766c0cba645387ebf183b53665c38840ceaa1a1ad6695c8bc7 at ordinal 1 of fact:sha256:8dee5b9af4939978877dc1b33f0de65352c11c8001069e1dd5ba5d693b9702b8; witness=1b7f4a253495217e9d8530596e68875395d0b2993705a4e103d08226089ab473; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_975a9ae6_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_975a9ae6;
+        reason = "rooted input fact:sha256:76bd6d6e62c2687900fc4785675f2a77f52cfc5b120888d43fef541bd0afe437 at ordinal 0 of fact:sha256:975a9ae699532c7d7e12162367b92628c447e2f3d95e8d4db3923dd9b89dbf01; witness=f0be14569fc4e25fafb3946d599617874cef59e45b09ae61038425cc255e9e50; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_9ad50f98_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_9ad50f98;
+        reason = "rooted input fact:sha256:beac29c71c0a48af5323a6b7195673b6ddd42f30dce61932385dbe9d22df50f2 at ordinal 0 of fact:sha256:9ad50f9838cd66146e8311c537a36ef44dd11b9321804374b0851c72072e71cc; witness=986f5a394d67c6cf5f0f73eb685bd04df055c6c33ac12e84ac3c1351a6366d50; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_9ed3a34c_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_9ed3a34c;
+        reason = "derived input fact:sha256:3e713cd67af385d93a90a1bb90b433211fd975593b14f06baf1193215ca003c8 at ordinal 1 of fact:sha256:9ed3a34c116f504ed7076d3c979572713a5bcfe87626776728f0a712a4ccf704; witness=daa056deefac4606c5d701e5b9e01359b089194e49a8b10e60c4f48f13e532f9; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_a9505c46_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_a9505c46;
+        reason = "derived input fact:sha256:859e482e81a524ab105400572ddc29ab6f896e716a3a3fb660fb614430880fbb at ordinal 1 of fact:sha256:a9505c46fd2a811fef8f7f228f52dc51188c808209a8023b2b0cbc825eacc798; witness=df807785281cf685cee842ffb6a149405f28cefc2521e548fd5718faced40628; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_ad0e6b93_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_ad0e6b93;
+        reason = "rooted input fact:sha256:5d022e1291e908baf2b9da05cec34d1d11c42b79704f651c1f075a8b139e5306 at ordinal 0 of fact:sha256:ad0e6b93b78d9cd21c4a73c31c4620959169f7480cfd2627372f7abed68c01b5; witness=36e55542f0ea4ed92ccb0303ea49efac0b3f65980975107e66bb22ebadaffd55; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_b2a953a3_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_b2a953a3;
+        reason = "rooted input fact:sha256:5feadee0d351c580630c2ff60d96d8b185b3f66ffaea8650618a51563aebdcad at ordinal 0 of fact:sha256:b2a953a3e754fd0c1c055d58af295529eb5dd43a824a739d2e99614e917177c9; witness=625e886e192422e70fd5ade2768c84cb2cd69612554f0b463ce80a06bee3eae6; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_b6617b1d_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_b6617b1d;
+        reason = "rooted input fact:sha256:7eef4e01d4ddab85f413fb41fe549666dc6422209b13b5757631c6006e562ea9 at ordinal 0 of fact:sha256:b6617b1d30bb149850b83f6539dcb6961fb544ea1fefba7cec13c5dd36272707; witness=76481940aeb10b5c25e38857cdbbd5686aa370e43b8bd2bd5280c54bf8523017; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_b7173879_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_b7173879;
+        reason = "rooted input fact:sha256:f7d934fc0c4015e1097827c111b2f71d5056a1dd467de55e77f4e493b0476ea8 at ordinal 0 of fact:sha256:b7173879899aae59f3fc285f5bd9bde7f1303228e109405f1fe130fd7e311354; witness=fa5d35ccaa24f64b82d7ad4c24fa0836fabcaf29600389b3a113a5bffa615042; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_b85f5085_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_b85f5085;
+        reason = "derived input fact:sha256:fbfc0bf8ddcaeb8a19b36c6c4a11dbe7c16c544d57eadc2a1a31032d8d7ec44d at ordinal 1 of fact:sha256:b85f5085a59957533c0cb12fa01340d744407d67c95c35f0b600fd182e83ae80; witness=8d6ba6b8f9e6d830f98c93aa65fe312a0ff9a70c634c6d07df519a795cf98be8; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_c0f5fc68_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_c0f5fc68;
+        reason = "rooted input fact:sha256:ae53381d722d8c9c59650be48ab16f28a24928a7518525ca750fd1651bb8535f at ordinal 0 of fact:sha256:c0f5fc689e2435e1e4513ce13c1a415ca64253a39793e5b3fa8e44e8d1edaac4; witness=8a916b9ba53ff192ec8554257bda00945fbc9dde2fecba1353fd27bcb04370d8; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_c410f979_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_c410f979;
+        reason = "rooted input fact:sha256:9b4284fc5d9b360e40db64b4ebd3d4240bd8fdb8979b8913cefc10eaa03da2da at ordinal 0 of fact:sha256:c410f9794ed3707eea42ead0db7b7861e45ad20f1653783162d8d37a1fee6d04; witness=de9942bf163eb635d0b1fc3cadc2568343a1e73007b3fdef7b4657cf1fff9bbc; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_dc4e6fd7_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_dc4e6fd7;
+        reason = "rooted input fact:sha256:da896cb4f2b0c53aeb9958be461eca2f95d429e80fd2e62c18fdd58a01e7cb78 at ordinal 0 of fact:sha256:dc4e6fd716a1281db88e6768f8beb39fd67f3a7c7dcf6553f714ca4cc4339a87; witness=2cdbc6abbcb1a94e0b10bbf7f06485bc0fc4dfeaf8f85132ff2789e988afb0cc; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_e3d3c37b_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_e3d3c37b;
+        reason = "derived input fact:sha256:975a9ae699532c7d7e12162367b92628c447e2f3d95e8d4db3923dd9b89dbf01 at ordinal 1 of fact:sha256:e3d3c37b5bbc8edf079f49c153a0d16f2465b8ccc5204b5e47d14f3c530155ef; witness=aa08ef28d718f594c29d0446e04c0e7df6f83bef17d0ff45c81267a504706fa5; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_eda21ea8_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_eda21ea8;
+        reason = "rooted input fact:sha256:7c96cb31bf1cec911535990ad7323bf1f1e6c8184bb2f2208498da4d0d7e1412 at ordinal 0 of fact:sha256:eda21ea8f12629e1992b9c396090dea2cf6119bc9ba573159ff6678fd4ad3182; witness=c4dbd90dbc30fa15301ff411dd4c7d5efc1946f482e1b05978023f020035a8c0; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_f4cad285_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_f4cad285;
+        reason = "rooted input fact:sha256:166e3c1dc9015a0ba40a9bd56e7ecc6d08a94751461a3a8e1cd74770578aa354 at ordinal 0 of fact:sha256:f4cad285632e0e60f1f64137cb509473b5384dbd65cfd18bf18c70c36abeca5b; witness=7cdb187913a22d6f7d3435ed8b5d9020bd1d24703ab9e7c49331e01beff8d302; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_fbfc0bf8_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_fbfc0bf8;
+        reason = "derived input fact:sha256:dc4e6fd716a1281db88e6768f8beb39fd67f3a7c7dcf6553f714ca4cc4339a87 at ordinal 0 of fact:sha256:fbfc0bf8ddcaeb8a19b36c6c4a11dbe7c16c544d57eadc2a1a31032d8d7ec44d; witness=a2510ae888df0bbedead2176b55079cd12be1e7134b9a65d4072d0ba19f0eddd; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_fbfc0bf8_1 {
+        kind = provenance_premise;
+        subject = @PR_fact_fbfc0bf8;
+        reason = "derived input fact:sha256:fdc2a36315683fcfe8784cc7915ede6019f525973a54b0c17039fef9386613de at ordinal 1 of fact:sha256:fbfc0bf8ddcaeb8a19b36c6c4a11dbe7c16c544d57eadc2a1a31032d8d7ec44d; witness=a2510ae888df0bbedead2176b55079cd12be1e7134b9a65d4072d0ba19f0eddd; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_premise_PR_fact_fdc2a363_0 {
+        kind = provenance_premise;
+        subject = @PR_fact_fdc2a363;
+        reason = "rooted input fact:sha256:4ccae9e48dc755337b4a6a28c849e22a58949789062c12bc770e384edd679cd5 at ordinal 0 of fact:sha256:fdc2a36315683fcfe8784cc7915ede6019f525973a54b0c17039fef9386613de; witness=133a253c8d0de9a0c7104e9cd2536151a56526cf54b63cca54f69ca34c490e60; semantic premise body is not projected into this case";
+        expandable = true;
+    }
+    omission OM_summary_expansion_E_function_ed44aaac {
+        kind = summary_expansion;
+        subject = @E_function_ed44aaac;
+        reason = "expand immutable summary summary:sha256:fe77f4e7437e5546fbaa6db204e8012c275cf4abf59d2bb06974bdac8c9bf5e3 at l2";
+        expandable = true;
     }
 }

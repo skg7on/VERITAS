@@ -912,3 +912,37 @@ The API-to-Evidence-IR boundary is qualified only when:
 * formatting and license checks pass; and
 * M10B and M10C documentation and issue trackers reference the same case IDs
   and ownership boundary.
+
+## RDX04 qualification amendment (2026-10-26, #158)
+
+The native integrity amendment's Tasks 4–6 refine the existing catalog without
+removing its §2.3 producer deferrals. `DepthOneAndTwoYieldDifferentRootedFrontiers`
+uses a real durable three-level derivation: depth 1 exposes the exact unexpanded
+premise; depth 2 reaches the rooted input. The same test checks exact aggregate
+member boundaries, stale intermediate bindings, cycles and all-level frontier
+omissions. `CompletionWitnessDoesNotReplaceFactWitness` requires real native
+selected witnesses and rooted EIR dependencies/premise handles.
+
+`L2CarriesCurrentSummaryComponents` compares summary IDs and component hashes to
+the native current bindings/component rows, checks reorder invariance and EIR-T/
+protobuf identity, and retains L0/L1 summary handles. Its consistent semantic
+handoff-delta oracle changes EvidenceID; it is not a new native producer.
+`RejectsStaleSummaryBinding` refuses a new assembly after binding corruption,
+while an already captured immutable input still builds without another DB read.
+`MemberBaseFactsAreRootedInputs` rejects FunctionVariantID placeholders in the
+summary-ID field. `BindingChangeDuringExplanationRefusesWholeHandoff` extends
+HND-002 through the new provenance/summary-read phase.
+
+`UnknownFeasibilityDoesNotProveEmptyUniversalDomain` exercises absent/unknown
+paths at the authority consumer. A verified-safe state needs a proved complete
+execution domain and nonemptiness or infeasible-entry argument for its exact
+universal source/sink pair. Native obligations remain pending. DEM-002 checks
+current L2 references; DEM-005 checks query truncation separately from provenance
+premise/frontier omissions, whose counts vary with the bounded closure. None of
+these checks supplies the deferred range/capacity/alias/positive-check oracles.
+
+Review regressions additionally require small-budget native occurrences and
+durable MAY facts to build incomplete EIR with actual binding provenance and
+no invented rule, and require removal of a declared modern explanation carrier
+to fail. Explicitly old v2 inputs retain `legacy_provenance` omissions at every
+level; unknown and partial provenance capabilities are refused.

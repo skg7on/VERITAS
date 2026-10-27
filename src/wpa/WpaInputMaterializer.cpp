@@ -310,6 +310,10 @@ StatusOr<WpaSummaryIndex> WpaSummaryIndex::Build(
     if (!index.by_function_.emplace(*function_id, &artifact).second) {
       return Status::InvalidArgument("duplicate summary function identity");
     }
+    auto summary_id = summary::ComputeFunctionSummaryId(artifact);
+    if (!summary_id.ok())
+      return summary_id.status();
+    index.summary_ids_.emplace(*function_id, *summary_id);
   }
   return index;
 }
@@ -327,6 +331,12 @@ const summary::SummaryArtifact* WpaSummaryIndex::Lookup(
 
 bool WpaSummaryIndex::Contains(core::StableId function_id) const {
   return by_function_.contains(function_id);
+}
+
+const core::StableId *
+WpaSummaryIndex::SummaryId(core::StableId function_id) const {
+  const auto it = summary_ids_.find(function_id);
+  return it == summary_ids_.end() ? nullptr : &it->second;
 }
 
 StatusOr<WpaLogicalComponentInput>
@@ -741,7 +751,7 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
         .provenance_ref = "wpa:local",
         .producer_id = "veritas",
         .source_anchor_id = "",
-        .summary_id = core::ToString(base.owner),
+        .summary_id = core::ToString(*summaries.SummaryId(base.owner)),
         .description = ""});
   }
 

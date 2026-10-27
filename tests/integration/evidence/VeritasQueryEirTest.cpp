@@ -1087,6 +1087,15 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
   EXPECT_GT(l0.omissions.size(), 0u);
   std::set<std::string> named;
   for (const ev::Omission& omission : l0.omissions) {
+    if (omission.kind == "provenance_premise") {
+      EXPECT_TRUE(omission.expandable);
+      continue;
+    }
+    if (omission.kind == "summary_expansion") {
+      EXPECT_TRUE(omission.expandable);
+      EXPECT_NE(omission.reason.find("summary:sha256:"), std::string::npos);
+      continue;
+    }
     if (omission.kind != "level_projection") {
       EXPECT_FALSE(omission.expandable);
       if (omission.kind == "analyzer_expansion") {
@@ -1145,7 +1154,10 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
   // Six open query scopes and four missing native producers coexist with the
   // two analyzer unknowns. L0 retains every coverage gap rather than replacing
   // it with a projection marker. #124 still owns those missing producers.
-  EXPECT_EQ(l1.omissions.size(), 12u);
+  const auto premise_omissions = std::ranges::count(
+      l1.omissions, "provenance_premise", &ev::Omission::kind);
+  EXPECT_GT(premise_omissions, 0);
+  EXPECT_EQ(l1.omissions.size(), 13u + premise_omissions);
   EXPECT_EQ(l1.unknowns.size(), 12u);
   EXPECT_EQ(
       std::ranges::count(l1.omissions, "open_frontier", &ev::Omission::kind),
@@ -1157,6 +1169,15 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
                                &ev::Omission::kind),
             2);
   for (const auto &omission : l1.omissions) {
+    if (omission.kind == "provenance_premise") {
+      EXPECT_TRUE(omission.expandable);
+      continue;
+    }
+    if (omission.kind == "summary_expansion") {
+      EXPECT_TRUE(omission.expandable);
+      EXPECT_NE(omission.reason.find("summary:sha256:"), std::string::npos);
+      continue;
+    }
     EXPECT_FALSE(omission.expandable);
     if (omission.kind != "analyzer_expansion") {
       EXPECT_EQ(omission.subject, l1.primary_claim.id);
@@ -1169,16 +1190,19 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
     return fact.predicate.text == "dominates_bounds_check";
   }));
 
-  // L2 preserves L1 and now exposes the existing missing-summary omission:
-  // scoped unknowns introduce a real Function entity. #158 owns supplying its
-  // summary; this test must not claim the expansion is already implemented.
+  // L2 replaces the L1 expansion handle with the current immutable summary.
+  // The four unsupported native predicates remain explicit at every level.
   EXPECT_GE(l2.entities.size(), l1.entities.size());
   EXPECT_GE(l2.facts.size(), l1.facts.size());
   EXPECT_GE(l2.provenance.size(), l1.provenance.size());
-  EXPECT_EQ(l2.omissions.size(), l1.omissions.size() + 1);
+  EXPECT_EQ(l2.omissions.size() + 1, l1.omissions.size());
   EXPECT_EQ(std::ranges::count(l2.omissions, "summary_expansion",
                                &ev::Omission::kind),
-            1);
+            0);
+  ASSERT_EQ(l2.summaries.size(), 1u);
+  EXPECT_EQ(l2.summaries.front().summary_id.kind,
+            core::IdKind::kFunctionSummary);
+  EXPECT_FALSE(l2.summaries.front().components.empty());
   EXPECT_EQ(l2.primary_claim.id, l1.primary_claim.id);
   EXPECT_EQ(l2.verification_state, l1.verification_state);
 
@@ -1641,7 +1665,17 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   EXPECT_GT(unsafe_case.paths.size(), 0u);
   EXPECT_EQ(truncated_case.paths.size(), 0u);
   EXPECT_EQ(truncated_case.edges.size(), 0u);
-  EXPECT_EQ(truncated_case.omissions.size(), unsafe_case.omissions.size() + 1);
+  auto query_and_analysis_omissions = [](const auto &value) {
+    return std::ranges::count_if(value.omissions, [](const auto &omission) {
+      return omission.kind != "provenance_premise" &&
+             omission.kind != "provenance_frontier";
+    });
+  };
+  EXPECT_EQ(query_and_analysis_omissions(truncated_case),
+            query_and_analysis_omissions(unsafe_case) + 1);
+  EXPECT_GT(std::ranges::count(truncated_case.omissions, "provenance_frontier",
+                               &ev::Omission::kind),
+            0);
   EXPECT_EQ(truncated_case.unknowns.size(), unsafe_case.unknowns.size() + 1);
   EXPECT_TRUE(std::ranges::any_of(truncated_case.omissions, [](const auto& omission) {
     return omission.kind == "truncated_query" &&

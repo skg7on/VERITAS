@@ -54,6 +54,7 @@
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 #include "veritas/evidence/EvidenceCase.h"
+#include "veritas/evidence/EvidenceCaseBuilder.h"
 #include "veritas/evidence/EvidenceQueryService.h"
 #include "veritas/evidence/EvidenceValidator.h"
 
@@ -434,6 +435,44 @@ TEST(EvidenceValidatorTest, VID005AcceptsDecidedResultWithProducer) {
   value.verification_state = VerificationState::kVerifiedDefect;
   const auto report = ValidateEvidenceCase(value);
   EXPECT_TRUE(report.ok()) << FirstIssue(report);
+}
+
+TEST(EvidenceValidatorTest,
+     UnknownFeasibilityDoesNotProveEmptyUniversalDomain) {
+  for (bool absent_paths : {false, true}) {
+    auto value = MakeOverflowEvidenceCase();
+    for (auto &path : value.paths)
+      path.feasibility = Feasibility::kUnknown;
+    if (absent_paths)
+      value.paths.clear();
+    for (auto &obligation : value.proof_obligations) {
+      obligation.status = ProofStatus::kProved;
+      obligation.result_id = "R_vacuous_forall";
+      obligation.verification_producer = "verifier.smt";
+    }
+    value.verification_state = VerificationState::kVerifiedSafe;
+    const auto report = ValidateEvidenceCase(value);
+    EXPECT_TRUE(HasCode(report, EvidenceValidationCode::kVerificationProducer))
+        << "a universal proof alone cannot establish its execution domain";
+  }
+}
+
+TEST(EvidenceValidatorTest,
+     SafeProofMustAdmitExactlyItsUniversalExecutionDomain) {
+  auto request = EvidenceScenarioBuilder().BuildRequest(EvidenceLevel::kL1);
+  auto built = EvidenceCaseBuilder().Build(request);
+  ASSERT_TRUE(built.ok()) << built.status().message();
+  auto &obligation = built->proof_obligations.front();
+  obligation.status = ProofStatus::kProved;
+  obligation.result_id = "R_scoped_domain_and_safety";
+  obligation.verification_producer = "verifier.smt";
+  built->verification_state = VerificationState::kVerifiedSafe;
+  EXPECT_TRUE(ValidateEvidenceCase(*built).ok());
+  ASSERT_EQ(obligation.predicate.kind, Expression::Kind::kAnd);
+  // A proof about another domain cannot qualify this universal statement.
+  obligation.predicate.operands.front().operands.clear();
+  EXPECT_TRUE(HasCode(ValidateEvidenceCase(*built),
+                      EvidenceValidationCode::kVerificationProducer));
 }
 
 TEST(EvidenceValidatorTest, VID005InterruptedResultsCannotVerifyACase) {

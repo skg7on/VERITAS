@@ -34,6 +34,7 @@
 #include "veritas/fact/v1/fact.pb.h"
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/ProvenanceStore.h"
+#include "veritas/summary/SummaryArtifact.h"
 
 namespace veritas::evidence {
 
@@ -68,6 +69,15 @@ class EvidenceReadSnapshot {
   // Bounded explanation of one fact within the pinned run.
   virtual StatusOr<veritas::fact::v1::ProvenanceGraph> Explain(
       core::StableId fact_id, const facts::ExplainBudget& budget) const = 0;
+
+  // Current function summaries from this snapshot. An exact summary ID from
+  // a selected witness must still be current in the same revision/build.
+  // Backends without a summary capability return an empty collection.
+  virtual StatusOr<std::vector<summary::SummaryArtifact>>
+  ReadSummaries(const std::vector<core::StableId> &refs) const {
+    (void)refs;
+    return std::vector<summary::SummaryArtifact>{};
+  }
 };
 
 // Opens a pinned snapshot for one analysis run. The concrete adapter (Task 3)

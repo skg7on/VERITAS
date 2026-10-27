@@ -68,7 +68,7 @@ Detailed redesign execution is tracked by
 with four focused spec/plan pairs and sixteen work packages. The first runtime
 slice enforces relation epistemic allowlists at stable/dense row boundaries and
 conservatively projects unresolved call targets; WPA configuration identity is
-`veritas.wpa.config.v2` so old receipts do not impersonate the corrected policy.
+`veritas.wpa.config.v3` so old receipts do not impersonate the corrected policy.
 Issue #156 adds `thin-cpg.v2` compiler containment and typed callsite bindings,
 captured before SVF can rewrite LLVM instructions. Exact copy seeds retain their
 callsite for constant-extent scope; the CLI accepts optional `--callsite` while
@@ -77,8 +77,12 @@ explicit missing ownership capability. Native identities and `eir.v1` stay intac
 #157/RDX03 adds versioned semantic coverage and a handoff digest; unsupported,
 open, unresolved and truncated queries retain EIR gaps at every level. Native
 complete-empty checks cannot assert absence without a supported closed scope.
-Legacy handoffs are explicitly labeled. #124/#158 retain producer/provenance/summary
-handoff gaps. This does not deliver the
+Legacy handoffs are explicitly labeled. #158/RDX04 adds real bounded selected-fact
+Explain traversal, rooted EIR premise references, pinned summary/component handoff
+and genuine L2 summary references. Native provenance now uses actual summary IDs;
+`VERIFIED_SAFE` requires an explicit proved execution-domain argument. Native
+assembly still emits pending obligations, and #124 retains the missing domain
+producers. This does not deliver the
 planned lightweight backend/controller or repair all native Evidence gaps. Native SVF/Soufflé requirements remain unchanged.
 
 Canonical configure and build (uses `CMakePresets.json` at repo root):

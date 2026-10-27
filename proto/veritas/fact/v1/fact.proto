@@ -148,4 +148,7 @@ message ProvenanceGraph {
   repeated FactWitnessEdge edges = 6;
   bool truncated = 7;
   string truncation_reason = 8;
+  // Facts whose selected input list was only partly expanded. Depth-cut
+  // frontiers are also recoverable from derived edges with no emitted node.
+  repeated string frontier_fact_ids = 9;
 }

@@ -572,6 +572,46 @@ class CaseValidator {
     }
   }
 
+  // A proved forall over feasible_paths alone can be vacuously true when
+  // unknown paths were silently excluded. A safe result must also prove the
+  // complete execution domain and its nonemptiness (or infeasible entry), for
+  // exactly the same source/sink pair.
+  bool HasExecutionDomainArgument(const Expression &predicate) const {
+    if (predicate.kind != Expression::Kind::kAnd)
+      return false;
+    const Expression *universal = nullptr;
+    for (const auto &term : predicate.operands)
+      if (term.kind == Expression::Kind::kForAll && term.operands.size() == 2 &&
+          term.operands[0].kind == Expression::Kind::kCall &&
+          term.operands[0].text == "feasible_paths" &&
+          term.operands[0].operands.size() == 2)
+        universal = &term;
+    if (universal == nullptr)
+      return false;
+    const auto &domain = universal->operands[0];
+    auto same_scope = [&](const Expression &call, std::string_view name) {
+      return call.kind == Expression::Kind::kCall && call.text == name &&
+             call.operands == domain.operands;
+    };
+    bool complete = false, admitted = false;
+    for (const auto &term : predicate.operands) {
+      complete |= same_scope(term, "execution_domain_complete");
+      if (term.kind != Expression::Kind::kOr || term.operands.size() != 2)
+        continue;
+      bool nonempty = false, infeasible = false;
+      for (const auto &branch : term.operands) {
+        infeasible |= same_scope(branch, "entry_infeasible");
+        nonempty |= branch.kind == Expression::Kind::kExists &&
+                    branch.operands.size() == 2 &&
+                    branch.operands[0] == domain &&
+                    branch.operands[1].kind == Expression::Kind::kBool &&
+                    branch.operands[1].boolean;
+      }
+      admitted |= nonempty && infeasible;
+    }
+    return complete && admitted;
+  }
+
   void CheckProofAuthority() {
     std::size_t conclusive_results = 0;
     for (const ProofObligation& obligation : value_.proof_obligations) {
@@ -615,6 +655,19 @@ class CaseValidator {
           }
           break;
       }
+    }
+    if (value_.verification_state == VerificationState::kVerifiedSafe) {
+      bool admitted_domain = false;
+      for (const auto &obligation : value_.proof_obligations)
+        admitted_domain |= obligation.goal_kind == ProofGoalKind::kProve &&
+                           obligation.status == ProofStatus::kProved &&
+                           !obligation.result_id.empty() &&
+                           !obligation.verification_producer.empty() &&
+                           HasExecutionDomainArgument(obligation.predicate);
+      if (!admitted_domain)
+        Add(EvidenceValidationCode::kVerificationProducer, "",
+            "verified safety requires a proved complete execution domain and "
+            "a nonempty feasible domain or explicit infeasible entry");
     }
     // Only deterministic verification may claim a verified case state.
     if (IsVerifiedState(value_.verification_state) && conclusive_results == 0) {
