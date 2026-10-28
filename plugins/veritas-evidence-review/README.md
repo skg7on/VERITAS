@@ -1,8 +1,9 @@
 # VERITAS review runtime foundation
 
 RDX05 (#159) delivers the backend v2 wire models and native snapshot library.
+RDX06 (#160) adds the structural index and narrow compiler-local provider.
 This directory currently contains the schema, frozen Python types and tests.
-The subprocess backend, controller, compiler provider, replay and host adapter
+The subprocess backend, controller, replay and host adapter
 are later deliveries; this is not an installable review plugin yet. The native
 SVF/Soufflé analysis path and `eir.v1` remain unchanged.
 
@@ -83,17 +84,71 @@ missing dependency artifacts and uncaptured TUs preserve UNRESOLVED frontiers.
 A compilation database without a declaration supplies only OUTPUT_HINT/OPEN
 membership; its object output directories cannot establish closure.
 
-Compiler capability is conservatively unsupported pending the structural
-provider and validation of the transitive include/toolchain closure. Explicit
-include/response/configuration references are checked against captured inputs;
-missing inputs remain visible. This foundation makes no analytical/proof claim.
+Capture alone continues to report compiler capability as unqualified. The
+separate structural provider validates commands and parses the captured include
+closure; its own coverage describes the resulting capability. Missing inputs
+remain visible. Capture makes no analytical/proof claim.
+
+## Structural index and local evidence (RDX06)
+
+`BuildStructuralIndex(snapshot, StructuralBudget)` uses the linked Clang library
+in a bounded child process, with an in-memory filesystem containing captured
+bytes only and no real-filesystem fallback. Project executables, wrappers,
+plugins, linker, SVF and WPA are never invoked. Clang's default include paths
+are disabled; headers must have been captured. Missing headers or compiler
+errors yield an incomplete index with a frontier, and recovery ASTs emit no
+local evidence. Selected program TU membership is respected; output hints stay
+OPEN. No hard portable RSS isolation or replay authority is advertised here.
+
+Compiler arguments are admitted with known arities: recognized Clang driver
+syntax, the listed C/C++ standards, basic optimization/diagnostic switches,
+macro definitions, captured include inputs and syntax-only output removal.
+Unknown semantic flags, wrappers, plugins, modules/PCH and external include
+paths refuse before compiler dispatch. Captured GNU response files have a
+64-KiB aggregate byte ceiling, 4096 argument limit and depth limit four; their
+expanded flags pass through the same admission. The initial ABI is explicitly
+`x86_64-unknown-linux-gnu`; other ABIs are unsupported. Date/time predefined
+macros use `SOURCE_DATE_EPOCH=0` in the scrubbed child environment.
+
+The index retains function definitions, array/type descriptors, direct versus
+indirect callsites, per-site operand indices and UTF-8 source byte anchors.
+`StructuralIndex::Context` advertises only entities contained in a captured
+source span. Its ID commits to the source-context premise, exact index and
+advertised bindings; source-only provenance context IDs remain separate. Index
+and evidence IDs exclude timing and absolute checkout paths.
+`Usage` includes cold setup wall/CPU and compiler child CPU/peak RSS; index setup
+is a distinct cost from warm investigation and must be charged once by the
+future backend/controller. Wall, input bytes, TU/entity counts, pipe output and
+observed child RSS are bounded. RSS is sampled at up to 25-ms intervals and
+checked again using `wait4` peak RSS; sampling and termination can overshoot.
+Worker failure/limit exhaustion refuses atomically and publishes no index.
+
+`InvestigateLocal(LocalRequest)` takes a trusted native index handle alongside
+the v2 request fields; that handle is never a wire/model field. It produces
+schema-valid, separately identified `local-evidence.v1` observations for
+`copy_bound.v1`, with no native analysis-run binding and no EIR/FactID conversion.
+Registered copies are compiler-recognized global `memcpy`/`__builtin_memcpy`
+with the default C ABI, no implementation/assembler override, and three exact
+operands. Extents use compiler layout bytes for direct local constant integer
+arrays (including multi-byte/wchar arrays). Pointer, VLA, heap, cast, macro-copy,
+indirect and unsupported ABI forms leave absent slots and coverage reasons.
+Captured constant macros used in array declarations are resolved by Clang.
+
+Guard observations initially cover `unsigned_parameter <= sizeof(destination)`
+or the exact literal byte capacity, and the corresponding `>` false branch.
+Only an enclosing structured branch establishes `dominates=true`. A sibling
+comparison is retained with `dominates=false`. Mutation, address/reference
+escape, loops/goto/switch/lambda/inline assembly and unmodeled guards remain
+unsupported; early-return guard inference is not implemented. These are local
+observations, with no feasibility or safety verdict. Native domain producers
+under #124 and the production review/replay release gate remain pending.
 
 ## Verification
 
 ```sh
 python3 -m unittest discover -s plugins/veritas-evidence-review/tests -p test_review_types.py
 cmake --build --preset homebrew-clang
-ctest --test-dir build-homebrew-clang -R 'ReviewTypes|SnapshotCapture' --output-on-failure
+ctest --test-dir build-homebrew-clang -R 'ReviewTypes|SnapshotCapture|LocalEvidence' --output-on-failure
 ```
 
 The Python package uses only Python 3.11+ standard-library modules. All new

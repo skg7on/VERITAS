@@ -437,6 +437,7 @@ struct SnapshotData {
   ReviewBinding binding;
   ProgramScope scope;
   Coverage compiler;
+  std::vector<CapturedCompileCommand> compiler_commands;
   std::map<std::string, std::shared_ptr<const std::string>> blobs;
   std::map<std::string, std::string> files, base_files;
   std::map<std::string, FileState> captured;
@@ -635,6 +636,8 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
             {"arguments", std::move(args)}});
         if (!encoded.ok())
           return encoded.status();
+        d->compiler_commands.push_back(
+            {cwd.generic_string(), *file, command.CommandLine});
         commands[*file].push_back(HashBytes(*encoded));
         command_identity.push_back(*encoded);
         if (!d->files.contains(*file))
@@ -703,6 +706,13 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
   if (!scope.ok())
     return scope.status();
   d->scope = std::move(*scope);
+  std::erase_if(d->compiler_commands, [&](const auto &command) {
+    auto it = scope_input.translation_unit_digests.find(command.file);
+    return it == scope_input.translation_unit_digests.end() ||
+           std::find(d->scope.member_tu_digests.begin(),
+                     d->scope.member_tu_digests.end(), it->second) ==
+               d->scope.member_tu_digests.end();
+  });
   auto scope_id = MakeArtifactId<ProgramScopeTag>(ToJson(d->scope));
   if (!scope_id.ok())
     return scope_id.status();
@@ -831,6 +841,32 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
                                    d->unavailable.begin(),
                                    d->unavailable.end());
   return ReviewSnapshot(std::move(d));
+}
+const std::vector<CapturedCompileCommand> &
+ReviewSnapshot::compiler_commands() const {
+  return data_->compiler_commands;
+}
+std::vector<std::string> ReviewSnapshot::captured_paths() const {
+  std::vector<std::string> paths;
+  for (const auto &[path, digest] : data_->files) paths.push_back(path);
+  return paths;
+}
+StatusOr<std::string>
+ReviewSnapshot::CompilerPath(std::string_view directory,
+                             std::string_view text) const {
+  if (text.empty() || text.find('\0') != std::string_view::npos ||
+      text.find('\\') != std::string_view::npos)
+    return Unsafe();
+  fs::path cwd(directory);
+  if (cwd.is_relative())
+    cwd = data_->root / cwd;
+  fs::path path(text);
+  if (path.is_relative())
+    path = cwd / path;
+  path = path.lexically_normal();
+  if (path == data_->root)
+    return std::string(".");
+  return RelativeInput(data_->root, cwd, std::string(text));
 }
 const ReviewBinding &ReviewSnapshot::binding() const { return data_->binding; }
 const ProgramScope &ReviewSnapshot::program_scope() const {
