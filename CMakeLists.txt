@@ -336,3 +336,5 @@ message(STATUS "  LLVM version         : ${LLVM_PACKAGE_VERSION}")
 message(STATUS "  Binary root          : ${CMAKE_BINARY_DIR}")
 message(STATUS "  SVF binary dir       : ${VERITAS_SVF_BINARY_DIR}")
 message(STATUS "")
+
+add_subdirectory(src/review)

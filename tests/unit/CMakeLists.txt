@@ -28,3 +28,5 @@ add_subdirectory(facts)
 add_subdirectory(wpa)
 add_subdirectory(evidence)
 add_subdirectory(observability)
+
+add_subdirectory(review)
