@@ -362,5 +362,81 @@ TEST_F(SnapshotCaptureTest, DependencyArtifactContentPinsProgramScope) {
   EXPECT_NE(before->binding().program_scope_id,
             after->binding().program_scope_id);
 }
+
+TEST_F(SnapshotCaptureTest, SemanticMacroValuesCannotAliasRelocatedPaths) {
+  auto database = [](const std::string &macro) {
+    auto value = CanonicalJson(Json::Array{
+        Json::Object{{"directory", "."},
+                     {"file", "src/a.cc"},
+                     {"arguments", Json::Array{"clang++", "-DVALUE=" + macro,
+                                               "-c", "src/a.cc"}}}});
+    return *value;
+  };
+  Write(root_ / "compile_commands.json", database(root_.string()));
+  auto r = Request();
+  r.compile_commands_path = "compile_commands.json";
+  auto path_macro = CaptureReviewSnapshot(r);
+  ASSERT_TRUE(path_macro.ok());
+  Write(root_ / "compile_commands.json", database("@REPO@"));
+  auto literal_macro = CaptureReviewSnapshot(r);
+  ASSERT_TRUE(literal_macro.ok());
+  EXPECT_NE(path_macro->binding().snapshot_id,
+            literal_macro->binding().snapshot_id);
+  EXPECT_NE(path_macro->binding().build_context_digest,
+            literal_macro->binding().build_context_digest);
+}
+TEST_F(SnapshotCaptureTest,
+       IgnoredGeneratedDirectoryMembershipAdvancesLiveTree) {
+  Write(root_ / ".gitignore", "generated/\n");
+  Write(root_ / "generated/a.h", "before");
+  auto r = Request();
+  r.selected_artifacts = {"generated"};
+  auto snap = CaptureReviewSnapshot(r);
+  ASSERT_TRUE(snap.ok());
+  ASSERT_TRUE(snap->LiveTreeAdvanced().ok());
+  EXPECT_FALSE(*snap->LiveTreeAdvanced());
+  Write(root_ / "generated/b.h", "new header");
+  ASSERT_TRUE(snap->LiveTreeAdvanced().ok());
+  EXPECT_TRUE(*snap->LiveTreeAdvanced());
+  EXPECT_FALSE(snap->Read("generated/b.h").ok());
+}
+TEST_F(SnapshotCaptureTest, EverySelectionRouteRejectsBaseSymlinks) {
+  std::filesystem::create_symlink("src/a.cc", root_ / "old-link");
+  ASSERT_EQ(Git(root_, {"add", "old-link"}), 0);
+  ASSERT_EQ(Git(root_,
+                {"-c", "user.name=Review Test", "-c",
+                 "user.email=review@example.invalid", "commit", "-qm", "link"}),
+            0);
+  std::filesystem::remove(root_ / "old-link");
+  Write(root_ / "old-link", "regular now");
+  auto r = Request();
+  r.selected_tracked = {"src/a.cc"};
+  r.selected_artifacts = {"old-link"};
+  EXPECT_FALSE(CaptureReviewSnapshot(r).ok());
+  r.selected_artifacts.clear();
+  Write(
+      root_ / "program.json",
+      R"({"version":"veritas.review.program.v1","targets":[{"key":"app","kind":"EXECUTABLE","translation_units":["old-link"],"dependencies":[],"artifacts":[]}]})");
+  r.program_manifest_path = "program.json";
+  r.program_target_key = "app";
+  EXPECT_FALSE(CaptureReviewSnapshot(r).ok());
+}
+TEST_F(SnapshotCaptureTest, PartialContextRetainsOmittedRegions) {
+  Write(root_ / "src/a.cc", "guard\ncopy\ntail\n");
+  auto snap = CaptureReviewSnapshot(Request());
+  ASSERT_TRUE(snap.ok());
+  auto context = snap->Context("src/a.cc", "SOURCE", 6, 10);
+  ASSERT_TRUE(context.ok());
+  EXPECT_EQ(context->excerpt, "copy");
+  ASSERT_EQ(context->omitted_regions.size(), 2u);
+  EXPECT_EQ(context->omitted_regions[0].start, 0u);
+  EXPECT_EQ(context->omitted_regions[0].end, 6u);
+  EXPECT_EQ(context->omitted_regions[1].start, 10u);
+  EXPECT_EQ(context->omitted_regions[1].end, 16u);
+  auto full = snap->Context("src/a.cc", "SOURCE", 0, 16);
+  ASSERT_TRUE(full.ok());
+  EXPECT_TRUE(full->omitted_regions.empty());
+  EXPECT_NE(full->context_id, context->context_id);
+}
 } // namespace
 } // namespace veritas::review

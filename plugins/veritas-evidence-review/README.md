@@ -44,17 +44,18 @@ scrubbed configuration and disabled hooks/fsmonitor. No compiler is executed.
 
 `Read`, `ReadBase` and `Context` use captured content-addressed blobs after live
 edits. Context ranges are UTF-8 byte offsets and source/test/doc artifacts have
-typed context IDs; no entity is invented. `Materialize` creates a new private,
+typed context IDs and explicit omitted byte ranges; no entity is invented. `Materialize` creates a new private,
 read-only tree from those blobs and refuses existing/symlink destinations.
-`LiveTreeAdvanced` reports subsequent selected-content or Git-discovery changes.
+`LiveTreeAdvanced` reports subsequent selected-content, artifact-directory membership or Git-discovery changes.
 The blobs live with the immutable snapshot handle; durable backend lifecycle
 and enforcement of compiler/replay isolation belong to later tasks.
 
 The repository identity is supplied by trusted invocation configuration. A local
 base is recorded as `git:<commit-oid>` rather than minting a native revision or
 analysis-run identity. Existing native revision bindings remain readable.
-Known checkout prefixes in compile-command metadata are relocated for semantic
-hashes; source/blob bytes stay exact. This does not remove the #125 portability
+Recognized compile-command path operands use a structured repository-relative
+identity; literal arguments and macro values stay exact and cannot alias a path
+placeholder. Source/blob bytes stay exact. This does not remove the #125 portability
 gate for native identities or authorize cross-host reuse.
 
 ## Program membership

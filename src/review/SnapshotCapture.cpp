@@ -324,14 +324,104 @@ StatusOr<std::string> RelativeInput(const fs::path &root, const fs::path &cwd,
     return Unsafe();
   return NormalizeReviewPath(rel.generic_string());
 }
-std::string RelocateArg(std::string value, const fs::path &root) {
-  std::string prefix = root.generic_string();
-  size_t pos = 0;
-  while ((pos = value.find(prefix, pos)) != std::string::npos) {
-    value.replace(pos, prefix.size(), "@REPO@");
-    pos += 6;
+
+// Only compiler-defined path operands relocate. Semantic data (notably macro
+// replacement tokens) remains literal. Typed objects cannot alias a literal
+// marker such as "@REPO@" or a relative directory with that name.
+Json PathIdentity(const fs::path &root, const fs::path &cwd,
+                  const std::string &text) {
+  fs::path path(text);
+  if (path.is_relative())
+    path = cwd / path;
+  path = path.lexically_normal();
+  auto relative = path.lexically_relative(root);
+  bool local = !relative.empty();
+  for (const auto &part : relative)
+    if (part == "..")
+      local = false;
+  if (local)
+    return Json::Object{{"root", "REPOSITORY"},
+                        {"path", relative.generic_string()}};
+  return Json::Object{{"root", "EXTERNAL"}, {"path", path.generic_string()}};
+}
+Json::Array CommandIdentity(const std::vector<std::string> &command,
+                            const fs::path &root, const fs::path &cwd,
+                            const std::string &source) {
+  static const std::set<std::string> path_flags = {
+      "-I",       "-isystem",  "-iquote",   "-idirafter",    "-include",
+      "-imacros", "-isysroot", "--sysroot", "-resource-dir", "-o",
+      "-MF"};
+  static const std::set<std::string> data_flags = {
+      "-D",     "-U",  "-x", "-target", "--target", "-Xclang", "-Xpreprocessor",
+      "-mllvm", "-MT", "-MQ"};
+  static const std::set<std::string> no_operand = {
+      "-c",  "-S",  "-E",  "-pipe", "-fPIC", "-fPIE", "-shared", "-pthread",
+      "-g",  "-g0", "-g1", "-g2",   "-g3",   "-ggdb", "-O0",     "-O1",
+      "-O2", "-O3", "-Os", "-Oz",   "-Og",   "-Ofast"};
+  Json::Array result;
+  bool path_next = false, literal_next = false;
+  for (size_t i = 0; i < command.size(); ++i) {
+    const auto &arg = command[i];
+    if (path_next) {
+      result.push_back(
+          Json::Object{{"path_operand", PathIdentity(root, cwd, arg)}});
+      path_next = false;
+      continue;
+    }
+    if (literal_next) {
+      result.push_back(arg);
+      literal_next = false;
+      continue;
+    }
+    if (path_flags.contains(arg)) {
+      result.push_back(arg);
+      path_next = true;
+      continue;
+    }
+    if (data_flags.contains(arg)) {
+      result.push_back(arg);
+      literal_next = true;
+      continue;
+    }
+    bool joined = false;
+    for (auto prefix : {"-I", "--sysroot=", "-resource-dir="}) {
+      std::string_view flag = prefix;
+      if (arg.starts_with(flag) && arg.size() > flag.size()) {
+        result.push_back(Json::Object{
+            {"path_option", std::string(flag)},
+            {"operand", PathIdentity(root, cwd, arg.substr(flag.size()))}});
+        joined = true;
+        break;
+      }
+    }
+    if (joined)
+      continue;
+    if (arg.starts_with('@')) {
+      result.push_back(Json::Object{
+          {"response_file", PathIdentity(root, cwd, arg.substr(1))}});
+      continue;
+    }
+    if (i == 0 && fs::path(arg).is_absolute()) {
+      result.push_back(
+          Json::Object{{"compiler_path", PathIdentity(root, cwd, arg)}});
+      continue;
+    }
+    if (!arg.starts_with('-')) {
+      auto relative = RelativeInput(root, cwd, arg);
+      if (relative.ok() && *relative == source) {
+        result.push_back(
+            Json::Object{{"source_path", PathIdentity(root, cwd, arg)}});
+        continue;
+      }
+    }
+    result.push_back(arg);
+    // Unknown options have unknown arity: preserve their next operand exactly.
+    // This is identity encoding, not permission to execute an option.
+    if (i > 0 && arg.starts_with('-') && !no_operand.contains(arg) &&
+        !arg.starts_with("-W") && arg.find('=') == std::string::npos)
+      literal_next = true;
   }
-  return value;
+  return result;
 }
 Json::Array Strings(const std::vector<std::string> &values) {
   Json::Array result;
@@ -351,6 +441,7 @@ struct SnapshotData {
   std::map<std::string, std::string> files, base_files;
   std::map<std::string, FileState> captured;
   std::vector<std::string> excluded, unavailable;
+  std::set<std::string> artifact_members;
 };
 StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
   if (request.max_files == 0 || request.max_bytes == 0)
@@ -439,6 +530,7 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
     if (!st.ok())
       return st;
   }
+  d->artifact_members = artifact_paths;
   auto select_special = [&](const std::string &raw) -> Status {
     if (raw.empty())
       return Status::Ok();
@@ -536,12 +628,10 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
         auto file = RelativeInput(d->root, cwd, command.Filename);
         if (!file.ok())
           return file.status();
-        Json::Array args;
-        for (const auto &arg : command.CommandLine)
-          args.push_back(RelocateArg(arg, d->root));
+        auto args = CommandIdentity(command.CommandLine, d->root, cwd, *file);
         auto encoded = CanonicalJson(Json::Object{
             {"file", *file},
-            {"directory", RelocateArg(cwd.generic_string(), d->root)},
+            {"directory", PathIdentity(d->root, d->root, cwd.generic_string())},
             {"arguments", std::move(args)}});
         if (!encoded.ok())
           return encoded.status();
@@ -578,8 +668,7 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
           }
           auto input = RelativeInput(d->root, cwd, value);
           if (!input.ok()) {
-            d->compiler.frontier_refs.push_back("external-input:" +
-                                                RelocateArg(value, d->root));
+            d->compiler.frontier_refs.push_back("external-input:" + value);
             continue;
           }
           bool covered =
@@ -627,6 +716,8 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
   std::sort(d->unavailable.begin(), d->unavailable.end());
   for (const auto &[path, object] : base_objects)
     if (selected.contains(path)) {
+      if (unsupported_base.contains(path))
+        return Unsafe();
       auto bytes =
           Git(d->root, {"cat-file", "blob", object}, request.max_bytes - total);
       if (!bytes.ok())
@@ -657,16 +748,7 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
     if (!status.ok())
       return Changed();
   }
-  // Compare directory selections separately from the automatically selected
-  // manifest/compile database, which need not have been directory members.
-  std::set<std::string> first_walk;
-  for (const auto &raw : request.selected_artifacts) {
-    auto path = *NormalizeReviewPath(raw);
-    for (const auto &p : artifact_paths)
-      if (p == path || p.starts_with(path + "/"))
-        first_walk.insert(p);
-  }
-  if (again != first_walk)
+  if (again != d->artifact_members)
     return Changed();
   auto index_after = Git(d->root, {"ls-files", "-z", "--cached"});
   auto base_after = PinBase(request, d->root);
@@ -795,6 +877,15 @@ StatusOr<ContextArtifact> ReviewSnapshot::Context(std::string_view path,
     return Status::InvalidArgument("invalid context byte span");
   auto p = *NormalizeReviewPath(path);
   auto excerpt = bytes->substr(start, end - start);
+  std::vector<Region> omitted;
+  if (start > 0)
+    omitted.push_back({0, start});
+  if (end < bytes->size())
+    omitted.push_back({end, uint64_t(bytes->size())});
+  Json::Array omitted_json;
+  for (const auto &region : omitted)
+    omitted_json.push_back(
+        Json::Object{{"start", region.start}, {"end", region.end}});
   Json::Object semantic{
       {"snapshot_id", data_->binding.snapshot_id->value()},
       {"kind", std::string(kind)},
@@ -803,7 +894,7 @@ StatusOr<ContextArtifact> ReviewSnapshot::Context(std::string_view path,
       {"start", start},
       {"end", end},
       {"excerpt", excerpt},
-      {"omitted_regions", Json::Array{}},
+      {"omitted_regions", std::move(omitted_json)},
       {"selection_reason", "operator-selected captured input"},
       {"entity_bindings", Json::Array{}}};
   auto id = MakeArtifactId<ContextTag>(semantic);
@@ -817,7 +908,7 @@ StatusOr<ContextArtifact> ReviewSnapshot::Context(std::string_view path,
                          start,
                          end,
                          excerpt,
-                         {},
+                         std::move(omitted),
                          "operator-selected captured input",
                          {}};
 }
@@ -831,6 +922,15 @@ StatusOr<bool> ReviewSnapshot::LiveTreeAdvanced() const {
     if (!now.ok() || now->bytes != state.bytes || now->issue != state.issue)
       return true;
   }
+  std::set<std::string> members;
+  for (const auto &raw : data_->request.selected_artifacts) {
+    auto path = *NormalizeReviewPath(raw);
+    auto status = Walk(root.get(), path, members, data_->request.max_files);
+    if (!status.ok())
+      return true;
+  }
+  if (members != data_->artifact_members)
+    return true;
   auto index = Git(data_->root, {"ls-files", "-z", "--cached"});
   auto base = PinBase(data_->request, data_->root);
   auto untracked =
