@@ -1,0 +1,1620 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "veritas-review-backend-v2.schema.json",
+  "description": "RDX05 foundation: verification request/result codecs remain unavailable until the qualification delivery. Unknown operations are rejected.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/HandshakeParametersEnvelope"
+    },
+    {
+      "$ref": "#/$defs/CaptureParametersEnvelope"
+    },
+    {
+      "$ref": "#/$defs/ContextParametersEnvelope"
+    },
+    {
+      "$ref": "#/$defs/SeedParametersEnvelope"
+    },
+    {
+      "$ref": "#/$defs/LocalRequestEnvelope"
+    },
+    {
+      "$ref": "#/$defs/NativeParametersEnvelope"
+    },
+    {
+      "$ref": "#/$defs/ReleaseParametersEnvelope"
+    },
+    {
+      "$ref": "#/$defs/SuccessEnvelope"
+    },
+    {
+      "$ref": "#/$defs/FailureEnvelope"
+    }
+  ],
+  "$defs": {
+    "SnapshotId": {
+      "type": "string",
+      "pattern": "^review-snapshot:sha256:[0-9a-f]{64}$"
+    },
+    "ProgramScopeId": {
+      "type": "string",
+      "pattern": "^program-scope:sha256:[0-9a-f]{64}$"
+    },
+    "ContextId": {
+      "type": "string",
+      "pattern": "^context:sha256:[0-9a-f]{64}$"
+    },
+    "CandidateId": {
+      "type": "string",
+      "pattern": "^candidate:sha256:[0-9a-f]{64}$"
+    },
+    "LocalEvidenceId": {
+      "type": "string",
+      "pattern": "^local-evidence:sha256:[0-9a-f]{64}$"
+    },
+    "ObligationId": {
+      "type": "string",
+      "pattern": "^obligation:sha256:[0-9a-f]{64}$"
+    },
+    "VerificationId": {
+      "type": "string",
+      "pattern": "^verification:sha256:[0-9a-f]{64}$"
+    },
+    "ReviewReportId": {
+      "type": "string",
+      "pattern": "^review-report:sha256:[0-9a-f]{64}$"
+    },
+    "StructuralIndexId": {
+      "type": "string",
+      "pattern": "^structural-index:sha256:[0-9a-f]{64}$"
+    },
+    "NativeBinding": {
+      "title": "NativeBinding",
+      "type": "object",
+      "properties": {
+        "analysis_run_id": {
+          "type": "string",
+          "pattern": "^run:sha256:[0-9a-f]{64}$"
+        },
+        "projection_id": {
+          "type": "string",
+          "pattern": "^cpgproj:sha256:[0-9a-f]{64}$"
+        },
+        "fact_snapshot_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "analysis_run_id",
+        "projection_id",
+        "fact_snapshot_id"
+      ],
+      "additionalProperties": false
+    },
+    "ProviderVersion": {
+      "title": "ProviderVersion",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "config_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "config_digest"
+      ],
+      "additionalProperties": false
+    },
+    "ReviewBinding": {
+      "title": "ReviewBinding",
+      "type": "object",
+      "properties": {
+        "snapshot_id": {
+          "$ref": "#/$defs/SnapshotId"
+        },
+        "repository_id": {
+          "type": "string",
+          "pattern": "^repo:sha256:[0-9a-f]{64}$"
+        },
+        "base_revision_id": {
+          "type": "string",
+          "pattern": "^(git:[0-9a-f]{40}|git:[0-9a-f]{64}|rev:sha256:[0-9a-f]{64})$"
+        },
+        "working_tree_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "program_scope_id": {
+          "$ref": "#/$defs/ProgramScopeId"
+        },
+        "build_context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "native_binding": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/NativeBinding"
+            }
+          ]
+        },
+        "provider_versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderVersion"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "repository_id",
+        "base_revision_id",
+        "working_tree_digest",
+        "program_scope_id",
+        "build_context_digest",
+        "native_binding",
+        "provider_versions"
+      ],
+      "additionalProperties": false
+    },
+    "ProgramScope": {
+      "title": "ProgramScope",
+      "type": "object",
+      "properties": {
+        "member_tu_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "uniqueItems": true
+        },
+        "dependency_artifact_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "uniqueItems": true
+        },
+        "target_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "membership_source": {
+          "type": "string",
+          "enum": [
+            "BUILD_LINK_ARTIFACT",
+            "EXPLICIT_DECLARATION",
+            "OUTPUT_HINT"
+          ]
+        },
+        "coverage": {
+          "type": "string",
+          "enum": [
+            "DECLARED_CLOSED",
+            "OPEN",
+            "UNRESOLVED"
+          ]
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "frontier": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "member_tu_digests",
+        "dependency_artifact_digests",
+        "target_digest",
+        "membership_source",
+        "coverage",
+        "assumptions",
+        "frontier"
+      ],
+      "additionalProperties": false
+    },
+    "EntityRef": {
+      "title": "EntityRef",
+      "type": "object",
+      "properties": {
+        "index_id": {
+          "$ref": "#/$defs/StructuralIndexId"
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "index_id",
+        "ordinal"
+      ],
+      "additionalProperties": false
+    },
+    "Coverage": {
+      "title": "Coverage",
+      "type": "object",
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "scope_closed": {
+          "type": "boolean"
+        },
+        "traversal": {
+          "type": "string",
+          "enum": [
+            "COMPLETE",
+            "INCOMPLETE"
+          ]
+        },
+        "frontier_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "examined": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "supported",
+        "scope_closed",
+        "traversal",
+        "frontier_refs",
+        "reasons",
+        "examined"
+      ],
+      "additionalProperties": false
+    },
+    "Usage": {
+      "title": "Usage",
+      "type": "object",
+      "properties": {
+        "wall_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "cpu_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "peak_rss_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "output_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "examined": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "wall_ms",
+        "cpu_ms",
+        "peak_rss_bytes",
+        "output_bytes",
+        "examined"
+      ],
+      "additionalProperties": false
+    },
+    "Limits": {
+      "title": "Limits",
+      "type": "object",
+      "properties": {
+        "wall_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        },
+        "output_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        },
+        "examined": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "wall_ms",
+        "output_bytes",
+        "examined"
+      ],
+      "additionalProperties": false
+    },
+    "Capability": {
+      "title": "Capability",
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "capture",
+            "context",
+            "seed-candidates",
+            "local-evidence",
+            "native-evidence",
+            "verify",
+            "release"
+          ]
+        },
+        "version": {
+          "type": "string"
+        },
+        "predicate_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "authority": {
+          "type": "string",
+          "enum": [
+            "OBSERVATION",
+            "CONCRETE_REPLAY",
+            "FORMAL"
+          ]
+        },
+        "limits": {
+          "$ref": "#/$defs/Limits"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "predicate_kinds",
+        "authority",
+        "limits"
+      ],
+      "additionalProperties": false
+    },
+    "Region": {
+      "title": "Region",
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "additionalProperties": false
+    },
+    "EntityBinding": {
+      "title": "EntityBinding",
+      "type": "object",
+      "properties": {
+        "entity_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "FUNCTION",
+            "CALLSITE",
+            "VALUE",
+            "MEMORY"
+          ]
+        }
+      },
+      "required": [
+        "entity_ref",
+        "start",
+        "end",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "ContextArtifact": {
+      "title": "ContextArtifact",
+      "type": "object",
+      "properties": {
+        "context_id": {
+          "$ref": "#/$defs/ContextId"
+        },
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "DIFF",
+            "SOURCE",
+            "TEST",
+            "DOC"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000]+$"
+        },
+        "content_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "excerpt": {
+          "type": "string"
+        },
+        "omitted_regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Region"
+          }
+        },
+        "selection_reason": {
+          "type": "string"
+        },
+        "entity_bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntityBinding"
+          }
+        }
+      },
+      "required": [
+        "context_id",
+        "binding",
+        "kind",
+        "path",
+        "content_digest",
+        "start",
+        "end",
+        "excerpt",
+        "omitted_regions",
+        "selection_reason",
+        "entity_bindings"
+      ],
+      "additionalProperties": false
+    },
+    "AnchorRef": {
+      "title": "AnchorRef",
+      "type": "object",
+      "properties": {
+        "context_id": {
+          "$ref": "#/$defs/ContextId"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "entity_ref": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/EntityRef"
+            }
+          ]
+        }
+      },
+      "required": [
+        "context_id",
+        "start",
+        "end",
+        "entity_ref"
+      ],
+      "additionalProperties": false
+    },
+    "CandidateProposal": {
+      "title": "CandidateProposal",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "LLM",
+            "DETERMINISTIC"
+          ]
+        },
+        "claim_kind": {
+          "type": "string",
+          "enum": [
+            "copy_bound.v1",
+            "semantic_observation.v1"
+          ]
+        },
+        "anchor_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AnchorRef"
+          }
+        },
+        "contract_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextId"
+          }
+        },
+        "question": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "binding",
+        "origin",
+        "claim_kind",
+        "anchor_refs",
+        "contract_refs",
+        "question",
+        "assumptions"
+      ],
+      "additionalProperties": false
+    },
+    "Operands": {
+      "title": "Operands",
+      "type": "object",
+      "properties": {
+        "destination": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "source": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "length": {
+          "$ref": "#/$defs/EntityRef"
+        }
+      },
+      "required": [
+        "destination",
+        "source",
+        "length"
+      ],
+      "additionalProperties": false
+    },
+    "Extent": {
+      "title": "Extent",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "bytes"
+      ],
+      "additionalProperties": false
+    },
+    "Guard": {
+      "title": "Guard",
+      "type": "object",
+      "properties": {
+        "condition_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "dominates": {
+          "type": "boolean"
+        },
+        "relation": {
+          "type": "string",
+          "enum": [
+            "SIZE_LE_EXTENT"
+          ]
+        },
+        "operand_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntityRef"
+          }
+        }
+      },
+      "required": [
+        "condition_ref",
+        "dominates",
+        "relation",
+        "operand_refs"
+      ],
+      "additionalProperties": false
+    },
+    "OPERANDSObservation": {
+      "title": "OPERANDSObservation",
+      "type": "object",
+      "properties": {
+        "slot": {
+          "const": "OPERANDS"
+        },
+        "subject_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "value": {
+          "$ref": "#/$defs/Operands"
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextId"
+          }
+        }
+      },
+      "required": [
+        "slot",
+        "subject_ref",
+        "value",
+        "source_refs"
+      ],
+      "additionalProperties": false
+    },
+    "EXTENTObservation": {
+      "title": "EXTENTObservation",
+      "type": "object",
+      "properties": {
+        "slot": {
+          "const": "EXTENT"
+        },
+        "subject_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "value": {
+          "$ref": "#/$defs/Extent"
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextId"
+          }
+        }
+      },
+      "required": [
+        "slot",
+        "subject_ref",
+        "value",
+        "source_refs"
+      ],
+      "additionalProperties": false
+    },
+    "GUARDObservation": {
+      "title": "GUARDObservation",
+      "type": "object",
+      "properties": {
+        "slot": {
+          "const": "GUARD"
+        },
+        "subject_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "value": {
+          "$ref": "#/$defs/Guard"
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextId"
+          }
+        }
+      },
+      "required": [
+        "slot",
+        "subject_ref",
+        "value",
+        "source_refs"
+      ],
+      "additionalProperties": false
+    },
+    "LocalObservation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/OPERANDSObservation"
+        },
+        {
+          "$ref": "#/$defs/EXTENTObservation"
+        },
+        {
+          "$ref": "#/$defs/GUARDObservation"
+        }
+      ]
+    },
+    "LocalRequest": {
+      "title": "LocalRequest",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "predicate_kind": {
+          "const": "copy_bound.v1"
+        },
+        "callsite_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "requested_slots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "OPERANDS",
+              "EXTENT",
+              "GUARD"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "max_examined": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "binding",
+        "predicate_kind",
+        "callsite_ref",
+        "requested_slots",
+        "max_examined"
+      ],
+      "additionalProperties": false
+    },
+    "LocalEvidence": {
+      "title": "LocalEvidence",
+      "type": "object",
+      "properties": {
+        "local_evidence_id": {
+          "$ref": "#/$defs/LocalEvidenceId"
+        },
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "predicate_kind": {
+          "const": "copy_bound.v1"
+        },
+        "callsite_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocalObservation"
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        },
+        "producer": {
+          "$ref": "#/$defs/ProviderVersion"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        }
+      },
+      "required": [
+        "local_evidence_id",
+        "binding",
+        "predicate_kind",
+        "callsite_ref",
+        "observations",
+        "assumptions",
+        "coverage",
+        "producer",
+        "usage"
+      ],
+      "additionalProperties": false
+    },
+    "HandshakeParameters": {
+      "title": "HandshakeParameters",
+      "type": "object",
+      "properties": {
+        "accepted_protocols": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "accepted_protocols"
+      ],
+      "additionalProperties": false
+    },
+    "CaptureParameters": {
+      "title": "CaptureParameters",
+      "type": "object",
+      "properties": {
+        "project_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+        },
+        "base_ref": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./~^{}@+-]*$"
+        },
+        "target_ref": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_./~^{}@+-]*$"
+            }
+          ]
+        },
+        "selected_untracked": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000]+$"
+          },
+          "uniqueItems": true
+        },
+        "program_manifest_key": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+            }
+          ]
+        },
+        "context_selection_keys": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "project_key",
+        "base_ref",
+        "target_ref",
+        "selected_untracked",
+        "program_manifest_key",
+        "context_selection_keys"
+      ],
+      "additionalProperties": false
+    },
+    "ContextParameters": {
+      "title": "ContextParameters",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "context_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextId"
+          }
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "binding",
+        "context_refs",
+        "max_bytes",
+        "max_tokens"
+      ],
+      "additionalProperties": false
+    },
+    "SeedParameters": {
+      "title": "SeedParameters",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "changed_context_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextId"
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "binding",
+        "changed_context_refs",
+        "limit"
+      ],
+      "additionalProperties": false
+    },
+    "EvidenceQueryBudget": {
+      "title": "EvidenceQueryBudget",
+      "type": "object",
+      "properties": {
+        "max_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        },
+        "max_nodes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        },
+        "max_paths": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        },
+        "max_facts_per_query": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        },
+        "max_provenance_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "max_depth",
+        "max_nodes",
+        "max_paths",
+        "max_facts_per_query",
+        "max_provenance_depth"
+      ],
+      "additionalProperties": false
+    },
+    "NativeParameters": {
+      "title": "NativeParameters",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "candidate_id": {
+          "$ref": "#/$defs/CandidateId"
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "L0",
+            "L1",
+            "L2"
+          ]
+        },
+        "budget": {
+          "$ref": "#/$defs/EvidenceQueryBudget"
+        }
+      },
+      "required": [
+        "binding",
+        "candidate_id",
+        "level",
+        "budget"
+      ],
+      "additionalProperties": false
+    },
+    "ReleaseParameters": {
+      "title": "ReleaseParameters",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        }
+      },
+      "required": [
+        "binding"
+      ],
+      "additionalProperties": false
+    },
+    "HandshakeResult": {
+      "title": "HandshakeResult",
+      "type": "object",
+      "properties": {
+        "protocols": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "backend_version": {
+          "type": "string"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Capability"
+          }
+        }
+      },
+      "required": [
+        "protocols",
+        "backend_version",
+        "capabilities"
+      ],
+      "additionalProperties": false
+    },
+    "CaptureResult": {
+      "title": "CaptureResult",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "context_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextId"
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Capability"
+          }
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        }
+      },
+      "required": [
+        "binding",
+        "context_refs",
+        "capabilities",
+        "coverage"
+      ],
+      "additionalProperties": false
+    },
+    "ContextResult": {
+      "title": "ContextResult",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextArtifact"
+          }
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        }
+      },
+      "required": [
+        "binding",
+        "artifacts",
+        "usage",
+        "coverage"
+      ],
+      "additionalProperties": false
+    },
+    "SeedResult": {
+      "title": "SeedResult",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CandidateProposal"
+          }
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        }
+      },
+      "required": [
+        "binding",
+        "candidates",
+        "coverage",
+        "usage"
+      ],
+      "additionalProperties": false
+    },
+    "NativeResult": {
+      "title": "NativeResult",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "evidence_id": {
+          "type": "string",
+          "pattern": "^evidence:sha256:[0-9a-f]{64}$"
+        },
+        "eir_json": {
+          "type": "string"
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        }
+      },
+      "required": [
+        "binding",
+        "evidence_id",
+        "eir_json",
+        "coverage",
+        "usage"
+      ],
+      "additionalProperties": false
+    },
+    "ReleaseResult": {
+      "title": "ReleaseResult",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "released": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "binding",
+        "released"
+      ],
+      "additionalProperties": false
+    },
+    "HandshakeParametersEnvelope": {
+      "title": "HandshakeParametersEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "const": "handshake"
+        },
+        "parameters": {
+          "$ref": "#/$defs/HandshakeParameters"
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "operation",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "CaptureParametersEnvelope": {
+      "title": "CaptureParametersEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "const": "capture"
+        },
+        "parameters": {
+          "$ref": "#/$defs/CaptureParameters"
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "operation",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "ContextParametersEnvelope": {
+      "title": "ContextParametersEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "const": "context"
+        },
+        "parameters": {
+          "$ref": "#/$defs/ContextParameters"
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "operation",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "SeedParametersEnvelope": {
+      "title": "SeedParametersEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "const": "seed-candidates"
+        },
+        "parameters": {
+          "$ref": "#/$defs/SeedParameters"
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "operation",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "LocalRequestEnvelope": {
+      "title": "LocalRequestEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "const": "local-evidence"
+        },
+        "parameters": {
+          "$ref": "#/$defs/LocalRequest"
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "operation",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "NativeParametersEnvelope": {
+      "title": "NativeParametersEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "const": "native-evidence"
+        },
+        "parameters": {
+          "$ref": "#/$defs/NativeParameters"
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "operation",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "ReleaseParametersEnvelope": {
+      "title": "ReleaseParametersEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "const": "release"
+        },
+        "parameters": {
+          "$ref": "#/$defs/ReleaseParameters"
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "operation",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "BackendError": {
+      "title": "BackendError",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "details"
+      ],
+      "additionalProperties": false
+    },
+    "SuccessEnvelope": {
+      "title": "SuccessEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ok": {
+          "const": true
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/HandshakeResult"
+            },
+            {
+              "$ref": "#/$defs/CaptureResult"
+            },
+            {
+              "$ref": "#/$defs/ContextResult"
+            },
+            {
+              "$ref": "#/$defs/SeedResult"
+            },
+            {
+              "$ref": "#/$defs/LocalEvidence"
+            },
+            {
+              "$ref": "#/$defs/NativeResult"
+            },
+            {
+              "$ref": "#/$defs/ReleaseResult"
+            }
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "ok",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "FailureEnvelope": {
+      "title": "FailureEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ok": {
+          "const": false
+        },
+        "error": {
+          "$ref": "#/$defs/BackendError"
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "ok",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "ProgramTarget": {
+      "title": "ProgramTarget",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+        },
+        "kind": {
+          "enum": [
+            "EXECUTABLE",
+            "STATIC_LIBRARY",
+            "SHARED_LIBRARY",
+            "TEST"
+          ],
+          "type": "string"
+        },
+        "translation_units": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000]+$"
+          },
+          "uniqueItems": true
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "uniqueItems": true
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000]+$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "translation_units",
+        "dependencies",
+        "artifacts"
+      ],
+      "additionalProperties": false
+    },
+    "ProgramManifest": {
+      "title": "ProgramManifest",
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": "veritas.review.program.v1"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgramTarget"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "version",
+        "targets"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
