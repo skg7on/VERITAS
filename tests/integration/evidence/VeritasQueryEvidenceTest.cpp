@@ -209,8 +209,12 @@ StatusOr<Oracle> BuildOracle(std::string_view fixture) {
   if (!seed.ok()) {
     return seed.status();
   }
-  evidence::FactStoreEvidenceBackend backend(snapshot->fact_store,
-                                             snapshot->descriptor);
+  auto summaries =
+      summarydb::SummaryRepository::Open(snapshot->output_root.string());
+  if (!summaries.ok())
+    return summaries.status();
+  evidence::FactStoreEvidenceBackend backend(
+      snapshot->fact_store, snapshot->descriptor, summaries->get());
   ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
   auto input = service.BuildEvidenceInput(*seed, Budget());
   if (!input.ok()) {

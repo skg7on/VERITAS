@@ -169,6 +169,8 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
     if (task.distance > budget.max_depth) {
       truncated = true;
       truncation_reason = "max_depth";
+      for (std::size_t j = i; j < queue.size(); ++j)
+        graph.add_frontier_fact_ids(queue[j].fact_id);
       break;
     }
 
@@ -176,8 +178,9 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
         "SELECT witness_id, selected, producer_kind, producer_id, rule_id,"
         " rule_version, analyzer_run_id, source_anchor_id, summary_id,"
         " description FROM provenance_nodes"
-        " WHERE run_id = ? AND output_fact_id = ?"
-        " ORDER BY selected DESC, witness_id ASC",
+        " WHERE run_id = ? AND output_fact_id = ?" +
+            std::string(budget.selected_only ? " AND selected = 1" : "") +
+            " ORDER BY selected DESC, witness_id ASC",
         {run, task.fact_id});
     if (!node_rows.ok()) {
       return node_rows.status();
@@ -185,6 +188,16 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
     if (node_rows->empty()) {
       continue;  // rooted input: a leaf, no witness to expand
     }
+    auto selected_binding = store_.Query(
+        "SELECT selected_witness_id FROM run_fact_bindings WHERE run_id = ?"
+        " AND fact_id = ? AND is_current = 1",
+        {run, task.fact_id});
+    if (!selected_binding.ok())
+      return selected_binding.status();
+    if (selected_binding->size() != 1 || (*node_rows)[0][1] != "1" ||
+        (*selected_binding)[0][0] != (*node_rows)[0][0])
+      return Status::FailedPrecondition(
+          "selected provenance binding is stale or missing");
 
     // Emit the selected witness first, then any retained alternatives, in
     // deterministic witness-id order.
@@ -192,6 +205,7 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
       if (node_count >= budget.max_nodes) {
         truncated = true;
         truncation_reason = "max_nodes";
+        graph.add_frontier_fact_ids(task.fact_id);
         break;
       }
       auto* node = graph.add_nodes();
@@ -223,17 +237,30 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
       }
     }
 
+    if (truncated) {
+      for (std::size_t j = i + 1; j < queue.size(); ++j)
+        graph.add_frontier_fact_ids(queue[j].fact_id);
+      break;
+    }
+
     // The breadth-first walk expands only the selected proof's edges.
     const std::string selected_witness_id = (*node_rows)[0][0];
     auto edge_rows = store_.Query(
         "SELECT witness_id, input_kind, input_id, input_ordinal"
         " FROM provenance_edges WHERE run_id = ? AND output_fact_id = ?"
-        " AND witness_id = ? ORDER BY input_ordinal",
+        " AND witness_id = ? ORDER BY input_ordinal LIMIT " +
+            std::to_string(static_cast<std::uint64_t>(budget.max_edges) + 1),
         {run, task.fact_id, selected_witness_id});
     if (!edge_rows.ok()) {
       return edge_rows.status();
     }
     for (const auto& er : *edge_rows) {
+      if (static_cast<std::uint32_t>(graph.edges_size()) >= budget.max_edges) {
+        truncated = true;
+        truncation_reason = "max_edges";
+        graph.add_frontier_fact_ids(task.fact_id);
+        break;
+      }
       auto* edge = graph.add_edges();
       edge->set_analysis_run_id(run);
       edge->set_output_fact_id(task.fact_id);
@@ -246,6 +273,11 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
       if (er[1] == "derived" && enqueued.insert(er[2]).second) {
         queue.push_back(Task{er[2], task.distance + 1});
       }
+    }
+    if (truncated) {
+      for (std::size_t j = i + 1; j < queue.size(); ++j)
+        graph.add_frontier_fact_ids(queue[j].fact_id);
+      break;
     }
   }
 

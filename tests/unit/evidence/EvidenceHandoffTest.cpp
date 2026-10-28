@@ -285,6 +285,19 @@ TEST(EvidenceHandoffTest, UsesOneImmutableSnapshot) {
   EXPECT_EQ(result.status().message(), "evidence snapshot changed; retry");
 }
 
+TEST(EvidenceHandoffTest, BindingChangeDuringExplanationRefusesWholeHandoff) {
+  EvidenceScenarioBuilder builder;
+  const auto seed = MakeClaimSeed(builder);
+  FakeEvidenceBackend backend(Descriptor(builder));
+  backend.SetFacts({RangeFact(builder, "f", seed.source_ref, 0, 65535)});
+  backend.SetAutoBumpOnExplain(true);
+  cpg::ThinCpg cpg = FlowCpg(builder, seed);
+  EvidenceQueryService service(cpg, backend, backend.run_id());
+  auto result = service.BuildEvidenceInput(seed, Budget(8, 256, 5, 64, 8));
+  ASSERT_FALSE(result.ok());
+  EXPECT_EQ(result.status().message(), "evidence snapshot changed; retry");
+}
+
 // HND-003: retain positive/negative evidence using a relation that admits both.
 // GlobalFlow is existential and cannot carry MUST_NOT; the former placeholder
 // depended on MakeFact failing to enforce the registry. Alias admits a real

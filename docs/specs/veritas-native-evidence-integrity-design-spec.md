@@ -1,6 +1,6 @@
 # Native Evidence Integrity Refinement
 
-**Status:** Detailed proposed amendment; implementation status is recorded per task.
+**Status:** Native Tasks 1–6 implemented; execution and qualification records are in the focused plan.
 **Baseline:** `99d3130`; P0 of the claim-driven redesign. Existing native SVF,
 Soufflé, `summary.v2`, `relations.v2`, and `eir.v1` contracts remain in force.
 **Plan:** [native integrity](../plans/veritas-native-evidence-integrity-implementation-plan.md).
@@ -282,3 +282,118 @@ Review deferred minor: pure-graph validation checks optional `result_ref`
 existence but not its owner. The compiler producer supplies the correct owner;
 no current consumer uses this field. Tighten that check before qualifying a
 result-consuming backend.
+
+### Tasks 4–6 execution amendment (#158 / RDX04)
+
+Native assembly now calls pinned `Explain` for every distinct selected support,
+contradiction, domain and unknown fact. `max_provenance_depth` is the actual M9
+walk depth. Each call bounds witness nodes and edges; the canonical union of
+fact witness nodes plus edges is bounded by `max_nodes`. The six query
+certificate witnesses are fixed additional overhead. Per-fact `FactExplanation`
+records bind the current run/witness and preserve the exact unexpanded FactIDs
+and truncation reason, independently of another selected fact's shared closure.
+Aggregate exhaustion adds `max_provenance_members`; it does not erase a prior
+depth reason. An interrupted edge list retains its output fact as an expansion
+frontier. `ProvenanceGraph.frontier_fact_ids` is an additive M9 protobuf field;
+`eir.v1` grammar and enum values are unchanged.
+
+`ProvenanceStore` checks the current selected witness at every expanded derived
+fact. A stale intermediate binding is an error, not an apparently rooted leaf.
+Assembly validates the returned semantic fact/run/binding, rejects conflicting
+union members and cycles, and preserves exact-boundary completion. The backend
+uses one SQLite read transaction for facts, explanations and summary bindings;
+a changed synthetic backend returns the existing retryable failure without a
+new-run subquery or partial handoff.
+
+EIR records the bounded selected witnesses with their actual rule, source anchor
+when supplied, and producer (including the native engine when the producer text
+is absent). Mapped selected facts name their own derivation, independently of
+query-certificate provenance. Edges between mapped facts become provenance
+inputs. Other premise bodies remain typed Fact dependencies with expandable
+`provenance_premise` omissions carrying the output/input FactIDs, rooted/derived
+kind, ordinal and witness. They do not acquire a fabricated EIR predicate. L0
+similarly replaces withheld premise bodies with expansion handles, and every
+level preserves claim-scoped `provenance_frontier` omissions. Native source
+anchors not produced upstream remain absent.
+
+`ReadSummaries(refs)` accepts function refs and exact summary refs from selected
+provenance. With the optional SummaryRepository CAS reader, the native backend
+resolves current bindings in the pinned revision/build, verifies immutable
+content identity and refuses stale exact refs. The service carries actual
+`SummaryArtifact`s and `SummarySelection`s (run, function, summary ID and explicit
+component digests) in the handoff. Payloads, selections and per-fact explanations
+are canonically included in its v2 digest. The builder validates summary/function/
+run/program binding and advertised/computed component hashes before projection;
+it never reopens a database. L2 emits genuine `SummaryReference`s naming their
+selected components. L0/L1 retain the function and exact summary expansion handle;
+backends lacking summary capability retain an explicit missing-summary omission.
+
+The native rooted-input producer had written FunctionVariantIDs into
+`RootedInputFact.summary_id`. A regression now requires the actual immutable
+FunctionSummaryID. `WpaSummaryIndex` computes it once per artifact, and the
+materializer carries that ID. Native configuration identity advances to
+`veritas.wpa.config.v3`, preventing v2 receipts from impersonating corrected
+provenance. This changes run/receipt/handoff/Evidence identities, while unchanged
+semantic FactIDs, summary schemas and function identities remain exact. Historical
+placeholder refs are not reinterpreted as real summary IDs.
+
+The safety request now asks a verifier to prove all three parts for one exact
+source/sink execution domain:
+
+```
+execution_domain_complete(source, sink)
+and ((exists path in feasible_paths(source, sink): true)
+     or entry_infeasible(source, sink))
+and (forall path in feasible_paths(source, sink): within_capacity)
+```
+
+`UNKNOWN` feasibility never proves domain emptiness. The model validator refuses
+`VERIFIED_SAFE` based solely on a bare universal result, even when it names a
+producer/result. A decided guarded result must establish the same domain. Native
+assembly still emits only `PENDING` obligations and `POSSIBLE_DEFECT`; this adds
+no verifier dispatch, proof result or native domain-completeness producer.
+
+Intentional golden changes are the v3 run binding, selected witness records and
+Fact dependencies, premise/frontier omissions, current summary expansion handles,
+and the stronger pending predicate. On the recorded host, the unsafe L1 case
+keeps its 14 entities and 17 facts; provenance grows from 6 to 31, dependencies
+from 3 to 41, and omissions from 12 to 33. These are fixture observations, not
+portable count guarantees. L2 replaces its summary handle with the actual
+reference. The truncated case additionally cuts provenance under the shared
+member limit, so its provenance omission count is not inferred by adding one
+to the untruncated case. Existing golden identity masks are not broadened.
+Linux CI subsequently exposed host-dependent selected-witness multiplicity and
+budget selection as well: native witness records, Fact dependencies and exact
+premise/frontier metadata are now compared against the pinned input on each
+host, independently of the EIR builder. The cross-host golden comparison keeps
+the query contract strict while those native sections use the same-run oracle.
+This changes structural comparison scope, not identity masking or product
+semantics; deliberate rule/dependency/gap corruption must fail the native check.
+Native range/capacity/alias/positive-check production remains under #124; no
+unsupported or open query has acquired negative or verified authority.
+
+
+RDX04 review refinements: the v2 handoff now declares digest-bound
+`provenance_version = evidence.provenance.v1`. That capability requires exactly
+one explanation per selected fact, including validation when the carrier is
+empty. Unknown versions and partial capability/carrier combinations are refused.
+Pre-RDX04 inputs without the capability remain readable with a claim-scoped
+`legacy_provenance` omission at every level; a completion witness does not grant
+rooted-derivation capability. Controllers requiring that capability must reject
+this labeled legacy path. Absent legacy JSON carriers retain their old bytes.
+
+When a legitimate aggregate cut omits a selected fact's witness, EIR still
+records the pinned occurrence's actual producer/run, with no invented rule or
+anchor. Its selected witness ID and exact frontier remain in the truncation
+omission. This keeps MAY facts valid and unstrengthened under small budgets,
+without substituting query provenance or claiming the witness was traversed.
+Fact dependencies include these bounded selected occurrences as well as the
+retained graph's premises. The native five-node cut and a durable synthetic
+MAY-alias corpus exercise this path; the latter is a handoff oracle and does not
+qualify the deferred native alias producer.
+
+The native snapshot also checks its revision/build against the persisted WPA
+run manifest inside the read transaction before serving refs. A descriptor for
+a different program context fails even if its requested summary set is empty;
+`RejectsStaleSummaryBinding` observes that boundary RED→GREEN as well as stale
+current-object bindings.

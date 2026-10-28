@@ -642,6 +642,18 @@ void AppendProvenanceGraph(std::string *out, const fp::ProvenanceGraph &graph,
   AppendBoolValue(out, graph.truncated());
   out->append(",\"truncation_reason\":");
   AppendStringValue(out, graph.truncation_reason());
+  if (!graph.frontier_fact_ids().empty()) {
+    out->append(",\"frontier_fact_ids\":[");
+    std::vector<std::string> frontier(graph.frontier_fact_ids().begin(),
+                                      graph.frontier_fact_ids().end());
+    std::sort(frontier.begin(), frontier.end());
+    for (std::size_t i = 0; i < frontier.size(); ++i) {
+      if (i != 0)
+        out->push_back(',');
+      AppendStringValue(out, frontier[i]);
+    }
+    out->push_back(']');
+  }
   out->push_back('}');
 }
 
@@ -866,6 +878,102 @@ std::string BuildInputJson(const EvidenceBuildInput &input,
   }
   out.append("],\"provenance\":");
   AppendProvenanceGraph(&out, input.provenance, precise);
+  if (!input.summaries.empty() || !input.summary_selections.empty()) {
+    out.append(",\"summaries\":[");
+    std::vector<std::pair<std::string, std::string>> payloads;
+    for (const auto &artifact : input.summaries) {
+      auto payload = std::visit(
+          [](const auto &value) { return value.SerializeAsString(); },
+          artifact);
+      auto id = core::MakeStableId(
+          core::IdKind::kFunctionSummary,
+          std::as_bytes(std::span(payload.data(), payload.size())));
+      payloads.emplace_back(core::ToString(id), std::move(payload));
+    }
+    std::sort(payloads.begin(), payloads.end());
+    for (std::size_t i = 0; i < payloads.size(); ++i) {
+      if (i != 0)
+        out.push_back(',');
+      out.append("{\"summary_id\":");
+      AppendStringValue(&out, payloads[i].first);
+      out.append(",\"payload_hex\":\"");
+      constexpr char digits[] = "0123456789abcdef";
+      for (unsigned char byte : payloads[i].second) {
+        out.push_back(digits[byte >> 4]);
+        out.push_back(digits[byte & 15]);
+      }
+      out.append("\"}");
+    }
+    out.append("],\"summary_selections\":[");
+    auto selections = input.summary_selections;
+    std::sort(selections.begin(), selections.end(),
+              [](const auto &a, const auto &b) {
+                return a.summary_id < b.summary_id;
+              });
+    for (std::size_t i = 0; i < selections.size(); ++i) {
+      if (i != 0)
+        out.push_back(',');
+      const auto &selection = selections[i];
+      out.append("{\"analysis_run_id\":");
+      AppendStableIdValue(&out, selection.analysis_run_id);
+      out.append(",\"function_variant_id\":");
+      AppendStableIdValue(&out, selection.function_variant_id);
+      out.append(",\"summary_id\":");
+      AppendStableIdValue(&out, selection.summary_id);
+      out.append(",\"components\":[");
+      auto components = selection.components;
+      std::sort(components.begin(), components.end(),
+                [](const auto &a, const auto &b) { return a.kind < b.kind; });
+      for (std::size_t j = 0; j < components.size(); ++j) {
+        if (j != 0)
+          out.push_back(',');
+        const auto &component = components[j];
+        out.append("{\"kind\":");
+        out.append(std::to_string(static_cast<int>(component.kind)));
+        out.append(",\"semantic_hash\":");
+        AppendStringValue(&out, core::DigestToHex(component.semantic_hash));
+        out.append(",\"evidence_hash\":");
+        AppendStringValue(&out, core::DigestToHex(component.evidence_hash));
+        out.append(",\"item_count\":");
+        out.append(std::to_string(component.item_count));
+        out.append(",\"payload_offset\":");
+        out.append(std::to_string(component.payload_offset));
+        out.append(",\"payload_length\":");
+        out.append(std::to_string(component.payload_length));
+        out.push_back('}');
+      }
+      out.append("]}");
+    }
+    out.push_back(']');
+  }
+  if (!input.provenance_version.empty() || !input.fact_explanations.empty()) {
+    out.append(",\"provenance_version\":");
+    AppendStringValue(&out, input.provenance_version);
+    out.append(",\"fact_explanations\":[");
+    auto explanations = input.fact_explanations;
+    std::sort(explanations.begin(), explanations.end(),
+              [](const auto &a, const auto &b) {
+                return a.binding.fact_id < b.binding.fact_id;
+              });
+    for (std::size_t i = 0; i < explanations.size(); ++i) {
+      if (i != 0)
+        out.push_back(',');
+      out.append("{\"binding\":");
+      AppendBinding(&out, explanations[i].binding, precise);
+      out.append(",\"truncation_reason\":");
+      AppendStringValue(&out, explanations[i].truncation_reason);
+      out.append(",\"frontier_refs\":[");
+      auto frontier = explanations[i].frontier_refs;
+      std::sort(frontier.begin(), frontier.end());
+      for (std::size_t j = 0; j < frontier.size(); ++j) {
+        if (j != 0)
+          out.push_back(',');
+        AppendStableIdValue(&out, frontier[j]);
+      }
+      out.append("]}");
+    }
+    out.push_back(']');
+  }
   if (!input.handoff_version.empty() || !input.query_coverage.empty() ||
       !input.handoff_digest.empty()) {
     out.append(",\"handoff_version\":");

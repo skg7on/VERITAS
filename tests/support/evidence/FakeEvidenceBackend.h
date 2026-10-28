@@ -61,6 +61,7 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
   // next read (e.g. the next BuildEvidenceInput subquery) sees a stale binding
   // and fails with the stable retryable text.
   void SetAutoBump(bool enabled) { auto_bump_ = enabled; }
+  void SetAutoBumpOnExplain(bool enabled) { auto_bump_on_explain_ = enabled; }
 
   core::StableId run_id() const { return descriptor_.analysis_run_id; }
 
@@ -100,7 +101,17 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
       if (backend_->generation_ != generation_) {
         return Status::FailedPrecondition("evidence snapshot changed; retry");
       }
-      return backend_->Explain(fact_id, budget);
+      auto graph = backend_->Explain(fact_id, budget);
+      if (backend_->auto_bump_on_explain_)
+        ++backend_->generation_;
+      return graph;
+    }
+
+    StatusOr<std::vector<summary::SummaryArtifact>>
+    ReadSummaries(const std::vector<core::StableId> &) const override {
+      if (backend_->generation_ != generation_)
+        return Status::FailedPrecondition("evidence snapshot changed; retry");
+      return std::vector<summary::SummaryArtifact>{};
     }
 
    private:
@@ -162,6 +173,7 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
   mutable std::uint64_t generation_;
   std::uint32_t provenance_depth_;
   bool auto_bump_;
+  bool auto_bump_on_explain_ = false;
 };
 
 }  // namespace veritas::testing

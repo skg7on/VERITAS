@@ -159,3 +159,43 @@ ownership of optional `result_ref` before any result-consuming backend is
 qualified. The native producer supplies the correct result; current consumers do
 not use it. This does not close #124/#157/#158, enable automatic qualifying
 fan-out, fix portable identities (#125), or qualify the entire reviewer.
+
+### RDX04 / #158 execution scope (2026-10-26–27)
+
+Native Tasks 4–6 now carry bounded selected-fact provenance and pinned current
+summaries through the immutable input into EIR. The execution amendment in the
+[native spec](../specs/veritas-native-evidence-integrity-design-spec.md) records
+budget accounting, rooted premise expansion handles, v3 native configuration,
+summary component admission, the non-vacuous safety request and each intentional
+golden change. Source anchors absent from upstream evidence remain absent.
+Native supported/open flow and unknown queries remain distinct from unsupported
+range/capacity/alias/positive-check outcomes; this delivery does not qualify a
+production verifier or assert a verified verdict.
+
+The #149 reconciliation remains explicitly scoped:
+
+| Audited gap | Owner / outcome |
+| --- | --- |
+| Operational incremental WPA | #143; scheduling/execution remains deferred |
+| Complete-empty/open/truncated Evidence | #157 delivered in `19d7b70`; semantic producer closure still requires #124 |
+| Compiler containment and unknown scope | #156 delivered in `3c636e2`; unresolved ownership remains explicit |
+| Relation allowlists and unresolved-target authority | #155 delivered; unchanged valid FactID goldens remain binding |
+| Native range, capacity, alias and positive check producers; unfinished #116/#13 demo oracles | #124 remains open; no synthetic substitution |
+| Exact sink operands and closed #132's scoping gap | #156 delivered exact callsites; automatic qualifying fan-out still gated by #124 |
+| Real provenance depth, rooted references and summary handoff | #158 this delivery; current binding and component checks, explicit bounded omissions |
+| Cross-host function identity | #125 remains open; no portability claim |
+| Scale envelope, whole-run retention and storage amplification | #140/#142–#145; bounded reads/scoped kernels/publication under #166–#168 |
+| Link-unit/program membership | #159 remains pending |
+| Evidence lifecycle, staleness, revalidation and retention | #169, coordinated with #143/#144 and #125 |
+| Production review backend, proof authority/dispatch and plugin host | #161/#162/#165 and #79; pending guarded goals are not proof execution |
+| Post-overflow defect families and external providers | Deferred by the review roadmap; M11/M12 and later qualification remain independent |
+| Historical documentation/issue-state overclaims | This plan and focused spec amendments distinguish delivered/runtime, partial/native and pending work; #149 retains its own completion criteria |
+
+Qualification results are recorded with the native plan's Tasks 4–6; #149 is not
+closed by this scoped repair.
+
+RDX04 final qualification: clean 572-step Debug build; 937/937 full CTest in
+390.20 s, zero failures/errors/skips including internal GoogleTest inspection.
+The engine-agreement test ran; independent review's two Important findings have
+RED→GREEN regressions. The existing duplicate-library linker warning remains.
+See the native plan for exact commands, scope and implementation rulings.

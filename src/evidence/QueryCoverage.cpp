@@ -86,6 +86,93 @@ bool IsLegacyEvidenceHandoff(const EvidenceBuildInput &input) {
 }
 
 Status ValidateEvidenceHandoffCoverage(const EvidenceBuildInput &input) {
+  if (!input.provenance_version.empty() &&
+      input.provenance_version != kEvidenceProvenanceVersion)
+    return Status::InvalidArgument("unknown evidence provenance capability");
+  if ((input.provenance_version.empty() && !input.fact_explanations.empty()) ||
+      (!input.provenance_version.empty() && IsLegacyEvidenceHandoff(input)))
+    return Status::InvalidArgument("partial evidence provenance capability");
+  if (input.summaries.size() != input.summary_selections.size())
+    return Status::InvalidArgument("summary payload/selection mismatch");
+  std::map<core::StableId, const SummarySelection *> selections;
+  std::set<core::StableId> functions;
+  for (const auto &selection : input.summary_selections) {
+    if (!ValidId(selection.summary_id, core::IdKind::kFunctionSummary) ||
+        !ValidId(selection.function_variant_id,
+                 core::IdKind::kFunctionVariant) ||
+        selection.analysis_run_id !=
+            input.flow_slice.metadata.analysis_run_id ||
+        !selections.emplace(selection.summary_id, &selection).second ||
+        !functions.insert(selection.function_variant_id).second)
+      return Status::InvalidArgument(
+          "invalid or stale summary selection binding");
+  }
+  std::set<core::StableId> artifacts;
+  for (const auto &artifact : input.summaries) {
+    const auto expected_schema =
+        std::holds_alternative<summary::v1::FunctionSummary>(artifact)
+            ? "summary.v1"
+            : "summary.v2";
+    if (summary::SchemaVersion(artifact) != expected_schema)
+      return Status::InvalidArgument(
+          "summary schema does not match its payload");
+    auto id = summary::ComputeFunctionSummaryId(artifact);
+    if (!id.ok())
+      return id.status();
+    auto selected = selections.find(*id);
+    if (selected == selections.end() || !artifacts.insert(*id).second ||
+        summary::Identity(artifact).function_variant_id() !=
+            core::ToString(selected->second->function_variant_id))
+      return Status::InvalidArgument("stale summary identity binding");
+    auto computed = summary::ComputeComponentDigests(artifact);
+    auto supplied = selected->second->components;
+    auto order = [](const auto &a, const auto &b) { return a.kind < b.kind; };
+    std::sort(computed.begin(), computed.end(), order);
+    std::sort(supplied.begin(), supplied.end(), order);
+    if (computed != supplied)
+      return Status::InvalidArgument("stale summary component binding");
+    bool valid = std::visit(
+        [&](const auto &value) {
+          if (static_cast<std::size_t>(value.component_digests_size()) !=
+              computed.size())
+            return false;
+          std::set<int> seen;
+          for (const auto &digest : value.component_digests()) {
+            const auto it = std::ranges::find(
+                computed, digest.kind(), &summary::ComponentDigestInfo::kind);
+            if (it == computed.end() ||
+                !seen.insert(static_cast<int>(digest.kind())).second ||
+                digest.semantic_hash() !=
+                    std::string(reinterpret_cast<const char *>(
+                                    it->semantic_hash.data()),
+                                it->semantic_hash.size()) ||
+                digest.evidence_hash() !=
+                    std::string(reinterpret_cast<const char *>(
+                                    it->evidence_hash.data()),
+                                it->evidence_hash.size()) ||
+                digest.item_count() != it->item_count ||
+                digest.payload_offset() != it->payload_offset ||
+                digest.payload_length() != it->payload_length)
+              return false;
+          }
+          return true;
+        },
+        artifact);
+    if (!valid)
+      return Status::InvalidArgument(
+          "summary advertises invalid component hashes");
+  }
+  if (!selections.empty()) {
+    for (const auto &node : input.provenance.nodes()) {
+      if (node.summary_id().empty())
+        continue;
+      auto id = core::ParseStableId(node.summary_id());
+      if (!id.ok() || !selections.contains(*id))
+        return Status::InvalidArgument(
+            "provenance references a stale or missing summary: " +
+            node.summary_id());
+    }
+  }
   if (IsLegacyEvidenceHandoff(input))
     return Status::Ok();
   if (input.handoff_version != kEvidenceHandoffVersion ||
@@ -116,6 +203,81 @@ Status ValidateEvidenceHandoffCoverage(const EvidenceBuildInput &input) {
   if (input.provenance.binding().has_confidence() &&
       !std::isfinite(input.provenance.binding().confidence()))
     return Status::InvalidArgument("nonfinite handoff provenance confidence");
+  if (input.provenance_version == kEvidenceProvenanceVersion) {
+    const std::string run =
+        core::ToString(input.flow_slice.metadata.analysis_run_id);
+    std::set<core::StableId> selected, explained;
+    for (const auto *rows :
+         {&input.ranges.facts, &input.capacities.facts, &input.aliases.facts,
+          &input.dominating_checks.facts, &input.unknowns.facts,
+          &input.flow_slice.supporting_facts,
+          &input.flow_slice.contradicting_facts, &input.flow_slice.unknowns})
+      for (const auto &fact : *rows)
+        selected.insert(fact.fact_id);
+    std::map<std::string, std::string> witnesses;
+    for (const auto &node : input.provenance.nodes()) {
+      if (node.analysis_run_id() != run)
+        return Status::InvalidArgument("provenance witness mixes runs");
+      if (node.selected() &&
+          !witnesses.emplace(node.output_fact_id(), node.witness_id()).second)
+        return Status::InvalidArgument("duplicate selected provenance witness");
+    }
+    for (const auto &explanation : input.fact_explanations) {
+      const auto &binding = explanation.binding;
+      if (core::ToString(binding.run_id) != run || !binding.is_current ||
+          binding.selected_witness_id.empty() ||
+          !selected.contains(binding.fact_id) ||
+          !explained.insert(binding.fact_id).second ||
+          (binding.confidence && !std::isfinite(*binding.confidence)))
+        return Status::InvalidArgument("invalid selected fact binding");
+      const auto witness = witnesses.find(core::ToString(binding.fact_id));
+      if (witness != witnesses.end() &&
+          witness->second != binding.selected_witness_id)
+        return Status::InvalidArgument("stale selected fact witness binding");
+      if (explanation.truncation_reason.empty() &&
+          (witness == witnesses.end() || !explanation.frontier_refs.empty()))
+        return Status::InvalidArgument(
+            "complete fact explanation has a missing witness or frontier");
+      if (!explanation.truncation_reason.empty() &&
+          (!input.provenance.truncated() || explanation.frontier_refs.empty()))
+        return Status::InvalidArgument(
+            "truncated fact explanation lost its frontier");
+      std::set<core::StableId> frontier;
+      for (const auto &ref : explanation.frontier_refs)
+        if (!ValidId(ref, core::IdKind::kFact) || !frontier.insert(ref).second)
+          return Status::InvalidArgument("invalid provenance frontier");
+    }
+    if (selected != explained)
+      return Status::InvalidArgument(
+          "selected fact has no explanation binding");
+    std::map<std::string, std::set<std::string>> successors;
+    std::map<std::string, std::size_t> indegree;
+    for (const auto &edge : input.provenance.edges()) {
+      if (edge.analysis_run_id() != run ||
+          !witnesses.contains(edge.output_fact_id()) ||
+          witnesses[edge.output_fact_id()] != edge.witness_id() ||
+          !core::ParseStableId(edge.input_id()).ok())
+        return Status::InvalidArgument("invalid provenance edge binding");
+      if (edge.input_kind() == "derived") {
+        indegree.try_emplace(edge.output_fact_id(), 0);
+        indegree.try_emplace(edge.input_id(), 0);
+        if (successors[edge.output_fact_id()].insert(edge.input_id()).second)
+          ++indegree[edge.input_id()];
+      } else if (edge.input_kind() != "rooted") {
+        return Status::InvalidArgument("unknown provenance input kind");
+      }
+    }
+    std::vector<std::string> ready;
+    for (const auto &[id, degree] : indegree)
+      if (degree == 0)
+        ready.push_back(id);
+    for (std::size_t i = 0; i < ready.size(); ++i)
+      for (const auto &next : successors[ready[i]])
+        if (--indegree[next] == 0)
+          ready.push_back(next);
+    if (ready.size() != indegree.size())
+      return Status::InvalidArgument("selected provenance contains a cycle");
+  }
   if (input.handoff_digest != ComputeEvidenceHandoffDigest(input))
     return Status::InvalidArgument(
         "invalid evidence handoff coverage envelope or digest");

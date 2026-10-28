@@ -485,6 +485,9 @@ class Builder {
     if (!status.ok()) return status;
     status = RouteFacts();
     if (!status.ok()) return status;
+    status = LinkProvenance();
+    if (!status.ok())
+      return status;
     status = BuildCoverage();
     if (!status.ok())
       return status;
@@ -511,6 +514,7 @@ class Builder {
     value.provenance = provenance_;
     value.proof_obligations = obligations_;
     value.dependencies = dependencies_;
+    value.summaries = summaries_;
     value.omissions = omissions_;
     value.verification_state = VerificationState::kPossibleDefect;
 
@@ -558,6 +562,14 @@ class Builder {
             "the build request carries an empty " + std::string(name) +
             "; a case cannot be bound to a program identity it does not have");
       }
+    }
+    for (const auto &artifact : request_.input.summaries) {
+      const auto &identity = summary::Identity(artifact);
+      if (identity.repository_id() != context.repository_id ||
+          identity.revision_id() != context.revision_id ||
+          identity.build_variant_id() != context.build_variant_id)
+        return Status::InvalidArgument(
+            "summary does not belong to the requested program context");
     }
     return Status::Ok();
   }
@@ -710,6 +722,12 @@ class Builder {
       if (!status.ok()) return status;
     }
 
+    for (const auto &selection : input.summary_selections) {
+      auto status =
+          NoteStable(selection.function_variant_id, EntityKind::kFunction, {});
+      if (!status.ok())
+        return status;
+    }
     IdAllocator allocator;
     for (const auto& [text, plan] : plans_) {
       auto stable = core::ParseStableId(text);
@@ -831,6 +849,88 @@ class Builder {
       provenance_by_fact_.emplace(text, record.id);
       provenance_.push_back(std::move(record));
     }
+    // Keep every selected witness in the bounded closure, including premises
+    // that have no query-result row. Native fact references are dependencies;
+    // unmapped predicates remain explicit expansion omissions below.
+    if (!input.fact_explanations.empty()) {
+      for (const auto &node : input.provenance.nodes()) {
+        if (!node.selected() ||
+            provenance_by_fact_.contains(node.output_fact_id()))
+          continue;
+        auto fact_id = core::ParseStableId(node.output_fact_id());
+        if (!fact_id.ok())
+          return fact_id.status();
+        Provenance record;
+        record.id = allocator.Allocate("PR_fact_" + DigestPrefix(*fact_id));
+        record.producer = TranslateProducer(node.producer_id());
+        if (record.producer.empty()) {
+          switch (node.producer_kind()) {
+          case fact::v1::PRODUCER_WPA_SOUFFLE:
+            record.producer = "analysis.souffle";
+            break;
+          case fact::v1::PRODUCER_WPA_CPP_CONFORMANCE:
+            record.producer = "analysis.cpp_conformance";
+            break;
+          case fact::v1::PRODUCER_WPA_CPP_EMERGENCY:
+            record.producer = "analysis.cpp_emergency";
+            break;
+          default:
+            record.producer = "analysis.external";
+            break;
+          }
+        }
+        record.rule = node.rule_id();
+        record.version = node.rule_version();
+        record.source_anchor_id = node.source_anchor_id();
+        record.analysis_run_id = run_id_;
+        record.configuration = request_.analysis_configuration_id;
+        provenance_by_fact_.emplace(node.output_fact_id(), record.id);
+        provenance_.push_back(std::move(record));
+      }
+    }
+    for (const auto &explanation : input.fact_explanations) {
+      const auto text = StableText(explanation.binding.fact_id);
+      if (!provenance_by_fact_.contains(text)) {
+        // A pinned occurrence is still known when its witness was budget-cut.
+        // Do not invent a rule, anchor, or traversed derivation for it.
+        Provenance record;
+        record.id = allocator.Allocate(
+            "PR_binding_" + DigestPrefix(explanation.binding.fact_id));
+        switch (explanation.binding.producer_kind) {
+        case facts::ProducerKind::kWpaSouffle:
+          record.producer = "analysis.souffle";
+          break;
+        case facts::ProducerKind::kWpaCppConformance:
+          record.producer = "analysis.cpp_conformance";
+          break;
+        case facts::ProducerKind::kWpaCppEmergency:
+          record.producer = "analysis.cpp_emergency";
+          break;
+        case facts::ProducerKind::kExternal:
+          record.producer = "analysis.external";
+          break;
+        }
+        record.analysis_run_id = run_id_;
+        record.configuration = request_.analysis_configuration_id;
+        provenance_by_fact_.emplace(text, record.id);
+        provenance_.push_back(std::move(record));
+      }
+      if (!explanation.truncation_reason.empty()) {
+        Omission omission;
+        omission.id = omission_ids_.Allocate(
+            "OM_provenance_" + DigestPrefix(explanation.binding.fact_id));
+        omission.kind = "provenance_frontier";
+        omission.subject = std::string(kClaimLocalId);
+        omission.reason =
+            text + ": " + explanation.truncation_reason +
+            "; selected_witness=" + explanation.binding.selected_witness_id +
+            "; frontier=";
+        for (const auto &ref : explanation.frontier_refs)
+          omission.reason += StableText(ref) + ";";
+        omission.expandable = true;
+        omissions_.push_back(std::move(omission));
+      }
+    }
     return Status::Ok();
   }
 
@@ -884,10 +984,11 @@ class Builder {
     EvidencePredicateMapper mapper;
     for (const auto& [text, fact] : routed) {
       auto certificate_it = certificate.find(text);
-      const std::string* provenance_id =
-          certificate_it != certificate.end()
-              ? ProvenanceForFact(certificate_it->second)
-              : nullptr;
+      const std::string *provenance_id = ProvenanceForFact(fact->fact_id);
+      if (provenance_id == nullptr && input.provenance_version.empty())
+        provenance_id = certificate_it != certificate.end()
+                            ? ProvenanceForFact(certificate_it->second)
+                            : nullptr;
       const std::string provenance_local =
           provenance_id != nullptr ? *provenance_id : std::string();
 
@@ -927,7 +1028,59 @@ class Builder {
                                          record.predicate.operands[1].text,
                                          record.epistemic});
       }
+      fact_local_by_stable_.emplace(text, record.id);
       facts_.push_back(std::move(record));
+    }
+    return Status::Ok();
+  }
+
+  Status LinkProvenance() {
+    std::set<core::StableId> dependencies;
+    for (const auto &explanation : request_.input.fact_explanations)
+      dependencies.insert(explanation.binding.fact_id);
+    for (const auto &edge : request_.input.provenance.edges()) {
+      const auto output = provenance_by_fact_.find(edge.output_fact_id());
+      if (output == provenance_by_fact_.end())
+        continue;
+      for (const auto &text : {edge.output_fact_id(), edge.input_id()}) {
+        auto id = core::ParseStableId(text);
+        if (!id.ok())
+          return id.status();
+        dependencies.insert(*id);
+      }
+      auto provenance =
+          std::ranges::find(provenance_, output->second, &Provenance::id);
+      const auto premise = fact_local_by_stable_.find(edge.input_id());
+      if (premise != fact_local_by_stable_.end()) {
+        provenance->input_fact_ids.push_back(premise->second);
+      } else {
+        Omission omission;
+        omission.id =
+            omission_ids_.Allocate("OM_premise_" + Sanitize(output->second) +
+                                   "_" + std::to_string(edge.input_ordinal()));
+        omission.kind = "provenance_premise";
+        omission.subject = output->second;
+        omission.reason =
+            edge.input_kind() + " input " + edge.input_id() + " at ordinal " +
+            std::to_string(edge.input_ordinal()) + " of " +
+            edge.output_fact_id() + "; witness=" + edge.witness_id() +
+            "; semantic premise body is not projected into this case";
+        omission.expandable = true;
+        omissions_.push_back(std::move(omission));
+      }
+    }
+    for (const auto &id : dependencies) {
+      Dependency dependency;
+      dependency.id = "DEP_provenance_" + id.digest_hex;
+      dependency.kind = DependencyKind::kFact;
+      dependency.stable_id = id;
+      dependencies_.push_back(std::move(dependency));
+    }
+    for (auto &record : provenance_) {
+      std::sort(record.input_fact_ids.begin(), record.input_fact_ids.end());
+      record.input_fact_ids.erase(std::unique(record.input_fact_ids.begin(),
+                                              record.input_fact_ids.end()),
+                                  record.input_fact_ids.end());
     }
     return Status::Ok();
   }
@@ -976,6 +1129,17 @@ class Builder {
   Status BuildCoverage() {
     const auto &input = request_.input;
     const bool legacy = IsLegacyEvidenceHandoff(input);
+    if (input.provenance_version.empty()) {
+      Omission omission;
+      omission.id = omission_ids_.Allocate("OM_legacy_provenance");
+      omission.kind = "legacy_provenance";
+      omission.subject = std::string(kClaimLocalId);
+      omission.reason =
+          "legacy handoff has no evidence.provenance.v1 capability; query "
+          "completion does not establish returned-fact derivation";
+      omission.expandable = false;
+      omissions_.push_back(std::move(omission));
+    }
     if (legacy) {
       Omission omission;
       omission.id = omission_ids_.Allocate("OM_legacy_coverage");
@@ -1206,37 +1370,9 @@ class Builder {
     path.id = std::string(kPathLocalId);
     path.kind = PathKind::kValueFlow;
     path.entity_ids = chain;
-    // The M10B handoff carries no feasibility for a path: `EvidenceBuildInput`
-    // is a claim seed, a flow slice, five fact sets (`ranges`, `capacities`,
-    // `aliases`, `dominating_checks`, `unknowns`), the query-completion
-    // certificates, the run bindings that select their witnesses, and the
-    // provenance graph — and none of them says whether any path is realizable.
-    // (The program context is on the *request*, not on the handoff.) So there is
-    // nothing to copy, and `kSat` would be an assertion rather than a
-    // transcription — §22 of the EIR architecture ("Path feasibility") says
-    // `SAT` "typically means an SMT/symbolic model was found", and no model was
-    // found here. `kUnspecified` is not available as the "nothing established"
-    // value: `EvidenceValidator` rejects a path that declares no feasibility
-    // (`kMissingEpistemic`, validator rule for `paths`). `kUnknown` is both
-    // permitted and true — the analysis established the flow, and never
-    // established feasibility — so it is what the case states. `kUntested` is
-    // the near neighbour and is wrong: it would say the question was posed and
-    // skipped, when it was never posed at all.
-    //
-    // What this choice does not settle, recorded so the claim is not read as
-    // wider than it is: the obligation below quantifies over
-    // `feasible_paths(...)`, and no artefact in this repository defines that
-    // domain. It appears only in examples — architecture §12 ("Quantifiers"),
-    // §32 ("Proof obligations") and §47 ("Example: complete overflow case"), and
-    // the formal specification §15 ("Concrete Syntax Example") — and the
-    // `Domain` production attaches no membership rule to it. Under a reading
-    // where membership demands a feasibility stronger than `UNKNOWN`, that
-    // `forall` would range over an empty set and hold vacuously. Settling it is
-    // a model-level decision this layer has no authority to make, and it is
-    // *not* symmetrical: `SAT` would guarantee membership under the strictest
-    // plausible reading, so the honest value and the non-vacuous value may
-    // differ here. That tension is real and is carried forward rather than
-    // resolved by asserting a feasibility nothing established.
+    // Flow establishes no execution model. UNKNOWN stays in the candidate
+    // domain; the safety obligation separately requires a complete domain and
+    // either a realizable member or a proof that entry is infeasible.
     path.feasibility = Feasibility::kUnknown;
     const std::string* flow_provenance =
         ProvenanceForFact(input.flow_slice.metadata.query_provenance_id);
@@ -1569,13 +1705,27 @@ class Builder {
     ProofObligation obligation;
     obligation.id = std::string(kObligationLocalId);
     obligation.goal_kind = ProofGoalKind::kProve;
-    obligation.predicate = ForAll(
-        "path",
-        Call("feasible_paths", {Reference(path_first_.empty()
-                                              ? source.value()
-                                              : path_first_),
-                                Reference(sink.value())}),
-        WithinCapacity(source.value(), subject.value()));
+    const auto origin =
+        Reference(path_first_.empty() ? source.value() : path_first_);
+    const auto destination = Reference(sink.value());
+    const auto domain = Call("feasible_paths", {origin, destination});
+    Expression nonempty;
+    nonempty.kind = Expression::Kind::kExists;
+    nonempty.text = "path";
+    Expression truth;
+    truth.kind = Expression::Kind::kBool;
+    truth.boolean = true;
+    nonempty.operands = {domain, truth};
+    Expression entry_domain;
+    entry_domain.kind = Expression::Kind::kOr;
+    entry_domain.operands = {nonempty,
+                             Call("entry_infeasible", {origin, destination})};
+    obligation.predicate.kind = Expression::Kind::kAnd;
+    obligation.predicate.operands = {
+        Call("execution_domain_complete", {origin, destination}),
+        std::move(entry_domain),
+        ForAll("path", domain,
+               WithinCapacity(source.value(), subject.value()))};
     obligation.verifier_kinds = {"range_analysis", "smt", "symbolic_execution"};
     obligation.status = ProofStatus::kPending;
     obligations_.push_back(std::move(obligation));
@@ -1604,29 +1754,57 @@ class Builder {
 
   // --- Summary expansion markers -------------------------------------------
 
-  // BLD-009: a function the case did not expand is reported as an expansion the
-  // case could not perform, not left as a silent gap. The marker is a property
-  // of the detail level, so it appears only where the detail is claimed.
+  // BLD-009/RDX04: every function retains its summary expansion capability.
+  // L2 emits supplied references; lower levels and missing capabilities retain
+  // explicit expansion handles.
   Status BuildSummaryExpansions() {
-    if (request_.level != EvidenceLevel::kL2) {
-      return Status::Ok();
+    std::map<std::string, const SummarySelection *> available;
+    for (const auto &selection : request_.input.summary_selections) {
+      auto function =
+          LocalForOrFail(selection.function_variant_id, "summary function");
+      if (!function.ok())
+        return function.status();
+      available.emplace(*function, &selection);
     }
-    std::vector<std::string> functions;
+    IdAllocator ids;
     for (const Entity& entity : entities_) {
-      if (entity.kind == EntityKind::kFunction) {
-        functions.push_back(entity.id);
+      if (entity.kind != EntityKind::kFunction)
+        continue;
+      auto selected = available.find(entity.id);
+      if (request_.level == EvidenceLevel::kL2 && selected != available.end()) {
+        SummaryReference reference;
+        reference.id =
+            ids.Allocate("S_" + DigestPrefix(selected->second->summary_id));
+        reference.function_id = entity.id;
+        reference.summary_id = selected->second->summary_id;
+        for (const auto &component : selected->second->components) {
+          std::string name = summary::v1::ComponentKind_Name(component.kind);
+          constexpr std::string_view prefix = "COMPONENT_KIND_";
+          if (name.starts_with(prefix))
+            name.erase(0, prefix.size());
+          for (char &c : name)
+            if (c >= 'A' && c <= 'Z')
+              c += 'a' - 'A';
+          reference.components.push_back(std::move(name));
+        }
+        std::sort(reference.components.begin(), reference.components.end());
+        summaries_.push_back(std::move(reference));
+        continue;
       }
-    }
-    std::sort(functions.begin(), functions.end());
-    for (const std::string& function : functions) {
+      // Older inputs may not have a summary capability. Modern L0/L1 retain
+      // the function handle and exact expansion identity without copying
+      // bodies.
       Omission omission;
       omission.id =
-          omission_ids_.Allocate("OM_summary_expansion_" + Sanitize(function));
+          omission_ids_.Allocate("OM_summary_expansion_" + Sanitize(entity.id));
       omission.kind = "summary_expansion";
-      omission.subject = function;
-      omission.reason =
-          "the handoff carries no function summary for this function, so its "
-          "components are not expanded at l2";
+      omission.subject = entity.id;
+      omission.reason = selected == available.end()
+                            ? "the handoff carries no current function summary "
+                              "for this function"
+                            : "expand immutable summary " +
+                                  StableText(selected->second->summary_id) +
+                                  " at l2";
       omission.expandable = true;
       omissions_.push_back(std::move(omission));
     }
@@ -1666,6 +1844,12 @@ class Builder {
     std::set<std::string> retained_entities;
     retained_entities.insert(claim_.subject);
     retained_entities.insert(claim_source_local_);
+    for (const auto &entity : entities_)
+      if (entity.kind == EntityKind::kFunction)
+        retained_entities.insert(entity.id);
+    for (const auto &selection : request_.input.summary_selections)
+      if (const auto *local = LocalFor(selection.function_variant_id))
+        retained_entities.insert(*local);
     // The obligation L0 keeps states a goal over the sink the claim is about.
     const std::string* sink = LocalFor(request_.input.claim_seed.sink_ref);
     if (sink != nullptr) {
@@ -1797,6 +1981,32 @@ class Builder {
                        }),
         value->provenance.end());
 
+    // A retained derivation may depend on a fact whose body L0 withheld.
+    // Keep its native dependency and an expansion handle, rather than a
+    // dangling local fact reference or an apparently premise-free derivation.
+    for (auto &record : value->provenance) {
+      for (const auto &input : record.input_fact_ids) {
+        if (retained_facts.contains(input))
+          continue;
+        const auto fact = std::ranges::find(facts_, input, &Fact::id);
+        Omission omission;
+        omission.id = omission_ids_.Allocate(
+            "OM_premise_l0_" + Sanitize(record.id) + "_" + Sanitize(input));
+        omission.kind = "provenance_premise";
+        omission.subject = record.id;
+        omission.reason = "l0 withholds input " +
+                          (fact != facts_.end() && fact->stable_id
+                               ? StableText(*fact->stable_id)
+                               : input) +
+                          " of " + record.id;
+        omission.expandable = true;
+        value->omissions.push_back(std::move(omission));
+      }
+      std::erase_if(record.input_fact_ids, [&](const auto &input) {
+        return !retained_facts.contains(input);
+      });
+    }
+
     // An omission whose subject the projection removed would dangle, so it goes
     // too — and it is a removed member like any other, so the loop below names
     // it. A dropped marker is never allowed to disappear silently: that is the
@@ -1894,6 +2104,7 @@ class Builder {
   LocalIdTable resolver_;
 
   std::vector<Provenance> provenance_;
+  std::map<std::string, std::string> fact_local_by_stable_;
   std::map<std::string, std::string> provenance_by_fact_;
   std::map<std::string, const facts::RunFactBinding*> binding_by_fact_;
   std::map<std::string, WitnessView> witness_by_fact_;
@@ -1906,6 +2117,7 @@ class Builder {
   std::set<std::string> coverage_unknown_ids_;
   std::vector<Constraint> constraints_;
   std::vector<ProofObligation> obligations_;
+  std::vector<SummaryReference> summaries_;
   std::vector<Dependency> dependencies_;
   std::vector<Omission> omissions_;
   std::vector<const facts::AnalysisFact*> coverage_facts_;

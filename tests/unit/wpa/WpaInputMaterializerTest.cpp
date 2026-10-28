@@ -378,6 +378,12 @@ TEST(WpaInputMaterializerTest, MemberBaseFactsAreRootedInputs) {
   for (const auto& root : input->local_roots) {
     EXPECT_FALSE(root.provenance_ref.empty());
     EXPECT_EQ(root.fact.fact_id.kind, core::IdKind::kFact);
+    auto summary_id = core::ParseStableId(root.summary_id);
+    ASSERT_TRUE(summary_id.ok());
+    EXPECT_EQ(summary_id->kind, core::IdKind::kFunctionSummary);
+    EXPECT_TRUE(std::ranges::any_of(artifacts, [&](const auto &artifact) {
+      return summary::ComputeFunctionSummaryId(artifact).value() == *summary_id;
+    }));
   }
 }
 

@@ -68,6 +68,8 @@ struct ExplainBudget {
   bool include_source_anchors = true;
   bool include_summary_ids = true;
   bool include_datalog_derivation = true;
+  std::uint32_t max_edges = 1000;
+  bool selected_only = false;
 };
 
 // Writing is queued and batched: a run publishes more than two million
