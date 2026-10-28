@@ -368,26 +368,33 @@ public:
                   stmt))
             structured = false;
           if (const auto *binary = llvm::dyn_cast<clang::BinaryOperator>(stmt))
-            if (binary->isAssignmentOp() && Refers(binary->getLHS(), length))
+            if (binary->isAssignmentOp() &&
+                References(binary->getLHS(), length))
               unchanged = false;
           if (const auto *unary = llvm::dyn_cast<clang::UnaryOperator>(stmt))
             if ((unary->isIncrementDecrementOp() ||
                  unary->getOpcode() == clang::UO_AddrOf) &&
-                Refers(unary->getSubExpr(), length))
+                References(unary->getSubExpr(), length))
               unchanged = false;
           if (const auto *other = llvm::dyn_cast<clang::CallExpr>(stmt)) {
             const auto *target = other->getDirectCallee();
             for (unsigned i = 0; i < other->getNumArgs(); ++i)
-              if (Refers(other->getArg(i), length) &&
+              if (References(other->getArg(i), length) &&
                   (!target || i >= target->getNumParams() ||
                    target->getParamDecl(i)->getType()->isReferenceType()))
                 unchanged = false;
           }
+          if ((llvm::isa<clang::CXXConstructExpr>(stmt) ||
+               llvm::isa<clang::InitListExpr>(stmt)) &&
+              References(stmt, length))
+            unchanged = false;
           if (const auto *declstmt = llvm::dyn_cast<clang::DeclStmt>(stmt))
             for (const auto *decl : declstmt->decls())
               if (const auto *var = llvm::dyn_cast<clang::VarDecl>(decl))
-                if (var->getType()->isReferenceType() && var->hasInit() &&
-                    Refers(var->getInit(), length))
+                if (var->hasInit() &&
+                    (var->getType()->isReferenceType() ||
+                     !var->getType()->isScalarType()) &&
+                    References(var->getInit(), length))
                   unchanged = false;
         });
         if (unchanged && structured) {
@@ -455,6 +462,16 @@ private:
     f(stmt);
     for (const auto *child : stmt->children())
       Scan(child, f);
+  }
+  static bool References(const clang::Stmt *stmt,
+                         const clang::ValueDecl *decl) {
+    bool found = false;
+    Scan(stmt, [&](const clang::Stmt *part) {
+      if (const auto *ref = llvm::dyn_cast<clang::DeclRefExpr>(part))
+        if (ref->getDecl() == decl)
+          found = true;
+    });
+    return found;
   }
   static bool Refers(const clang::Expr *expr, const clang::ValueDecl *decl) {
     if (!expr)
@@ -873,6 +890,21 @@ StatusOr<ContextArtifact> StructuralIndex::Context(std::string_view path,
     if (e.path == context->path && e.start >= start && e.end <= end)
       context->entity_bindings.push_back(
           {{id(), e.ordinal}, e.start, e.end, e.kind});
+  Json::Array bindings;
+  for (const auto &entity : context->entity_bindings)
+    bindings.push_back(Json::Object{{"entity_ref", RefJson(entity.entity_ref)},
+                                    {"start", entity.start},
+                                    {"end", entity.end},
+                                    {"kind", entity.kind}});
+  // The plain source context remains the provenance premise. This indexed
+  // view additionally commits to the exact index and advertised bindings.
+  auto id = MakeArtifactId<ContextTag>(
+      Json::Object{{"source_context_id", context->context_id.value()},
+                   {"index_id", data_->id.value()},
+                   {"entity_bindings", std::move(bindings)}});
+  if (!id.ok())
+    return id.status();
+  context->context_id = *id;
   return context;
 }
 } // namespace veritas::review

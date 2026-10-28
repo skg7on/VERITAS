@@ -113,7 +113,9 @@ macros use `SOURCE_DATE_EPOCH=0` in the scrubbed child environment.
 The index retains function definitions, array/type descriptors, direct versus
 indirect callsites, per-site operand indices and UTF-8 source byte anchors.
 `StructuralIndex::Context` advertises only entities contained in a captured
-source span. Index and evidence IDs exclude timing and absolute checkout paths.
+source span. Its ID commits to the source-context premise, exact index and
+advertised bindings; source-only provenance context IDs remain separate. Index
+and evidence IDs exclude timing and absolute checkout paths.
 `Usage` includes cold setup wall/CPU and compiler child CPU/peak RSS; index setup
 is a distinct cost from warm investigation and must be charged once by the
 future backend/controller. Wall, input bytes, TU/entity counts, pipe output and

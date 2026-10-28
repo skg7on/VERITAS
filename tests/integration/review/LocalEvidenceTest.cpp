@@ -493,5 +493,57 @@ TEST_F(LocalEvidenceTest, TruncationAndIdsPreserveCoverageAndIgnoreTiming) {
   ASSERT_TRUE(truncated.ok());
   EXPECT_EQ(truncated->coverage().traversal, "INCOMPLETE");
 }
+TEST_F(LocalEvidenceTest, ReviewAggregateReferenceEscape) {
+  Write(root_ / "main.cc",
+        R"(extern "C" void *memcpy(void*,const void*,__SIZE_TYPE__);
+struct Ref { __SIZE_TYPE__ &value; };
+void f(const char*s,__SIZE_TYPE__ n){char d[32];Ref r{n};if(n<=sizeof(d)){r.value=64;memcpy(d,s,n);}}
+)");
+  auto snap = Capture();
+  ASSERT_TRUE(snap.ok());
+  auto index = BuildStructuralIndex(*snap, {});
+  ASSERT_TRUE(index.ok());
+  auto calls = Calls(*index);
+  ASSERT_EQ(calls.size(), 1u);
+  auto e = Query(*index, calls[0], {"GUARD"});
+  ASSERT_TRUE(e.ok());
+  EXPECT_EQ(Slot(*e, "GUARD"), nullptr);
+}
+TEST_F(LocalEvidenceTest, ReviewConditionalReferenceEscape) {
+  Write(root_ / "main.cc",
+        R"(extern "C" void *memcpy(void*,const void*,__SIZE_TYPE__);
+void change(__SIZE_TYPE__ &);
+void f(const char*s,__SIZE_TYPE__ n,bool b){char d[32];if(n<=sizeof(d)){change(b?n:n);memcpy(d,s,n);}}
+)");
+  auto snap = Capture();
+  ASSERT_TRUE(snap.ok());
+  auto index = BuildStructuralIndex(*snap, {});
+  ASSERT_TRUE(index.ok());
+  auto calls = Calls(*index);
+  ASSERT_EQ(calls.size(), 2u);
+  auto e = Query(*index, calls[1], {"GUARD"});
+  ASSERT_TRUE(e.ok());
+  EXPECT_EQ(Slot(*e, "GUARD"), nullptr);
+}
+TEST_F(LocalEvidenceTest, ReviewIndexedContextIdentity) {
+  auto snap = Capture();
+  ASSERT_TRUE(snap.ok());
+  auto full = BuildStructuralIndex(*snap, {});
+  ASSERT_TRUE(full.ok());
+  StructuralBudget budget;
+  budget.max_entities = 2;
+  auto partial = BuildStructuralIndex(*snap, budget);
+  ASSERT_TRUE(partial.ok());
+  auto size = snap->Read("main.cc")->size();
+  auto plain = snap->Context("main.cc", "SOURCE", 0, size);
+  ASSERT_TRUE(plain.ok());
+  auto a = full->Context("main.cc", 0, size);
+  ASSERT_TRUE(a.ok());
+  auto b = partial->Context("main.cc", 0, size);
+  ASSERT_TRUE(b.ok());
+  ASSERT_NE(a->entity_bindings.size(), b->entity_bindings.size());
+  EXPECT_NE(a->context_id, b->context_id);
+  EXPECT_NE(a->context_id, plain->context_id);
+}
 } // namespace
 } // namespace veritas::review
