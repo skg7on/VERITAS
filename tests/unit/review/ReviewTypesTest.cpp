@@ -85,4 +85,13 @@ TEST(ReviewTypesTest, CaptureUsesTrustedSelectionKeysBeforeRefs) {
     EXPECT_FALSE(DecodeV2(bad).ok());
   }
 }
+
+TEST(ReviewTypesTest, CanonicalUnicodeNulAndEmptyArrays) {
+  auto bytes = CanonicalJson(Json::Object{
+      {"unicode", "é😀"}, {"nul", std::string(1, '\0')}, {"a", Json::Array{}}});
+  ASSERT_TRUE(bytes.ok());
+  EXPECT_EQ(*bytes, "{\"a\":[],\"nul\":\"\\u0000\",\"unicode\":\"é😀\"}");
+  EXPECT_FALSE(
+      CanonicalJson(Json::Object{{std::string(1, char(0xff)), "value"}}).ok());
+}
 } // namespace veritas::review

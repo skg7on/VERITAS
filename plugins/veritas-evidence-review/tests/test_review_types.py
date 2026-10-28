@@ -91,6 +91,28 @@ class ReviewTypesTest(unittest.TestCase):
                            ("project_key","../escape"),("base_ref","--upload-pack=evil"),("selected_untracked",["../secret"])]:
             with self.subTest(key=key), self.assertRaises(ValueError): decode(request("capture", {**params,key:value}))
 
+
+    def test_TaggedIdsAreFrozen(self):
+        tag=ContextId(ident("context"))
+        with self.assertRaises(dataclasses.FrozenInstanceError): tag.kind="review-snapshot"
+    def test_NativeResultsRequireNativeIds(self):
+        usage=dict(wall_ms=0,cpu_ms=0,peak_rss_bytes=0,output_bytes=0,examined=0)
+        coverage=dict(supported=False,scope_closed=False,traversal="INCOMPLETE",frontier_refs=[],reasons=["unsupported"],examined=0)
+        envelope=dict(protocol=P,request_id="r1",ok=True,result=dict(binding=binding(),evidence_id=ident("context"),eir_json="{}",coverage=coverage,usage=usage))
+        with self.assertRaises(ValueError): decode(envelope,expected_operation="native-evidence")
+
+
+    def test_FrozenModelsRejectWrongKindsAndMutableCollections(self):
+        b=ReviewBinding.from_wire(binding())
+        with self.assertRaises(ValueError): dataclasses.replace(b,snapshot_id=ContextId(ident("context")))
+        with self.assertRaises(ValueError): dataclasses.replace(b,provider_versions=[])
+
+
+    def test_CanonicalUnicodeNulAndEmptyArrays(self):
+        self.assertEqual(canonical_json({"unicode":"é😀","nul":"\x00","a":[]}),
+                         b'{"a":[],"nul":"\\u0000","unicode":"\xc3\xa9\xf0\x9f\x98\x80"}')
+        with self.assertRaises(ValueError): canonical_json({"\ud800":"value"})
+
     def test_NumericBoundsAndClosedResults(self):
         params=dict(binding=binding(), context_refs=[ident("context")],max_bytes=1,max_tokens=1)
         for bad in [True,0,-1,4294967296]:

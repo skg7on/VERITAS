@@ -83,7 +83,15 @@ and genuine L2 summary references. Native provenance now uses actual summary IDs
 `VERIFIED_SAFE` requires an explicit proved execution-domain argument. Native
 assembly still emits pending obligations, and #124 retains the missing domain
 producers. This does not deliver the
-planned lightweight backend/controller or repair all native Evidence gaps. Native SVF/Soufflé requirements remain unchanged.
+planned lightweight backend/controller or repair all native Evidence gaps.
+#159/RDX05 adds the backend v2 schema/frozen Python models, separate tagged
+review artifact IDs, and the native immutable snapshot/program-scope library.
+Snapshots pin base/dirty/explicit untracked/artifact bytes and materialize private
+read-only inputs; explicit/build-link target graphs preserve shared dependencies,
+while output hints stay OPEN. Local bindings have no fabricated native run.
+Compiler/include-closure qualification, public backend, controller and host remain
+pending. See [runtime foundation](plugins/veritas-evidence-review/README.md).
+Native SVF/Soufflé requirements remain unchanged.
 
 Canonical configure and build (uses `CMakePresets.json` at repo root):
 

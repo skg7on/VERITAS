@@ -126,7 +126,7 @@
         },
         "base_revision_id": {
           "type": "string",
-          "pattern": "^rev:sha256:[0-9a-f]{64}$"
+          "pattern": "^(git:[0-9a-f]{40}|git:[0-9a-f]{64}|rev:sha256:[0-9a-f]{64})$"
         },
         "working_tree_digest": {
           "type": "string",
@@ -1221,7 +1221,8 @@
           "$ref": "#/$defs/ReviewBinding"
         },
         "evidence_id": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^evidence:sha256:[0-9a-f]{64}$"
         },
         "eir_json": {
           "type": "string"
@@ -1540,6 +1541,78 @@
         "request_id",
         "ok",
         "error"
+      ],
+      "additionalProperties": false
+    },
+    "ProgramTarget": {
+      "title": "ProgramTarget",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+        },
+        "kind": {
+          "enum": [
+            "EXECUTABLE",
+            "STATIC_LIBRARY",
+            "SHARED_LIBRARY",
+            "TEST"
+          ],
+          "type": "string"
+        },
+        "translation_units": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000]+$"
+          },
+          "uniqueItems": true
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "uniqueItems": true
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000]+$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "translation_units",
+        "dependencies",
+        "artifacts"
+      ],
+      "additionalProperties": false
+    },
+    "ProgramManifest": {
+      "title": "ProgramManifest",
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": "veritas.review.program.v1"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgramTarget"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "version",
+        "targets"
       ],
       "additionalProperties": false
     }

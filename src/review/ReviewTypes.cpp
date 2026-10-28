@@ -314,6 +314,8 @@ Status Encode(const V &v, std::string &out, unsigned depth = 0) {
     out += '{';
     bool first = true;
     for (const auto &[k, x] : sorted) {
+      if (!llvm::json::isUTF8(k))
+        return Bad();
       if (!first)
         out += ',';
       first = false;

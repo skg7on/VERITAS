@@ -37,7 +37,7 @@ for _name, _kind in [("SnapshotId","review-snapshot"),("ProgramScopeId","program
     ("ContextId","context"),("CandidateId","candidate"),("LocalEvidenceId","local-evidence"),
     ("ObligationId","obligation"),("VerificationId","verification"),
     ("ReviewReportId","review-report"),("StructuralIndexId","structural-index")]:
-    globals()[_name] = type(_name, (ArtifactId,), {"kind":_kind, "__module__":__name__})
+    globals()[_name] = dataclass(frozen=True)(type(_name, (ArtifactId,), {"kind":_kind, "__module__":__name__}))
 
 
 def _semantic(value, depth=0):
@@ -124,7 +124,23 @@ def _invariants(value, name):
             if item["start"]<value["start"] or item["end"]>value["end"]: raise ValueError("entity outside context")
     if name=="ProgramScope" and value["membership_source"]=="OUTPUT_HINT" and value["coverage"]=="DECLARED_CLOSED": raise ValueError("output hint cannot close membership")
 
+def _wire(value):
+    if isinstance(value,ArtifactId): return value.value
+    if isinstance(value,_WireModel): return {k:_wire(getattr(value,k)) for k in value.__dataclass_fields__}
+    if type(value) is tuple: return [_wire(v) for v in value]
+    if value is None or type(value) in (bool,int,str): return value
+    raise ValueError("wire models require immutable typed fields")
+
+def _annotation(rule):
+    if "$ref" in rule: return rule["$ref"].split("/")[-1]
+    if "oneOf" in rule: return " | ".join(_annotation(r) for r in rule["oneOf"])
+    if rule.get("type")=="array": return "tuple["+_annotation(rule["items"])+", ...]"
+    if "const" in rule: return type(rule["const"]).__name__
+    return {"string":"str","boolean":"bool","integer":"int","null":"None"}[rule["type"]]
+
 class _WireModel:
+    def __post_init__(self):
+        _validate(_wire(self), {"$ref":"#/$defs/"+type(self).__name__})
     @classmethod
     def from_wire(cls, value):
         _semantic(value); _validate(value,{"$ref":"#/$defs/"+cls.__name__})
@@ -134,7 +150,7 @@ class _WireModel:
 # ID-valued fields are converted to the distinct tagged classes above.
 for _name,_definition in _SCHEMA["$defs"].items():
     if _definition.get("type")=="object":
-        globals()[_name]=make_dataclass(_name,[(field,object) for field in _definition["required"]],bases=(_WireModel,),frozen=True,namespace={"__module__":__name__})
+        globals()[_name]=make_dataclass(_name,[(field,_annotation(_definition["properties"][field])) for field in _definition["required"]],bases=(_WireModel,),frozen=True,namespace={"__module__":__name__})
 
 
 def _freeze(value, schema):
@@ -184,7 +200,7 @@ def decode_v2(data: bytes, *, expected_request_id=None, expected_operation=None)
         if "operation" in value and value["operation"] != expected_operation: raise ValueError("operation mismatch")
         if value.get("ok") is True:
             if expected_operation not in names: raise ValueError("unsupported operation")
-            _validate(value["result"],ref_schema:={"$ref":"#/$defs/"+names[expected_operation]})
+            _validate(value["result"],{"$ref":"#/$defs/"+names[expected_operation]})
     for branch in _SCHEMA["oneOf"]:
         try: _validate(value,branch)
         except ValueError: continue
