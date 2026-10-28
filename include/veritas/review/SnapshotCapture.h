@@ -35,10 +35,20 @@ struct SnapshotRequest {
   std::vector<ProviderVersion> provider_versions;
   uint64_t max_files = 10000, max_bytes = 64 * 1024 * 1024;
 };
+struct CapturedCompileCommand {
+  std::string directory, file;
+  std::vector<std::string> arguments;
+};
 struct SnapshotData;
 class ReviewSnapshot {
 public:
   const ReviewBinding &binding() const;
+  const std::vector<CapturedCompileCommand> &compiler_commands() const;
+  std::vector<std::string> captured_paths() const;
+  // Lexical resolution against the captured root; never consults live files.
+  // Root itself is returned as "." for include-directory operands.
+  StatusOr<std::string> CompilerPath(std::string_view directory,
+                                    std::string_view path) const;
   const ProgramScope &program_scope() const;
   const Coverage &compiler_coverage() const;
   const std::vector<std::string> &excluded() const;
