@@ -93,9 +93,12 @@ while output hints stay OPEN. Local bindings have no fabricated native run.
 `copy_bound.v1` local-evidence producer, with byte extents, site/operand bindings,
 conservative branch guards and bounded child costs, without SVF/WPA. Its initial
 ABI is x86_64-unknown-linux-gnu; headers must be captured, and unsupported
-commands/forms or incomplete parses retain explicit gaps. Native #124 domain
-producers, deployment/replay qualification, public backend, controller and host
-remain pending. See [runtime foundation](plugins/veritas-evidence-review/README.md).
+commands/forms or incomplete parses retain explicit gaps. RDX07/#161 exposes the strict resident public v2 subprocess backend, pinned
+context/seed/local operations and exact-obligation C++/Python authority boundary.
+Local mode requires no SummaryDB. Native/verify operations explicitly refuse
+unavailable production providers; producer names alone grant no deciding
+authority. Native #124 domain producers, deployment/replay qualification,
+controller and host remain pending. See [runtime foundation](plugins/veritas-evidence-review/README.md).
 Native SVF/Soufflé requirements remain unchanged.
 
 Canonical configure and build (uses `CMakePresets.json` at repo root):

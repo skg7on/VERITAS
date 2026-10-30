@@ -1,0 +1,133 @@
+{
+  "request": {
+    "binding": {
+      "snapshot_id": "review-snapshot:sha256:38f67b8cf4e4a02615b4c2ca3206cd3b503ab84c67ab3a11563445d22e6955e0",
+      "repository_id": "repo:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "base_revision_id": "git:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "working_tree_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "program_scope_id": "program-scope:sha256:33a5558d474566bb52168bd7a50409684f4bcb362ad853eb926223b74abc78ef",
+      "build_context_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "native_binding": null,
+      "provider_versions": []
+    },
+    "predicate_kind": "copy_bound.v1",
+    "typed_operands": {
+      "kind": "copy_bound.v1",
+      "callsite_ref": {
+        "index_id": "structural-index:sha256:42d6d437d3e192afccf0efbfd0f4d0662be5134ec06a64e24e684ab121e5d437",
+        "ordinal": 0
+      },
+      "destination_ref": {
+        "index_id": "structural-index:sha256:42d6d437d3e192afccf0efbfd0f4d0662be5134ec06a64e24e684ab121e5d437",
+        "ordinal": 0
+      },
+      "source_ref": {
+        "index_id": "structural-index:sha256:42d6d437d3e192afccf0efbfd0f4d0662be5134ec06a64e24e684ab121e5d437",
+        "ordinal": 0
+      },
+      "length_ref": {
+        "index_id": "structural-index:sha256:42d6d437d3e192afccf0efbfd0f4d0662be5134ec06a64e24e684ab121e5d437",
+        "ordinal": 0
+      },
+      "capacity_bytes": 32,
+      "requested_bytes": 33,
+      "readable_bytes": 33,
+      "payload_digest": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5",
+      "harness_id": "test-harness"
+    },
+    "input_artifact_ids": [
+      "local-evidence:sha256:a77ddbcf203dbd9cb8ed8b1cde7dd3656706ac7cf86a2d4e8d0fb900d0c050c7"
+    ],
+    "assumptions": [],
+    "execution_domain": {
+      "kind": "CONCRETE_INPUT",
+      "snapshot_id": "review-snapshot:sha256:38f67b8cf4e4a02615b4c2ca3206cd3b503ab84c67ab3a11563445d22e6955e0",
+      "input_digest": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5",
+      "harness_id": "test-harness"
+    },
+    "backend_id": "test-bound-check",
+    "backend_version": "1",
+    "budget": {
+      "wall_ms": 1000,
+      "output_bytes": 4096,
+      "examined": 100
+    },
+    "obligation_id": "obligation:sha256:c4063094a8f57bfcabe361350d754a1be8a5439008451f2e4ffaa3575939b540"
+  },
+  "result": {
+    "binding": {
+      "snapshot_id": "review-snapshot:sha256:38f67b8cf4e4a02615b4c2ca3206cd3b503ab84c67ab3a11563445d22e6955e0",
+      "repository_id": "repo:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "base_revision_id": "git:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "working_tree_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "program_scope_id": "program-scope:sha256:33a5558d474566bb52168bd7a50409684f4bcb362ad853eb926223b74abc78ef",
+      "build_context_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "native_binding": null,
+      "provider_versions": []
+    },
+    "request_digest": "1c31c510371684a98864a9f87fb8281e07a98a1d525bb4f9fe44adf40a6a9722",
+    "predicate_kind": "copy_bound.v1",
+    "typed_operands": {
+      "kind": "copy_bound.v1",
+      "callsite_ref": {
+        "index_id": "structural-index:sha256:42d6d437d3e192afccf0efbfd0f4d0662be5134ec06a64e24e684ab121e5d437",
+        "ordinal": 0
+      },
+      "destination_ref": {
+        "index_id": "structural-index:sha256:42d6d437d3e192afccf0efbfd0f4d0662be5134ec06a64e24e684ab121e5d437",
+        "ordinal": 0
+      },
+      "source_ref": {
+        "index_id": "structural-index:sha256:42d6d437d3e192afccf0efbfd0f4d0662be5134ec06a64e24e684ab121e5d437",
+        "ordinal": 0
+      },
+      "length_ref": {
+        "index_id": "structural-index:sha256:42d6d437d3e192afccf0efbfd0f4d0662be5134ec06a64e24e684ab121e5d437",
+        "ordinal": 0
+      },
+      "capacity_bytes": 32,
+      "requested_bytes": 33,
+      "readable_bytes": 33,
+      "payload_digest": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5",
+      "harness_id": "test-harness"
+    },
+    "execution_domain": {
+      "kind": "CONCRETE_INPUT",
+      "snapshot_id": "review-snapshot:sha256:38f67b8cf4e4a02615b4c2ca3206cd3b503ab84c67ab3a11563445d22e6955e0",
+      "input_digest": "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5",
+      "harness_id": "test-harness"
+    },
+    "producer": {
+      "name": "test-bound-check",
+      "version": "1",
+      "config_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "status": "REFUTED",
+    "proposition": "REQUESTED_LE_CAPACITY",
+    "certificate_artifact_ids": [],
+    "counterexample_artifact_ids": [
+      "witness"
+    ],
+    "input_dependencies": [
+      {
+        "artifact_id": "local-evidence:sha256:a77ddbcf203dbd9cb8ed8b1cde7dd3656706ac7cf86a2d4e8d0fb900d0c050c7",
+        "content_digest": "ee8250fb76e094b34b471f13a73dbbe51d1ae142e9df59d7c0d31ec20f0a0a8e"
+      },
+      {
+        "artifact_id": "witness",
+        "content_digest": "ba1c566a4bad288c22a0b7511458c92ca5822cd41632e51806e9ea75ed12d13d"
+      }
+    ],
+    "assumptions": [],
+    "coverage": {
+      "supported": true,
+      "scope_closed": false,
+      "traversal": "COMPLETE",
+      "frontier_refs": [],
+      "reasons": [],
+      "examined": 1
+    },
+    "operational_outcome": "COMPLETED",
+    "verification_id": "verification:sha256:bd97b9dd57be4457d5201f2af277da2bd74190c438f57448eaeb110f0291edba"
+  }
+}

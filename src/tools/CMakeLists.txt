@@ -55,3 +55,7 @@ target_link_libraries(veritas-explain PRIVATE veritas_facts)
 if(TARGET absl::status)
   target_link_libraries(veritas-explain PRIVATE absl::status)
 endif()
+
+add_executable(veritas-review-backend veritas-review-backend.cpp)
+target_link_libraries(veritas-review-backend PRIVATE veritas_review)
+veritas_add_warnings(veritas-review-backend)

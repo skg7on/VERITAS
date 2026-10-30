@@ -593,6 +593,7 @@ StatusOr<BackendEnvelope> DecodeV2(std::string_view text,
           {"seed-candidates", "SeedResult"},
           {"local-evidence", "LocalEvidence"},
           {"native-evidence", "NativeResult"},
+          {"verify", "VerifyResult"},
           {"release", "ReleaseResult"}};
       auto it = names.find(expected_op);
       if (it == names.end() ||

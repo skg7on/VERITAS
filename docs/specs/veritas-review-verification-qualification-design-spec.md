@@ -163,3 +163,26 @@ adjudicated quality/coverage at acceptable incremental cost. A decision record
 must report both benefits and misses; unavailable experiments keep that gate
 open. Model/provider selection is an operator deployment choice requiring the
 user's source-disclosure policy, not a dependency added by this design task.
+
+## RDX07 authority-boundary execution amendment
+
+The closed concrete-input wire models and C++/Python validation are delivered by
+RDX07. The budget fields are positive `wall_ms`, `output_bytes`, `examined`.
+VerificationResult carries `verification_id`, `binding`, `request_digest`,
+`predicate_kind`, `typed_operands`, `execution_domain`, `producer`, `status`,
+`proposition=REQUESTED_LE_CAPACITY`, `certificate_artifact_ids`,
+`counterexample_artifact_ids`, `input_dependencies`, `assumptions`, `coverage`,
+`operational_outcome`. Each dependency is `{artifact_id,content_digest}`.
+Operational outcomes are COMPLETED/TIMEOUT/UNSUPPORTED/CANCELLED/ERROR.
+The executable schema defines every field as required and rejects extra keys.
+
+Obligation ID hashes the canonical request without its `obligation_id`; request
+digest hashes the complete canonical request. Result ID hashes the canonical
+result without `verification_id`. Timing/occurrences stay outside these payloads.
+Trusted immutable policy pins dependency bytes and independently admitted result
+IDs. A registered producer name/version/config alone is insufficient: a deciding
+result must have an exact admitted receipt, complete supported coverage and its
+own witness. Reusing an input as its own proof, changing input content or any
+request premise, or admitting circular/unapproved assumptions is refused.
+No production verifier or FORMAL schema is registered; production verify remains
+UNSUPPORTED until RDX09's enforcing-runtime and real-replay qualification passes.

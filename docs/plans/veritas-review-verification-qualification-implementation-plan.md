@@ -128,3 +128,14 @@ Use existing RunMetrics/M13/M14 instruments for native measurements.
   Preserve #142's separate scaling thresholds and report model variability/misses.
 - [ ] Run complete repository/plugin verification and commit the measured decision
   record. Pending experiments stay pending; do not fill targets with predictions.
+
+### RDX07 / Task 1 qualification (2026-10-30)
+
+Task 1's concrete-input obligation/request/result identity and exact authority
+boundary are delivered in C++ and Python. Runtime Task 4 exposes the closed
+verify operation with explicit UNSUPPORTED while no production producer is
+qualified. The [runtime execution record](veritas-lightweight-review-runtime-implementation-plan.md#rdx07--161-execution-qualification-2026-10-30)
+records RED→GREEN evidence, independent review fixes, 589-step clean build,
+999/999 full CTest with no skips and 37/37 Python tests. The test-only registered
+receipt fixture does not establish production verification. Task 2's enforcing
+runtime, real sanitizer execution and deciding release acceptance remain pending.

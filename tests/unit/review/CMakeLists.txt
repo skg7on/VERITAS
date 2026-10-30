@@ -13,9 +13,15 @@
 # limitations under the License.
 
 
-add_executable(veritas_unit_review_tests ReviewTypesTest.cpp)
+add_executable(veritas_unit_review_tests ReviewTypesTest.cpp VerificationTest.cpp)
 target_link_libraries(veritas_unit_review_tests PRIVATE veritas_review GTest::gtest_main)
 veritas_add_warnings(veritas_unit_review_tests)
 gtest_discover_tests(veritas_unit_review_tests DISCOVERY_TIMEOUT 60)
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 add_test(NAME ReviewTypesPythonTest COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s "${PROJECT_SOURCE_DIR}/plugins/veritas-evidence-review/tests" -p test_review_types.py)
+
+target_compile_definitions(veritas_unit_review_tests PRIVATE VERITAS_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+if(TARGET veritas-review-backend)
+add_test(NAME ReviewRuntimePythonTest COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s "${PROJECT_SOURCE_DIR}/plugins/veritas-evidence-review/tests")
+set_tests_properties(ReviewRuntimePythonTest PROPERTIES ENVIRONMENT "VERITAS_REVIEW_BACKEND=$<TARGET_FILE:veritas-review-backend>")
+endif()
