@@ -2,9 +2,10 @@
 
 RDX05 (#159) delivers the backend v2 wire models and native snapshot library.
 RDX06 (#160) adds the structural index and narrow compiler-local provider.
-This directory currently contains the schema, frozen Python types and tests.
-The subprocess backend, controller, replay and host adapter
-are later deliveries; this is not an installable review plugin yet. The native
+This directory contains the schema, frozen Python types, bounded transport and tests.
+RDX07 (#161) adds the public resident subprocess backend and exact-obligation
+authority boundary. The controller, real replay and host adapter
+remain later deliveries; this is not an installable review plugin yet. The native
 SVF/Soufflé analysis path and `eir.v1` remain unchanged.
 
 ## Wire contract
@@ -21,9 +22,10 @@ FactIDs, AnalysisRunIDs or evidence IDs. Semantic IDs hash
 passed separately and excluded. Native and Python tests pin identical Unicode,
 control/NUL, empty-array and signed/unsigned boundary bytes and hash vectors.
 The schema currently covers handshake, capture, context, seed-candidates,
-local-evidence, native-evidence and release shapes. Verification codecs remain
-unavailable until the qualification contract delivers their closed result and
-budget definitions; `verify` is rejected. No operation executes here.
+local-evidence, native-evidence and release shapes. RDX07 closes the verification request/result, concrete-input domain and positive
+verification budget codecs. A schema-valid verifier response alone has no authority.
+The backend implements capture/context/seed/local/release; native/verify are
+recognized and explicitly UNSUPPORTED until a qualified provider is configured.
 
 ## Trusted native snapshot API
 
@@ -154,3 +156,98 @@ ctest --test-dir build-homebrew-clang -R 'ReviewTypes|SnapshotCapture|LocalEvide
 The Python package uses only Python 3.11+ standard-library modules. All new
 first-party code uses the repository's Apache-2.0 license notice; raw JSON is
 covered by this directory's Apache-2.0 attribution and the repository LICENSE.
+
+## Public backend and authority boundary (RDX07)
+
+Build `veritas-review-backend` and import `veritas_review.backend` from this
+package's `scripts/` directory. The transport uses only the Python standard
+library. The native service does not link or open SummaryDB for local mode.
+All eight named subcommands exist. Begin with handshake, then capture; the
+backend advertises the exact operations currently available. It never selects
+practice mode. Native evidence has no configured adapter; production verification
+has no registered producer. Both operations return UNSUPPORTED. This delivery
+does not qualify replay, the controller, the plugin host, or a real review release.
+
+A resident process keeps one immutable snapshot/index and its advertised context
+handles until release or process exit. Each request and response is exactly one
+bounded v2 JSON envelope followed by a newline; EOF also terminates a one-shot
+request. Newlines inside strings use normal JSON escaping. A named subcommand
+accepts its matching bootstrap request or an initial handshake; later requests
+are dispatched by their closed operation envelope. A v1-only client cannot
+capture v2 inputs. Duplicate request IDs refuse before execution; durable retry
+receipts and aggregate model-turn admission belong to RDX08.
+
+The backend consumes a trusted operator JSON file selected in argv, never a path
+from a model request. All top-level fields below are required; selection maps
+can be empty. Compile-command absolute paths must match the canonical project
+root. The manifest map selects both a captured manifest path and its target.
+`target_ref` currently accepts null for the captured working tree; revision-target
+capture is unavailable. Source contexts come from captured compiler inputs;
+TEST/DOC selections resolve only through `context_selection_keys`.
+
+```json
+{
+  "project_key": "app",
+  "project_root": "/absolute/canonical/project",
+  "repository_id": "repo:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "base_ref": "HEAD",
+  "compile_commands_path": "compile_commands.json",
+  "selected_tracked": [],
+  "selected_artifacts": ["include"],
+  "allowed_untracked": [],
+  "context_selections": {"design": {"path": "docs/design.md", "kind": "DOC"}},
+  "programs": {"app": {"path": "review-program.json", "target": "app"}},
+  "limits": {"wall_ms": 120000, "output_bytes": 1048576, "examined": 10000,
+             "context_bytes": 32768, "request_bytes": 1048576, "requests": 256}
+}
+```
+
+```python
+from veritas_review.backend import Backend
+
+with Backend(("/absolute/build/bin/veritas-review-backend", "handshake",
+              "--config", "/absolute/operator.json"), cwd="/private/tmp") as backend:
+    backend.handshake()
+    captured = backend.call("capture", {
+        "project_key": "app", "base_ref": "HEAD", "target_ref": None,
+        "selected_untracked": [], "program_manifest_key": "app",
+        "context_selection_keys": ["design"],
+    }).result
+```
+
+Context returns only advertised handles and conservatively charges one token per
+UTF-8 byte. Large source/diff artifacts outside the configured window are omitted
+with incomplete coverage. DIFF artifacts are deterministic full-file replacements
+of base and captured bytes; they do not invent entity bindings. Seeds name actual
+advertised copy callsites in changed files. They are candidates, never findings.
+Structural entity/TU work exhaustion refuses capture before publication; parse
+and include gaps remain explicit partial coverage. Local evidence and its source
+provenance retain their separate review IDs and nullable native binding.
+
+`Backend.call` validates operations, parameters, advertised capabilities and the
+pinned binding before dispatch. It uses trusted argv, a scrubbed environment,
+a private cwd, nonblocking bounded stdin/stdout/stderr, deadlines, process groups,
+and descendant process/RSS sampling at most every 250 ms. Cleanup covers the
+dedicated POSIX session, including the compiler's separate process group; it does
+not rely on macOS's redacted `ps sess` column. The OS sampler has its own bounded
+output and deadline. Per-call and aggregate
+wall/RSS allowances apply to the resident process and its children. Its
+`transport_usage`/`last_usage` records cold startup wall time, sampled peak worker
+RSS, output, sample count and deadline overshoot even on failure. The structural
+provider also bounds and meters its compiler child. RSS limits are observed,
+with sampling/termination overshoot; there is no portable hard isolation claim.
+Requiring hard isolation returns UNSUPPORTED before launch. Malformed/mismatched
+responses, floods and timeout kill the group and invalidate the session. A valid
+refusal keeps the pinned snapshot available for a corrected request.
+
+`VerificationPolicy` is trusted host state, never decoded from a model request.
+Producer name/version/config registration alone cannot decide a result. The
+policy must also admit the independently checked immutable result ID for the
+exact obligation, request digest, binding, operands, domain, assumptions and
+content-checked input/witness dependencies. Input evidence cannot serve as its
+own proof. Timeout, unsupported, cancellation, errors and incomplete results
+cannot promote a disposition. A concrete PROVED result means only
+NO_DEFECT_OBSERVED for that input; no formal domain or universal-safe producer is
+registered. Local report transitions never write authoritative native EIR state.
+The test-bound-check fixture is a test-only authority vector, not a production
+verifier or an analytical replay qualification.

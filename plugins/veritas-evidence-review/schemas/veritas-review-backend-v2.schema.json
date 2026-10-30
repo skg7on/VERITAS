@@ -22,6 +22,9 @@
       "$ref": "#/$defs/NativeParametersEnvelope"
     },
     {
+      "$ref": "#/$defs/VerificationRequestEnvelope"
+    },
+    {
       "$ref": "#/$defs/ReleaseParametersEnvelope"
     },
     {
@@ -1506,6 +1509,9 @@
             },
             {
               "$ref": "#/$defs/ReleaseResult"
+            },
+            {
+              "$ref": "#/$defs/VerifyResult"
             }
           ]
         }
@@ -1615,6 +1621,348 @@
         "targets"
       ],
       "additionalProperties": false
+    },
+    "VerificationBudget": {
+      "title": "VerificationBudget",
+      "type": "object",
+      "properties": {
+        "wall_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        },
+        "output_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        },
+        "examined": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 18446744073709551615
+        }
+      },
+      "required": [
+        "wall_ms",
+        "output_bytes",
+        "examined"
+      ],
+      "additionalProperties": false
+    },
+    "CopyBoundOperands": {
+      "title": "CopyBoundOperands",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "copy_bound.v1"
+        },
+        "callsite_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "destination_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "source_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "length_ref": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "capacity_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "requested_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "readable_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "harness_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "callsite_ref",
+        "destination_ref",
+        "source_ref",
+        "length_ref",
+        "capacity_bytes",
+        "requested_bytes",
+        "readable_bytes",
+        "payload_digest",
+        "harness_id"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionDomain": {
+      "title": "ExecutionDomain",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "CONCRETE_INPUT"
+        },
+        "snapshot_id": {
+          "$ref": "#/$defs/SnapshotId"
+        },
+        "input_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "harness_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "snapshot_id",
+        "input_digest",
+        "harness_id"
+      ],
+      "additionalProperties": false
+    },
+    "VerificationRequest": {
+      "title": "VerificationRequest",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "obligation_id": {
+          "$ref": "#/$defs/ObligationId"
+        },
+        "predicate_kind": {
+          "const": "copy_bound.v1"
+        },
+        "typed_operands": {
+          "$ref": "#/$defs/CopyBoundOperands"
+        },
+        "input_artifact_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "execution_domain": {
+          "$ref": "#/$defs/ExecutionDomain"
+        },
+        "backend_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "budget": {
+          "$ref": "#/$defs/VerificationBudget"
+        }
+      },
+      "required": [
+        "binding",
+        "obligation_id",
+        "predicate_kind",
+        "typed_operands",
+        "input_artifact_ids",
+        "assumptions",
+        "execution_domain",
+        "backend_id",
+        "backend_version",
+        "budget"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactDependency": {
+      "title": "ArtifactDependency",
+      "type": "object",
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "content_digest"
+      ],
+      "additionalProperties": false
+    },
+    "VerificationResult": {
+      "title": "VerificationResult",
+      "type": "object",
+      "properties": {
+        "verification_id": {
+          "$ref": "#/$defs/VerificationId"
+        },
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "request_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "predicate_kind": {
+          "const": "copy_bound.v1"
+        },
+        "typed_operands": {
+          "$ref": "#/$defs/CopyBoundOperands"
+        },
+        "execution_domain": {
+          "$ref": "#/$defs/ExecutionDomain"
+        },
+        "producer": {
+          "$ref": "#/$defs/ProviderVersion"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PROVED",
+            "REFUTED",
+            "UNKNOWN",
+            "INCOMPLETE",
+            "ERROR"
+          ]
+        },
+        "proposition": {
+          "const": "REQUESTED_LE_CAPACITY"
+        },
+        "certificate_artifact_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "counterexample_artifact_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "input_dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ArtifactDependency"
+          },
+          "uniqueItems": true
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        },
+        "operational_outcome": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "TIMEOUT",
+            "UNSUPPORTED",
+            "CANCELLED",
+            "ERROR"
+          ]
+        }
+      },
+      "required": [
+        "verification_id",
+        "binding",
+        "request_digest",
+        "predicate_kind",
+        "typed_operands",
+        "execution_domain",
+        "producer",
+        "status",
+        "proposition",
+        "certificate_artifact_ids",
+        "counterexample_artifact_ids",
+        "input_dependencies",
+        "assumptions",
+        "coverage",
+        "operational_outcome"
+      ],
+      "additionalProperties": false
+    },
+    "VerifyResult": {
+      "title": "VerifyResult",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ReviewBinding"
+        },
+        "verification": {
+          "$ref": "#/$defs/VerificationResult"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        }
+      },
+      "required": [
+        "binding",
+        "verification",
+        "usage"
+      ],
+      "additionalProperties": false
+    },
+    "VerificationRequestEnvelope": {
+      "title": "VerificationRequestEnvelope",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "veritas.review.backend.v2"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "const": "verify"
+        },
+        "parameters": {
+          "$ref": "#/$defs/VerificationRequest"
+        }
+      },
+      "required": [
+        "protocol",
+        "request_id",
+        "operation",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "Digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     }
   }
 }

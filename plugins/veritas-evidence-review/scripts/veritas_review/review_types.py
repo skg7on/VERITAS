@@ -196,7 +196,7 @@ def decode_v2(data: bytes, *, expected_request_id=None, expected_operation=None)
         raise ValueError("invalid UTF-8 or nesting") from error
     if expected_request_id is not None and value["request_id"]!=expected_request_id: raise ValueError("request ID mismatch")
     if expected_operation is not None:
-        names={"handshake":"HandshakeResult","capture":"CaptureResult","context":"ContextResult","seed-candidates":"SeedResult","local-evidence":"LocalEvidence","native-evidence":"NativeResult","release":"ReleaseResult"}
+        names={"handshake":"HandshakeResult","capture":"CaptureResult","context":"ContextResult","seed-candidates":"SeedResult","local-evidence":"LocalEvidence","native-evidence":"NativeResult","verify":"VerifyResult","release":"ReleaseResult"}
         if "operation" in value and value["operation"] != expected_operation: raise ValueError("operation mismatch")
         if value.get("ok") is True:
             if expected_operation not in names: raise ValueError("unsupported operation")
@@ -207,3 +207,7 @@ def decode_v2(data: bytes, *, expected_request_id=None, expected_operation=None)
         frozen=_freeze(value,branch)
         return BackendEnvelope(**{k:getattr(frozen,k) for k in _resolve(branch)["required"]})
     raise ValueError("invalid envelope")
+
+
+def hash_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()

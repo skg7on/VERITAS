@@ -1,6 +1,7 @@
 # Lightweight Review Runtime and Backend v2
 
-**Status:** Detailed proposed runtime contract; no implementation claim.
+**Status:** Detailed runtime contract. RDX05–07 foundations are implemented;
+controller, real replay, host and release qualification remain pending.
 **Stage:** P1; does not depend on P2/P3 storage changes.
 **Plan:** [lightweight runtime](../plans/veritas-lightweight-review-runtime-implementation-plan.md).
 **Amends:** the context/discovery portions of the approved plugin specification;
@@ -283,3 +284,28 @@ and base rejection; release/callback cancellation concern with a correct
 control and explicit contract assumptions. The 32/33-byte fixture is mandatory;
 a real change uses its actual N/N+1 boundary. A synthetic-only result or a fake
 backend transcript is practice, not production qualification.
+
+## RDX07 execution amendment
+
+RDX07 implements runtime Task 4 and verification Task 1. The executable uses
+bounded newline-delimited, individually strict v2 envelopes in one resident
+subprocess, preserving immutable in-memory handles across requests without
+recapturing live content. A named subcommand accepts its operation or an initial
+handshake; every post-capture operation still requires its exact pinned binding.
+There is one active snapshot; release/process exit removes its handles. This
+framing choice avoids a disk serialization or native-pointer restoration format.
+
+Trusted configuration resolves project/context/program keys before model access.
+`target_ref=null` selects the working tree; non-null revision-target capture is
+explicitly unsupported. DIFF context is an exact deterministic full-file
+replacement. Contexts exceeding the 32-KiB configured window retain an incomplete
+gap; no omitted copy site is advertised for local investigation. Structural work
+exhaustion refuses public capture before publication, while parse gaps remain
+partial. The public limit is propagated into the structural provider.
+
+Only capture/context/seed/local/release are advertised. Native evidence and
+verification have no qualified production implementation and return UNSUPPORTED.
+The closed verification codecs are present for downstream RDX09; arbitrary
+FORMAL domains remain unavailable. Authority requires a separately admitted
+exact-result receipt in trusted policy, beyond producer/version registration.
+This does not deliver RDX08/RDX09/RDX11 or weaken their real qualification gates.

@@ -193,3 +193,56 @@ plan. **Consumes:** Tasks 1–6 plus real replay, annotation and corpus deliveri
 - [ ] Run clean native build/CTest, plugin tests, schema/protocol/host evaluation,
   documentation and license checks; inspect skips explicitly.
 - [ ] Commit the acceptance record and update only the issues actually delivered.
+
+### RDX07 / #161 execution qualification (2026-10-30)
+
+Runtime Task 4 and verification-plan Task 1 are delivered. The public C++
+resident subprocess supports strict v2 handshake/capture/context/seed/local/
+native/verify/release dispatch. Capture resolves trusted operator selection keys,
+keeps immutable source/index handles, and publishes only after output validation.
+The Python transport uses no shell, scrubs its environment, bounds live streams,
+charges per-call/aggregate wall time and samples RSS/processes. POSIX session
+cleanup includes the compiler's separate process group. No SummaryDB is required
+for local mode, and no local artifact is converted into a native FactID/run.
+
+Verification codecs and C++/Python authority validation bind the obligation,
+request/result identities, exact snapshot, typed operands, domain, admitted
+assumptions and immutable input/witness bytes. Producer names alone cannot
+promote a disposition; a separately admitted exact-result receipt is required.
+Concrete PROVED means no defect observed on that input, never universal safety.
+
+Observed RED before implementation: missing public backend and verification
+headers/modules. Adversarial RED→GREEN regressions also cover lowered structural
+work limits, non-null revision targets, separate compiler groups surviving a
+transport deadline, echoed requests being mistaken for responses, repeated
+handshake dropping active capabilities and release inventing a capability.
+An independent whole-branch review found three Important issues (group cleanup,
+response-envelope discrimination, repeated negotiation), all reproduced and fixed;
+no Critical or Minor findings remain deferred.
+
+Final clean Debug verification used Homebrew Clang 20.1.8 with LLVM/Clang 24 and
+pinned SVF/Souffle. Configure/build:
+
+```sh
+cmake --preset default -DCMAKE_C_COMPILER=/opt/homebrew/bin/clang -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/clang++ -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build
+cmake --build --preset default --clean-first -j 8
+ctest --test-dir build --output-on-failure --output-junit /tmp/rdx07-final-ctest.xml
+python3 -m unittest discover -s plugins/veritas-evidence-review/tests -v
+```
+
+The clean build completed **589/589 steps**, zero errors and the existing
+`libveritas_analysis_semantic.a` duplicate-library linker warning. Full CTest
+passed **999/999** in **372.68 s**, zero failures/errors/skips. JUnit and internal
+GoogleTest skip-marker inspection found zero skips; the native engine-agreement
+test ran. The Python suite passed **37/37**. Modified/new source license headers
+and staged/unstaged whitespace checks passed. The runtime process tests require
+OS process-table access; sandbox-denied sampling was not accepted as flood or
+timeout evidence.
+
+Scope remains deliberately narrow: only capture/context/seed/local/release are
+advertised. Native evidence and production verification return UNSUPPORTED until
+qualified providers exist. Real sanitizer replay/enforcing isolation, controller,
+host and end-user release qualification remain #163/#162/#79/#165. Source/diff
+windows over the configured limit retain explicit omissions; arbitrary revision
+targets and FORMAL/universal safety are unavailable. This does not discharge
+native domain producers under #124 or change SVF/Souffle/EIR authority contracts.
