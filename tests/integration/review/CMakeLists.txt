@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-add_executable(veritas_integration_review_tests SnapshotCaptureTest.cpp LocalEvidenceTest.cpp ReviewBackendTest.cpp)
+add_executable(veritas_integration_review_tests SnapshotCaptureTest.cpp LocalEvidenceTest.cpp AsanReplayTest.cpp ReviewBackendTest.cpp)
 target_link_libraries(veritas_integration_review_tests PRIVATE veritas_review GTest::gtest_main)
 veritas_add_warnings(veritas_integration_review_tests)
 gtest_discover_tests(veritas_integration_review_tests DISCOVERY_TIMEOUT 60)

@@ -53,21 +53,21 @@ discovery misses (Task 4); setup costs hidden by warm-only metrics (Task 5).
 **Produces:** `RunAsanReplay(const VerificationRequest&) ->
 StatusOr<VerificationResult>` for `asan-replay.v1`/`copy_bound.v1` only.
 
-- [ ] Write `ModifiedCopyOverflowsAndBaseRejects33`, length 0/32/33 and short
+- [x] Write `ModifiedCopyOverflowsAndBaseRejects33`, length 0/32/33 and short
   source controls, `OtherCrashIsNotThisObligation`, `MissingRuntimeIsUnsupported`,
   and `WrongSiteCannotVerify`. Require real compiler/sanitizer execution.
   Add `GlobalInitializerCannotWriteHostCanary`, `NetworkIsDenied`,
   `CapturedPluginFlagIsRejected`, and `NoIsolationProfileIsUnsupported`; these
   exercise the actual configured enforcement runtime before replay is advertised.
-- [ ] Run AsanReplayTest for RED; fake transcript fixtures may test parsing but
+- [x] Run AsanReplayTest for RED; fake transcript fixtures may test parsing but
   cannot pass the real qualification case.
-- [ ] Implement allowlisted compiler/harness execution in private snapshot input,
+- [x] Implement allowlisted compiler/harness execution in private snapshot input,
   an enforcing write/network/credential isolation profile, bounded process/output
   management and precise sanitizer/site matching. Private cwd is not confinement.
   Match REFUTED to a real bound violation; a non-deciding passing replay is UNKNOWN.
-- [ ] Verify missing dependencies, child process leaks, cancellation and replay
+- [x] Verify missing dependencies, child process leaks, cancellation and replay
   artifacts/digests. The base's rejection is a negative control, not global safety.
-- [ ] Commit with the actual deciding execution record and remaining assumptions.
+- [x] Commit with the actual deciding execution record and remaining assumptions.
 
 ## Task 3: Implement semantic annotations and reusable contract artifacts
 
@@ -137,5 +137,113 @@ verify operation with explicit UNSUPPORTED while no production producer is
 qualified. The [runtime execution record](veritas-lightweight-review-runtime-implementation-plan.md#rdx07--161-execution-qualification-2026-10-30)
 records RED→GREEN evidence, independent review fixes, 589-step clean build,
 999/999 full CTest with no skips and 37/37 Python tests. The test-only registered
-receipt fixture does not establish production verification. Task 2's enforcing
-runtime, real sanitizer execution and deciding release acceptance remain pending.
+receipt fixture does not establish production verification.
+
+### RDX09 / Task 2 qualification (2026-11-01)
+
+Verification-plan Task 2 is delivered. `asan-replay.v1` is a registered,
+operator-configured producer for `copy_bound.v1`, wired through backend v2
+`verify`. It compiles the admitted callsite's captured translation unit and a
+registered trusted harness with the configured compiler's AddressSanitizer
+runtime, and executes only the registered concrete payload. No request or model
+field selects a compiler, command, predicate or authority; `harness_id` selects
+only among operator-registered harnesses, and the site/size gate binds the
+execution to the admitted callsite.
+
+Enforcement: the operator selects `macos-sandbox` (sandbox-exec profile) or
+`linux-bwrap` (bubblewrap). Each replay qualifies the profile with real canaries
+for a host write outside the disposable tree, a read of a host credential, and
+a loopback connection to a host listener. An allowed canary, an unavailable
+compiler/sanitizer runtime/harness/payload, or an empty isolation profile
+returns UNSUPPORTED before any captured source is compiled or run; there is no
+private-cwd-only fallback. Captured plugin/response-file/explicit-target
+compiler flags are refused before execution. Child processes run in their own
+process group with wall/output/RSS/process bounds, are killed with the group on
+exhaustion, and are reaped.
+
+REFUTED requires a sanitizer buffer-overflow WRITE of exactly `requested_bytes`
+at the admitted callsite's unambiguous file basename and line, with
+`requested_bytes > capacity_bytes`. The evidence is a canonical facts witness
+(no addresses/PID/transcript), so identical admitted inputs produce the same
+verification ID across disposable roots; the raw sanitizer/compile logs and
+executable bytes are retained as non-dependency artifacts. The executable
+identity normalizes the disposable root path, the platform linker's
+UUID/signature/link-edit metadata and ELF build-id notes, and materialized
+source mtimes (ELF DWARF line tables can record them).
+
+RED→GREEN evidence: the initial fifteen `AsanReplayTest` cases all failed
+against an unimplemented producer, then passed against the real sanitizer
+execution. The content-address stability case failed until the executable
+identity was normalized, and the backend-protocol case failed until the verify
+operation was wired. The modified fixture with the destination bound removed and
+a 33-byte request is REFUTED at the admitted `memcpy` line; the base fixture
+rejects the same input and is UNKNOWN. Length 0/32 are UNKNOWN. Wrong site, unrelated crash, short
+payload, wrong snapshot, captured plugin flag, timeout, missing
+compiler/runtime, and no isolation profile are non-deciding. The untrusted
+global initializer cannot write a host canary, read a host credential, or reach
+a host network listener. The decisive result passes `ValidateVerificationResult`
+only with its own witness and an exact authorized result ID, and
+`ApplyVerification` is the sole transition to VERIFIED FINDING.
+
+Independent review of the first implementation found and fixed: ELF/arch-less
+sanitizer frame parsing (the Darwin-only `:arch` form had made every Linux
+decision impossible); symbolization and executable hashing now use an immutable
+pre-run image copy rather than a work-tree file the target can replace; a
+sanitizer-like transcript requires the sanitizer abort status and summary (a
+forged report with a clean exit is non-deciding); captured standard, language
+and include-kind semantics now match the index; every subprocess is bounded by
+the caller's remaining aggregate deadline; macOS denies host signals while
+allowing self-abort; detached descendants are sampled and killed on a
+best-effort basis (a child that reparents between samples can escape) and
+inherited descriptors are closed; cleanup never follows symlinks created by the
+target;
+and every denied root (including the live checkout) is canaried, with bubblewrap
+masking deny roots. The write canary judges the host-side effect rather than the
+child's report, because a private tmpfs can accept the path without touching the
+host; each canary probe must also exit successfully. The harness is compiled
+without captured macros/include dirs, and local-evidence coverage must be
+complete before replay.
+
+Remaining assumptions: the sanitizer runtime is linked into the untrusted
+process, so a target that deliberately forges the sanitizer channel *and*
+aborts remains indistinguishable from a real report without a trusted external
+observer; the abort/summary gate rejects the clean-exit forgery, and an
+out-of-process observer remains future work. Replay executes on the configured
+compiler's native target, while the structural index uses its portable
+x86_64-linux analysis target; the harness re-checks the admitted extents on the
+replay target, but target-conditional source is a documented limitation.
+`harness_id` is request-supplied by contract, so the wire selects among
+operator-registered harnesses only. The wire pins dependency digests but has no
+artifact-fetch operation, so independent Python-side authority admission of a
+backend result remains future host work.
+
+Scope: replay never emits PROVED and never establishes universal safety; base
+rejection is a control. No FORMAL schema, native `EvidenceCase` promotion or
+real-change release corpus is delivered here. Explicit captured `--target`
+values are refused because the analysis target is not assumed to be the replay
+host. Linux bubblewrap execution is exercised in CI; a host that cannot create
+the namespace returns UNSUPPORTED. Corpus freezing and release qualification
+remain #164/#165.
+
+Targeted verification: 22/22 AsanReplayTest, 69/69 review integration tests,
+15/15 review unit tests, and 76/76 Python runtime tests.
+
+Final local verification used Homebrew Clang 20.1.8 with LLVM/Clang 24 and the
+pinned SVF/Soufflé in the isolated worktree:
+
+```sh
+cmake --preset homebrew-clang -DLLVM_PROJECT_BUILD_DIR=<llvm-build>
+cmake --build --preset homebrew-clang --clean-first -j 8
+ctest --test-dir build-homebrew-clang --output-on-failure \
+  --output-junit /tmp/rdx09-final-ctest.xml
+```
+
+The clean build completed **591/591** steps with zero errors and the existing
+`libveritas_analysis_semantic.a` duplicate-library linker warning. Full CTest
+passed **1023/1023** in **391.19 s** with zero failures and zero skipped/not-run
+cases. `git diff --check`, clang-format and license-header checks passed. The
+Linux coverage build exposed one portability defect in the canary code — the
+socket declarations were only reaching it transitively on macOS — and the
+headers are now included directly; the final clean build/CTest above includes
+that fix. The Linux bubblewrap/ASan qualification is exercised by CI, not this
+local run.

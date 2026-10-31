@@ -14,7 +14,9 @@
 
 #ifndef VERITAS_REVIEW_REVIEW_BACKEND_H_
 #define VERITAS_REVIEW_REVIEW_BACKEND_H_
+#include "veritas/review/AsanReplay.h"
 #include "veritas/review/LocalEvidence.h"
+#include <optional>
 #include <set>
 namespace veritas::review {
 struct ContextSelection {
@@ -30,6 +32,9 @@ struct BackendProject {
 struct BackendConfig {
   std::map<std::string, BackendProject> projects;
   StructuralBudget structural;
+  // Present only when the operator configured and registered a replay
+  // producer. Its isolation profile is qualified before any replay result.
+  std::optional<ReplayConfig> replay;
   uint64_t max_request_bytes = 1024 * 1024, max_output_bytes = 1024 * 1024,
            max_context_bytes = 32768, max_examined = 10000, max_requests = 256,
            wall_ms = 120000;

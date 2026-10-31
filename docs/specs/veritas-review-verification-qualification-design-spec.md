@@ -184,5 +184,8 @@ IDs. A registered producer name/version/config alone is insufficient: a deciding
 result must have an exact admitted receipt, complete supported coverage and its
 own witness. Reusing an input as its own proof, changing input content or any
 request premise, or admitting circular/unapproved assumptions is refused.
-No production verifier or FORMAL schema is registered; production verify remains
-UNSUPPORTED until RDX09's enforcing-runtime and real-replay qualification passes.
+RDX09 registers `asan-replay.v1` for `copy_bound.v1` behind an
+operator-configured, canary-qualified isolation profile; absent that
+configuration the verify operation is not advertised or returns UNSUPPORTED.
+No FORMAL schema or universal-safety producer is registered, and a concrete
+replay result never establishes universal safety.

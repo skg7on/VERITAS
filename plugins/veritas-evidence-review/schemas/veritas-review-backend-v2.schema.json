@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "veritas-review-backend-v2.schema.json",
-  "description": "RDX05 foundation: verification request/result codecs remain unavailable until the qualification delivery. Unknown operations are rejected.",
+  "description": "Review backend v2: snapshot capture, structural/local evidence, the RDX07 verification request/result codecs and the RDX09 concrete replay verify envelope. Verify is advertised only with an operator-registered isolation profile. Unknown operations are rejected.",
   "oneOf": [
     {
       "$ref": "#/$defs/HandshakeParametersEnvelope"

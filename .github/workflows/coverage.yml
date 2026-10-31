@@ -72,11 +72,14 @@ jobs:
           done
 
           sudo apt-get install --yes --no-install-recommends \
+            bubblewrap \
             build-essential \
             bison \
+            clang \
             cmake \
             flex \
             git \
+            libclang-rt-18-dev \
             libedit-dev \
             libffi-dev \
             libgtest-dev \
@@ -358,6 +361,12 @@ jobs:
       # excluded: its wall-clock ceiling is calibrated for an optimized,
       # uninstrumented build and instrumentation is not the subject of that
       # gate (the regular CI job still runs it).
+      - name: Enable replay isolation
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo sysctl -w vm.mmap_rnd_bits=28 || true
+          bwrap --unshare-all --ro-bind / / --dev /dev --proc /proc /bin/true
+
       - name: Run tests under coverage
         env:
           LD_LIBRARY_PATH: ${{ runner.temp }}/llvm-install/lib:${{ runner.temp }}/z3-install/lib

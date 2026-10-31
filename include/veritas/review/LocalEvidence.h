@@ -56,6 +56,9 @@ struct LocalEvidence {
 // Rejects stale/foreign/non-callsite refs, unregistered predicates and invalid
 // budgets/slots. Unsupported slots remain absent with a coverage reason.
 StatusOr<LocalEvidence> InvestigateLocal(const LocalRequest &);
+// Usage-free canonical semantics. This is the stable content a verification
+// dependency may pin; ToJson additionally carries measured usage.
+Json LocalEvidenceSemanticJson(const LocalEvidence &);
 Json ToJson(const LocalEvidence &);
 } // namespace veritas::review
 #endif
