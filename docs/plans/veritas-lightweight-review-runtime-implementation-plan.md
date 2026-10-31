@@ -246,3 +246,86 @@ host and end-user release qualification remain #163/#162/#79/#165. Source/diff
 windows over the configured limit retain explicit omissions; arbitrary revision
 targets and FORMAL/universal safety are unavailable. This does not discharge
 native domain producers under #124 or change SVF/Souffle/EIR authority contracts.
+
+### RDX08 / #162 controller execution qualification (2026-10-31)
+
+Runtime Task 5, Task 6's shared API/report/schema portion and verification
+Task 3's P1 annotation portion are delivered. #79 retains the isolated plugin
+host/manifest/runner/MCP adapter and its authenticated host qualification.
+The public controller API is `start_review`, `admit_candidates`, `advance_review`
+and `render_report`; every host uses the same implementation.
+
+Candidate admission precedes EIR, resolves exact advertised source spans,
+deduplicates semantic callsite anchors across origins/context kinds, and retains
+rejected/deferred coverage. Source/test/doc handles are pinned and bounded.
+Eight model turns, sixteen candidates, response/context/input limits and
+aggregate backend allowances apply to the entire attempt. Without a tokenizer,
+actual controller prompts are charged at one token per UTF-8 byte, or the host's
+larger measured usage. Missing usage prevents another turn; model responses
+cannot raise limits or claim deterministic provenance or proof authority.
+
+Operation/ref/limit pairs are exact per-turn grants. Pre-dispatch reservations,
+process limits and successful actual-usage reconciliation include initialization
+and repeated calls. The hash-chained WAL and atomic fsynced checkpoint preserve
+replay receipts. Concurrent identical request IDs return one stored response;
+conflicting IDs or reused capabilities refuse before backend execution. A crash
+around completion never silently reexecutes uncertain work. Normal audit writes
+reserve 1 KiB for a compact durable abort record, including response-rejection
+exhaustion. Unvisited advertised contexts remain terminal coverage gaps.
+
+`review-report.v1` preserves local evidence and supporting/contradicting refs;
+Markdown escapes source/model text. Semantic report identity excludes measured
+costs, timing, occurrence IDs and capabilities. P1 `semantic-contract.v1`
+annotations preserve unregistered release/callback concerns and source/test/doc
+intent with PROPOSED/CONDITIONAL status, dependency digests and no verification
+ref. Source/doc/model changes invalidate reuse. There is no EIR fact promotion,
+formal contract store or concurrency proof.
+
+Observed RED before implementation: missing candidate, policy/budget and
+controller modules. Behavioral RED→GREEN regressions cover stale/invented refs,
+model authority/source instruction strings, exact-span ambiguity, duplicate
+origins/sites, ninth-turn and missing usage, conservative input accounting,
+aggregate context windows, actual output/work reconciliation, concurrent retry,
+and crash after backend completion. The real bounded C++ resident service was
+used for start/advance, immutable source context, a compiler-observed 32-byte
+extent, local evidence, retry, annotation and terminal report. The regression
+fixture is not a qualified production change corpus.
+
+Independent whole-branch review found four Important issues: a malformed
+assessment escaping durable model accounting; audit exhaustion preventing abort
+recovery; missing unvisited-context gaps; and model-forged deterministic origin.
+Each was reproduced and fixed RED→GREEN. A repeated-site multi-anchor proposal
+was also fixed so one semantic callsite is not misclassified as ambiguous.
+The audit fix additionally covers exhaustion while rejecting a model response.
+No review findings remain deferred.
+
+Scope decisions: repository worktree placement and the `codex/` branch prefix
+follow project/desktop instructions. The approved design/plan was executed
+without restarting design approval. #79's host adapter is not duplicated here;
+#163 owns qualified replay, #164 corpus freezing before tuning, and #165 release
+qualification. No tuning was performed. Backend v2 has no live-tree-advancement
+operation: reports explicitly retain that unknown instead of inventing a result.
+Continuing a nonterminal attempt requires its original resident backend; recovery
+does not serialize native pointers or recapture a changed tree. These limits
+require downstream host/replay/qualification work and leave live advancement
+unassessed. Native SVF/Souffle and EIR authority contracts remain unchanged.
+
+Final verification used Homebrew Clang 20.1.8 with LLVM/Clang 24 and pinned
+SVF/Souffle in the isolated `codex/issue-162-review-controller` worktree:
+
+```sh
+cmake --preset default -DCMAKE_C_COMPILER=/opt/homebrew/bin/clang -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/clang++ -DLLVM_PROJECT_BUILD_DIR=/Users/skg7on/Workspace/Projects/llvm-project/build
+cmake --build --preset default --clean-first -j 8
+ctest --test-dir build -j 8 --output-on-failure --output-junit /tmp/rdx08-final-ctest.xml
+```
+
+The final clean build completed **589/589 steps**, zero errors and one existing
+`libveritas_analysis_semantic.a` duplicate-library warning. Full CTest passed
+**999/999** in **64.40 seconds**, including **76/76** Python runtime tests.
+JUnit and internal GoogleTest output show zero skips; the native
+`WpaExecutorConformanceTest.EnginesProduceSameCanonicalFacts` test ran and passed.
+Changed source license headers and staged/unstaged whitespace checks passed.
+OS process-table access was allowed for the process/RSS tests; sandbox refusal
+was not accepted as deadline/output-limit evidence. Primary `main` remained
+clean throughout. This is controller qualification, not #165 production release
+qualification, and does not close #79/#124/#163/#164/#165.

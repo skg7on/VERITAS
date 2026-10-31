@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "veritas-model-response-v1.schema.json",
+  "type": "object",
+  "properties": {
+    "binding": {
+      "$ref": "veritas-review-backend-v2.schema.json#/$defs/ReviewBinding"
+    },
+    "candidate_proposals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ModelCandidateProposal"
+      },
+      "maxItems": 16
+    },
+    "assessments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Assessment"
+      },
+      "maxItems": 16
+    },
+    "requests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Request"
+      },
+      "maxItems": 16
+    },
+    "finish": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "binding",
+    "candidate_proposals",
+    "assessments",
+    "requests",
+    "finish"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "ContextParameters": {
+      "title": "ContextParameters",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "veritas-review-backend-v2.schema.json#/$defs/ReviewBinding"
+        },
+        "context_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "veritas-review-backend-v2.schema.json#/$defs/ContextId"
+          }
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "binding",
+        "context_refs",
+        "max_bytes",
+        "max_tokens"
+      ],
+      "additionalProperties": false
+    },
+    "Assessment": {
+      "type": "object",
+      "properties": {
+        "candidate_id": {
+          "$ref": "veritas-review-backend-v2.schema.json#/$defs/CandidateId"
+        },
+        "assessment": {
+          "enum": [
+            "needs_evidence",
+            "likely_defect",
+            "likely_false_positive",
+            "inconclusive"
+          ]
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "candidate_id",
+        "assessment",
+        "refs",
+        "assumptions"
+      ],
+      "additionalProperties": false
+    },
+    "Request": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "enum": [
+            "context",
+            "local-evidence"
+          ]
+        },
+        "parameters": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ContextParameters"
+            },
+            {
+              "$ref": "veritas-review-backend-v2.schema.json#/$defs/LocalRequest"
+            }
+          ]
+        }
+      },
+      "required": [
+        "request_id",
+        "operation",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "ModelCandidateProposal": {
+      "title": "CandidateProposal",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "veritas-review-backend-v2.schema.json#/$defs/ReviewBinding"
+        },
+        "origin": {
+          "const": "LLM"
+        },
+        "claim_kind": {
+          "type": "string",
+          "enum": [
+            "copy_bound.v1",
+            "semantic_observation.v1"
+          ]
+        },
+        "anchor_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "veritas-review-backend-v2.schema.json#/$defs/AnchorRef"
+          }
+        },
+        "contract_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "veritas-review-backend-v2.schema.json#/$defs/ContextId"
+          }
+        },
+        "question": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "binding",
+        "origin",
+        "claim_kind",
+        "anchor_refs",
+        "contract_refs",
+        "question",
+        "assumptions"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
