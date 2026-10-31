@@ -1504,8 +1504,11 @@ StatusOr<ReplayResult> RunAsanReplay(const Json &request,
   auto written = canary({"write", write_canary.string()});
   bool canary_present = std::filesystem::exists(write_canary, ec);
   std::filesystem::remove(write_canary, ec);
-  if (!written.ok() || canary_present ||
-      written->out.find("DENIED") == std::string::npos)
+  // The host-side effect is the enforcement property. Inside bubblewrap the
+  // child may create the same path in its private tmpfs while the host file
+  // stays absent; a macOS denial reports DENIED. Either way the host tree must
+  // remain untouched and the probe must have run.
+  if (!written.ok() || written->exit_code != 0 || canary_present)
     return Unsupported("the configured isolation profile allows host writes");
   const passwd *account = getpwuid(getuid());
   if (!account)
@@ -1516,7 +1519,8 @@ StatusOr<ReplayResult> RunAsanReplay(const Json &request,
     return Unsupported("cannot qualify credential isolation");
   auto read = canary({"read", secret_path});
   std::filesystem::remove(secret_path, ec);
-  if (!read.ok() || read->out.find("DENIED") == std::string::npos)
+  if (!read.ok() || read->exit_code != 0 ||
+      read->out.find("DENIED") == std::string::npos)
     return Unsupported(
         "the configured isolation profile exposes host credentials");
   // Each denied root must actually be denied, including the live checkout.
@@ -1527,7 +1531,8 @@ StatusOr<ReplayResult> RunAsanReplay(const Json &request,
     if (!std::filesystem::is_directory(path, status))
       continue;
     auto listed = canary({"list", path});
-    if (!listed.ok() || listed->out.find("DENIED") == std::string::npos)
+    if (!listed.ok() || listed->exit_code != 0 ||
+        listed->out.find("DENIED") == std::string::npos)
       return Unsupported(
           "the configured isolation profile exposes a denied path: " + path);
   }
@@ -1554,7 +1559,7 @@ StatusOr<ReplayResult> RunAsanReplay(const Json &request,
   pollfd pending{listener, POLLIN, 0};
   int ready = poll(&pending, 1, 150);
   close(listener);
-  if (!network.ok() || ready > 0 ||
+  if (!network.ok() || network->exit_code != 0 || ready > 0 ||
       network->out.find("DENIED") == std::string::npos)
     return Unsupported(
         "the configured isolation profile allows host network access");

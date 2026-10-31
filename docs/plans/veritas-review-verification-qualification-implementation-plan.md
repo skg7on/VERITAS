@@ -197,8 +197,11 @@ best-effort basis (a child that reparents between samples can escape) and
 inherited descriptors are closed; cleanup never follows symlinks created by the
 target;
 and every denied root (including the live checkout) is canaried, with bubblewrap
-masking deny roots. The harness is compiled without captured macros/include
-dirs, and local-evidence coverage must be complete before replay.
+masking deny roots. The write canary judges the host-side effect rather than the
+child's report, because a private tmpfs can accept the path without touching the
+host; each canary probe must also exit successfully. The harness is compiled
+without captured macros/include dirs, and local-evidence coverage must be
+complete before replay.
 
 Remaining assumptions: the sanitizer runtime is linked into the untrusted
 process, so a target that deliberately forges the sanitizer channel *and*
@@ -236,7 +239,7 @@ ctest --test-dir build-homebrew-clang --output-on-failure \
 
 The clean build completed **591/591** steps with zero errors and the existing
 `libveritas_analysis_semantic.a` duplicate-library linker warning. Full CTest
-passed **1023/1023** in **401.64 s** with zero failures and zero skipped/not-run
+passed **1023/1023** in **394.63 s** with zero failures and zero skipped/not-run
 cases. `git diff --check`, clang-format and license-header checks passed. The
 Linux coverage build exposed one portability defect in the canary code — the
 socket declarations were only reaching it transitively on macOS — and the
