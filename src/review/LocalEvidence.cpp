@@ -63,6 +63,7 @@ Json Semantic(const LocalEvidence &e) {
                       {"producer", ProducerJson(e.producer)}};
 }
 } // namespace
+Json LocalEvidenceSemanticJson(const LocalEvidence &e) { return Semantic(e); }
 Json ToJson(const LocalEvidence &e) {
   auto json = Semantic(e);
   auto &object = std::get<Json::Object>(json.data);

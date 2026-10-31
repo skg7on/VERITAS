@@ -4,9 +4,12 @@ RDX05 (#159) delivers the backend v2 wire models and native snapshot library.
 RDX06 (#160) adds the structural index and narrow compiler-local provider.
 This directory contains the schema, frozen Python types, bounded transport and tests.
 RDX07 (#161) adds the public resident subprocess backend and exact-obligation
-authority boundary. RDX08 (#162) adds the shared controller and reports;
-real replay and the host adapter remain later deliveries; this is not an installable review plugin yet. The native
-SVF/Soufflé analysis path and `eir.v1` remain unchanged.
+authority boundary. RDX08 (#162) adds the shared controller and reports.
+RDX09 (#163) registers the operator-configured `asan-replay.v1` sanitizer
+producer and qualifies it with a real enforcing isolation profile; the
+installable host adapter remains a later delivery, so this is not yet an
+installable review plugin. The native SVF/Soufflé analysis path and `eir.v1`
+remain unchanged.
 
 ## Wire contract
 
@@ -24,8 +27,10 @@ control/NUL, empty-array and signed/unsigned boundary bytes and hash vectors.
 The schema currently covers handshake, capture, context, seed-candidates,
 local-evidence, native-evidence and release shapes. RDX07 closes the verification request/result, concrete-input domain and positive
 verification budget codecs. A schema-valid verifier response alone has no authority.
-The backend implements capture/context/seed/local/release; native/verify are
-recognized and explicitly UNSUPPORTED until a qualified provider is configured.
+The backend implements capture/context/seed/local/release. `verify` is
+advertised only when the operator registers `asan-replay.v1` with an isolation
+profile; without that configuration, and for `native-evidence`, it remains
+UNSUPPORTED.
 
 ## Trusted native snapshot API
 
@@ -51,7 +56,8 @@ typed context IDs and explicit omitted byte ranges; no entity is invented. `Mate
 read-only tree from those blobs and refuses existing/symlink destinations.
 `LiveTreeAdvanced` reports subsequent selected-content, artifact-directory membership or Git-discovery changes.
 The blobs live with the immutable snapshot handle; durable backend lifecycle
-and enforcement of compiler/replay isolation belong to later tasks.
+belongs to the host adapter. Compiler/replay isolation is provided only by the
+separately configured and qualified `asan-replay.v1` producer.
 
 The repository identity is supplied by trusted invocation configuration. A local
 base is recorded as `git:<commit-oid>` rather than minting a native revision or
@@ -151,7 +157,12 @@ under #124 and the production review/replay release gate remain pending.
 python3 -m unittest discover -s plugins/veritas-evidence-review/tests -p test_review_types.py
 cmake --build --preset homebrew-clang
 ctest --test-dir build-homebrew-clang -R 'ReviewTypes|SnapshotCapture|LocalEvidence' --output-on-failure
+ctest --test-dir build-homebrew-clang -R 'AsanReplayTest' --output-on-failure
 ```
+
+The replay tests require a host compiler with a working AddressSanitizer
+runtime and either `sandbox-exec` or `bubblewrap`; without a qualified runtime
+the producer returns UNSUPPORTED rather than running unconfined.
 
 The Python package uses only Python 3.11+ standard-library modules. All new
 first-party code uses the repository's Apache-2.0 license notice; raw JSON is
@@ -164,9 +175,10 @@ package's `scripts/` directory. The transport uses only the Python standard
 library. The native service does not link or open SummaryDB for local mode.
 All eight named subcommands exist. Begin with handshake, then capture; the
 backend advertises the exact operations currently available. It never selects
-practice mode. Native evidence has no configured adapter; production verification
-has no registered producer. Both operations return UNSUPPORTED. This delivery
-does not qualify replay, the plugin host, or a real review release.
+practice mode. Native evidence has no configured adapter and returns
+UNSUPPORTED. Verification has no producer unless the operator supplies the
+`verification` configuration described below. Neither delivery constitutes a
+plugin host or a real review release.
 
 A resident process keeps one immutable snapshot/index and its advertised context
 handles until release or process exit. Each request and response is exactly one
@@ -252,6 +264,65 @@ registered. Local report transitions never write authoritative native EIR state.
 The test-bound-check fixture is a test-only authority vector, not a production
 verifier or an analytical replay qualification.
 
+## Sanitizer replay producer (RDX09)
+
+`asan-replay.v1` is a registered producer for `copy_bound.v1`, selected only by
+trusted operator configuration supplied on the backend argv/configuration file:
+
+```json
+"verification": {
+  "compiler": "/absolute/trusted/clang++",
+  "isolation": "macos-sandbox",
+  "work_parent": "/private/tmp",
+  "harnesses": {"copy-bound": {"source": "/trusted/harness.cc",
+                               "payload": "/trusted/input.bin"}},
+  "limits": {"wall_ms": 60000, "output_bytes": 262144}
+}
+```
+
+`isolation` is `macos-sandbox`, `linux-bwrap`, or empty (which advertises no
+verify operation). The producer resolves only the admitted callsite's captured
+translation unit, compiles it with a registered trusted harness under
+AddressSanitizer, and runs the registered payload; no model field selects a
+command, compiler, harness or predicate. The harness is compiled without
+captured `-D`/`-U` flags and sees the captured tree only as a last-resort
+include root, so project macros cannot rewrite the trusted driver; a harness
+that includes a project header to bind the entry-point signature is trusted for
+that project family. Before compiling captured code it
+qualifies the profile on every replay with real canaries for a host write, a
+host credential read and a host loopback connection. A missing compiler,
+sanitizer runtime, harness, payload or enforcing profile returns UNSUPPORTED.
+
+REFUTED requires a buffer-overflow WRITE of exactly the requested size at the
+admitted file basename and line, with an unambiguous site and
+`requested_bytes > capacity_bytes`, plus the sanitizer's abort status and
+summary (a forged transcript with a clean exit is non-deciding). A passing
+replay never proves the bound; a base rejection, unrelated crash, timeout,
+wrong site, short payload or wrong snapshot is UNKNOWN/ERROR/TIMEOUT, never a
+verification. Symbolization and executable hashing use an immutable pre-run
+image copy, so the target cannot rewrite the binary after execution. The
+counterexample is a canonical facts artifact (no addresses, PID or transcript),
+so identical replays have the same verification ID; raw sanitizer/compile logs
+and executable bytes are retained as non-dependency artifacts. The executable
+identity normalizes the disposable root path and the platform linker's
+UUID/signature/link-edit metadata. Explicit captured `--target` flags are
+refused because the analysis target is not assumed to be the replay host; the
+harness re-checks the destination/readable extents with the replay compiler.
+Every subprocess is bounded by the caller's remaining deadline; macOS denies
+host signals, and detached descendants are sampled and killed on a best-effort
+basis.
+
+Remaining assumptions: a target that deliberately forges the sanitizer channel
+*and* aborts is indistinguishable from a real report without a trusted external
+observer; replay executes on the configured compiler's native target while the
+index uses its portable x86_64-linux analysis target (target-conditional source
+is a documented limitation); `harness_id` selects only among
+operator-registered harnesses; and the wire pins dependency digests but has no
+artifact-fetch operation, so independent Python-side authority admission
+remains future host work. FORMAL/universal-safety schemas, native EIR
+promotion, the real-change corpus and release qualification remain later gates
+(#164/#165).
+
 ## Shared controller (RDX08)
 
 `controller.start_review`, `controller.admit_candidates`,
@@ -336,9 +407,11 @@ annotation can preserve an unregistered release/callback concern with source,
 test and documentation anchors. Inferred intent stays PROPOSED or CONDITIONAL;
 documentation states intent but does not prove implementation. Source/doc/model
 changes invalidate annotation reuse. No annotation is an EIR fact, formal summary,
-independent certificate or concurrency proof. Registered production verification
-is still unavailable (#163), corpus freezing is #164, and release qualification
-is #165. Empty/truncated discovery never certifies safety.
+independent certificate or concurrency proof. `asan-replay.v1` is a registered
+concrete-input producer only when the operator configures and qualifies an
+isolation profile; it never proves universal safety. Real-change corpus freezing
+is #164 and release qualification is #165. Empty/truncated discovery never
+certifies safety.
 
 Run the full Python suite with the just-built public backend:
 

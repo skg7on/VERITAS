@@ -87,6 +87,16 @@ Json Capabilities(const BackendConfig &c, bool captured) {
                                   {"output_bytes", c.max_output_bytes},
                                   {"examined", c.max_examined}}}});
   }
+  // Replay is advertised only with an operator-configured enforcing profile.
+  // The profile is still qualified by real canaries before any result exists.
+  if (c.replay && !c.replay->isolation.empty())
+    a.emplace_back(O{{"operation", "verify"},
+                     {"version", "2"},
+                     {"predicate_kinds", A{"copy_bound.v1"}},
+                     {"authority", "CONCRETE_REPLAY"},
+                     {"limits", O{{"wall_ms", c.wall_ms},
+                                  {"output_bytes", c.max_output_bytes},
+                                  {"examined", c.max_examined}}}});
   return a;
 }
 Json Success(std::string_view id, Json result) {
@@ -362,7 +372,21 @@ StatusOr<std::string> ReviewBackend::Call(std::string_view bytes) {
     auto valid = ValidateVerificationRequest(q);
     if (!valid.ok())
       return fail("INVALID_ARGUMENT", valid.message());
-    return fail("UNSUPPORTED", "no qualified production verifier configured");
+    if (!config_.replay)
+      return fail("UNSUPPORTED", "no qualified production verifier configured");
+    auto replay = RunAsanReplay(q, *config_.replay, state_->snapshot,
+                                state_->index, remaining);
+    if (!replay.ok()) {
+      const auto code = replay.status().code();
+      const char *error =
+          code == StatusCode::kInvalidArgument    ? "INVALID_ARGUMENT"
+          : code == StatusCode::kDeadlineExceeded ? "LIMIT_EXCEEDED"
+                                                  : "UNSUPPORTED";
+      return fail(error, replay.status().message());
+    }
+    return finish(O{{"binding", binding},
+                    {"verification", replay->verification},
+                    {"usage", UsageJson(replay->usage)}});
   }
   if (op == "release") {
     auto response = finish(O{{"binding", binding}, {"released", true}});
@@ -481,13 +505,32 @@ StatusOr<BackendConfig> DecodeBackendConfig(std::string_view bytes) {
   if (!parsed.ok())
     return parsed.status();
   auto root = parsed->getAsObject();
-  if (!root ||
-      !Keys(*root,
-            {"project_key", "project_root", "repository_id", "base_ref",
-             "compile_commands_path", "selected_tracked", "selected_artifacts",
-             "allowed_untracked", "context_selections", "programs", "limits"}))
+  const std::set<std::string> allowed = {"project_key",
+                                         "project_root",
+                                         "repository_id",
+                                         "base_ref",
+                                         "compile_commands_path",
+                                         "selected_tracked",
+                                         "selected_artifacts",
+                                         "allowed_untracked",
+                                         "context_selections",
+                                         "programs",
+                                         "limits",
+                                         "verification"};
+  if (!root)
     return Status::InvalidArgument(
         "closed backend operator configuration required");
+  for (const auto &[key, unused] : *root)
+    if (!allowed.contains(key))
+      return Status::InvalidArgument("unknown backend configuration key: " +
+                                     key);
+  for (auto key :
+       {"project_key", "project_root", "repository_id", "base_ref",
+        "compile_commands_path", "selected_tracked", "selected_artifacts",
+        "allowed_untracked", "context_selections", "programs", "limits"})
+    if (!root->get(key))
+      return Status::InvalidArgument(
+          "closed backend operator configuration required");
   for (auto k : {"project_key", "project_root", "repository_id", "base_ref",
                  "compile_commands_path"})
     if (!root->getString(k))
@@ -555,6 +598,16 @@ StatusOr<BackendConfig> DecodeBackendConfig(std::string_view bytes) {
         "config may lower hard protocol limits only");
   config.structural.wall_ms = std::min(config.wall_ms, uint64_t(60000));
   config.projects.emplace(Text(*root, "project_key"), std::move(project));
+  if (const auto *verification = root->get("verification")) {
+    auto replay = DecodeReplayConfig(*verification);
+    if (!replay.ok())
+      return replay.status();
+    // A replay must not read the live checkout it was captured from.
+    for (const auto &[key, selected] : config.projects)
+      replay->deny_read_paths.push_back(
+          selected.snapshot.project_root.string());
+    config.replay = std::move(*replay);
+  }
   return config;
 }
 } // namespace veritas::review

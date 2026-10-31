@@ -99,10 +99,16 @@ Local mode requires no SummaryDB. Native/verify operations explicitly refuse
 unavailable production providers; producer names alone grant no deciding
 authority. Native #124 domain producers and deployment/replay qualification
 remain pending. RDX08/#162 adds the shared pre-EIR candidate/context/budget controller, durable
-request receipts and observation-only reports/semantic annotations. The isolated
-host remains #79; real replay, corpus and end-user release qualification remain
-#163–#165. See [runtime foundation](plugins/veritas-evidence-review/README.md).
-Native SVF/Soufflé requirements remain unchanged.
+request receipts and observation-only reports/semantic annotations. RDX09/#163
+registers `asan-replay.v1` for `copy_bound.v1`: an operator-configured and
+canary-qualified enforcing isolation profile, captured-TU/registered-harness
+AddressSanitizer execution, exact admitted-site matching, canonical
+counterexample witnesses, and backend v2 `verify` wiring. Missing runtime,
+isolation, harness or payload is UNSUPPORTED; a passing replay is never
+universal safety. The isolated host remains #79; real-change corpus and
+end-user release qualification remain #164–#165. See
+[runtime foundation](plugins/veritas-evidence-review/README.md). Native
+SVF/Soufflé requirements remain unchanged.
 
 Canonical configure and build (uses `CMakePresets.json` at repo root):
 
