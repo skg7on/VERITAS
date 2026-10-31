@@ -236,6 +236,10 @@ ctest --test-dir build-homebrew-clang --output-on-failure \
 
 The clean build completed **591/591** steps with zero errors and the existing
 `libveritas_analysis_semantic.a` duplicate-library linker warning. Full CTest
-passed **1023/1023** in **402.25 s** with zero failures and zero skipped/not-run
+passed **1023/1023** in **401.64 s** with zero failures and zero skipped/not-run
 cases. `git diff --check`, clang-format and license-header checks passed. The
-Linux bubblewrap/ASan qualification is exercised by CI, not this local run.
+Linux coverage build exposed one portability defect in the canary code — the
+socket declarations were only reaching it transitively on macOS — and the
+headers are now included directly; the final clean build/CTest above includes
+that fix. The Linux bubblewrap/ASan qualification is exercised by CI, not this
+local run.
