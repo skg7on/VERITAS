@@ -141,6 +141,17 @@ Status WriteFile(const Path &path, std::string_view bytes, mode_t mode) {
   close(fd);
   return Status::Ok();
 }
+// ELF DWARF line tables may record source mtimes; freshly materialized inputs
+// would otherwise change the linked executable between identical replays.
+void NormalizeTimestamps(const Path &root) {
+  std::error_code ec;
+  const timespec epoch[2] = {{0, 0}, {0, 0}};
+  for (auto it = std::filesystem::recursive_directory_iterator(root, ec);
+       !ec && it != std::filesystem::recursive_directory_iterator();
+       it.increment(ec))
+    utimensat(AT_FDCWD, it->path().c_str(), epoch, AT_SYMLINK_NOFOLLOW);
+  utimensat(AT_FDCWD, root.c_str(), epoch, AT_SYMLINK_NOFOLLOW);
+}
 Status MakeDirectories(const Path &path, mode_t mode = 0700) {
   std::error_code ec;
   std::filesystem::create_directories(path, ec);
@@ -1360,11 +1371,13 @@ StatusOr<ReplayResult> RunAsanReplay(const Json &request,
   if (!materialized.ok())
     return Unsupported("cannot materialize captured inputs: " +
                        std::string(materialized.message()));
+  NormalizeTimestamps(paths.input);
   auto harness_copy = ReadBounded(harness_source, kMaxSourceBytes);
   if (!harness_copy.ok())
     return harness_copy.status();
   if (!WriteFile(paths.harness / "harness.cc", *harness_copy, 0400).ok())
     return Status::Internal("cannot stage the registered harness");
+  NormalizeTimestamps(paths.harness);
   if (!WriteFile(paths.payload / "input.bin", *payload_bytes, 0400).ok())
     return Status::Internal("cannot stage the concrete input");
   // Producer/configuration identity binds the toolchain, the registered
