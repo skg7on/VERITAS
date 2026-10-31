@@ -17,12 +17,15 @@
 #include "veritas/review/LocalEvidence.h"
 #include "veritas/review/Verification.h"
 
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <poll.h>
 #include <pwd.h>
 #include <signal.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
