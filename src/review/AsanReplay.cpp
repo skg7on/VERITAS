@@ -833,8 +833,63 @@ std::string NormalizeExecutable(std::string bytes, std::string_view root) {
   const uint32_t magic = read32(0);
   const bool mach64 = magic == 0xfeedfacf;
   const bool mach32 = magic == 0xfeedface;
-  if (!mach64 && !mach32)
+  if (!mach64 && !mach32) {
+    // ELF build-id notes are hashes of the pre-normalized output, so the note
+    // still differs after the disposable root path is canonicalized. The note
+    // is an occurrence identifier, not program content; zero it.
+    if (bytes.size() >= 64 && static_cast<unsigned char>(bytes[0]) == 0x7f &&
+        bytes.substr(1, 3) == "ELF" && bytes[5] == 1) {
+      const bool elf64 = bytes[4] == 2;
+      auto read16 = [&](size_t offset) -> uint32_t {
+        return static_cast<uint32_t>(
+                   static_cast<unsigned char>(bytes[offset])) |
+               (static_cast<uint32_t>(
+                    static_cast<unsigned char>(bytes[offset + 1]))
+                << 8);
+      };
+      auto read64 = [&](size_t offset) -> uint64_t {
+        return static_cast<uint64_t>(read32(offset)) |
+               (static_cast<uint64_t>(read32(offset + 4)) << 32);
+      };
+      const uint64_t shoff = elf64 ? read64(0x28) : read32(0x20);
+      const uint32_t shentsize = read16(elf64 ? 0x3a : 0x2e);
+      const uint32_t shnum = read16(elf64 ? 0x3c : 0x30);
+      const uint32_t shstrndx = read16(elf64 ? 0x3e : 0x32);
+      if (shoff < bytes.size() && shentsize >= (elf64 ? 64 : 40) && shnum &&
+          shstrndx < shnum &&
+          shoff + static_cast<uint64_t>(shentsize) * shnum <= bytes.size()) {
+        const size_t strings_header = shoff + shentsize * shstrndx;
+        const uint64_t strings_offset =
+            elf64 ? read64(strings_header + 24) : read32(strings_header + 16);
+        const uint64_t strings_size =
+            elf64 ? read64(strings_header + 32) : read32(strings_header + 20);
+        if (strings_offset < bytes.size() &&
+            strings_size <= bytes.size() - strings_offset) {
+          for (uint32_t i = 0; i < shnum; ++i) {
+            const size_t header = shoff + static_cast<size_t>(shentsize) * i;
+            const uint64_t name_offset = read32(header);
+            if (name_offset >= strings_size)
+              continue;
+            const size_t name_at = strings_offset + name_offset;
+            const size_t name_end = bytes.find('\0', name_at);
+            if (name_end == std::string::npos ||
+                name_end > strings_offset + strings_size)
+              continue;
+            if (bytes.compare(name_at, name_end - name_at,
+                              ".note.gnu.build-id") != 0)
+              continue;
+            const uint64_t offset =
+                elf64 ? read64(header + 24) : read32(header + 16);
+            const uint64_t size =
+                elf64 ? read64(header + 32) : read32(header + 20);
+            if (offset <= bytes.size() && size <= bytes.size() - offset)
+              bytes.replace(offset, size, std::string(size, '\0'));
+          }
+        }
+      }
+    }
     return bytes;
+  }
   const uint32_t count = read32(16);
   const size_t header = mach64 ? 32 : 28;
   size_t offset = header;

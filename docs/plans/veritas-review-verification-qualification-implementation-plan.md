@@ -168,8 +168,8 @@ at the admitted callsite's unambiguous file basename and line, with
 verification ID across disposable roots; the raw sanitizer/compile logs and
 executable bytes are retained as non-dependency artifacts. The executable
 identity normalizes the disposable root path, the platform linker's
-UUID/signature/link-edit metadata, and materialized source mtimes (ELF DWARF
-line tables can record them).
+UUID/signature/link-edit metadata and ELF build-id notes, and materialized
+source mtimes (ELF DWARF line tables can record them).
 
 RED→GREEN evidence: the initial fifteen `AsanReplayTest` cases all failed
 against an unimplemented producer, then passed against the real sanitizer
@@ -240,7 +240,7 @@ ctest --test-dir build-homebrew-clang --output-on-failure \
 
 The clean build completed **591/591** steps with zero errors and the existing
 `libveritas_analysis_semantic.a` duplicate-library linker warning. Full CTest
-passed **1023/1023** in **392.03 s** with zero failures and zero skipped/not-run
+passed **1023/1023** in **391.19 s** with zero failures and zero skipped/not-run
 cases. `git diff --check`, clang-format and license-header checks passed. The
 Linux coverage build exposed one portability defect in the canary code — the
 socket declarations were only reaching it transitively on macOS — and the

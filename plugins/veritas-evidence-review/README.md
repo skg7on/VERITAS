@@ -304,8 +304,8 @@ image copy, so the target cannot rewrite the binary after execution. The
 counterexample is a canonical facts artifact (no addresses, PID or transcript),
 so identical replays have the same verification ID; raw sanitizer/compile logs
 and executable bytes are retained as non-dependency artifacts. The executable
-identity normalizes the disposable root path, materialized source mtimes and
-the platform linker's UUID/signature/link-edit metadata. Explicit captured `--target` flags are
+identity normalizes the disposable root path, materialized source mtimes, the
+platform linker's UUID/signature/link-edit metadata and ELF build-id notes. Explicit captured `--target` flags are
 refused because the analysis target is not assumed to be the replay host; the
 harness re-checks the destination/readable extents with the replay compiler.
 Every subprocess is bounded by the caller's remaining deadline; macOS denies

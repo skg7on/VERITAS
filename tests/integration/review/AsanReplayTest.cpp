@@ -30,8 +30,10 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <fstream>
+#include <iomanip>
 #include <map>
 #include <optional>
 #include <string>
@@ -528,6 +530,42 @@ TEST_F(AsanReplayTest, IdenticalReplayHasStableContentAddress) {
   ExpectStatus(*second, "REFUTED", "COMPLETED");
   EXPECT_EQ(*first->verification.getAsObject()->getString("verification_id"),
             *second->verification.getAsObject()->getString("verification_id"));
+  auto image_of = [](const ReplayResult &result) -> const std::string * {
+    for (const auto &[id, bytes] : result.artifacts)
+      if (id.starts_with("replay-executable:"))
+        return &bytes;
+    return nullptr;
+  };
+  const std::string *first_image = image_of(*first);
+  const std::string *second_image = image_of(*second);
+  ASSERT_NE(first_image, nullptr);
+  ASSERT_NE(second_image, nullptr);
+  if (*first_image != *second_image) {
+    size_t where = 0;
+    while (where < first_image->size() && where < second_image->size() &&
+           (*first_image)[where] == (*second_image)[where])
+      ++where;
+    std::cerr << "normalized executable differs at offset " << where << " ("
+              << first_image->size() << "/" << second_image->size()
+              << " bytes)\n";
+    auto window = [&](const std::string &bytes, const char *label) {
+      std::cerr << label << " hex: ";
+      const size_t begin = where > 24 ? where - 24 : 0;
+      const size_t end = std::min(bytes.size(), where + 56);
+      for (size_t i = begin; i < end; ++i)
+        std::cerr << std::hex << std::setw(2) << std::setfill('0')
+                  << static_cast<int>(static_cast<unsigned char>(bytes[i]))
+                  << ' ';
+      std::cerr << "\n" << label << " text: ";
+      for (size_t i = begin; i < end; ++i) {
+        const unsigned char c = static_cast<unsigned char>(bytes[i]);
+        std::cerr << (std::isprint(c) ? static_cast<char>(c) : '.');
+      }
+      std::cerr << "\n";
+    };
+    window(*first_image, "first");
+    window(*second_image, "second");
+  }
   auto digest_of = [](const ReplayResult &result, std::string_view prefix) {
     for (const auto &dependency :
          *result.verification.getAsObject()->getArray("input_dependencies")) {
