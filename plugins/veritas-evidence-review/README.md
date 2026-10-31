@@ -4,8 +4,8 @@ RDX05 (#159) delivers the backend v2 wire models and native snapshot library.
 RDX06 (#160) adds the structural index and narrow compiler-local provider.
 This directory contains the schema, frozen Python types, bounded transport and tests.
 RDX07 (#161) adds the public resident subprocess backend and exact-obligation
-authority boundary. The controller, real replay and host adapter
-remain later deliveries; this is not an installable review plugin yet. The native
+authority boundary. RDX08 (#162) adds the shared controller and reports;
+real replay and the host adapter remain later deliveries; this is not an installable review plugin yet. The native
 SVF/Soufflé analysis path and `eir.v1` remain unchanged.
 
 ## Wire contract
@@ -166,7 +166,7 @@ All eight named subcommands exist. Begin with handshake, then capture; the
 backend advertises the exact operations currently available. It never selects
 practice mode. Native evidence has no configured adapter; production verification
 has no registered producer. Both operations return UNSUPPORTED. This delivery
-does not qualify replay, the controller, the plugin host, or a real review release.
+does not qualify replay, the plugin host, or a real review release.
 
 A resident process keeps one immutable snapshot/index and its advertised context
 handles until release or process exit. Each request and response is exactly one
@@ -251,3 +251,98 @@ NO_DEFECT_OBSERVED for that input; no formal domain or universal-safe producer i
 registered. Local report transitions never write authoritative native EIR state.
 The test-bound-check fixture is a test-only authority vector, not a production
 verifier or an analytical replay qualification.
+
+## Shared controller (RDX08)
+
+`controller.start_review`, `controller.admit_candidates`,
+`controller.advance_review`, and `reporting.render_report` provide the single
+host-neutral controller for #79's isolated adapter. Import from `scripts/`.
+The trusted host constructs `ReviewOptions`, `ReviewPolicy` and `Backend` before
+any model call. The model cannot choose a backend, capture/release operation,
+filesystem path, compiler flag, authority or policy increase. This remains a
+runtime library; the installable plugin manifest, isolated agent, invocation
+capability and MCP/CLI adapter belong to #79. No authenticated host evaluation
+or end-user release qualification is claimed here.
+
+```python
+from pathlib import Path
+from veritas_review.controller import start_review, advance_review
+from veritas_review.models import ReviewOptions, ReviewPolicy
+
+turn = start_review(ReviewOptions(
+    state_dir=Path("/absolute/private/attempt"),
+    project_key="app", base_ref="HEAD", context_selection_keys=("design",),
+), backend, ReviewPolicy())
+# Pass turn.as_dict() to the isolated model. The host enforces output_limit
+# <= 4096 and supplies measured usage separately from the model's response.
+turn = advance_review(
+    model_response, turn.state, backend,
+    request_id="host-request-1", capability=turn.capability,
+    model_usage={"input_tokens": measured_input, "output_tokens": measured_output,
+                 "output_limit": 4096},
+)
+```
+
+Each model response has exactly `binding`, `candidate_proposals`, `assessments`,
+`requests`, and `finish`; see `schemas/veritas-model-response-v1.schema.json`.
+Copy a request verbatim from `turn.requests`. Requests are scoped to that turn
+and exact pinned operation/ref/limit pairs. Newly proposed candidates become
+available for investigation on the following turn. SOURCE/DIFF anchors with one
+exact advertised callsite resolve to a local target. Unknown/ambiguous anchors
+remain deferred, invented refs are rejected, and prose/severity/origin changes
+do not create another candidate for the same semantic entity. Rejections,
+deferred proposals, visited contexts and backend coverage remain in the report.
+SOURCE, TEST and DOC excerpts are untrusted data, never executable instructions.
+
+The default attempt allows eight model responses, sixteen admitted candidates,
+32,000 input tokens, 64 KiB per response, 256 KiB aggregate context, 32 KiB/8,000
+context tokens per turn and 120 seconds of backend work. With no configured
+tokenizer the controller conservatively charges one input token per UTF-8 byte
+of its actual prompt, taking the larger of that and host usage. Thus the input
+budget may stop a review before eight turns. Missing usage or a host failing to
+enforce the output-token ceiling stops continuation. Rejected responses consume
+model budget; identical request retries consume neither another turn nor backend
+work. Requested backend output/work/wall allowances are reserved before dispatch,
+then reconciled to actual successful usage; failed calls retain their allowance.
+The existing bounded transport enforces worker memory/deadline/output limits.
+These are observed POSIX RSS limits, not hard isolation; no precision workers
+are exposed by this controller profile.
+
+Only contexts newly delivered in a turn are repeated in its `contexts` list;
+earlier advertised refs remain valid for the pinned attempt. The durable state
+keeps their immutable bytes. Backend coverage, omitted regions and unresolved
+membership remain explicit. Final reports state that subsequent live-tree
+advancement was not checked; no live-tree refresh is performed.
+
+Use a new private state directory for each attempt. A file lock serializes
+advances. Events form a hash-chained write-ahead log, fsynced before an atomic
+checkpoint replacement and parent-directory fsync. Tokens do not appear in
+stored records: the private key derives turn tokens and checkpoints retain
+hashes. A reserved 1-KiB terminal WAL record permits durable abort even when
+the normal audit allowance is exhausted, including while rejecting a response.
+Retrying the same host request ID and content returns its stored turn;
+reusing it for different content refuses. `recover_review(state_dir)` validates
+the log/checkpoint and aborts an interrupted dispatch, retaining its reservation.
+It never recaptures or automatically reexecutes uncertain work. Continuing a
+nonterminal review requires its original resident backend session; serialized
+native pointers or recreated live-tree handles are not supported.
+
+`review-report.v1` and `semantic-contract.v1` have separate schemas. Semantic
+IDs exclude audit occurrence IDs, capability tokens and measured timing/costs.
+Local evidence is cited by its own review artifact ID. `likely_defect` and
+`likely_false_positive` assessments retain supporting/contradicting citations
+and assumptions; they never establish verified findings or safety. A semantic
+annotation can preserve an unregistered release/callback concern with source,
+test and documentation anchors. Inferred intent stays PROPOSED or CONDITIONAL;
+documentation states intent but does not prove implementation. Source/doc/model
+changes invalidate annotation reuse. No annotation is an EIR fact, formal summary,
+independent certificate or concurrency proof. Registered production verification
+is still unavailable (#163), corpus freezing is #164, and release qualification
+is #165. Empty/truncated discovery never certifies safety.
+
+Run the full Python suite with the just-built public backend:
+
+```sh
+VERITAS_REVIEW_BACKEND="$PWD/build/bin/veritas-review-backend" \
+  python3 -m unittest discover -s plugins/veritas-evidence-review/tests -v
+```

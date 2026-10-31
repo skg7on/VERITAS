@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "veritas-semantic-contract-v1.schema.json",
+  "type": "object",
+  "properties": {
+    "candidate_id": {
+      "$ref": "veritas-review-backend-v2.schema.json#/$defs/CandidateId"
+    },
+    "binding": {
+      "$ref": "veritas-review-backend-v2.schema.json#/$defs/ReviewBinding"
+    },
+    "proposal_digest": {
+      "$ref": "veritas-review-backend-v2.schema.json#/$defs/Digest"
+    },
+    "subject_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "veritas-review-backend-v2.schema.json#/$defs/AnchorRef"
+      }
+    },
+    "predicate": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "semantic_observation.v1"
+        },
+        "text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "veritas-review-backend-v2.schema.json#/$defs/ContextId"
+      }
+    },
+    "origin": {
+      "enum": [
+        "DOCUMENTED",
+        "LLM_INFERRED"
+      ]
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version": {
+      "const": "semantic-contract.v1"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "context_id": {
+            "$ref": "veritas-review-backend-v2.schema.json#/$defs/ContextId"
+          },
+          "content_digest": {
+            "$ref": "veritas-review-backend-v2.schema.json#/$defs/Digest"
+          }
+        },
+        "required": [
+          "context_id",
+          "content_digest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "status": {
+      "enum": [
+        "PROPOSED",
+        "CONDITIONAL"
+      ]
+    },
+    "verification_ref": {
+      "type": "null"
+    }
+  },
+  "required": [
+    "candidate_id",
+    "binding",
+    "proposal_digest",
+    "subject_refs",
+    "predicate",
+    "preconditions",
+    "effects",
+    "invariants",
+    "evidence_refs",
+    "origin",
+    "assumptions",
+    "version",
+    "dependencies",
+    "status",
+    "verification_ref"
+  ],
+  "additionalProperties": false
+}

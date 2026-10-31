@@ -97,8 +97,11 @@ commands/forms or incomplete parses retain explicit gaps. RDX07/#161 exposes the
 context/seed/local operations and exact-obligation C++/Python authority boundary.
 Local mode requires no SummaryDB. Native/verify operations explicitly refuse
 unavailable production providers; producer names alone grant no deciding
-authority. Native #124 domain producers, deployment/replay qualification,
-controller and host remain pending. See [runtime foundation](plugins/veritas-evidence-review/README.md).
+authority. Native #124 domain producers and deployment/replay qualification
+remain pending. RDX08/#162 adds the shared pre-EIR candidate/context/budget controller, durable
+request receipts and observation-only reports/semantic annotations. The isolated
+host remains #79; real replay, corpus and end-user release qualification remain
+#163–#165. See [runtime foundation](plugins/veritas-evidence-review/README.md).
 Native SVF/Soufflé requirements remain unchanged.
 
 Canonical configure and build (uses `CMakePresets.json` at repo root):
