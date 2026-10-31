@@ -98,7 +98,7 @@ bool RunForSetup(const std::vector<std::string> &args, int timeout_ms) {
   waitpid(pid, &status, 0);
   return false;
 }
-std::string Capture(const char *command) {
+[[maybe_unused]] std::string Capture(const char *command) {
   std::string out;
   std::FILE *pipe = ::popen(command, "r");
   if (!pipe)
