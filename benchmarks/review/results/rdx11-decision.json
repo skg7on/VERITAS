@@ -1,0 +1,149 @@
+{
+  "admitted_attempts": 0,
+  "authority": "administrative evaluation only; no native facts or universal-safety promotion",
+  "configuration": {},
+  "evaluation_status": "INCOMPLETE",
+  "gaps": [
+    "A/fixed_candidate/lb-libuv-scoped-ipv6: fewer than 3 fresh full runs",
+    "A/fixed_candidate/rc-libuv-pollerr-after-close: fewer than 3 fresh full runs",
+    "A/fixed_candidate/rc-libuv-udp-send-after-close: fewer than 3 fresh full runs",
+    "A/whole_discovery/lb-libuv-scoped-ipv6-guarded: fewer than 3 fresh full runs",
+    "A/whole_discovery/lb-libuv-scoped-ipv6: fewer than 3 fresh full runs",
+    "A/whole_discovery/rc-libuv-pollerr-after-close: fewer than 3 fresh full runs",
+    "A/whole_discovery/rc-libuv-udp-send-after-close-guarded: fewer than 3 fresh full runs",
+    "A/whole_discovery/rc-libuv-udp-send-after-close: fewer than 3 fresh full runs",
+    "A/whole_discovery/rc-libuv-version-bump: fewer than 3 fresh full runs",
+    "B/fixed_candidate/lb-libuv-scoped-ipv6: fewer than 3 fresh full runs",
+    "B/fixed_candidate/rc-libuv-pollerr-after-close: fewer than 3 fresh full runs",
+    "B/fixed_candidate/rc-libuv-udp-send-after-close: fewer than 3 fresh full runs",
+    "B/whole_discovery/lb-libuv-scoped-ipv6-guarded: fewer than 3 fresh full runs",
+    "B/whole_discovery/lb-libuv-scoped-ipv6: fewer than 3 fresh full runs",
+    "B/whole_discovery/rc-libuv-pollerr-after-close: fewer than 3 fresh full runs",
+    "B/whole_discovery/rc-libuv-udp-send-after-close-guarded: fewer than 3 fresh full runs",
+    "B/whole_discovery/rc-libuv-udp-send-after-close: fewer than 3 fresh full runs",
+    "B/whole_discovery/rc-libuv-version-bump: fewer than 3 fresh full runs",
+    "C/fixed_candidate/lb-libuv-scoped-ipv6: fewer than 3 fresh full runs",
+    "C/fixed_candidate/rc-libuv-pollerr-after-close: fewer than 3 fresh full runs",
+    "C/fixed_candidate/rc-libuv-udp-send-after-close: fewer than 3 fresh full runs",
+    "C/whole_discovery/lb-libuv-scoped-ipv6-guarded: fewer than 3 fresh full runs",
+    "C/whole_discovery/lb-libuv-scoped-ipv6: fewer than 3 fresh full runs",
+    "C/whole_discovery/rc-libuv-pollerr-after-close: fewer than 3 fresh full runs",
+    "C/whole_discovery/rc-libuv-udp-send-after-close-guarded: fewer than 3 fresh full runs",
+    "C/whole_discovery/rc-libuv-udp-send-after-close: fewer than 3 fresh full runs",
+    "C/whole_discovery/rc-libuv-version-bump: fewer than 3 fresh full runs",
+    "no attempts",
+    "operator model/disclosure configuration pending",
+    "production release validator unavailable"
+  ],
+  "p4_investment": "OPEN: requires held-out incremental quality/cost decision",
+  "profiles": {
+    "A": {
+      "availability": "AVAILABLE",
+      "precision": null,
+      "quality": {
+        "fixed_candidate": {
+          "abstention_rate": null,
+          "attempts": 0,
+          "counts": {},
+          "deciding": 0,
+          "misses": [],
+          "precision": null,
+          "recall": null,
+          "supported_reports": 0,
+          "unsupported_rate": null,
+          "useful_hypotheses": 0
+        },
+        "whole_discovery": {
+          "abstention_rate": null,
+          "attempts": 0,
+          "counts": {},
+          "deciding": 0,
+          "misses": [],
+          "precision": null,
+          "recall": null,
+          "supported_reports": 0,
+          "unsupported_rate": null,
+          "useful_hypotheses": 0
+        }
+      },
+      "run_variability": {},
+      "workloads": {}
+    },
+    "B": {
+      "availability": "AVAILABLE",
+      "precision": null,
+      "quality": {
+        "fixed_candidate": {
+          "abstention_rate": null,
+          "attempts": 0,
+          "counts": {},
+          "deciding": 0,
+          "misses": [],
+          "precision": null,
+          "recall": null,
+          "supported_reports": 0,
+          "unsupported_rate": null,
+          "useful_hypotheses": 0
+        },
+        "whole_discovery": {
+          "abstention_rate": null,
+          "attempts": 0,
+          "counts": {},
+          "deciding": 0,
+          "misses": [],
+          "precision": null,
+          "recall": null,
+          "supported_reports": 0,
+          "unsupported_rate": null,
+          "useful_hypotheses": 0
+        }
+      },
+      "run_variability": {},
+      "workloads": {}
+    },
+    "C": {
+      "availability": "AVAILABLE",
+      "precision": null,
+      "quality": {
+        "fixed_candidate": {
+          "abstention_rate": null,
+          "attempts": 0,
+          "counts": {},
+          "deciding": 0,
+          "misses": [],
+          "precision": null,
+          "recall": null,
+          "supported_reports": 0,
+          "unsupported_rate": null,
+          "useful_hypotheses": 0
+        },
+        "whole_discovery": {
+          "abstention_rate": null,
+          "attempts": 0,
+          "counts": {},
+          "deciding": 0,
+          "misses": [],
+          "precision": null,
+          "recall": null,
+          "supported_reports": 0,
+          "unsupported_rate": null,
+          "useful_hypotheses": 0
+        }
+      },
+      "run_variability": {},
+      "workloads": {}
+    },
+    "D": {
+      "availability": "UNAVAILABLE",
+      "reason": "formal/SMT adapters are not qualified for this corpus; no substitute data"
+    },
+    "E": {
+      "availability": "UNAVAILABLE",
+      "reason": "native Evidence mode is not qualified for this corpus; RDX01-RDX04 remain pending"
+    }
+  },
+  "qualification": "OPEN",
+  "release_digest": "sha256:a939cac2a225ba39f037e51aa8d9fa98c4acb3850c6545bf53ed9e7a73cb5bb1",
+  "scaling": "#142/#145 thresholds unchanged; no demand-scaling claim",
+  "version": "veritas.review.eval.decision.v1"
+}

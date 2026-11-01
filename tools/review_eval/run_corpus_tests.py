@@ -21,17 +21,24 @@ suite, so the gate uses this wrapper instead.
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import sys
 import unittest
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--pattern", default="test_corpus.py",
+        choices=("test_corpus.py", "test_evaluation.py"),
+    )
+    args = parser.parse_args()
     tests = Path(__file__).resolve().parent / "tests"
-    suite = unittest.TestLoader().discover(str(tests), pattern="test_corpus.py")
+    suite = unittest.TestLoader().discover(str(tests), pattern=args.pattern)
     discovered = suite.countTestCases()
     if discovered == 0:
-        print("no corpus tests discovered", file=sys.stderr)
+        print("no review evaluation/corpus tests discovered", file=sys.stderr)
         return 1
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return 0 if result.wasSuccessful() else 1

@@ -121,10 +121,10 @@ Use existing RunMetrics/M13/M14 instruments for native measurements.
 **Consumes:** frozen corpus, controller/backend and provider profiles A–E.
 **Produces:** machine-readable per-attempt results, distributions and go/no-go record.
 
-- [ ] Write tests where a fixed-candidate verifier succeeds but discovery misses
+- [x] Write tests where a fixed-candidate verifier succeeds but discovery misses
   the known bug, where no real replay decides, and where warm-only accounting
   omits expensive bootstrap. Each must fail qualification despite a plausible report.
-- [ ] Run the evaluator's unittest suite for RED before its implementation.
+- [x] Run the evaluator's unittest suite for RED before its implementation.
 - [ ] Implement paired fixed-budget runs, separate cold/warm/setup/model costs,
   aggregate child/parent memory and per-layer bytes; unavailable capabilities
   remain explicit. Use >=100 query/attempt samples for P95 and >=3 full runs.
@@ -311,3 +311,36 @@ Replay remains `NOT_RUN`: the corpus freezes the trusted harness
 replay execution is #165; the harness/payload digests are published and
 production qualification stays OPEN. No model was tuned, no A–E measurement or
 universal-safety claim is made, and no native Evidence state is changed.
+
+### RDX11 / Task 5 evaluator infrastructure (2026-11-01)
+
+The operator-adapter runner, independent response-bound adjudication, A–E
+reporting and CTest regression integration are implemented in
+`tools/review_eval/`. The suite was observed RED against unimplemented entry
+points, then GREEN. It covers a discovery miss despite fixed-candidate success,
+all-inconclusive output, missing cold/bootstrap costs, changed result bytes,
+independent reviewer binding, insufficient samples, nonce separation and bounded
+subprocess execution. See [execution contract](../../tools/review_eval/README.md).
+
+This is a partial delivery. The committed
+`benchmarks/review/results/rdx11-decision.{json,md}` is generated from the actual
+pending runner output: **OPEN, zero attempts**. It contains no measured model,
+replay or performance claims. Direct API authentication, real A/B/C controller
+adapters and bounded contexts, independent adjudication, per-layer/native instruments, real deciding replay/controls and
+fresh deterministic build measurements remain pending. The user approved
+OpenAI gpt-6.1-sol at medium reasoning, public-libuv-only disclosure and a $5
+smoke cap; the full paid evaluation is not authorized. The user then explicitly
+deferred model runs and requested infrastructure/CI completion. D/E are UNAVAILABLE.
+Neither issue #165 nor runtime Task 7 is complete; their acceptance checkboxes
+remain open. P4 investment and #142/#145 thresholds are unchanged.
+
+Infrastructure verification: clean Homebrew Clang/LLVM 24 build **591/591**;
+full CTest **1026/1026** in **419.73 s**, with zero skipped/not-run cases and
+zero internal GoogleTest skips; evaluator/corpus Python **55/55**, including
+25 evaluator regressions; plugin Python **76/76**. Independent review found
+and the delivery fixed sample relabeling, observed-memory scoring,
+positive-case recall/miss accounting and semantic-versus-analytical deciding
+counts. Separate compiler process groups are cleaned up; trusted adapters that
+daemonize into new sessions remain unsupported, and enforcing containment is
+required for production. The report unconditionally retains OPEN while the
+production release validator is unavailable. Diff and license checks pass.
