@@ -126,9 +126,9 @@ class EvaluationTest(unittest.TestCase):
         self.assertTrue(any("duplicate" in gap for gap in result["gaps"]))
 
 
-    def admitted_fixture(self, directory, *, mode="whole_discovery", outcome="TRUE_POSITIVE_SUPPORTED"):
+    def admitted_fixture(self, directory, *, mode="whole_discovery", outcome="TRUE_POSITIVE_SUPPORTED", case_index=0):
         # Synthetic transport data only: never a production measurement artifact.
-        case=self.corpus["families"][0]["cases"][0]
+        case=self.corpus["families"][0]["cases"][case_index]
         bundle=run.pending(self.corpus)
         bundle["configuration"]={"model":"test-model","provider":"test-only","source_disclosure_policy":"test-only"}
         job=dict(case_id=case["case_id"],profile="C",mode=mode,run_id=0,sample_id=0)
@@ -258,6 +258,14 @@ class EvaluationTest(unittest.TestCase):
                                       outcome="TRUE_POSITIVE_SUPPORTED",analytically_deciding=False)])["whole_discovery"]
         self.assertEqual(metrics["deciding"],0)
         self.assertEqual(metrics["supported_reports"],1)
+
+
+    def test_clean_control_cannot_inflate_supported_positive_metrics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bundle,judgment=self.admitted_fixture(directory,case_index=1)
+            result=evaluate.evaluate(self.corpus,bundle,[judgment])
+            self.assertEqual(result["admitted_attempts"],0)
+            self.assertIn("test-only: clean control mislabeled as positive/missed defect",result["gaps"])
 
 
 def measurements():

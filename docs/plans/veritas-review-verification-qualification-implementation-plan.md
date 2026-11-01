@@ -335,12 +335,17 @@ Neither issue #165 nor runtime Task 7 is complete; their acceptance checkboxes
 remain open. P4 investment and #142/#145 thresholds are unchanged.
 
 Infrastructure verification: clean Homebrew Clang/LLVM 24 build **591/591**;
-full CTest **1026/1026** in **419.73 s**, with zero skipped/not-run cases and
-zero internal GoogleTest skips; evaluator/corpus Python **55/55**, including
-25 evaluator regressions; plugin Python **76/76**. Independent review found
+full CTest **1026/1026** in **124.01 s** (four workers), with zero skipped/not-run cases and
+zero internal GoogleTest skips; evaluator/corpus Python **56/56**, including
+26 evaluator regressions; plugin Python **76/76**. Independent review found
 and the delivery fixed sample relabeling, observed-memory scoring,
 positive-case recall/miss accounting and semantic-versus-analytical deciding
 counts. Separate compiler process groups are cleaned up; trusted adapters that
 daemonize into new sessions remain unsupported, and enforcing containment is
 required for production. The report unconditionally retains OPEN while the
 production release validator is unavailable. Diff and license checks pass.
+
+A further RED→GREEN regression rejects a supported-positive/unproven-positive/
+missed-defect judgment on a frozen clean control before it can inflate quality
+metrics. The clean build and complete CTest suite were repeated after this fix;
+the final verification counts above include it.

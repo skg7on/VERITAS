@@ -151,6 +151,7 @@ def evaluate(corpus,bundle,judgments):
                 if "sha256:"+hashlib.sha256(raw).hexdigest()!=ref["digest"]:raise ValueError("adjudication witness digest mismatch")
             positive=case["oracle"]["kind"]!="CLEAN"
             if positive and outcome=="TRUE_NEGATIVE":raise ValueError("known positive mislabeled negative")
+            if not positive and outcome in {"TRUE_POSITIVE_SUPPORTED","TRUE_POSITIVE_UNPROVEN","FALSE_NEGATIVE"}:raise ValueError("clean control mislabeled as positive/missed defect")
             if not positive and outcome!="TRUE_NEGATIVE":gaps.append("negative control failed: "+aid)
             if positive and outcome!="TRUE_POSITIVE_SUPPORTED":gaps.append("missed or unsupported positive: "+aid)
             if outcome=="TRUE_POSITIVE_SUPPORTED":
