@@ -1,0 +1,957 @@
+{
+  "version": "veritas.review.eval.corpus.v1",
+  "release": "rdx10-real-change-2026-11-01",
+  "release_digest": "sha256:a939cac2a225ba39f037e51aa8d9fa98c4acb3850c6545bf53ed9e7a73cb5bb1",
+  "frozen": {
+    "date": "2026-11-01",
+    "tuning_started": false,
+    "rubric_path": "rubric.md",
+    "rubric_digest": "sha256:1521c2347970fc61d8fe5e7359fb3f37f80d9007590ca61726711627594b4910",
+    "split_digest": "sha256:da9784cfbbc9484379606f5b1f77a888167d2b31ef9c3375fe19bd15e1089ae9"
+  },
+  "split": {
+    "strategy": "family-held-out-real-defect",
+    "tuning": [
+      "rc-libuv-version-bump"
+    ],
+    "held_out": [
+      "lb-libuv-scoped-ipv6",
+      "lb-libuv-scoped-ipv6-guarded",
+      "rc-libuv-udp-send-after-close",
+      "rc-libuv-udp-send-after-close-guarded",
+      "rc-libuv-pollerr-after-close"
+    ],
+    "held_out_policy": "held-out real defects are never used for prompts, examples or tuning"
+  },
+  "budgets": {
+    "version": "veritas.review.eval.budgets.v1",
+    "profiles": {
+      "A": {
+        "availability": "AVAILABLE",
+        "max_turns": 8,
+        "input_tokens": 32000,
+        "response_bytes": 65536,
+        "output_tokens": 4096,
+        "context_bytes": 262144,
+        "wall_ms": 120000
+      },
+      "B": {
+        "availability": "AVAILABLE",
+        "max_turns": 8,
+        "input_tokens": 32000,
+        "response_bytes": 65536,
+        "output_tokens": 4096,
+        "context_bytes": 262144,
+        "wall_ms": 120000
+      },
+      "C": {
+        "availability": "AVAILABLE",
+        "max_turns": 8,
+        "input_tokens": 32000,
+        "response_bytes": 65536,
+        "output_tokens": 4096,
+        "context_bytes": 262144,
+        "wall_ms": 120000
+      },
+      "D": {
+        "availability": "UNAVAILABLE",
+        "reason": "formal/SMT adapters are not qualified for this corpus; no substitute data"
+      },
+      "E": {
+        "availability": "UNAVAILABLE",
+        "reason": "native Evidence mode is not qualified for this corpus; RDX01-RDX04 remain pending"
+      }
+    }
+  },
+  "runs": {
+    "fixed_candidate": {
+      "candidate_source": "FROZEN",
+      "budget_profile": "A",
+      "case_ids": [
+        "lb-libuv-scoped-ipv6",
+        "rc-libuv-udp-send-after-close",
+        "rc-libuv-pollerr-after-close"
+      ],
+      "description": "the known candidate is supplied to isolate verification from discovery; success does not demonstrate discovery"
+    },
+    "whole_discovery": {
+      "candidate_source": "MODEL_DISCOVERY",
+      "budget_profile": "A",
+      "case_ids": [
+        "lb-libuv-scoped-ipv6",
+        "rc-libuv-udp-send-after-close",
+        "rc-libuv-pollerr-after-close",
+        "lb-libuv-scoped-ipv6-guarded",
+        "rc-libuv-udp-send-after-close-guarded",
+        "rc-libuv-version-bump"
+      ],
+      "description": "the model discovers candidates over the bounded context; clean controls measure false positives and fixed-candidate success never compensates for a miss"
+    }
+  },
+  "families": [
+    {
+      "id": "local-bounds",
+      "required_real_cases": 1,
+      "production_qualification": "OPEN",
+      "sensitive_paths": [
+        "src/inet.c"
+      ],
+      "cases": [
+        {
+          "case_id": "lb-libuv-scoped-ipv6",
+          "family": "local-bounds",
+          "kind": "REAL_CHANGE",
+          "index": "HELD_OUT",
+          "repository": {
+            "url": "https://github.com/libuv/libuv",
+            "license": {
+              "spdx": "MIT",
+              "path": "LICENSE",
+              "digest": "b11eec54859519e31d61ced9363c7add7a4300f89bf5d5732fe5a1f3d8821419"
+            }
+          },
+          "base_revision": "e7b3c3fb6b56298174e5eaf2ac3bea2b721cf0f5",
+          "head_revision": "4fac9427e4a652cdebf241803ce7443dd59a4451",
+          "change": {
+            "summary": "Fix parsing scoped IPv6 addresses by bounding the IPv4 scope-id copy.",
+            "paths": [
+              "src/inet.c",
+              "test/test-ip6-addr.c"
+            ]
+          },
+          "program": {
+            "version": "veritas.review.program.v1",
+            "target_key": "libuv-uv_a",
+            "kind": "STATIC_LIBRARY",
+            "membership_source": "EXPLICIT_DECLARATION",
+            "coverage": "OPEN",
+            "translation_units": [
+              "src/inet.c"
+            ],
+            "targets": [
+              {
+                "key": "libuv-uv_a",
+                "kind": "STATIC_LIBRARY",
+                "translation_units": [
+                  "src/inet.c"
+                ],
+                "dependencies": [],
+                "artifacts": []
+              }
+            ],
+            "frontier": [
+              "the remaining libuv translation units are outside this case's declared scope; membership stays OPEN"
+            ]
+          },
+          "build": {
+            "system": "cmake",
+            "commands": [
+              "cmake -S . -B build -DLIBUV_BUILD_TESTS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug",
+              "cmake --build build"
+            ],
+            "compile_commands": "build/compile_commands.json"
+          },
+          "capture": {
+            "program_target_key": "libuv-uv_a",
+            "selected_tracked": [
+              "src/inet.c",
+              "include",
+              "src/uv-common.h",
+              "src/queue.h",
+              "src/tree.h",
+              "test/test-ip6-addr.c"
+            ],
+            "selected_artifacts": [
+              "CMakeLists.txt",
+              "build/compile_commands.json"
+            ],
+            "context_selection_keys": [
+              "src/inet.c",
+              "test/test-ip6-addr.c"
+            ]
+          },
+          "artifacts": [
+            {
+              "path": "src/inet.c",
+              "revision": "base",
+              "digest": "19044b8bfba28dd8f5bfe549c2bbcf2d09b5ab828b6263e949cfcd0b29a350f9"
+            },
+            {
+              "path": "src/inet.c",
+              "revision": "head",
+              "digest": "bdb9f580b0334ffc4a9b44cbf21ed1146f8900c17d54dcf9591dd8aaf8794d0b"
+            },
+            {
+              "path": "test/test-ip6-addr.c",
+              "revision": "base",
+              "digest": "50a7f5be77b7d1eff77b2c0298869c9c640b0b9124127a07b5f39cffcd108106"
+            },
+            {
+              "path": "test/test-ip6-addr.c",
+              "revision": "head",
+              "digest": "f453518667a9a97540fd268564a88bdafeddcec025eafee25f7ea78418863881"
+            },
+            {
+              "path": "LICENSE",
+              "revision": "head",
+              "digest": "b11eec54859519e31d61ced9363c7add7a4300f89bf5d5732fe5a1f3d8821419"
+            }
+          ],
+          "oracle": {
+            "kind": "KNOWN_DEFECT",
+            "predicate": "copy_bound.v1",
+            "defect_revision": "base",
+            "callsite": {
+              "path": "src/inet.c",
+              "line": 269,
+              "contains": "memcpy(tmp, curtok, pch - curtok);"
+            },
+            "destination": {
+              "expression": "tmp",
+              "declaration": "char tmp[sizeof \"255.255.255.255\"];",
+              "declaration_line": 267
+            },
+            "capacity_bytes": 16,
+            "inputs": [
+              {
+                "label": "N",
+                "requested_bytes": 16,
+                "readable_bytes": 20,
+                "payload": "tests/qualification/review/payloads/libuv_inet_pton_n.bin",
+                "payload_digest": "15a2f92e63107dcabf30ea4b793a64ba85e0aa898b353d3b6b21d5a562f2d201",
+                "harness_id": "libuv-inet-pton-n",
+                "expected_status": "UNKNOWN"
+              },
+              {
+                "label": "N+1",
+                "requested_bytes": 17,
+                "readable_bytes": 21,
+                "payload": "tests/qualification/review/payloads/libuv_inet_pton_n_plus_1.bin",
+                "payload_digest": "de7dc2340a1cf510be44a905f0d799cf2277ec4773303d2faa238478594581cc",
+                "harness_id": "libuv-inet-pton-n-plus-1",
+                "expected_status": "REFUTED"
+              },
+              {
+                "label": "SHORT_SOURCE",
+                "requested_bytes": 17,
+                "readable_bytes": 9,
+                "payload": "tests/qualification/review/payloads/libuv_inet_pton_short.bin",
+                "payload_digest": "8936fa7b62d9b20424f8ff26208da560de5366fa8d156ae85c2b7c2d077b5df0",
+                "harness_id": "libuv-inet-pton-short",
+                "expected_status": "UNSUPPORTED"
+              }
+            ],
+            "harness": {
+              "source": "tests/qualification/review/harnesses/libuv_inet_pton.cc",
+              "source_digest": "fedf2df2db5901f85faddc3816ab16235af68e20ca2c68d3cf6f213b5cc92b1a",
+              "entry_point": "uv_inet_pton",
+              "linkage": "C"
+            },
+            "replay": {
+              "revision": "base",
+              "isolation": "macos-sandbox or linux-bwrap (operator-configured, canary-qualified)",
+              "status": "NOT_RUN",
+              "reason": "the corpus freezes the trusted harness and payload; operator-qualified replay execution is recorded by the execution runner (#165)"
+            },
+            "expected_status": "REFUTED",
+            "universal_safety_forbidden": true
+          }
+        },
+        {
+          "case_id": "lb-libuv-scoped-ipv6-guarded",
+          "family": "local-bounds",
+          "kind": "REAL_CONTROL",
+          "index": "HELD_OUT",
+          "repository": {
+            "url": "https://github.com/libuv/libuv",
+            "license": {
+              "spdx": "MIT",
+              "path": "LICENSE",
+              "digest": "b11eec54859519e31d61ced9363c7add7a4300f89bf5d5732fe5a1f3d8821419"
+            }
+          },
+          "base_revision": "e7b3c3fb6b56298174e5eaf2ac3bea2b721cf0f5",
+          "head_revision": "4fac9427e4a652cdebf241803ce7443dd59a4451",
+          "change": {
+            "summary": "Fix parsing scoped IPv6 addresses by bounding the IPv4 scope-id copy.",
+            "paths": [
+              "src/inet.c",
+              "test/test-ip6-addr.c"
+            ]
+          },
+          "program": {
+            "version": "veritas.review.program.v1",
+            "target_key": "libuv-uv_a",
+            "kind": "STATIC_LIBRARY",
+            "membership_source": "EXPLICIT_DECLARATION",
+            "coverage": "OPEN",
+            "translation_units": [
+              "src/inet.c"
+            ],
+            "targets": [
+              {
+                "key": "libuv-uv_a",
+                "kind": "STATIC_LIBRARY",
+                "translation_units": [
+                  "src/inet.c"
+                ],
+                "dependencies": [],
+                "artifacts": []
+              }
+            ],
+            "frontier": [
+              "the remaining libuv translation units are outside this case's declared scope; membership stays OPEN"
+            ]
+          },
+          "build": {
+            "system": "cmake",
+            "commands": [
+              "cmake -S . -B build -DLIBUV_BUILD_TESTS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug",
+              "cmake --build build"
+            ],
+            "compile_commands": "build/compile_commands.json"
+          },
+          "artifacts": [
+            {
+              "path": "src/inet.c",
+              "revision": "base",
+              "digest": "19044b8bfba28dd8f5bfe549c2bbcf2d09b5ab828b6263e949cfcd0b29a350f9"
+            },
+            {
+              "path": "src/inet.c",
+              "revision": "head",
+              "digest": "bdb9f580b0334ffc4a9b44cbf21ed1146f8900c17d54dcf9591dd8aaf8794d0b"
+            },
+            {
+              "path": "test/test-ip6-addr.c",
+              "revision": "base",
+              "digest": "50a7f5be77b7d1eff77b2c0298869c9c640b0b9124127a07b5f39cffcd108106"
+            },
+            {
+              "path": "test/test-ip6-addr.c",
+              "revision": "head",
+              "digest": "f453518667a9a97540fd268564a88bdafeddcec025eafee25f7ea78418863881"
+            },
+            {
+              "path": "LICENSE",
+              "revision": "head",
+              "digest": "b11eec54859519e31d61ced9363c7add7a4300f89bf5d5732fe5a1f3d8821419"
+            }
+          ],
+          "capture": {
+            "program_target_key": "libuv-uv_a",
+            "selected_tracked": [
+              "src/inet.c",
+              "include",
+              "src/uv-common.h",
+              "src/queue.h",
+              "src/tree.h",
+              "test/test-ip6-addr.c"
+            ],
+            "selected_artifacts": [
+              "CMakeLists.txt",
+              "build/compile_commands.json"
+            ],
+            "context_selection_keys": [
+              "src/inet.c",
+              "test/test-ip6-addr.c"
+            ]
+          },
+          "oracle": {
+            "kind": "CLEAN",
+            "predicate": null,
+            "control_scope": "CORRECT_GUARD",
+            "expected_status": "NO_DEFECT",
+            "expectation": "the head copies through a 46-byte local array only after rejecting len > UV__INET6_ADDRSTRLEN-1 and no unbounded direct local-array memcpy remains",
+            "evidence": [
+              {
+                "path": "src/inet.c",
+                "revision": "head",
+                "line": 176,
+                "contains": "UV__INET6_ADDRSTRLEN-1"
+              },
+              {
+                "path": "src/inet.c",
+                "revision": "head",
+                "line": 178,
+                "contains": "memcpy(s, src, len);"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "release-callback",
+      "required_real_cases": 1,
+      "production_qualification": "OPEN",
+      "sensitive_paths": [
+        "src/unix/udp.c",
+        "src/unix/fs-event.c"
+      ],
+      "cases": [
+        {
+          "case_id": "rc-libuv-udp-send-after-close",
+          "family": "release-callback",
+          "kind": "REAL_CHANGE",
+          "index": "HELD_OUT",
+          "repository": {
+            "url": "https://github.com/libuv/libuv",
+            "license": {
+              "spdx": "MIT",
+              "path": "LICENSE",
+              "digest": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+            }
+          },
+          "base_revision": "e8458b2402e7a068f25f01d0b72e6aed73ca2138",
+          "head_revision": "a7c44d674833e8dec66b8730b5635fcad0f81162",
+          "change": {
+            "summary": "Skip the queued UDP send path when a recv callback closes the handle.",
+            "paths": [
+              "src/unix/udp.c"
+            ]
+          },
+          "program": {
+            "version": "veritas.review.program.v1",
+            "target_key": "libuv-uv_a",
+            "kind": "STATIC_LIBRARY",
+            "membership_source": "EXPLICIT_DECLARATION",
+            "coverage": "OPEN",
+            "translation_units": [
+              "src/unix/udp.c"
+            ],
+            "targets": [
+              {
+                "key": "libuv-uv_a",
+                "kind": "STATIC_LIBRARY",
+                "translation_units": [
+                  "src/unix/udp.c"
+                ],
+                "dependencies": [],
+                "artifacts": []
+              }
+            ],
+            "frontier": [
+              "the remaining libuv translation units are outside this case's declared scope; membership stays OPEN"
+            ]
+          },
+          "build": {
+            "system": "cmake",
+            "commands": [
+              "cmake -S . -B build -DLIBUV_BUILD_TESTS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug",
+              "cmake --build build"
+            ],
+            "compile_commands": "build/compile_commands.json"
+          },
+          "capture": {
+            "program_target_key": "libuv-uv_a",
+            "selected_tracked": [
+              "src/unix/udp.c",
+              "include",
+              "src"
+            ],
+            "selected_artifacts": [
+              "CMakeLists.txt",
+              "build/compile_commands.json"
+            ],
+            "context_selection_keys": [
+              "src/unix/udp.c"
+            ]
+          },
+          "artifacts": [
+            {
+              "path": "src/unix/udp.c",
+              "revision": "base",
+              "digest": "616efb57d7dfff6dcd7017aff1822e9bd53b6b3665582873296ce68282b04f8d"
+            },
+            {
+              "path": "src/unix/udp.c",
+              "revision": "head",
+              "digest": "17a3b0eb22d4bdebc66e92e2c66f452eb16542ba2d36dbf0152b9cf01aece1fd"
+            },
+            {
+              "path": "LICENSE",
+              "revision": "head",
+              "digest": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+            }
+          ],
+          "oracle": {
+            "kind": "SEMANTIC_OBSERVATION",
+            "predicate": "semantic-contract.v1",
+            "expected_status": "PROPOSED",
+            "concern": "A recv callback can close the UDP handle while the same uv__udp_io dispatch still processes an enqueued POLLOUT write; uv__udp_sendmsg then feeds the closing handle and can use after free. The change skips the send path when uv__is_closing(handle).",
+            "anchors": [
+              {
+                "role": "enqueue",
+                "path": "src/unix/udp.c",
+                "revision": "base",
+                "line": 743,
+                "contains": "uv__io_start(handle->loop, &handle->io_watcher, POLLOUT);"
+              },
+              {
+                "role": "cancel",
+                "path": "src/unix/udp.c",
+                "revision": "head",
+                "line": 144,
+                "contains": "uv__is_closing(handle)"
+              },
+              {
+                "role": "dispatch",
+                "path": "src/unix/udp.c",
+                "revision": "base",
+                "line": 145,
+                "contains": "uv__udp_sendmsg(handle);"
+              },
+              {
+                "role": "release",
+                "path": "src/unix/udp.c",
+                "revision": "base",
+                "line": 52,
+                "contains": "void uv__udp_close(uv_udp_t* handle) {"
+              }
+            ],
+            "control_case": "rc-libuv-udp-send-after-close-guarded",
+            "independent_sink": "rc-libuv-pollerr-after-close",
+            "not_claimed": [
+              "universal-safety",
+              "concurrency-proof",
+              "native-fact-authority"
+            ],
+            "verification_ref": null
+          }
+        },
+        {
+          "case_id": "rc-libuv-udp-send-after-close-guarded",
+          "family": "release-callback",
+          "kind": "REAL_CONTROL",
+          "index": "HELD_OUT",
+          "repository": {
+            "url": "https://github.com/libuv/libuv",
+            "license": {
+              "spdx": "MIT",
+              "path": "LICENSE",
+              "digest": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+            }
+          },
+          "base_revision": "e8458b2402e7a068f25f01d0b72e6aed73ca2138",
+          "head_revision": "a7c44d674833e8dec66b8730b5635fcad0f81162",
+          "change": {
+            "summary": "Skip the queued UDP send path when a recv callback closes the handle.",
+            "paths": [
+              "src/unix/udp.c"
+            ]
+          },
+          "program": {
+            "version": "veritas.review.program.v1",
+            "target_key": "libuv-uv_a",
+            "kind": "STATIC_LIBRARY",
+            "membership_source": "EXPLICIT_DECLARATION",
+            "coverage": "OPEN",
+            "translation_units": [
+              "src/unix/udp.c"
+            ],
+            "targets": [
+              {
+                "key": "libuv-uv_a",
+                "kind": "STATIC_LIBRARY",
+                "translation_units": [
+                  "src/unix/udp.c"
+                ],
+                "dependencies": [],
+                "artifacts": []
+              }
+            ],
+            "frontier": [
+              "the remaining libuv translation units are outside this case's declared scope; membership stays OPEN"
+            ]
+          },
+          "build": {
+            "system": "cmake",
+            "commands": [
+              "cmake -S . -B build -DLIBUV_BUILD_TESTS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug",
+              "cmake --build build"
+            ],
+            "compile_commands": "build/compile_commands.json"
+          },
+          "artifacts": [
+            {
+              "path": "src/unix/udp.c",
+              "revision": "base",
+              "digest": "616efb57d7dfff6dcd7017aff1822e9bd53b6b3665582873296ce68282b04f8d"
+            },
+            {
+              "path": "src/unix/udp.c",
+              "revision": "head",
+              "digest": "17a3b0eb22d4bdebc66e92e2c66f452eb16542ba2d36dbf0152b9cf01aece1fd"
+            },
+            {
+              "path": "LICENSE",
+              "revision": "head",
+              "digest": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+            }
+          ],
+          "capture": {
+            "program_target_key": "libuv-uv_a",
+            "selected_tracked": [
+              "src/unix/udp.c",
+              "include",
+              "src"
+            ],
+            "selected_artifacts": [
+              "CMakeLists.txt",
+              "build/compile_commands.json"
+            ],
+            "context_selection_keys": [
+              "src/unix/udp.c"
+            ]
+          },
+          "oracle": {
+            "kind": "CLEAN",
+            "predicate": null,
+            "control_scope": "CORRECT_CANCELLATION",
+            "expected_status": "NO_CONCERN",
+            "expectation": "the head skips uv__udp_sendmsg for a closing handle",
+            "evidence": [
+              {
+                "path": "src/unix/udp.c",
+                "revision": "head",
+                "line": 144,
+                "contains": "uv__is_closing(handle)"
+              },
+              {
+                "path": "src/unix/udp.c",
+                "revision": "head",
+                "line": 145,
+                "contains": "uv__udp_sendmsg(handle);"
+              }
+            ]
+          }
+        },
+        {
+          "case_id": "rc-libuv-pollerr-after-close",
+          "family": "release-callback",
+          "kind": "REAL_CHANGE",
+          "index": "HELD_OUT",
+          "repository": {
+            "url": "https://github.com/libuv/libuv",
+            "license": {
+              "spdx": "MIT",
+              "path": "LICENSE",
+              "digest": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+            }
+          },
+          "base_revision": "e62ccbf7707f62b8056a963b6bd01507fbf02817",
+          "head_revision": "b030b02a3e51acd09e260bf20e115e841c3842d0",
+          "change": {
+            "summary": "Require an active handle before reading the UDP error queue after a poll callback may have closed it.",
+            "paths": [
+              "CMakeLists.txt",
+              "Makefile.am",
+              "src/unix/udp.c",
+              "test/test-list.h",
+              "test/test-udp-recv-cb-close-pollerr.c"
+            ]
+          },
+          "program": {
+            "version": "veritas.review.program.v1",
+            "target_key": "libuv-uv_a",
+            "kind": "STATIC_LIBRARY",
+            "membership_source": "EXPLICIT_DECLARATION",
+            "coverage": "OPEN",
+            "translation_units": [
+              "src/unix/udp.c"
+            ],
+            "targets": [
+              {
+                "key": "libuv-uv_a",
+                "kind": "STATIC_LIBRARY",
+                "translation_units": [
+                  "src/unix/udp.c"
+                ],
+                "dependencies": [],
+                "artifacts": []
+              }
+            ],
+            "frontier": [
+              "the remaining libuv translation units are outside this case's declared scope; membership stays OPEN"
+            ]
+          },
+          "build": {
+            "system": "cmake",
+            "commands": [
+              "cmake -S . -B build -DLIBUV_BUILD_TESTS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug",
+              "cmake --build build"
+            ],
+            "compile_commands": "build/compile_commands.json"
+          },
+          "capture": {
+            "program_target_key": "libuv-uv_a",
+            "selected_tracked": [
+              "src/unix/udp.c",
+              "include",
+              "src",
+              "test/test-udp-recv-cb-close-pollerr.c"
+            ],
+            "selected_artifacts": [
+              "CMakeLists.txt",
+              "Makefile.am",
+              "build/compile_commands.json"
+            ],
+            "context_selection_keys": [
+              "src/unix/udp.c"
+            ]
+          },
+          "artifacts": [
+            {
+              "path": "src/unix/udp.c",
+              "revision": "base",
+              "digest": "fde20ab4b6952b306b31d95cb5bc3b6c767761d292bfdeb062cb3df916b10c39"
+            },
+            {
+              "path": "src/unix/udp.c",
+              "revision": "head",
+              "digest": "81c58307bb111bfd09cbfa91d206b4bf4d4179e422e2fc174ae88e111bbe36b1"
+            },
+            {
+              "path": "test/test-udp-recv-cb-close-pollerr.c",
+              "revision": "head",
+              "digest": "b4e802f6ea4eb9b4961c28f2493993388d8d7f2dae038337edfd97ea2d3ab467"
+            },
+            {
+              "path": "LICENSE",
+              "revision": "head",
+              "digest": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+            }
+          ],
+          "oracle": {
+            "kind": "SEMANTIC_OBSERVATION",
+            "predicate": "semantic-contract.v1",
+            "expected_status": "PROPOSED",
+            "concern": "A POLLIN callback can close the UDP handle; the same dispatch then processes POLLERR and calls uv__udp_recvmsg with a cleared recv_cb. The change requires uv__is_active(handle) before the error-queue read.",
+            "anchors": [
+              {
+                "role": "enqueue",
+                "path": "src/unix/udp.c",
+                "revision": "base",
+                "line": 1319,
+                "contains": "uv__io_start(handle->loop, &handle->io_watcher, POLLIN);"
+              },
+              {
+                "role": "cancel",
+                "path": "src/unix/udp.c",
+                "revision": "head",
+                "line": 190,
+                "contains": "uv__is_active(handle)"
+              },
+              {
+                "role": "dispatch",
+                "path": "src/unix/udp.c",
+                "revision": "base",
+                "line": 187,
+                "contains": "uv__udp_recvmsg(handle, MSG_ERRQUEUE);"
+              },
+              {
+                "role": "release",
+                "path": "src/unix/udp.c",
+                "revision": "base",
+                "line": 59,
+                "contains": "void uv__udp_close(uv_udp_t* handle) {"
+              }
+            ],
+            "control_case": null,
+            "independent_sink": null,
+            "not_claimed": [
+              "universal-safety",
+              "concurrency-proof",
+              "native-fact-authority"
+            ],
+            "verification_ref": null
+          }
+        },
+        {
+          "case_id": "rc-libuv-version-bump",
+          "family": "release-callback",
+          "kind": "REAL_CONTROL",
+          "index": "TUNING",
+          "repository": {
+            "url": "https://github.com/libuv/libuv",
+            "license": {
+              "spdx": "MIT",
+              "path": "LICENSE",
+              "digest": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+            }
+          },
+          "base_revision": "be8eec8c5a99bcce5a1b8435237dad588cfd9f28",
+          "head_revision": "8fb9cb919489a48880680a56efecff6a7dfb4504",
+          "change": {
+            "summary": "Release version bump with no callback or release source change.",
+            "paths": [
+              ".mailmap",
+              "AUTHORS",
+              "ChangeLog",
+              "configure.ac",
+              "include/uv/version.h"
+            ]
+          },
+          "program": {
+            "version": "veritas.review.program.v1",
+            "target_key": "libuv-uv_a",
+            "kind": "STATIC_LIBRARY",
+            "membership_source": "EXPLICIT_DECLARATION",
+            "coverage": "OPEN",
+            "translation_units": [
+              "include/uv/version.h"
+            ],
+            "targets": [
+              {
+                "key": "libuv-uv_a",
+                "kind": "STATIC_LIBRARY",
+                "translation_units": [
+                  "include/uv/version.h"
+                ],
+                "dependencies": [],
+                "artifacts": []
+              }
+            ],
+            "frontier": [
+              "the remaining libuv translation units are outside this case's declared scope; membership stays OPEN"
+            ]
+          },
+          "build": {
+            "system": "cmake",
+            "commands": [
+              "cmake -S . -B build -DLIBUV_BUILD_TESTS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug",
+              "cmake --build build"
+            ],
+            "compile_commands": "build/compile_commands.json"
+          },
+          "capture": {
+            "program_target_key": "libuv-uv_a",
+            "selected_tracked": [
+              "include/uv/version.h",
+              "include",
+              "src"
+            ],
+            "selected_artifacts": [
+              "CMakeLists.txt",
+              "configure.ac",
+              "build/compile_commands.json"
+            ],
+            "context_selection_keys": [
+              "include/uv/version.h"
+            ]
+          },
+          "artifacts": [
+            {
+              "path": "include/uv/version.h",
+              "revision": "base",
+              "digest": "fd7be25ec8d7e8254745f91dd3e2b7988f5287b01bb3083bf1069ca76315b40a"
+            },
+            {
+              "path": "include/uv/version.h",
+              "revision": "head",
+              "digest": "a7f44c746ed686c56d69aa3518b96f6e50035c99bcb3df47df5ce66d764f8780"
+            },
+            {
+              "path": "LICENSE",
+              "revision": "head",
+              "digest": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+            }
+          ],
+          "oracle": {
+            "kind": "CLEAN",
+            "predicate": null,
+            "control_scope": "UNRELATED_CHANGE",
+            "expected_status": "NO_DEFECT",
+            "expectation": "no UDP, fs-event or other callback/release source path changed",
+            "evidence": [
+              {
+                "path": "include/uv/version.h",
+                "revision": "head",
+                "line": 34,
+                "contains": "UV_VERSION_MINOR 50"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "regression_companions": [
+    {
+      "id": "asan-replay-modified-overflow",
+      "role": "SYNTHETIC_REGRESSION",
+      "case_id": "lb-libuv-scoped-ipv6",
+      "paths": {
+        "source": "tests/fixtures/review/asan_replay/modified.cc",
+        "harness": "tests/fixtures/review/asan_replay/harness.cc",
+        "packet": "tests/fixtures/review/asan_replay/packet.h"
+      },
+      "digests": {
+        "source": "c4d50b101d5a02537e53bdb5fcbf4257d1e216e084e01846a52fff29aac53160",
+        "harness": "bd80e2679dd46de92110aa99629f0e901eb66ad3fa31ac0853d5db7b68ec495e",
+        "packet": "7d64273349f90c3ff3ea4388298355c526fe30b5cc40a9277b9cb552d01749e0"
+      }
+    },
+    {
+      "id": "asan-replay-base-guard",
+      "role": "SYNTHETIC_REGRESSION",
+      "case_id": "lb-libuv-scoped-ipv6-guarded",
+      "paths": {
+        "source": "tests/fixtures/review/asan_replay/base.cc",
+        "harness": "tests/fixtures/review/asan_replay/harness.cc",
+        "packet": "tests/fixtures/review/asan_replay/packet.h"
+      },
+      "digests": {
+        "source": "31835b371249fb4de23c03418acd1a4d4f4f22970ed9fa6cb38fb2881f9c6218",
+        "harness": "bd80e2679dd46de92110aa99629f0e901eb66ad3fa31ac0853d5db7b68ec495e",
+        "packet": "7d64273349f90c3ff3ea4388298355c526fe30b5cc40a9277b9cb552d01749e0"
+      }
+    },
+    {
+      "id": "asan-replay-unrelated-crash",
+      "role": "SYNTHETIC_REGRESSION",
+      "case_id": "lb-libuv-scoped-ipv6",
+      "paths": {
+        "source": "tests/fixtures/review/asan_replay/crash.cc",
+        "harness": "tests/fixtures/review/asan_replay/harness.cc",
+        "packet": "tests/fixtures/review/asan_replay/packet.h"
+      },
+      "digests": {
+        "source": "6a6e463bf5945bfe998a7631336bdcb7c37123ee058961f8e756ebfc0892608c",
+        "harness": "bd80e2679dd46de92110aa99629f0e901eb66ad3fa31ac0853d5db7b68ec495e",
+        "packet": "7d64273349f90c3ff3ea4388298355c526fe30b5cc40a9277b9cb552d01749e0"
+      }
+    },
+    {
+      "id": "asan-replay-wrong-site",
+      "role": "SYNTHETIC_REGRESSION",
+      "case_id": "lb-libuv-scoped-ipv6",
+      "paths": {
+        "source": "tests/fixtures/review/asan_replay/wrong_site.cc",
+        "harness": "tests/fixtures/review/asan_replay/harness.cc",
+        "packet": "tests/fixtures/review/asan_replay/packet.h"
+      },
+      "digests": {
+        "source": "e7fb8ee14c5b61cb2c005f55e0c2d71fae15507915848084956caeaba599acc3",
+        "harness": "bd80e2679dd46de92110aa99629f0e901eb66ad3fa31ac0853d5db7b68ec495e",
+        "packet": "7d64273349f90c3ff3ea4388298355c526fe30b5cc40a9277b9cb552d01749e0"
+      }
+    },
+    {
+      "id": "asan-replay-global-canary",
+      "role": "SYNTHETIC_REGRESSION",
+      "case_id": "lb-libuv-scoped-ipv6",
+      "paths": {
+        "source": "tests/fixtures/review/asan_replay/global_canary.cc",
+        "harness": "tests/fixtures/review/asan_replay/harness.cc",
+        "packet": "tests/fixtures/review/asan_replay/packet.h"
+      },
+      "digests": {
+        "source": "8503f28181d50950d525a1f7fc68a2ab423643f913448882d814ea8c30ed55a6",
+        "harness": "bd80e2679dd46de92110aa99629f0e901eb66ad3fa31ac0853d5db7b68ec495e",
+        "packet": "7d64273349f90c3ff3ea4388298355c526fe30b5cc40a9277b9cb552d01749e0"
+      }
+    }
+  ]
+}

@@ -36,4 +36,25 @@ set_tests_properties(M9DocumentationConsistencyTest PROPERTIES
   TIMEOUT 60
 )
 
+# RDX10 real-change corpus freeze. These checks are deterministic and offline:
+# they validate the schema, freeze digests, split, budgets, oracle/control
+# shape and every local harness/payload/regression-fixture digest. The
+# upstream revision/diff/artifact/witness check is documented in
+# tests/qualification/review/README.md and runs where the pinned git objects
+# are available.
+add_test(NAME ReviewCorpusValidatorTest
+  COMMAND ${PYTHON3_EXECUTABLE}
+    ${PROJECT_SOURCE_DIR}/tools/review_eval/run_corpus_tests.py)
+set_tests_properties(ReviewCorpusValidatorTest PROPERTIES
+  ENVIRONMENT "VERITAS_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+  TIMEOUT 120
+)
+
+add_test(NAME ReviewCorpusContentTest
+  COMMAND ${PYTHON3_EXECUTABLE}
+    ${PROJECT_SOURCE_DIR}/tools/review_eval/validate_corpus.py
+    ${PROJECT_SOURCE_DIR}/tests/qualification/review/corpus.json
+    --content-root ${PROJECT_SOURCE_DIR})
+set_tests_properties(ReviewCorpusContentTest PROPERTIES TIMEOUT 120)
+
 add_subdirectory(wpa)
