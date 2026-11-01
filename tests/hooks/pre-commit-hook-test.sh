@@ -57,6 +57,15 @@ if git -C "$repo" commit -q -m "reject unformatted staged content" \
 fi
 
 git -C "$repo" reset -q bad.cpp
+
+# Vendored upstream code is exempt: it is pinned to an upstream revision and
+# is not formatted with VERITAS's style.
+mkdir -p "$repo/third_party/vendor"
+printf 'int vendored( ){return 0;}\n' >"$repo/third_party/vendor/vendored.cpp"
+git -C "$repo" add third_party/vendor/vendored.cpp
+git -C "$repo" commit -q -m "ignore vendored third-party content" ||
+  fail "vendored third-party content was rejected"
+
 printf 'plain text is not C++\n' >"$repo/notes.txt"
 git -C "$repo" add notes.txt
 git -C "$repo" commit -q -m "ignore non-C++ content" ||
