@@ -96,17 +96,21 @@ fixtures and `tools/review_eval/validate_corpus.py` with unittest coverage.
 **Consumes:** real base/head changes, explicit program/build manifests and digests.
 **Produces:** immutable corpus release, held-out split and known-defect/clean oracles.
 
-- [ ] Test rejection of short/nonexistent revisions, mismatched file digests,
+- [x] Test rejection of short/nonexistent revisions, mismatched file digests,
   missing program membership, missing real case in either first-release family,
   and a supposedly negative control that still violates its source contract.
-- [ ] Run `python3 -m unittest discover -s tools/review_eval/tests -p test_corpus.py`
+- [x] Run `python3 -m unittest discover -s tools/review_eval/tests -p test_corpus.py`
   for RED before implementing the corpus validator.
 - [ ] Select/license and pin real local-bounds and release/callback changes plus
   clean controls; verify they build/replay under their declared harness. Do not
   invent revision identities; record a corpus gap if selection fails.
-- [ ] Freeze thresholds/splits before tuning and distinguish fixed-candidate from
+  Selection, licensing, revision pinning, artifact/license digests and upstream
+  git-object validation are delivered. The operator-qualified replay execution
+  remains #165, so this bullet stays open and the families keep
+  `production_qualification: OPEN`.
+- [x] Freeze thresholds/splits before tuning and distinguish fixed-candidate from
   whole-discovery runs. Validate all manifests and publish their exact digests.
-- [ ] Commit the corpus/rubric; this is a prerequisite for production qualification,
+- [x] Commit the corpus/rubric; this is a prerequisite for production qualification,
   not proof that the model has detected its cases.
 
 ## Task 5: Measure A–E quality, costs and release gates
@@ -247,3 +251,63 @@ socket declarations were only reaching it transitively on macOS — and the
 headers are now included directly; the final clean build/CTest above includes
 that fix. The Linux bubblewrap/ASan qualification is exercised by CI, not this
 local run.
+
+### RDX10 / Task 4 qualification (2026-11-01)
+
+Verification-plan Task 4 is delivered. `tests/qualification/review/corpus.json`
+freezes `rdx10-real-change-2026-11-01`; `rubric.md` is the frozen adjudication
+contract, and `tools/review_eval/validate_corpus.py` enforces the release. The
+frozen release digest is
+`sha256:a939cac2a225ba39f037e51aa8d9fa98c4acb3850c6545bf53ed9e7a73cb5bb1`;
+the split digest is
+`sha256:da9784cfbbc9484379606f5b1f77a888167d2b31ef9c3375fe19bd15e1089ae9`;
+the rubric digest is
+`sha256:1521c2347970fc61d8fe5e7359fb3f37f80d9007590ca61726711627594b4910`.
+
+Real families: local-bounds pins libuv
+`e7b3c3fb6b56298174e5eaf2ac3bea2b721cf0f5` (`char tmp[sizeof
+"255.255.255.255"]`; `memcpy(tmp, curtok, pch - curtok)` in `src/inet.c`) to
+`4fac9427e4a652cdebf241803ce7443dd59a4451` (bounded scope-id copy).
+Release/callback pins `e8458b2402e7a068f25f01d0b72e6aed73ca2138` to
+`a7c44d674833e8dec66b8730b5635fcad0f81162` (`uv__udp_sendmsg` after a recv
+callback closes the handle) and the independent
+`e62ccbf7707f62b8056a963b6bd01507fbf02817` to
+`b030b02a3e51acd09e260bf20e115e841c3842d0` POLLERR sink. Every case pins the
+MIT license and source/test/build artifact digests. N=16/N+1=17 and a
+short-source payload are frozen; the guarded head, the closing-handle head and
+an unrelated 1.50.0 version bump are the clean controls. The guarded controls
+and all real defects are held out; only the unrelated version bump is tuning.
+The existing `asan_replay` fixtures are regression companions, not real cases.
+
+The validator rejects short/non-commit revisions, changed paths outside the
+base..head diff, artifact/local digest mismatches, a callsite outside program
+membership, a family without a real case or its required clean controls, a
+control whose witness does not contain its guard, a tuning case that reuses a
+held-out revision pair/path set, split leakage, stale rubric/split/release
+digests, a semantic observation promoted without an independent reference, a
+short-source control that could decide, a non-`memcpy` `copy_bound.v1`
+callsite, and a missing fixed-candidate/whole-discovery mode. D/E remain
+explicitly UNAVAILABLE.
+
+RED→GREEN: the first unittest run failed all 22 original cases with
+`NotImplementedError`. The final suite passes 30/30, including a temporary-git
+fixture for the revision/diff/digest/witness/split rules and the real corpus.
+`validate_corpus.py --content-root . --repository-root <libuv clone>`
+additionally accepted every real revision, diff, artifact digest, callsite and
+anchor against the pinned libuv objects. An independent review found and the
+delivery fixed: the registered harness accepts the producer's `{program,
+payload, requested_bytes}` argv contract and re-checks the prefix length (with
+a regression test); the guarded controls moved out of the tuning split;
+`SHORT_SOURCE` is required and must be non-deciding; per-family clean controls
+are mandatory; control/sink references are typed; and the CTest wrapper fails
+if test discovery is empty.
+
+Targeted CTest: `ReviewCorpusValidatorTest` and `ReviewCorpusContentTest`
+passed 2/2. Full clean build/CTest: **1025/1025** in **406.56 s** with zero
+skipped/not-run cases.
+
+Replay remains `NOT_RUN`: the corpus freezes the trusted harness
+(`harnesses/libuv_inet_pton.cc`) and three payloads, but operator-qualified
+replay execution is #165; the harness/payload digests are published and
+production qualification stays OPEN. No model was tuned, no A–E measurement or
+universal-safety claim is made, and no native Evidence state is changed.

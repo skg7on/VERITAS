@@ -75,7 +75,7 @@ Focused plans: [native](veritas-native-evidence-integrity-implementation-plan.md
 - [ ] Review the v2 binding/ID/program-membership and local-evidence contracts.
   Native authority validation is a correction to the existing registry contract,
   not a prerequisite to approving a new model transport.
-- [ ] Complete RDX05 types/capture and freeze RDX10's real changes/rubric.
+- [x] Complete RDX05 types/capture and freeze RDX10's real changes/rubric.
   Begin source-only corpus evaluation while native repairs continue.
 - [ ] Deliver RDX06 local evidence and RDX07 public backend/authority boundary.
   An unsupported verifier can be advertised as absent during transport tests.
