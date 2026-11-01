@@ -57,4 +57,11 @@ add_test(NAME ReviewCorpusContentTest
     --content-root ${PROJECT_SOURCE_DIR})
 set_tests_properties(ReviewCorpusContentTest PROPERTIES TIMEOUT 120)
 
+# RDX11 evaluator regression suite. Pending experiments never become a release.
+add_test(NAME ReviewEvaluationTest
+  COMMAND ${PYTHON3_EXECUTABLE}
+    ${PROJECT_SOURCE_DIR}/tools/review_eval/run_corpus_tests.py
+    --pattern test_evaluation.py)
+set_tests_properties(ReviewEvaluationTest PROPERTIES TIMEOUT 120)
+
 add_subdirectory(wpa)

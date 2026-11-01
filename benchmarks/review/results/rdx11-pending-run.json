@@ -1,0 +1,7 @@
+{
+  "version": "veritas.review.eval.run.v1",
+  "release_digest": "sha256:a939cac2a225ba39f037e51aa8d9fa98c4acb3850c6545bf53ed9e7a73cb5bb1",
+  "configuration": null,
+  "attempts": [],
+  "reason": "authenticated model transport, production profile adapters and independent measurements pending"
+}

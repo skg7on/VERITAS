@@ -106,7 +106,10 @@ AddressSanitizer execution, exact admitted-site matching, canonical
 counterexample witnesses, and backend v2 `verify` wiring. Missing runtime,
 isolation, harness or payload is UNSUPPORTED; a passing replay is never
 universal safety. The isolated host remains #79; real-change corpus and
-end-user release qualification remain #164–#165. See
+end-user release qualification remain #164–#165. #164 freezes the real-change
+corpus; #165 now has an operator-adapter evaluation harness and fail-closed
+reporting, while real model comparisons, independent adjudication and release
+qualification remain OPEN. See
 [runtime foundation](plugins/veritas-evidence-review/README.md). Native
 SVF/Soufflé requirements remain unchanged.
 

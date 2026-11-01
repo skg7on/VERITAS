@@ -1,0 +1,14 @@
+{
+  "version": "veritas.review.eval.operator-selection.v1",
+  "date": "2026-11-01",
+  "provider": "OpenAI",
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "medium",
+  "source_disclosure_policy": "frozen public libuv source/tests/license and bounded derived evidence only; no credentials, private paths or unrelated files",
+  "smoke_budget_usd": 5,
+  "full_paid_evaluation_authorized": false,
+  "api_authentication": "PENDING",
+  "production_profile_adapters": "PENDING",
+  "paid_attempts": 0,
+  "execution": "DEFERRED_BY_USER"
+}
