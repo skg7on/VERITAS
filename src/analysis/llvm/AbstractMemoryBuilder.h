@@ -24,7 +24,7 @@
 namespace llvm {
 class DataLayout;
 class Value;
-}  // namespace llvm
+} // namespace llvm
 
 namespace veritas::analysis::llvm {
 
@@ -45,25 +45,25 @@ class StableValueMapper;
 // distinction is lost, while a caller that knows the access size and one that
 // passes std::nullopt for the same pointer still agree on identity.
 class AbstractMemoryBuilder {
- public:
-  AbstractMemoryBuilder(const ::llvm::DataLayout& layout,
-                        const StableValueMapper& values,
-                        const OriginMap& origins);
+public:
+  AbstractMemoryBuilder(const ::llvm::DataLayout &layout,
+                        const StableValueMapper &values,
+                        const OriginMap &origins);
   ~AbstractMemoryBuilder() = default;
 
   // FailedPrecondition means an unsupported scalable/unsized memory shape;
   // consumers may retain an unowned/unsupported result instead of inventing a
   // fixed location. Other errors must be propagated.
-  StatusOr<semantic::MemoryLocation> LocationFor(
-      const ::llvm::Value& pointer,
-      std::optional<std::uint64_t> access_size) const;
+  StatusOr<semantic::MemoryLocation>
+  LocationFor(const ::llvm::Value &pointer,
+              std::optional<std::uint64_t> access_size) const;
 
- private:
-  const ::llvm::DataLayout& layout_;
-  const StableValueMapper& values_;
-  const OriginMap& origins_;
+private:
+  const ::llvm::DataLayout &layout_;
+  const StableValueMapper &values_;
+  const OriginMap &origins_;
 };
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm
 
-#endif  // VERITAS_ANALYSIS_LLVM_ABSTRACTMEMORYBUILDER_H_
+#endif // VERITAS_ANALYSIS_LLVM_ABSTRACTMEMORYBUILDER_H_

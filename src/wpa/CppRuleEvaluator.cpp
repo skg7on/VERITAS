@@ -79,14 +79,14 @@ struct DerivedTuple {
   core::StableId object;
   sem::EpistemicState epistemic;
 
-  auto operator<=>(const DerivedTuple&) const = default;
+  auto operator<=>(const DerivedTuple &) const = default;
 };
 
 struct CallEdgeTuple {
   core::StableId caller;
   core::StableId callee;
   sem::EpistemicState epistemic;
-  facts::SemanticRow row;  // the DirectCall row, cited as a witness input
+  facts::SemanticRow row; // the DirectCall row, cited as a witness input
 };
 
 // One closure domain a component evaluates: its base EDB relation, its
@@ -130,45 +130,45 @@ struct ResolvedRow {
 // Resolves dense cells through the component's mappings. Dense ids are
 // run-local, so every cell is mapped back before it can appear in a result or
 // a witness key.
-StatusOr<ResolvedRow> ResolveRow(const facts::ExecutionRow& row,
-                                 const StableIdMappings& mappings) {
-  const auto& schema = facts::RelationsV2().Get(row.relation);
+StatusOr<ResolvedRow> ResolveRow(const facts::ExecutionRow &row,
+                                 const StableIdMappings &mappings) {
+  const auto &schema = facts::RelationsV2().Get(row.relation);
   if (row.cells.size() != schema.columns.size()) {
     return Status::InvalidArgument("execution row does not match its schema");
   }
 
   ResolvedRow resolved;
   resolved.semantic.relation = row.relation;
-  for (const auto& cell : row.cells) {
-    if (const auto* function = std::get_if<facts::FunctionId>(&cell)) {
+  for (const auto &cell : row.cells) {
+    if (const auto *function = std::get_if<facts::FunctionId>(&cell)) {
       auto stable = mappings.functions.ToStable(*function);
       if (!stable.ok())
         return stable.status();
       resolved.endpoint_ids.push_back(*stable);
       resolved.semantic.cells.push_back(*stable);
-    } else if (const auto* memory_id = std::get_if<facts::MemoryId>(&cell)) {
+    } else if (const auto *memory_id = std::get_if<facts::MemoryId>(&cell)) {
       auto stable = mappings.memories.ToStable(*memory_id);
       if (!stable.ok())
         return stable.status();
       resolved.endpoint_ids.push_back(*stable);
       resolved.semantic.cells.push_back(*stable);
-    } else if (const auto* site = std::get_if<facts::CallSiteId>(&cell)) {
+    } else if (const auto *site = std::get_if<facts::CallSiteId>(&cell)) {
       auto stable = mappings.call_sites.ToStable(*site);
       if (!stable.ok())
         return stable.status();
       resolved.semantic.cells.push_back(*stable);
-    } else if (const auto* value_id = std::get_if<facts::ValueId>(&cell)) {
+    } else if (const auto *value_id = std::get_if<facts::ValueId>(&cell)) {
       auto stable = mappings.values.ToStable(*value_id);
       if (!stable.ok())
         return stable.status();
       resolved.value_ids.push_back(*stable);
       resolved.semantic.cells.push_back(*stable);
-    } else if (const auto* state = std::get_if<sem::EpistemicState>(&cell)) {
+    } else if (const auto *state = std::get_if<sem::EpistemicState>(&cell)) {
       resolved.epistemics.push_back(*state);
       resolved.semantic.cells.push_back(*state);
     } else {
       std::visit(
-          [&](const auto& value) {
+          [&](const auto &value) {
             using T = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<T, facts::FunctionId> ||
                           std::is_same_v<T, facts::MemoryId> ||
@@ -195,13 +195,13 @@ StatusOr<ResolvedRow> ResolveRow(const facts::ExecutionRow& row,
 // transitive and successor-support steps. Unlike the call-mediated closures,
 // the transitive step joins two derived flows directly on a shared boundary
 // value.
-StatusOr<facts::RawWpaEvaluation> EvaluateFlow(
-    const WpaLogicalComponentInput& input) {
+StatusOr<facts::RawWpaEvaluation>
+EvaluateFlow(const WpaLogicalComponentInput &input) {
   std::vector<std::pair<DerivedTuple, facts::SemanticRow>> base_rows;
   std::vector<std::pair<DerivedTuple, facts::SemanticRow>> support_rows;
   std::map<DerivedTuple, std::string> base_rule;
 
-  for (const auto& row : input.edb) {
+  for (const auto &row : input.edb) {
     const bool base = row.relation == facts::RelationId::kLocalFlow ||
                       row.relation == facts::RelationId::kParameterFlow ||
                       row.relation == facts::RelationId::kReturnFlow;
@@ -220,7 +220,7 @@ StatusOr<facts::RawWpaEvaluation> EvaluateFlow(
       continue;
     }
     base_rows.emplace_back(tuple, resolved->semantic);
-    const char* rule = row.relation == facts::RelationId::kLocalFlow
+    const char *rule = row.relation == facts::RelationId::kLocalFlow
                            ? "wpa.flow.global.local.v2"
                        : row.relation == facts::RelationId::kParameterFlow
                            ? "wpa.flow.global.parameter.v2"
@@ -230,21 +230,21 @@ StatusOr<facts::RawWpaEvaluation> EvaluateFlow(
 
   facts::RawWpaEvaluation raw;
   std::set<DerivedTuple> derived;
-  auto ResultRow = [&](const DerivedTuple& tuple) {
+  auto ResultRow = [&](const DerivedTuple &tuple) {
     return facts::SemanticRow{facts::RelationId::kGlobalFlow,
                               {tuple.subject, tuple.object, tuple.epistemic}};
   };
 
-  for (const auto& [tuple, row] : base_rows) {
+  for (const auto &[tuple, row] : base_rows) {
     if (!WeaknessRank(tuple.epistemic).has_value())
       continue;
     if (derived.insert(tuple).second) {
-      raw.witnesses.push_back(facts::WitnessEdge{
-          .result = facts::SemanticKey{ResultRow(tuple)},
-          .rule_id = base_rule.at(tuple),
-          .derivation_key = facts::EncodeSemanticKey(row),
-          .input = facts::SemanticKey{row},
-          .input_ordinal = 0});
+      raw.witnesses.push_back(
+          facts::WitnessEdge{.result = facts::SemanticKey{ResultRow(tuple)},
+                             .rule_id = base_rule.at(tuple),
+                             .derivation_key = facts::EncodeSemanticKey(row),
+                             .input = facts::SemanticKey{row},
+                             .input_ordinal = 0});
     }
   }
 
@@ -254,8 +254,8 @@ StatusOr<facts::RawWpaEvaluation> EvaluateFlow(
     const std::vector<DerivedTuple> snapshot(derived.begin(), derived.end());
 
     // Transitive: compose two derived flows sharing a boundary value.
-    for (const auto& a : snapshot) {
-      for (const auto& b : snapshot) {
+    for (const auto &a : snapshot) {
+      for (const auto &b : snapshot) {
         if (a.object != b.subject)
           continue;
         const auto combined = Weaken(a.epistemic, b.epistemic);
@@ -267,24 +267,24 @@ StatusOr<facts::RawWpaEvaluation> EvaluateFlow(
         const std::string derivation_key =
             facts::EncodeSemanticKey(ResultRow(a)) +
             facts::EncodeSemanticKey(ResultRow(b));
-        raw.witnesses.push_back(facts::WitnessEdge{
-            .result = facts::SemanticKey{ResultRow(next)},
-            .rule_id = "wpa.flow.global.transitive.v2",
-            .derivation_key = derivation_key,
-            .input = facts::SemanticKey{ResultRow(a)},
-            .input_ordinal = 0});
-        raw.witnesses.push_back(facts::WitnessEdge{
-            .result = facts::SemanticKey{ResultRow(next)},
-            .rule_id = "wpa.flow.global.transitive.v2",
-            .derivation_key = derivation_key,
-            .input = facts::SemanticKey{ResultRow(b)},
-            .input_ordinal = 1});
+        raw.witnesses.push_back(
+            facts::WitnessEdge{.result = facts::SemanticKey{ResultRow(next)},
+                               .rule_id = "wpa.flow.global.transitive.v2",
+                               .derivation_key = derivation_key,
+                               .input = facts::SemanticKey{ResultRow(a)},
+                               .input_ordinal = 0});
+        raw.witnesses.push_back(
+            facts::WitnessEdge{.result = facts::SemanticKey{ResultRow(next)},
+                               .rule_id = "wpa.flow.global.transitive.v2",
+                               .derivation_key = derivation_key,
+                               .input = facts::SemanticKey{ResultRow(b)},
+                               .input_ordinal = 1});
       }
     }
 
     // Support: a derived flow composed with a successor SCC's flow summary.
-    for (const auto& a : snapshot) {
-      for (const auto& [tuple, row] : support_rows) {
+    for (const auto &a : snapshot) {
+      for (const auto &[tuple, row] : support_rows) {
         if (a.object != tuple.subject)
           continue;
         const auto combined = Weaken(a.epistemic, tuple.epistemic);
@@ -296,23 +296,23 @@ StatusOr<facts::RawWpaEvaluation> EvaluateFlow(
         const std::string derivation_key =
             facts::EncodeSemanticKey(ResultRow(a)) +
             facts::EncodeSemanticKey(row);
-        raw.witnesses.push_back(facts::WitnessEdge{
-            .result = facts::SemanticKey{ResultRow(next)},
-            .rule_id = "wpa.flow.global.support.v2",
-            .derivation_key = derivation_key,
-            .input = facts::SemanticKey{ResultRow(a)},
-            .input_ordinal = 0});
-        raw.witnesses.push_back(facts::WitnessEdge{
-            .result = facts::SemanticKey{ResultRow(next)},
-            .rule_id = "wpa.flow.global.support.v2",
-            .derivation_key = derivation_key,
-            .input = facts::SemanticKey{row},
-            .input_ordinal = 1});
+        raw.witnesses.push_back(
+            facts::WitnessEdge{.result = facts::SemanticKey{ResultRow(next)},
+                               .rule_id = "wpa.flow.global.support.v2",
+                               .derivation_key = derivation_key,
+                               .input = facts::SemanticKey{ResultRow(a)},
+                               .input_ordinal = 0});
+        raw.witnesses.push_back(
+            facts::WitnessEdge{.result = facts::SemanticKey{ResultRow(next)},
+                               .rule_id = "wpa.flow.global.support.v2",
+                               .derivation_key = derivation_key,
+                               .input = facts::SemanticKey{row},
+                               .input_ordinal = 1});
       }
     }
   }
 
-  for (const auto& tuple : derived) {
+  for (const auto &tuple : derived) {
     raw.results.push_back(ResultRow(tuple));
   }
   std::ranges::sort(raw.witnesses);
@@ -329,15 +329,15 @@ struct UnknownTuple {
   std::string reason;
   sem::EpistemicState epistemic;
 
-  auto operator<=>(const UnknownTuple&) const = default;
+  auto operator<=>(const UnknownTuple &) const = default;
 };
 
 // Evaluates the UnknownEffect and SoundnessCoverage domains together: the
 // unknown-effect closure seeds from unresolved calls and propagates up the
 // call graph, then the coverage certificate marks each function complete or
 // not based on the presence of an unknown effect.
-StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
-    const WpaLogicalComponentInput& input) {
+StatusOr<facts::RawWpaEvaluation>
+EvaluateEffects(const WpaLogicalComponentInput &input) {
   std::vector<CallEdgeTuple> calls;
   std::vector<std::pair<UnknownTuple, facts::SemanticRow>> base_rows;
   std::vector<std::pair<UnknownTuple, facts::SemanticRow>> support_rows;
@@ -346,7 +346,7 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
   std::set<core::StableId> unmodeled_externals;
   std::vector<std::pair<std::string, facts::SemanticRow>> unsupported_features;
 
-  for (const auto& row : input.edb) {
+  for (const auto &row : input.edb) {
     if (row.relation == facts::RelationId::kDirectCall) {
       auto resolved = ResolveRow(row, input.mappings);
       if (!resolved.ok())
@@ -365,15 +365,17 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
       if (resolved->endpoint_ids.empty()) {
         return Status::InvalidArgument("UnknownCall row is missing its caller");
       }
-      const auto* site = std::get_if<core::StableId>(&resolved->semantic.cells[0]);
-      const auto* reason = std::get_if<std::string>(&resolved->semantic.cells[2]);
+      const auto *site =
+          std::get_if<core::StableId>(&resolved->semantic.cells[0]);
+      const auto *reason =
+          std::get_if<std::string>(&resolved->semantic.cells[2]);
       if (site == nullptr || reason == nullptr) {
         return Status::InvalidArgument("malformed UnknownCall row");
       }
-      base_rows.emplace_back(
-          UnknownTuple{resolved->endpoint_ids[0], core::ToString(*site),
-                       *reason, resolved->epistemics.front()},
-          resolved->semantic);
+      base_rows.emplace_back(UnknownTuple{resolved->endpoint_ids[0],
+                                          core::ToString(*site), *reason,
+                                          resolved->epistemics.front()},
+                             resolved->semantic);
     } else if (row.relation == facts::RelationId::kSupportUnknownEffect) {
       auto resolved = ResolveRow(row, input.mappings);
       if (!resolved.ok())
@@ -382,20 +384,22 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
         return Status::InvalidArgument(
             "SupportUnknownEffect row is missing its function");
       }
-      const auto* subject = std::get_if<std::string>(&resolved->semantic.cells[1]);
-      const auto* reason = std::get_if<std::string>(&resolved->semantic.cells[2]);
+      const auto *subject =
+          std::get_if<std::string>(&resolved->semantic.cells[1]);
+      const auto *reason =
+          std::get_if<std::string>(&resolved->semantic.cells[2]);
       if (subject == nullptr || reason == nullptr) {
         return Status::InvalidArgument("malformed SupportUnknownEffect row");
       }
-      support_rows.emplace_back(
-          UnknownTuple{resolved->endpoint_ids[0], *subject, *reason,
-                       resolved->epistemics.front()},
-          resolved->semantic);
+      support_rows.emplace_back(UnknownTuple{resolved->endpoint_ids[0],
+                                             *subject, *reason,
+                                             resolved->epistemics.front()},
+                                resolved->semantic);
     } else if (row.relation == facts::RelationId::kFunctionMap) {
       // FunctionMap carries no epistemic state, so resolve it directly rather
       // than through ResolveRow (which requires one).
-      const auto* fn = std::get_if<facts::FunctionId>(&row.cells[0]);
-      const auto* stable = std::get_if<std::string>(&row.cells[1]);
+      const auto *fn = std::get_if<facts::FunctionId>(&row.cells[0]);
+      const auto *stable = std::get_if<std::string>(&row.cells[1]);
       if (fn == nullptr || stable == nullptr) {
         return Status::InvalidArgument("malformed FunctionMap row");
       }
@@ -405,7 +409,7 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
       function_stable[*id] = *stable;
       stable_to_function[*stable] = *id;
     } else if (row.relation == facts::RelationId::kUnmodeledExternal) {
-      const auto* fn = std::get_if<facts::FunctionId>(&row.cells[0]);
+      const auto *fn = std::get_if<facts::FunctionId>(&row.cells[0]);
       if (fn == nullptr) {
         return Status::InvalidArgument("malformed UnmodeledExternal row");
       }
@@ -414,9 +418,9 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
         return id.status();
       unmodeled_externals.insert(*id);
     } else if (row.relation == facts::RelationId::kUnsupportedFeature) {
-      const auto* node = std::get_if<std::string>(&row.cells[0]);
-      const auto* kind = std::get_if<std::string>(&row.cells[1]);
-      const auto* policy = std::get_if<std::string>(&row.cells[2]);
+      const auto *node = std::get_if<std::string>(&row.cells[0]);
+      const auto *kind = std::get_if<std::string>(&row.cells[1]);
+      const auto *policy = std::get_if<std::string>(&row.cells[2]);
       if (node == nullptr || kind == nullptr || policy == nullptr) {
         return Status::InvalidArgument("malformed UnsupportedFeature row");
       }
@@ -428,21 +432,20 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
   }
 
   facts::RawWpaEvaluation raw;
-  auto UnknownResultRow = [](const UnknownTuple& tuple) {
-    return facts::SemanticRow{facts::RelationId::kUnknownEffect,
-                              {tuple.function, tuple.subject, tuple.reason,
-                               tuple.epistemic}};
-  };
-  auto CoverageResultRow = [](const std::string& scope,
-                              std::uint64_t complete) {
+  auto UnknownResultRow = [](const UnknownTuple &tuple) {
     return facts::SemanticRow{
-        facts::RelationId::kSoundnessCoverage,
-        {scope, std::string("dominating_check_absence"), complete,
-         sem::EpistemicState::kMust}};
+        facts::RelationId::kUnknownEffect,
+        {tuple.function, tuple.subject, tuple.reason, tuple.epistemic}};
+  };
+  auto CoverageResultRow = [](const std::string &scope,
+                              std::uint64_t complete) {
+    return facts::SemanticRow{facts::RelationId::kSoundnessCoverage,
+                              {scope, std::string("dominating_check_absence"),
+                               complete, sem::EpistemicState::kMust}};
   };
 
   std::set<UnknownTuple> derived;
-  for (const auto& [tuple, row] : base_rows) {
+  for (const auto &[tuple, row] : base_rows) {
     if (!WeaknessRank(tuple.epistemic).has_value())
       continue;
     if (derived.insert(tuple).second) {
@@ -456,7 +459,7 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
   }
 
   // Unmodeled external: a DirectCall to an unmodeled external callee.
-  for (const auto& call : calls) {
+  for (const auto &call : calls) {
     if (!unmodeled_externals.contains(call.callee))
       continue;
     auto stable_it = function_stable.find(call.callee);
@@ -475,11 +478,11 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
   }
 
   // Unsupported feature: seed from UnsupportedFeature resolved to a function.
-  for (const auto& [node, row] : unsupported_features) {
+  for (const auto &[node, row] : unsupported_features) {
     auto fn_it = stable_to_function.find(node);
     if (fn_it == stable_to_function.end())
       continue;
-    const auto* kind = std::get_if<std::string>(&row.cells[1]);
+    const auto *kind = std::get_if<std::string>(&row.cells[1]);
     if (kind == nullptr)
       continue;
     const UnknownTuple tuple{fn_it->second, *kind, "unsupported_feature",
@@ -499,8 +502,8 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
     changed = false;
     const std::vector<UnknownTuple> snapshot(derived.begin(), derived.end());
 
-    for (const auto& call : calls) {
-      for (const auto& tuple : snapshot) {
+    for (const auto &call : calls) {
+      for (const auto &tuple : snapshot) {
         if (tuple.function != call.callee)
           continue;
         const auto combined = Weaken(call.epistemic, tuple.epistemic);
@@ -528,8 +531,8 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
       }
     }
 
-    for (const auto& call : calls) {
-      for (const auto& [tuple, row] : support_rows) {
+    for (const auto &call : calls) {
+      for (const auto &[tuple, row] : support_rows) {
         if (tuple.function != call.callee)
           continue;
         const auto combined = Weaken(call.epistemic, tuple.epistemic);
@@ -540,8 +543,7 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
         if (derived.insert(next).second)
           changed = true;
         const std::string derivation_key =
-            facts::EncodeSemanticKey(call.row) +
-            facts::EncodeSemanticKey(row);
+            facts::EncodeSemanticKey(call.row) + facts::EncodeSemanticKey(row);
         raw.witnesses.push_back(facts::WitnessEdge{
             .result = facts::SemanticKey{UnknownResultRow(next)},
             .rule_id = "wpa.effect.unknown.support.v2",
@@ -558,7 +560,7 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
     }
   }
 
-  for (const auto& tuple : derived) {
+  for (const auto &tuple : derived) {
     raw.results.push_back(UnknownResultRow(tuple));
   }
 
@@ -567,11 +569,11 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
   // this fact at the query layer. Each unknown effect witnesses the gap, but
   // the fact itself is emitted once per function.
   std::set<std::string> emitted_scopes;
-  for (const auto& tuple : derived) {
+  for (const auto &tuple : derived) {
     const auto it = function_stable.find(tuple.function);
     if (it == function_stable.end())
       continue;
-    const std::string& scope = it->second;
+    const std::string &scope = it->second;
     raw.witnesses.push_back(facts::WitnessEdge{
         .result = facts::SemanticKey{CoverageResultRow(scope, 0)},
         .rule_id = "wpa.coverage.incomplete.v2",
@@ -589,10 +591,10 @@ StatusOr<facts::RawWpaEvaluation> EvaluateEffects(
   return raw;
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
-    const WpaLogicalComponentInput& input) const {
+StatusOr<facts::RawWpaEvaluation>
+CppRuleEvaluator::Evaluate(const WpaLogicalComponentInput &input) const {
   if (input.component == WpaComponentKind::kFlow) {
     return EvaluateFlow(input);
   }
@@ -604,7 +606,7 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
   // 1. Parse the DirectCall edges once; they seed the transitive closure for
   // every domain this component evaluates.
   std::vector<CallEdgeTuple> calls;
-  for (const auto& row : input.edb) {
+  for (const auto &row : input.edb) {
     if (row.relation != facts::RelationId::kDirectCall)
       continue;
     auto resolved = ResolveRow(row, input.mappings);
@@ -623,11 +625,11 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
   // in a set so the fixpoint terminates and the output order is independent of
   // discovery order.
   facts::RawWpaEvaluation raw;
-  for (const auto& domain : domains) {
+  for (const auto &domain : domains) {
     std::vector<std::pair<DerivedTuple, facts::SemanticRow>> base_rows;
     std::vector<std::pair<DerivedTuple, facts::SemanticRow>> support_rows;
 
-    for (const auto& row : input.edb) {
+    for (const auto &row : input.edb) {
       if (row.relation != domain.base_relation &&
           row.relation != domain.support_relation) {
         continue;
@@ -650,22 +652,22 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
 
     std::set<DerivedTuple> derived;
 
-    auto ResultRow = [&](const DerivedTuple& tuple) {
+    auto ResultRow = [&](const DerivedTuple &tuple) {
       return facts::SemanticRow{domain.derived_relation,
                                 {tuple.subject, tuple.object, tuple.epistemic}};
     };
 
-    for (const auto& [tuple, row] : base_rows) {
+    for (const auto &[tuple, row] : base_rows) {
       // The derived tuple keeps the base row's own warrant.
       if (!WeaknessRank(tuple.epistemic).has_value())
         continue;
       if (derived.insert(tuple).second) {
-        raw.witnesses.push_back(facts::WitnessEdge{
-            .result = facts::SemanticKey{ResultRow(tuple)},
-            .rule_id = domain.rule_prefix + "direct.v2",
-            .derivation_key = facts::EncodeSemanticKey(row),
-            .input = facts::SemanticKey{row},
-            .input_ordinal = 0});
+        raw.witnesses.push_back(
+            facts::WitnessEdge{.result = facts::SemanticKey{ResultRow(tuple)},
+                               .rule_id = domain.rule_prefix + "direct.v2",
+                               .derivation_key = facts::EncodeSemanticKey(row),
+                               .input = facts::SemanticKey{row},
+                               .input_ordinal = 0});
       }
     }
 
@@ -677,8 +679,8 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
 
       // Transitive: a call edge composed with an already-derived tuple.
       const std::vector<DerivedTuple> snapshot(derived.begin(), derived.end());
-      for (const auto& call : calls) {
-        for (const auto& tuple : snapshot) {
+      for (const auto &call : calls) {
+        for (const auto &tuple : snapshot) {
           if (tuple.subject != call.callee)
             continue;
           const auto combined = Weaken(call.epistemic, tuple.epistemic);
@@ -707,8 +709,8 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
       }
 
       // Support: a call edge composed with a successor SCC's result.
-      for (const auto& call : calls) {
-        for (const auto& [tuple, row] : support_rows) {
+      for (const auto &call : calls) {
+        for (const auto &[tuple, row] : support_rows) {
           if (tuple.subject != call.callee)
             continue;
           const auto combined = Weaken(call.epistemic, tuple.epistemic);
@@ -721,23 +723,23 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
           const std::string derivation_key =
               facts::EncodeSemanticKey(call.row) +
               facts::EncodeSemanticKey(row);
-          raw.witnesses.push_back(facts::WitnessEdge{
-              .result = facts::SemanticKey{ResultRow(next)},
-              .rule_id = domain.rule_prefix + "support.v2",
-              .derivation_key = derivation_key,
-              .input = facts::SemanticKey{call.row},
-              .input_ordinal = 0});
-          raw.witnesses.push_back(facts::WitnessEdge{
-              .result = facts::SemanticKey{ResultRow(next)},
-              .rule_id = domain.rule_prefix + "support.v2",
-              .derivation_key = derivation_key,
-              .input = facts::SemanticKey{row},
-              .input_ordinal = 1});
+          raw.witnesses.push_back(
+              facts::WitnessEdge{.result = facts::SemanticKey{ResultRow(next)},
+                                 .rule_id = domain.rule_prefix + "support.v2",
+                                 .derivation_key = derivation_key,
+                                 .input = facts::SemanticKey{call.row},
+                                 .input_ordinal = 0});
+          raw.witnesses.push_back(
+              facts::WitnessEdge{.result = facts::SemanticKey{ResultRow(next)},
+                                 .rule_id = domain.rule_prefix + "support.v2",
+                                 .derivation_key = derivation_key,
+                                 .input = facts::SemanticKey{row},
+                                 .input_ordinal = 1});
         }
       }
     }
 
-    for (const auto& tuple : derived) {
+    for (const auto &tuple : derived) {
       raw.results.push_back(ResultRow(tuple));
     }
   }
@@ -748,4 +750,4 @@ StatusOr<facts::RawWpaEvaluation> CppRuleEvaluator::Evaluate(
   return raw;
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

@@ -31,7 +31,7 @@ protected:
   void SetUp() override {
     // One directory per case, so a parallel `ctest -j` run of this binary's
     // cases cannot have one case's teardown delete another's store mid-schema.
-    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    const auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
     test_dir_ = std::filesystem::temp_directory_path() /
                 ("veritas_summary_repo_test_" + std::string(info->name()));
     std::filesystem::remove_all(test_dir_);

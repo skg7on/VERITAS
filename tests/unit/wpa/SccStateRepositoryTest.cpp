@@ -40,13 +40,13 @@ std::string Hash(char digit) { return std::string(64, digit); }
 
 // How many convergence-state rows the store currently exposes. Only committed
 // rows are visible, so this is how a test reads the batch window.
-std::size_t VisibleStateRowCount(summarydb::MetadataStore& store) {
+std::size_t VisibleStateRowCount(summarydb::MetadataStore &store) {
   auto rows = store.Query("SELECT COUNT(*) FROM wpa_component_states", {});
   if (!rows.ok() || rows->empty() || (*rows)[0].empty()) {
     return std::numeric_limits<std::size_t>::max();
   }
   std::size_t parsed = 0;
-  const std::string& text = (*rows)[0][0];
+  const std::string &text = (*rows)[0][0];
   const auto result =
       std::from_chars(text.data(), text.data() + text.size(), parsed);
   if (result.ec != std::errc{} || result.ptr != text.data() + text.size()) {
@@ -60,10 +60,10 @@ protected:
   void SetUp() override {
     // One directory per case, so a parallel `ctest -j` run of this binary's
     // cases cannot have one case's teardown delete another's store mid-schema.
-    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-    directory_ = std::filesystem::temp_directory_path() /
-                 ("veritas_scc_state_repository_test_" +
-                  std::string(info->name()));
+    const auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
+    directory_ =
+        std::filesystem::temp_directory_path() /
+        ("veritas_scc_state_repository_test_" + std::string(info->name()));
     std::filesystem::remove_all(directory_);
     std::filesystem::create_directories(directory_);
     auto opened = summarydb::MetadataStore::Open(directory_ / "metadata.db");

@@ -41,14 +41,15 @@ std::string IntToString(int value) { return std::to_string(value); }
 // Reconstructs a binding from a run_fact_bindings row (the SELECT column order
 // is fixed: confidence, producer_kind, analyzer_run_id, scope_kind, scope_id,
 // selected_witness_id, is_current).
-RunFactBinding ParseBinding(const std::vector<std::string>& row,
+RunFactBinding ParseBinding(const std::vector<std::string> &row,
                             core::StableId run_id, core::StableId fact_id) {
   RunFactBinding binding;
   binding.run_id = run_id;
   binding.fact_id = fact_id;
   binding.confidence =
-      row[0].empty() ? std::nullopt
-                     : std::optional<double>(std::strtod(row[0].c_str(), nullptr));
+      row[0].empty()
+          ? std::nullopt
+          : std::optional<double>(std::strtod(row[0].c_str(), nullptr));
   binding.producer_kind =
       static_cast<ProducerKind>(std::strtol(row[1].c_str(), nullptr, 10));
   binding.analyzer_run_id = row[2];
@@ -64,7 +65,7 @@ RunFactBinding ParseBinding(const std::vector<std::string>& row,
 // to find rooted evidence, to classify the edge's input, and no part of the
 // publication path needs to re-derive it.
 struct WitnessEdgeRef {
-  const WitnessEdge* edge;
+  const WitnessEdge *edge;
   core::StableId input_fact_id;
 };
 
@@ -76,7 +77,7 @@ struct WitnessEdgeRef {
 // The fields stream straight into the hash. Building the whole byte string
 // first cost one large allocation per derivation and, on the caller's side, a
 // copy of every input row just to reach the encoder.
-std::string DeriveWitnessId(const std::vector<WitnessEdgeRef>& ordered_edges) {
+std::string DeriveWitnessId(const std::vector<WitnessEdgeRef> &ordered_edges) {
   core::SHA256Hasher hasher;
   auto update = [&hasher](std::string_view value) {
     hasher.Update(std::as_bytes(std::span(value.data(), value.size())));
@@ -91,7 +92,7 @@ std::string DeriveWitnessId(const std::vector<WitnessEdgeRef>& ordered_edges) {
   AppendSemanticKey(&key, ordered_edges.front().edge->result.row);
   append_field(key);
   append_field(ordered_edges.front().edge->rule_id);
-  for (const WitnessEdgeRef& ref : ordered_edges) {
+  for (const WitnessEdgeRef &ref : ordered_edges) {
     key.clear();
     AppendSemanticKey(&key, ref.edge->input.row);
     append_field(key);
@@ -99,21 +100,21 @@ std::string DeriveWitnessId(const std::vector<WitnessEdgeRef>& ordered_edges) {
   return core::DigestToHex(hasher.Finalize());
 }
 
-}  // namespace
+} // namespace
 
 ProducerKind ProducerKindForEngine(EngineIdentity engine) {
   switch (engine) {
-    case EngineIdentity::kSouffle:
-      return ProducerKind::kWpaSouffle;
-    case EngineIdentity::kCppConformance:
-      return ProducerKind::kWpaCppConformance;
-    case EngineIdentity::kCppEmergency:
-      return ProducerKind::kWpaCppEmergency;
+  case EngineIdentity::kSouffle:
+    return ProducerKind::kWpaSouffle;
+  case EngineIdentity::kCppConformance:
+    return ProducerKind::kWpaCppConformance;
+  case EngineIdentity::kCppEmergency:
+    return ProducerKind::kWpaCppEmergency;
   }
   return ProducerKind::kWpaSouffle;
 }
 
-StatusOr<FactStore> FactStore::Open(const std::filesystem::path& db_path) {
+StatusOr<FactStore> FactStore::Open(const std::filesystem::path &db_path) {
   std::error_code ec;
   std::filesystem::create_directories(db_path, ec);
   if (ec) {
@@ -135,12 +136,12 @@ StatusOr<FactStore> FactStore::Open(const std::filesystem::path& db_path) {
 FactStore::FactStore(summarydb::MetadataStore store)
     : metadata_store_(std::move(store)) {}
 
-FactStore::FactStore(FactStore&&) noexcept = default;
-FactStore& FactStore::operator=(FactStore&&) noexcept = default;
+FactStore::FactStore(FactStore &&) noexcept = default;
+FactStore &FactStore::operator=(FactStore &&) noexcept = default;
 FactStore::~FactStore() = default;
 
-Status FactStore::AppendFact(summarydb::BulkInsertBatcher& facts,
-                             const AnalysisFact& fact) {
+Status FactStore::AppendFact(summarydb::BulkInsertBatcher &facts,
+                             const AnalysisFact &fact) {
   auto proto = ToProtoFact(fact);
   if (!proto.ok()) {
     return proto.status();
@@ -154,8 +155,8 @@ Status FactStore::AppendFact(summarydb::BulkInsertBatcher& facts,
                     HexEncode(serialized)});
 }
 
-Status FactStore::AppendBinding(summarydb::BulkInsertBatcher& bindings,
-                                const RunFactBinding& binding) {
+Status FactStore::AppendBinding(summarydb::BulkInsertBatcher &bindings,
+                                const RunFactBinding &binding) {
   Status s = metadata_store_.Execute(
       "UPDATE run_fact_bindings SET is_current = 0"
       " WHERE run_id = ? AND fact_id = ? AND is_current = 1",
@@ -172,13 +173,13 @@ Status FactStore::AppendBinding(summarydb::BulkInsertBatcher& bindings,
                        binding.scope_id, binding.selected_witness_id, "1"});
 }
 
-Status FactStore::Publish(const AnalysisFactBatch& batch) {
+Status FactStore::Publish(const AnalysisFactBatch &batch) {
   // Collect every canonical fact: the published (derived) facts plus each
   // witness input, which may be a rooted input absent from batch.facts. Any
   // validation failure here happens before a transaction opens, so no rollback
   // is needed.
   std::set<core::StableId> fact_ids;
-  for (const AnalysisFact& fact : batch.facts) {
+  for (const AnalysisFact &fact : batch.facts) {
     fact_ids.insert(fact.fact_id);
   }
   std::vector<AnalysisFact> missing_input_facts;
@@ -193,12 +194,13 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     core::StableId fact_id{};
     std::vector<WitnessEdgeRef> ordered_edges;
   };
+
   // Input rows repeat: a rooted input is the leaf of every proof that reaches
   // it, and a derived fact is an input wherever another rule cites it. One memo
   // derives each distinct input row once instead of once per citing edge.
   FactIdentityMemo input_identity;
   std::map<std::string, ResultWitness> result_witnesses;
-  for (const WitnessEdge& edge : batch.witnesses) {
+  for (const WitnessEdge &edge : batch.witnesses) {
     auto input_fact_id = input_identity.Identify(edge.input.row);
     if (!input_fact_id.ok()) {
       return input_fact_id.status();
@@ -209,8 +211,9 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
       missing_input_facts.push_back(
           AnalysisFact{*input_fact_id, edge.input.row});
     }
-    result_witnesses[EncodeSemanticKey(edge.result.row)].ordered_edges.push_back(
-        WitnessEdgeRef{.edge = &edge, .input_fact_id = std::move(*input_fact_id)});
+    result_witnesses[EncodeSemanticKey(edge.result.row)]
+        .ordered_edges.push_back(WitnessEdgeRef{
+            .edge = &edge, .input_fact_id = std::move(*input_fact_id)});
   }
 
   // Group the canonical witnesses by result and derive each result's
@@ -218,8 +221,8 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   // distinct from the semantic FactID, so re-deriving a fact by a different
   // proof retains a distinct witness record.
   std::map<core::StableId, std::string> witness_id_by_fact;
-  for (auto& [result_key, entry] : result_witnesses) {
-    std::ranges::sort(entry.ordered_edges, [](const auto& a, const auto& b) {
+  for (auto &[result_key, entry] : result_witnesses) {
+    std::ranges::sort(entry.ordered_edges, [](const auto &a, const auto &b) {
       return a.edge->input_ordinal < b.edge->input_ordinal;
     });
     entry.witness_id = DeriveWitnessId(entry.ordered_edges);
@@ -231,8 +234,8 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     witness_id_by_fact[*fact_id] = entry.witness_id;
   }
 
-  std::map<core::StableId, const RootedInputFact*> root_evidence;
-  for (const auto& root : batch.rooted_input_facts) {
+  std::map<core::StableId, const RootedInputFact *> root_evidence;
+  for (const auto &root : batch.rooted_input_facts) {
     root_evidence[root.fact.fact_id] = &root;
   }
 
@@ -276,13 +279,13 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
       " producer_kind, analyzer_run_id, scope_kind, scope_id,"
       " selected_witness_id, is_current) VALUES",
       9);
-  for (const AnalysisFact& fact : batch.facts) {
+  for (const AnalysisFact &fact : batch.facts) {
     s = AppendFact(facts, fact);
     if (!s.ok()) {
       return rollback(s);
     }
   }
-  for (const AnalysisFact& fact : missing_input_facts) {
+  for (const AnalysisFact &fact : missing_input_facts) {
     s = AppendFact(facts, fact);
     if (!s.ok()) {
       return rollback(s);
@@ -294,16 +297,16 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
   if (!s.ok()) {
     return rollback(s);
   }
-  for (const AnalysisFact& fact : batch.facts) {
+  for (const AnalysisFact &fact : batch.facts) {
     RunFactBinding binding;
     binding.run_id = batch.run.run_id;
     binding.fact_id = fact.fact_id;
     binding.producer_kind = ProducerKindForEngine(batch.run.engine);
     binding.is_current = true;
     const auto witness = witness_id_by_fact.find(fact.fact_id);
-    binding.selected_witness_id =
-        witness != witness_id_by_fact.end() ? witness->second
-                                            : core::ToString(fact.fact_id);
+    binding.selected_witness_id = witness != witness_id_by_fact.end()
+                                      ? witness->second
+                                      : core::ToString(fact.fact_id);
     s = AppendBinding(bindings, binding);
     if (!s.ok()) {
       return rollback(s);
@@ -312,8 +315,8 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
 
   // The witness DAG: one node per selected proof, one edge per derivation step.
   ProvenanceStore provenance(metadata_store_);
-  for (const auto& [result_key, entry] : result_witnesses) {
-    const core::StableId& result_fact_id = entry.fact_id;
+  for (const auto &[result_key, entry] : result_witnesses) {
+    const core::StableId &result_fact_id = entry.fact_id;
 
     FactWitness node;
     node.run_id = batch.run.run_id;
@@ -324,7 +327,7 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
     node.rule_id = entry.ordered_edges.front().edge->rule_id;
     // Populate provenance metadata from a rooted input's structured evidence,
     // so the explanation graph reports source anchors and summaries.
-    for (const WitnessEdgeRef& edge_ref : entry.ordered_edges) {
+    for (const WitnessEdgeRef &edge_ref : entry.ordered_edges) {
       const auto root = root_evidence.find(edge_ref.input_fact_id);
       if (root != root_evidence.end()) {
         node.producer_id = root->second->producer_id;
@@ -339,8 +342,8 @@ Status FactStore::Publish(const AnalysisFactBatch& batch) {
       return rollback(s);
     }
 
-    for (const WitnessEdgeRef& edge_ref : entry.ordered_edges) {
-      const WitnessEdge& edge = *edge_ref.edge;
+    for (const WitnessEdgeRef &edge_ref : entry.ordered_edges) {
+      const WitnessEdge &edge = *edge_ref.edge;
       FactWitnessEdge witness_edge;
       witness_edge.run_id = batch.run.run_id;
       witness_edge.output_fact_id = result_fact_id;
@@ -414,8 +417,8 @@ StatusOr<RunFactBinding> FactStore::GetBinding(core::StableId run_id,
   return ParseBinding((*rows)[0], run_id, fact_id);
 }
 
-StatusOr<std::vector<RunFactBinding>> FactStore::GetBindings(
-    core::StableId run_id, core::StableId fact_id) {
+StatusOr<std::vector<RunFactBinding>>
+FactStore::GetBindings(core::StableId run_id, core::StableId fact_id) {
   auto rows = metadata_store_.Query(
       "SELECT confidence, producer_kind, analyzer_run_id, scope_kind,"
       " scope_id, selected_witness_id, is_current FROM run_fact_bindings"
@@ -426,23 +429,23 @@ StatusOr<std::vector<RunFactBinding>> FactStore::GetBindings(
   }
   std::vector<RunFactBinding> bindings;
   bindings.reserve(rows->size());
-  for (const auto& row : *rows) {
+  for (const auto &row : *rows) {
     bindings.push_back(ParseBinding(row, run_id, fact_id));
   }
   return bindings;
 }
 
-StatusOr<std::vector<AnalysisFact>> FactStore::GetCurrentFacts(
-    core::StableId run_id) {
-  auto ids = metadata_store_.Query(
-      "SELECT fact_id FROM run_fact_bindings WHERE run_id = ? AND is_current = 1",
-      {core::ToString(run_id)});
+StatusOr<std::vector<AnalysisFact>>
+FactStore::GetCurrentFacts(core::StableId run_id) {
+  auto ids = metadata_store_.Query("SELECT fact_id FROM run_fact_bindings "
+                                   "WHERE run_id = ? AND is_current = 1",
+                                   {core::ToString(run_id)});
   if (!ids.ok()) {
     return ids.status();
   }
   std::vector<AnalysisFact> facts;
   facts.reserve(ids->size());
-  for (const auto& row : *ids) {
+  for (const auto &row : *ids) {
     auto parsed = core::ParseStableId(row[0]);
     if (!parsed.ok()) {
       return parsed.status();
@@ -456,4 +459,4 @@ StatusOr<std::vector<AnalysisFact>> FactStore::GetCurrentFacts(
   return facts;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts

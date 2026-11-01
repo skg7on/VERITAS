@@ -89,7 +89,7 @@ inline constexpr std::string_view kClosedWorldAbsenceRuleId =
 std::string TranslateProducer(std::string_view m9_producer_id);
 
 class EvidenceCaseBuilder {
- public:
+public:
   // Assembles `request` into a validated case at `request.level`.
   //
   // The result has passed `RequireValidEvidenceCase` and carries its computed
@@ -108,9 +108,9 @@ class EvidenceCaseBuilder {
   // Never fails on an *open* dominating-check query: absence of evidence is
   // recorded as an unknown or an omission, not as an error and not as a
   // negative fact.
-  StatusOr<EvidenceCase> Build(const EvidenceBuildRequest& request) const;
+  StatusOr<EvidenceCase> Build(const EvidenceBuildRequest &request) const;
 };
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EVIDENCE_CASE_BUILDER_H_
+#endif // VERITAS_EVIDENCE_EVIDENCE_CASE_BUILDER_H_

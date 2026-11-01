@@ -99,13 +99,14 @@ TEST(WitnessTest, AppendSemanticKeyMatchesReturnedEncoding) {
   const std::vector<SemanticRow> rows = {
       Unsupported("node", "feature", "policy"),
       Unsupported("", "01", ":"),
-      SemanticRow{RelationId::kReachableCall,
-                  {FunctionId("f"), FunctionId("g"), sem::EpistemicState::kMay}},
+      SemanticRow{
+          RelationId::kReachableCall,
+          {FunctionId("f"), FunctionId("g"), sem::EpistemicState::kMay}},
       SemanticRow{RelationId::kDirectRead,
                   {FunctionId("f"), std::int64_t{-7}, std::uint64_t{9},
                    sem::ByteRangeKind::kUnknown}},
   };
-  for (const SemanticRow& row : rows) {
+  for (const SemanticRow &row : rows) {
     std::string appended;
     AppendSemanticKey(&appended, row);
     EXPECT_EQ(appended, EncodeSemanticKey(row));
@@ -127,8 +128,8 @@ TEST(RuleRegistryTest, KnownRulesResolveAndUnknownRulesDoNot) {
 // Proof selection breaks ties on rule priority, so a rule that derives the
 // same relation by a more direct route must sort ahead of the transitive one.
 TEST(RuleRegistryTest, DirectRulesOutrankTransitiveRules) {
-  const auto* direct = RulesV2().Find("wpa.reachability.direct.v2");
-  const auto* transitive = RulesV2().Find("wpa.reachability.transitive.v2");
+  const auto *direct = RulesV2().Find("wpa.reachability.direct.v2");
+  const auto *transitive = RulesV2().Find("wpa.reachability.transitive.v2");
   ASSERT_NE(direct, nullptr);
   ASSERT_NE(transitive, nullptr);
   EXPECT_LT(direct->priority, transitive->priority);
@@ -178,10 +179,9 @@ TEST(RuleRegistryManifestTest, ManifestMatchesCompiledRegistry) {
   for (std::size_t i = 0; i < rules.size(); ++i) {
     EXPECT_EQ(std::get<0>(rows[i]), rules[i].id);
     EXPECT_EQ(std::get<1>(rows[i]), rules[i].priority);
-    EXPECT_EQ(std::get<2>(rows[i]),
-              RelationsV2().Get(rules[i].result).name);
+    EXPECT_EQ(std::get<2>(rows[i]), RelationsV2().Get(rules[i].result).name);
   }
 }
 
-}  // namespace
-}  // namespace veritas::facts
+} // namespace
+} // namespace veritas::facts

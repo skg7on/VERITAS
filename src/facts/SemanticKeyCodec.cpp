@@ -32,16 +32,16 @@ bool IsKnownTag(char tag) {
   return false;
 }
 
-}  // namespace
+} // namespace
 
-void AppendField(std::string* out, KeyFieldTag tag, std::string_view value) {
+void AppendField(std::string *out, KeyFieldTag tag, std::string_view value) {
   out->push_back(static_cast<char>(tag));
   out->append(std::to_string(value.size()));
   out->push_back(':');
   out->append(value);
 }
 
-void AppendKeyHeader(std::string* out, std::string_view relation_name,
+void AppendKeyHeader(std::string *out, std::string_view relation_name,
                      std::size_t arity) {
   out->append(kSemanticKeyVersion);
   AppendField(out, KeyFieldTag::kSymbol, relation_name);
@@ -113,7 +113,7 @@ StatusOr<std::vector<KeyField>> DecodeFields(std::string_view encoded) {
       }
       length = length * 10 + digit;
     }
-    ++cursor;  // consume ':'
+    ++cursor; // consume ':'
 
     // A length running past the end must fail. Truncating instead would let a
     // malformed key decode as a shorter valid one.
@@ -143,7 +143,7 @@ StatusOr<DecodedKey> DecodeKey(std::string_view encoded) {
   }
 
   std::size_t arity = 0;
-  const std::string& arity_text = (*fields)[1].value;
+  const std::string &arity_text = (*fields)[1].value;
   if (arity_text.empty())
     return Status::InvalidArgument("semantic key arity is empty");
   for (const char digit : arity_text) {
@@ -162,4 +162,4 @@ StatusOr<DecodedKey> DecodeKey(std::string_view encoded) {
   return decoded;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts

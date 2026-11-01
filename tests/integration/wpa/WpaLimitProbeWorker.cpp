@@ -19,7 +19,7 @@
 
 #include <sys/resource.h>
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   std::filesystem::path output_dir;
   for (int i = 1; i + 1 < argc; ++i) {
     if (std::string_view(argv[i]) == "-D") {

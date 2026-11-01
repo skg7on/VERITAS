@@ -43,12 +43,12 @@ namespace veritas::wpa {
 struct WpaRunRequest {
   facts::AnalysisRunManifest run;
   std::span<const summary::SummaryArtifact> summaries;
-  const analysis::semantic::ModelBundle* models = nullptr;
+  const analysis::semantic::ModelBundle *models = nullptr;
   std::span<const WpaComponentKind> components;
   WpaExecutionLimits limits;
   // Optional recorder. Non-owning, not hashed, and excluded from every
   // identity derivation (design section 5.2, Rule 2).
-  core::RunMetrics* metrics = nullptr;
+  core::RunMetrics *metrics = nullptr;
 };
 
 struct WpaRunResult {
@@ -65,23 +65,23 @@ struct WpaRunResult {
 class SccStateRepository;
 
 class WpaOrchestrator {
- public:
+public:
   // The optional scc_state enables incremental predecessor scheduling: when a
   // component's externally visible hash changes, its predecessors are enqueued
   // through the M7 scheduler and surfaced in scheduled_predecessors. `Run`
   // flushes `scc_state`'s last batch of convergence rows before it returns, so
   // a later run reads this run's state and not a stale row.
-  WpaOrchestrator(WpaExecutor& executor, WpaRunRepository& repository,
-                  SccStateRepository* scc_state = nullptr);
+  WpaOrchestrator(WpaExecutor &executor, WpaRunRepository &repository,
+                  SccStateRepository *scc_state = nullptr);
 
-  StatusOr<WpaRunResult> Run(const WpaRunRequest& request);
+  StatusOr<WpaRunResult> Run(const WpaRunRequest &request);
 
- private:
-  WpaExecutor& executor_;
-  WpaRunRepository& repository_;
-  SccStateRepository* scc_state_;
+private:
+  WpaExecutor &executor_;
+  WpaRunRepository &repository_;
+  SccStateRepository *scc_state_;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_WPA_ORCHESTRATOR_H_
+#endif // VERITAS_WPA_WPA_ORCHESTRATOR_H_

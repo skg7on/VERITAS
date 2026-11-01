@@ -18,8 +18,9 @@
 
 namespace veritas::wpa {
 
-StatusOr<CppConformanceExecutor> CppConformanceExecutor::Create(
-    facts::EngineIdentity identity, std::string toolchain_identity) {
+StatusOr<CppConformanceExecutor>
+CppConformanceExecutor::Create(facts::EngineIdentity identity,
+                               std::string toolchain_identity) {
   if (identity == facts::EngineIdentity::kSouffle) {
     return Status::InvalidArgument(
         "CppConformanceExecutor cannot carry the production Souffle identity");
@@ -32,8 +33,8 @@ StatusOr<CppConformanceExecutor> CppConformanceExecutor::Create(
   return CppConformanceExecutor(identity, std::move(toolchain_identity));
 }
 
-CppConformanceExecutor::CppConformanceExecutor(
-    facts::EngineIdentity identity, std::string toolchain_identity)
+CppConformanceExecutor::CppConformanceExecutor(facts::EngineIdentity identity,
+                                               std::string toolchain_identity)
     : identity_(identity), toolchain_identity_(std::move(toolchain_identity)) {}
 
 facts::EngineIdentity CppConformanceExecutor::identity() const {
@@ -44,8 +45,9 @@ std::string_view CppConformanceExecutor::toolchain_identity() const {
   return toolchain_identity_;
 }
 
-StatusOr<facts::RawWpaEvaluation> CppConformanceExecutor::Execute(
-    const WpaExecutionEnvelope& input, const WpaExecutionLimits& limits) const {
+StatusOr<facts::RawWpaEvaluation>
+CppConformanceExecutor::Execute(const WpaExecutionEnvelope &input,
+                                const WpaExecutionLimits &limits) const {
   if (input.run.engine != identity_) {
     return Status::InvalidArgument(
         "envelope engine identity does not match this executor");
@@ -54,9 +56,9 @@ StatusOr<facts::RawWpaEvaluation> CppConformanceExecutor::Execute(
     return Status::InvalidArgument(
         "envelope toolchain identity does not match this executor");
   }
-  (void)limits;  // The in-process C++ evaluator has no subprocess limits.
+  (void)limits; // The in-process C++ evaluator has no subprocess limits.
   CppRuleEvaluator evaluator;
   return evaluator.Evaluate(input.logical);
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

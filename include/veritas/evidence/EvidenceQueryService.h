@@ -53,14 +53,14 @@ inline constexpr std::string_view kQueryCompletionWitnessId = "completion";
 // Fact sets hash the sorted fact IDs; flow hashes the sorted node IDs then the
 // sorted edge IDs. This is the returned_member_digest cell of the completion
 // certificate, so callers (and tests) recompute it from the result payload.
-std::string ReturnedMemberDigest(const std::vector<facts::AnalysisFact>& facts);
-std::string ReturnedMemberDigest(const FlowSlice& slice);
+std::string ReturnedMemberDigest(const std::vector<facts::AnalysisFact> &facts);
+std::string ReturnedMemberDigest(const FlowSlice &slice);
 
 class EvidenceQueryService {
- public:
+public:
   // Binds an immutable CPG projection and a read backend for one analysis run.
-  EvidenceQueryService(const cpg::ThinCpg& cpg,
-                       const EvidenceReadBackend& backend,
+  EvidenceQueryService(const cpg::ThinCpg &cpg,
+                       const EvidenceReadBackend &backend,
                        core::StableId analysis_run_id);
 
   StatusOr<FlowSlice> GetValueFlow(core::StableId src, core::StableId dst,
@@ -73,21 +73,23 @@ class EvidenceQueryService {
                                        EvidenceQueryBudget budget) const;
   StatusOr<EvidenceFactSet> GetUnknowns(core::StableId scope_ref,
                                         EvidenceQueryBudget budget) const;
-  StatusOr<EvidenceFactSet> GetDominatingChecks(core::StableId callsite_ref,
-                                                EvidenceQueryBudget budget) const;
-  StatusOr<veritas::fact::v1::ProvenanceGraph> Explain(
-      core::StableId run_id, core::StableId fact_id,
-      const facts::ExplainBudget& budget) const;
+  StatusOr<EvidenceFactSet>
+  GetDominatingChecks(core::StableId callsite_ref,
+                      EvidenceQueryBudget budget) const;
+  StatusOr<veritas::fact::v1::ProvenanceGraph>
+  Explain(core::StableId run_id, core::StableId fact_id,
+          const facts::ExplainBudget &budget) const;
 
-  StatusOr<EvidenceBuildInput> BuildEvidenceInput(const ClaimSeed& claim_seed,
-                                                  EvidenceQueryBudget budget) const;
+  StatusOr<EvidenceBuildInput>
+  BuildEvidenceInput(const ClaimSeed &claim_seed,
+                     EvidenceQueryBudget budget) const;
 
- private:
-  const cpg::ThinCpg* cpg_;
-  const EvidenceReadBackend* backend_;
+private:
+  const cpg::ThinCpg *cpg_;
+  const EvidenceReadBackend *backend_;
   core::StableId run_id_;
 };
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EVIDENCE_QUERY_SERVICE_H_
+#endif // VERITAS_EVIDENCE_EVIDENCE_QUERY_SERVICE_H_

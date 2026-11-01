@@ -35,15 +35,14 @@ namespace {
 // Records land in the exact order the field visitor emits them, and that order
 // is the source of truth for equality. Never rely on hash-map iteration.
 
-template <typename T>
-void AppendBigEndian(std::string& out, T value) {
+template <typename T> void AppendBigEndian(std::string &out, T value) {
   char bytes[sizeof(T)];
   llvm::support::endian::write<T, llvm::support::unaligned>(
       bytes, value, llvm::endianness::big);
   out.append(bytes, sizeof(T));
 }
 
-void AppendField(std::string& out, std::string_view key,
+void AppendField(std::string &out, std::string_view key,
                  std::string_view value) {
   AppendBigEndian(out, static_cast<std::uint32_t>(key.size()));
   out.append(key.data(), key.size());
@@ -53,10 +52,14 @@ void AppendField(std::string& out, std::string_view key,
 
 std::string_view RootKindToken(PathRootKind kind) {
   switch (kind) {
-    case PathRootKind::kRepository: return "repository";
-    case PathRootKind::kGenerated:  return "generated";
-    case PathRootKind::kExternal:   return "external";
-    case PathRootKind::kToolchain:  return "toolchain";
+  case PathRootKind::kRepository:
+    return "repository";
+  case PathRootKind::kGenerated:
+    return "generated";
+  case PathRootKind::kExternal:
+    return "external";
+  case PathRootKind::kToolchain:
+    return "toolchain";
   }
   return "unknown";
 }
@@ -69,7 +72,7 @@ std::string_view RootKindToken(PathRootKind kind) {
 // update one of them is impossible.
 
 template <typename EmitScalar>
-void VisitContextFields(const ProgramContext& ctx, EmitScalar emit) {
+void VisitContextFields(const ProgramContext &ctx, EmitScalar emit) {
   emit("build_variant_id", ctx.build_variant_id);
   emit("compilation_database_hash", ctx.compilation_database_hash);
   emit("compile_options_hash", ctx.compile_options_hash);
@@ -89,7 +92,7 @@ void VisitContextFields(const ProgramContext& ctx, EmitScalar emit) {
 // TaggedPath flattens into three scalar fields sharing a prefix so both
 // encoders can emit them without a separate nested type.
 template <typename EmitScalar>
-void VisitTaggedPath(std::string_view prefix, const TaggedPath& path,
+void VisitTaggedPath(std::string_view prefix, const TaggedPath &path,
                      EmitScalar emit) {
   emit(std::string(prefix) + "_relative_path",
        path.relative_path.generic_string());
@@ -98,9 +101,8 @@ void VisitTaggedPath(std::string_view prefix, const TaggedPath& path,
 }
 
 template <typename EmitScalar, typename EmitStringArray>
-void VisitTranslationUnitFields(const TranslationUnitCommand& unit,
-                                EmitScalar emit,
-                                EmitStringArray emit_array) {
+void VisitTranslationUnitFields(const TranslationUnitCommand &unit,
+                                EmitScalar emit, EmitStringArray emit_array) {
   emit_array("arguments", unit.arguments);
   emit("build_variant_id", unit.build_variant_id);
   emit("command_hash", unit.command_hash);
@@ -111,10 +113,11 @@ void VisitTranslationUnitFields(const TranslationUnitCommand& unit,
   VisitTaggedPath("working_directory", unit.working_directory, emit);
 }
 
-std::string JoinNul(const std::vector<std::string>& items) {
+std::string JoinNul(const std::vector<std::string> &items) {
   std::string out;
   for (std::size_t i = 0; i < items.size(); ++i) {
-    if (i > 0) out.push_back('\0');
+    if (i > 0)
+      out.push_back('\0');
     out.append(items[i]);
   }
   return out;
@@ -125,10 +128,12 @@ struct TranslationUnitSortKey {
   std::string_view root_id;
   std::string relative_path;
   std::string_view command_hash;
+
   auto tie() const {
     return std::tie(root_kind, root_id, relative_path, command_hash);
   }
-  bool operator<(const TranslationUnitSortKey& other) const {
+
+  bool operator<(const TranslationUnitSortKey &other) const {
     return tie() < other.tie();
   }
 };
@@ -137,13 +142,13 @@ struct TranslationUnitSortKey {
 // root_id, relative_path, command_hash). Precomputed keys avoid re-hashing
 // `generic_string()` on every comparison, and pointer output avoids deep-
 // copying every TU (arguments vector alone is often 20-40 strings).
-std::vector<const TranslationUnitCommand*> OrderedTranslationUnits(
-    const AnalysisManifest& manifest) {
-  const auto& units = manifest.translation_units;
-  std::vector<std::pair<TranslationUnitSortKey, const TranslationUnitCommand*>>
+std::vector<const TranslationUnitCommand *>
+OrderedTranslationUnits(const AnalysisManifest &manifest) {
+  const auto &units = manifest.translation_units;
+  std::vector<std::pair<TranslationUnitSortKey, const TranslationUnitCommand *>>
       keyed;
   keyed.reserve(units.size());
-  for (const auto& unit : units) {
+  for (const auto &unit : units) {
     keyed.push_back({
         TranslationUnitSortKey{
             static_cast<int>(unit.source_path.root_kind),
@@ -155,39 +160,39 @@ std::vector<const TranslationUnitCommand*> OrderedTranslationUnits(
     });
   }
   std::sort(keyed.begin(), keyed.end(),
-            [](const auto& a, const auto& b) { return a.first < b.first; });
+            [](const auto &a, const auto &b) { return a.first < b.first; });
 
-  std::vector<const TranslationUnitCommand*> ordered;
+  std::vector<const TranslationUnitCommand *> ordered;
   ordered.reserve(keyed.size());
-  for (const auto& entry : keyed) ordered.push_back(entry.second);
+  for (const auto &entry : keyed)
+    ordered.push_back(entry.second);
   return ordered;
 }
 
-}  // namespace
+} // namespace
 
-std::string ToCanonicalBytes(const TranslationUnitCommand& unit) {
+std::string ToCanonicalBytes(const TranslationUnitCommand &unit) {
   std::string bytes;
   VisitTranslationUnitFields(
       unit,
       [&](std::string_view key, std::string_view value) {
         AppendField(bytes, key, value);
       },
-      [&](std::string_view key, const std::vector<std::string>& list) {
+      [&](std::string_view key, const std::vector<std::string> &list) {
         AppendField(bytes, key, JoinNul(list));
       });
   return bytes;
 }
 
-std::string ToCanonicalBytes(const AnalysisManifest& manifest) {
+std::string ToCanonicalBytes(const AnalysisManifest &manifest) {
   std::string bytes;
-  VisitContextFields(
-      manifest.context,
-      [&](std::string_view key, std::string_view value) {
-        AppendField(bytes, key, value);
-      });
+  VisitContextFields(manifest.context,
+                     [&](std::string_view key, std::string_view value) {
+                       AppendField(bytes, key, value);
+                     });
   const auto ordered = OrderedTranslationUnits(manifest);
   AppendBigEndian(bytes, static_cast<std::uint32_t>(ordered.size()));
-  for (const auto* unit : ordered) {
+  for (const auto *unit : ordered) {
     AppendField(bytes, "translation_unit", ToCanonicalBytes(*unit));
   }
   return bytes;
@@ -200,8 +205,8 @@ namespace {
 // Emit one TU as a JSON object using the shared field visitor. Arguments
 // become a JSON array; every other field becomes an attribute. `llvm::json`
 // handles quoting, escaping, and UTF-8 correctness.
-void EmitTranslationUnitJson(llvm::json::OStream& j,
-                             const TranslationUnitCommand& unit) {
+void EmitTranslationUnitJson(llvm::json::OStream &j,
+                             const TranslationUnitCommand &unit) {
   j.object([&] {
     VisitTranslationUnitFields(
         unit,
@@ -209,31 +214,31 @@ void EmitTranslationUnitJson(llvm::json::OStream& j,
           j.attribute(llvm::StringRef(key.data(), key.size()),
                       llvm::StringRef(value.data(), value.size()));
         },
-        [&](std::string_view key, const std::vector<std::string>& list) {
+        [&](std::string_view key, const std::vector<std::string> &list) {
           j.attributeArray(llvm::StringRef(key.data(), key.size()), [&] {
-            for (const auto& arg : list) j.value(arg);
+            for (const auto &arg : list)
+              j.value(arg);
           });
         });
   });
 }
 
-}  // namespace
+} // namespace
 
-std::string ToDiagnosticJson(const AnalysisManifest& manifest) {
+std::string ToDiagnosticJson(const AnalysisManifest &manifest) {
   std::string out;
   llvm::raw_string_ostream os(out);
   llvm::json::OStream j(os, /*IndentSize=*/2);
   j.object([&] {
     j.attributeObject("context", [&] {
-      VisitContextFields(manifest.context,
-                         [&](std::string_view key, std::string_view value) {
-                           j.attribute(llvm::StringRef(key.data(), key.size()),
-                                       llvm::StringRef(value.data(),
-                                                       value.size()));
-                         });
+      VisitContextFields(
+          manifest.context, [&](std::string_view key, std::string_view value) {
+            j.attribute(llvm::StringRef(key.data(), key.size()),
+                        llvm::StringRef(value.data(), value.size()));
+          });
     });
     j.attributeArray("translation_units", [&] {
-      for (const auto* unit : OrderedTranslationUnits(manifest)) {
+      for (const auto *unit : OrderedTranslationUnits(manifest)) {
         EmitTranslationUnitJson(j, *unit);
       }
     });
@@ -243,4 +248,4 @@ std::string ToDiagnosticJson(const AnalysisManifest& manifest) {
   return out;
 }
 
-}  // namespace veritas::build
+} // namespace veritas::build

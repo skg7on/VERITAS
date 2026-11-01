@@ -63,6 +63,7 @@ StatusOr<SccGraph> SccGraph::Build(const CallGraph &call_graph) {
     std::vector<core::StableId> callees;
     std::size_t next_callee = 0;
   };
+
   std::vector<DfsFrame> dfs;
   auto push_vertex = [&](const core::StableId &vertex) {
     index[vertex] = next_index;

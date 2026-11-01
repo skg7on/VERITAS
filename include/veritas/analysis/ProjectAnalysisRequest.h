@@ -31,6 +31,6 @@ struct ProjectAnalysisRequest {
   std::filesystem::path output_root;
 };
 
-}  // namespace veritas::analysis
+} // namespace veritas::analysis
 
-#endif  // VERITAS_ANALYSIS_PROJECTANALYSISREQUEST_H_
+#endif // VERITAS_ANALYSIS_PROJECTANALYSISREQUEST_H_

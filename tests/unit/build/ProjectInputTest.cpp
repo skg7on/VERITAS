@@ -117,5 +117,5 @@ TEST(ProjectInputTest, RejectsEmptyProjectPath) {
   EXPECT_EQ(resolved.status().code(), StatusCode::kInvalidArgument);
 }
 
-}  // namespace
-}  // namespace veritas::build
+} // namespace
+} // namespace veritas::build

@@ -27,28 +27,29 @@
 namespace veritas::summarydb {
 
 class MetadataStoreTestPeer {
- public:
-  static std::size_t CachedStatementCount(const MetadataStore& store) {
+public:
+  static std::size_t CachedStatementCount(const MetadataStore &store) {
     return store.statement_cache_.size();
   }
 
-  static std::size_t CachedStatementCountForSql(const MetadataStore& store,
-                                                const std::string& sql) {
+  static std::size_t CachedStatementCountForSql(const MetadataStore &store,
+                                                const std::string &sql) {
     return store.statement_cache_.count(sql);
   }
 
   // How many rows the batcher writes in one statement, and how many rows are
   // queued right now (the batcher holds flat values, not rows).
-  static std::size_t BatchCapacity(const BulkInsertBatcher& batcher) {
+  static std::size_t BatchCapacity(const BulkInsertBatcher &batcher) {
     return batcher.max_rows_;
   }
 
-  static std::size_t PendingRows(const BulkInsertBatcher& batcher) {
-    return batcher.columns_ == 0 ? 0 : batcher.pending_.size() / batcher.columns_;
+  static std::size_t PendingRows(const BulkInsertBatcher &batcher) {
+    return batcher.columns_ == 0 ? 0
+                                 : batcher.pending_.size() / batcher.columns_;
   }
 };
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb
 
 using namespace veritas::summarydb;
 
@@ -67,7 +68,7 @@ namespace {
 // mistake), which is a different event from "there was nothing to remove".
 // `EXPECT_` rather than `ASSERT_` because the assertion belongs to the caller,
 // and this helper is also called from `SetUp` and `TearDown`.
-bool RemoveFile(const std::filesystem::path& path) {
+bool RemoveFile(const std::filesystem::path &path) {
   std::error_code error;
   const bool removed = std::filesystem::remove(path, error);
   EXPECT_FALSE(error) << "cannot remove " << path.string() << ": "
@@ -94,12 +95,11 @@ std::filesystem::path TempDirectory() {
 // failure is the point: a bare `exists(p)` that cannot stat `p` reports "no
 // such file", which is exactly the answer a caller asking "did this create a
 // file?" must not be handed silently.
-bool PathExists(const std::filesystem::path& path) {
+bool PathExists(const std::filesystem::path &path) {
   std::error_code error;
   const bool present = std::filesystem::exists(path, error);
   if (error) {
-    ADD_FAILURE() << "cannot stat " << path.string() << ": "
-                  << error.message();
+    ADD_FAILURE() << "cannot stat " << path.string() << ": " << error.message();
   }
   return present;
 }
@@ -111,7 +111,7 @@ std::filesystem::path TempDbPath() {
 
 // SHA-256 of a file's bytes, for "did this change?" checks. Uses the same
 // hashing the project already depends on so no new dependency appears.
-std::string FileDigest(const std::filesystem::path& path) {
+std::string FileDigest(const std::filesystem::path &path) {
   std::ifstream in(path, std::ios::binary);
   std::string bytes((std::istreambuf_iterator<char>(in)),
                     std::istreambuf_iterator<char>());
@@ -303,19 +303,17 @@ TEST_F(MetadataStoreTest,
 
   const std::string create_sql =
       "CREATE TABLE cached_values(value TEXT PRIMARY KEY)";
-  const std::string insert_sql =
-      "INSERT INTO cached_values(value) VALUES(?)";
-  const std::string distinct_sql =
-      "DELETE FROM cached_values WHERE value = ?";
+  const std::string insert_sql = "INSERT INTO cached_values(value) VALUES(?)";
+  const std::string distinct_sql = "DELETE FROM cached_values WHERE value = ?";
 
   ASSERT_TRUE(store->Execute(create_sql, {}).ok());
   EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*store), 1u);
 
   ASSERT_TRUE(store->Execute(insert_sql, {"alpha"}).ok());
   ASSERT_TRUE(store->Execute(insert_sql, {"beta"}).ok());
-  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCountForSql(*store,
-                                                              insert_sql),
-            1u);
+  EXPECT_EQ(
+      MetadataStoreTestPeer::CachedStatementCountForSql(*store, insert_sql),
+      1u);
   EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*store), 2u);
 
   EXPECT_FALSE(store->Execute(insert_sql, {"alpha"}).ok());
@@ -324,12 +322,12 @@ TEST_F(MetadataStoreTest,
 
   ASSERT_TRUE(store->Execute(distinct_sql, {"missing"}).ok());
   EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*store), 3u);
-  EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCountForSql(*store,
-                                                              distinct_sql),
-            1u);
+  EXPECT_EQ(
+      MetadataStoreTestPeer::CachedStatementCountForSql(*store, distinct_sql),
+      1u);
 
-  auto rows = store->Query(
-      "SELECT value FROM cached_values ORDER BY value", {});
+  auto rows =
+      store->Query("SELECT value FROM cached_values ORDER BY value", {});
   ASSERT_TRUE(rows.ok()) << rows.status().message();
   EXPECT_EQ(*rows, (std::vector<std::vector<std::string>>{
                        {"alpha"}, {"beta"}, {"gamma"}}));
@@ -338,8 +336,7 @@ TEST_F(MetadataStoreTest,
 TEST_F(MetadataStoreTest, MoveTransfersCachedStatementsAndEmptiesSource) {
   auto source = MetadataStore::Open(db_path_);
   ASSERT_TRUE(source.ok()) << source.status().message();
-  const std::string insert_sql =
-      "INSERT INTO cached_values(value) VALUES(?)";
+  const std::string insert_sql = "INSERT INTO cached_values(value) VALUES(?)";
   ASSERT_TRUE(
       source->Execute("CREATE TABLE cached_values(value TEXT PRIMARY KEY)", {})
           .ok());
@@ -356,15 +353,15 @@ TEST_F(MetadataStoreTest, MoveTransfersCachedStatementsAndEmptiesSource) {
   RemoveFile(replacement_path);
   auto replacement = MetadataStore::Open(replacement_path);
   ASSERT_TRUE(replacement.ok()) << replacement.status().message();
-  ASSERT_TRUE(replacement->Execute("CREATE TABLE discarded(value TEXT)", {})
-                  .ok());
+  ASSERT_TRUE(
+      replacement->Execute("CREATE TABLE discarded(value TEXT)", {}).ok());
 
   *replacement = std::move(moved);
   EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(moved), 0u);
   EXPECT_EQ(MetadataStoreTestPeer::CachedStatementCount(*replacement), 2u);
   ASSERT_TRUE(replacement->Execute(insert_sql, {"gamma"}).ok());
-  auto rows = replacement->Query(
-      "SELECT value FROM cached_values ORDER BY value", {});
+  auto rows =
+      replacement->Query("SELECT value FROM cached_values ORDER BY value", {});
   ASSERT_TRUE(rows.ok()) << rows.status().message();
   EXPECT_EQ(*rows, (std::vector<std::vector<std::string>>{
                        {"alpha"}, {"beta"}, {"gamma"}}));
@@ -474,8 +471,8 @@ TEST_F(MetadataStoreTest, BulkInsertBatchesFullBatchesAndFlushesTheTail) {
   EXPECT_EQ((*counted)[0][0], std::to_string(rows));
 
   // Rows survive the batch boundary in the order they were queued.
-  auto ordered = store->Query(
-      "SELECT a FROM bulk_probe ORDER BY CAST(a AS INTEGER)", {});
+  auto ordered =
+      store->Query("SELECT a FROM bulk_probe ORDER BY CAST(a AS INTEGER)", {});
   ASSERT_TRUE(ordered.ok());
   ASSERT_EQ(ordered->size(), rows);
   EXPECT_EQ((*ordered)[0][0], "0");
@@ -496,7 +493,8 @@ TEST_F(MetadataStoreTest, BulkInsertRejectsARowOfTheWrongWidth) {
 
   BulkInsertBatcher batcher(*store, "INSERT INTO bulk_probe (a, b, c) VALUES",
                             3);
-  EXPECT_EQ(batcher.Add({"a", "b"}).code(), veritas::StatusCode::kInvalidArgument);
+  EXPECT_EQ(batcher.Add({"a", "b"}).code(),
+            veritas::StatusCode::kInvalidArgument);
   EXPECT_EQ(batcher.Add({"a", "b", "c", "d"}).code(),
             veritas::StatusCode::kInvalidArgument);
   EXPECT_EQ(MetadataStoreTestPeer::PendingRows(batcher), 0u);

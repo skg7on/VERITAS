@@ -74,10 +74,10 @@ ThinCpg BuildFixtureGraph(bool reverse) {
       (void)graph.AddEdge(*it);
     }
   } else {
-    for (const auto& node : nodes) {
+    for (const auto &node : nodes) {
       (void)graph.AddNode(node);
     }
-    for (const auto& edge : edges) {
+    for (const auto &edge : edges) {
       (void)graph.AddEdge(edge);
     }
   }
@@ -98,13 +98,14 @@ TEST(CpgCanonicalizerTest, DifferentContentProducesDifferentProjectionId) {
   ThinCpg first = BuildFixtureGraph(false);
   ThinCpg second = BuildFixtureGraph(false);
   // Change one node's label so the content differs.
-  ASSERT_TRUE(second.AddNode(CpgNode{Id(core::IdKind::kMemoryRef, "d"),
-                                     NodeKind::kMemoryObject, "extra"})
+  ASSERT_TRUE(second
+                  .AddNode(CpgNode{Id(core::IdKind::kMemoryRef, "d"),
+                                   NodeKind::kMemoryObject, "extra"})
                   .ok());
 
   EXPECT_NE(CpgCanonicalizer::ProjectionId(first),
             CpgCanonicalizer::ProjectionId(second));
 }
 
-}  // namespace
-}  // namespace veritas::cpg
+} // namespace
+} // namespace veritas::cpg

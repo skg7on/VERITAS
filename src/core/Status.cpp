@@ -24,4 +24,4 @@ namespace veritas {
 
 // Intentionally empty — see comment above.
 
-}  // namespace veritas
+} // namespace veritas

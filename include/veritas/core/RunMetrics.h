@@ -168,7 +168,7 @@ struct RunMetricsStats {
 // class with a direct Append rather than a field: tests exercise the policy
 // without starting a thread, and the sampler's two concerns stay separate.
 class SeriesBuffer {
- public:
+public:
   explicit SeriesBuffer(std::size_t capacity = 65536);
 
   // Append one sample. While the buffer is below capacity this is a push.
@@ -178,11 +178,13 @@ class SeriesBuffer {
   // sample and the newest are never discarded.
   void Append(MemorySample sample);
 
-  const std::vector<MemorySample>& samples() const { return samples_; }
+  const std::vector<MemorySample> &samples() const { return samples_; }
+
   std::uint64_t decimation() const { return decimation_; }
+
   std::size_t capacity() const { return capacity_; }
 
- private:
+private:
   std::size_t capacity_;
   std::uint64_t decimation_ = 1;
   std::vector<MemorySample> samples_;
@@ -195,17 +197,16 @@ class SeriesBuffer {
 // it writes solely into its own pre-allocated buffer, which is read after it
 // is joined. See the design spec, sections 4.5 and 7.4.
 class RunMetrics {
- public:
-  explicit RunMetrics(
-      RunMetricsOptions options = {},
-      WallClock wall = std::chrono::steady_clock::now,
-      CpuClock cpu = &ProcessCpuNow);
+public:
+  explicit RunMetrics(RunMetricsOptions options = {},
+                      WallClock wall = std::chrono::steady_clock::now,
+                      CpuClock cpu = &ProcessCpuNow);
   ~RunMetrics();
 
-  RunMetrics(const RunMetrics&) = delete;
-  RunMetrics& operator=(const RunMetrics&) = delete;
-  RunMetrics(RunMetrics&&) = delete;
-  RunMetrics& operator=(RunMetrics&&) = delete;
+  RunMetrics(const RunMetrics &) = delete;
+  RunMetrics &operator=(const RunMetrics &) = delete;
+  RunMetrics(RunMetrics &&) = delete;
+  RunMetrics &operator=(RunMetrics &&) = delete;
 
   // BeginSpan opens a span and returns a token. Spans are strictly nested:
   // EndSpan must receive the innermost open token. A mismatched token records
@@ -233,7 +234,7 @@ class RunMetrics {
   // thread before reading it, so a caller may append only when no sampler is
   // running — which is the case for every recorder with the default interval
   // of zero, and for the tests.
-  SeriesBuffer& series();
+  SeriesBuffer &series();
 
   // RecordMemorySample measures process memory now and appends the reading to
   // the series at the current wall time. This is the recorder's measurement
@@ -249,7 +250,7 @@ class RunMetrics {
   // interval while its sampler runs would mutate the buffer without a lock.
   void RecordMemorySample();
 
- private:
+private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
@@ -258,25 +259,25 @@ class RunMetrics {
 // no-op that never reads a clock, so an uninstrumented build pays one pointer
 // test per span.
 class PhaseSpan {
- public:
-  PhaseSpan(RunMetrics* metrics, std::string_view name,
+public:
+  PhaseSpan(RunMetrics *metrics, std::string_view name,
             SpanMode mode = SpanMode::kPlain);
   ~PhaseSpan();
 
-  PhaseSpan(const PhaseSpan&) = delete;
-  PhaseSpan& operator=(const PhaseSpan&) = delete;
-  PhaseSpan(PhaseSpan&& other) = delete;
-  PhaseSpan& operator=(PhaseSpan&& other) = delete;
+  PhaseSpan(const PhaseSpan &) = delete;
+  PhaseSpan &operator=(const PhaseSpan &) = delete;
+  PhaseSpan(PhaseSpan &&other) = delete;
+  PhaseSpan &operator=(PhaseSpan &&other) = delete;
 
   void SetLabel(std::string label);
   void AddCounter(std::string_view name, std::uint64_t value,
                   std::string_view unit);
 
- private:
-  RunMetrics* metrics_ = nullptr;
+private:
+  RunMetrics *metrics_ = nullptr;
   std::size_t token_ = 0;
 };
 
-}  // namespace veritas::core
+} // namespace veritas::core
 
-#endif  // VERITAS_CORE_RUNMETRICS_H_
+#endif // VERITAS_CORE_RUNMETRICS_H_

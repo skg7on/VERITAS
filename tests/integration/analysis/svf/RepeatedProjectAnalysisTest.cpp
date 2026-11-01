@@ -31,21 +31,17 @@ namespace {
 svf::SvfMappingResult RunMinimalAnalysis() {
   auto program_ir = std::make_unique<pipeline::ProgramIr>();
 
-  auto module = std::make_unique<::llvm::Module>(
-      "repeated_test", program_ir->GetContext());
+  auto module = std::make_unique<::llvm::Module>("repeated_test",
+                                                 program_ir->GetContext());
 
-  auto* func_type = ::llvm::FunctionType::get(
+  auto *func_type = ::llvm::FunctionType::get(
       ::llvm::Type::getInt32Ty(program_ir->GetContext()),
-      {::llvm::Type::getInt32Ty(program_ir->GetContext())},
-      false);
-  auto* func = ::llvm::Function::Create(
-      func_type,
-      ::llvm::Function::ExternalLinkage,
-      "test_func",
-      module.get());
+      {::llvm::Type::getInt32Ty(program_ir->GetContext())}, false);
+  auto *func = ::llvm::Function::Create(
+      func_type, ::llvm::Function::ExternalLinkage, "test_func", module.get());
 
-  auto* entry = ::llvm::BasicBlock::Create(
-      program_ir->GetContext(), "entry", func);
+  auto *entry =
+      ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry", func);
   ::llvm::IRBuilder<> builder(entry);
   builder.CreateRet(func->getArg(0));
 
@@ -60,9 +56,9 @@ svf::SvfMappingResult RunMinimalAnalysis() {
   svf::SvfMappingResult result;
   auto status = svf::RunWithSvfSession(
       *program_ir, svf::SvfConfig::Default(),
-      [&](const svf::SvfSessionView& view) {
-        return svf::MapSvfFacts(
-            *program_ir, view, run_context, svf::SvfConfig::Default(), &result);
+      [&](const svf::SvfSessionView &view) {
+        return svf::MapSvfFacts(*program_ir, view, run_context,
+                                svf::SvfConfig::Default(), &result);
       });
 
   if (!status.ok()) {
@@ -80,12 +76,9 @@ TEST(RepeatedProjectAnalysisTest, TwoRunsProduceDeterministicResults) {
   EXPECT_EQ(result1.completion, result2.completion);
 
   // Fact counts should match (deterministic analysis)
-  EXPECT_EQ(result1.facts.value_flows.size(),
-            result2.facts.value_flows.size());
-  EXPECT_EQ(result1.facts.aliases.size(),
-            result2.facts.aliases.size());
-  EXPECT_EQ(result1.facts.unknowns.size(),
-            result2.facts.unknowns.size());
+  EXPECT_EQ(result1.facts.value_flows.size(), result2.facts.value_flows.size());
+  EXPECT_EQ(result1.facts.aliases.size(), result2.facts.aliases.size());
+  EXPECT_EQ(result1.facts.unknowns.size(), result2.facts.unknowns.size());
 
   // Facts should be identical after sorting (already sorted by mapper)
   EXPECT_EQ(result1.facts.value_flows, result2.facts.value_flows);
@@ -100,11 +93,12 @@ TEST(RepeatedProjectAnalysisTest, SvfStateCleanBetweenRuns) {
 
     // Should succeed on every iteration
     EXPECT_TRUE(result.completion == svf::SvfMappingCompletion::kComplete ||
-                result.completion == svf::SvfMappingCompletion::kCompleteWithUnknowns);
+                result.completion ==
+                    svf::SvfMappingCompletion::kCompleteWithUnknowns);
   }
 
   // If SVF state wasn't cleaned up properly, later runs would fail
 }
 
-}  // namespace
-}  // namespace veritas::analysis
+} // namespace
+} // namespace veritas::analysis

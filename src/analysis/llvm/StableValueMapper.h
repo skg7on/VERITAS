@@ -35,7 +35,7 @@ class InlineAsm;
 class Instruction;
 class Module;
 class Value;
-}  // namespace llvm
+} // namespace llvm
 
 namespace veritas::analysis::llvm {
 
@@ -51,25 +51,25 @@ class OriginMap;
 // the constructor, so no reference to the (possibly short-lived) OriginMap is
 // retained.
 class StableValueMapper {
- public:
-  StableValueMapper(const ::llvm::Module& module, const OriginMap& origin_map);
+public:
+  StableValueMapper(const ::llvm::Module &module, const OriginMap &origin_map);
   ~StableValueMapper() = default;
 
   // Deterministic kValueRef identity for an LLVM value in the module.
-  StatusOr<core::StableId> IdFor(const ::llvm::Value& value) const;
+  StatusOr<core::StableId> IdFor(const ::llvm::Value &value) const;
 
   // Deterministic kCallSite identity for a call instruction.
-  StatusOr<core::StableId> CallSiteIdFor(const ::llvm::CallBase& call) const;
+  StatusOr<core::StableId> CallSiteIdFor(const ::llvm::CallBase &call) const;
 
   // Deterministic kValueRef identity for a function's formal parameter,
   // independent of whether the function has a body in the module. Mirrors the
   // Argument encoding without needing the LLVM Argument, so an external
   // callee's formal can be named too.
-  core::StableId FormalParamId(const ::llvm::Function& callee,
+  core::StableId FormalParamId(const ::llvm::Function &callee,
                                std::uint32_t arg_index) const;
 
   // Deterministic kValueRef identity for a function's return value.
-  core::StableId ReturnValueId(const ::llvm::Function& callee) const;
+  core::StableId ReturnValueId(const ::llvm::Function &callee) const;
 
   // The canonical kValueRef identity of a function, derived solely from its
   // function-variant ID string (or diagnostic name when no origin-map entry
@@ -78,37 +78,36 @@ class StableValueMapper {
   // in SvfMerge both go through it, so the framing lives in exactly one place.
   static core::StableId FunctionValueRef(std::string_view function_variant_id);
 
- private:
-  using OwnerMap =
-      std::unordered_map<const ::llvm::Function*, std::string>;
+private:
+  using OwnerMap = std::unordered_map<const ::llvm::Function *, std::string>;
   using BlockMap =
-      std::unordered_map<const ::llvm::BasicBlock*, std::uint32_t>;
+      std::unordered_map<const ::llvm::BasicBlock *, std::uint32_t>;
   using InstMap =
-      std::unordered_map<const ::llvm::Instruction*, std::uint32_t>;
+      std::unordered_map<const ::llvm::Instruction *, std::uint32_t>;
 
-  void AppendValue(std::string* out, const ::llvm::Value& value) const;
-  void AppendInstruction(std::string* out,
-                         const ::llvm::Instruction& inst) const;
-  void AppendArgument(std::string* out, const ::llvm::Argument& arg) const;
-  void AppendGlobal(std::string* out, const ::llvm::GlobalVariable& gv) const;
-  void AppendFunction(std::string* out, const ::llvm::Function& fn) const;
-  void AppendConstant(std::string* out, const ::llvm::Constant& c) const;
-  void AppendOperand(std::string* out, const ::llvm::Value& operand) const;
-  void AppendBlockAddress(std::string* out,
-                          const ::llvm::BlockAddress& address) const;
-  void AppendInlineAsm(std::string* out,
-                       const ::llvm::InlineAsm& asm_value) const;
-  void AppendOwnerVariant(std::string* out, const ::llvm::Function* fn) const;
+  void AppendValue(std::string *out, const ::llvm::Value &value) const;
+  void AppendInstruction(std::string *out,
+                         const ::llvm::Instruction &inst) const;
+  void AppendArgument(std::string *out, const ::llvm::Argument &arg) const;
+  void AppendGlobal(std::string *out, const ::llvm::GlobalVariable &gv) const;
+  void AppendFunction(std::string *out, const ::llvm::Function &fn) const;
+  void AppendConstant(std::string *out, const ::llvm::Constant &c) const;
+  void AppendOperand(std::string *out, const ::llvm::Value &operand) const;
+  void AppendBlockAddress(std::string *out,
+                          const ::llvm::BlockAddress &address) const;
+  void AppendInlineAsm(std::string *out,
+                       const ::llvm::InlineAsm &asm_value) const;
+  void AppendOwnerVariant(std::string *out, const ::llvm::Function *fn) const;
 
-  std::uint32_t BlockIndexOf(const ::llvm::Instruction* inst) const;
-  std::uint32_t BlockIndexOf(const ::llvm::BasicBlock* block) const;
-  std::uint32_t InstIndexOf(const ::llvm::Instruction* inst) const;
+  std::uint32_t BlockIndexOf(const ::llvm::Instruction *inst) const;
+  std::uint32_t BlockIndexOf(const ::llvm::BasicBlock *block) const;
+  std::uint32_t InstIndexOf(const ::llvm::Instruction *inst) const;
 
   OwnerMap owner_variants_;
   BlockMap block_indices_;
   InstMap inst_indices_;
 };
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm
 
-#endif  // VERITAS_ANALYSIS_LLVM_STABLEVALUEMAPPER_H_
+#endif // VERITAS_ANALYSIS_LLVM_STABLEVALUEMAPPER_H_

@@ -36,7 +36,7 @@ namespace {
 
 // In-memory ObjectStore implementation for testing.
 class InMemoryObjectStore : public ObjectStore {
- public:
+public:
   veritas::Status PutIfAbsent(std::string_view key,
                               std::span<const std::byte> bytes) override {
     std::string key_str(key);
@@ -53,13 +53,12 @@ class InMemoryObjectStore : public ObjectStore {
     }
 
     // Insert new object
-    store_[key_str] =
-        std::vector<std::byte>(bytes.begin(), bytes.end());
+    store_[key_str] = std::vector<std::byte>(bytes.begin(), bytes.end());
     return veritas::Status::Ok();
   }
 
-  veritas::StatusOr<std::vector<std::byte>> Get(
-      std::string_view key) const override {
+  veritas::StatusOr<std::vector<std::byte>>
+  Get(std::string_view key) const override {
     auto it = store_.find(std::string(key));
     if (it == store_.end()) {
       return veritas::Status::NotFound("ObjectStore: key not found");
@@ -73,24 +72,26 @@ class InMemoryObjectStore : public ObjectStore {
 
   size_t ObjectCount() const { return store_.size(); }
 
- private:
+private:
   std::map<std::string, std::vector<std::byte>> store_;
 };
 
-// Custom merge operator that implements put-if-absent with content verification.
-// For content-addressed storage, identical keys MUST have identical content.
+// Custom merge operator that implements put-if-absent with content
+// verification. For content-addressed storage, identical keys MUST have
+// identical content.
 class PutIfAbsentMergeOperator : public rocksdb::MergeOperator {
- public:
-  bool FullMergeV2(const MergeOperationInput& merge_in,
-                   MergeOperationOutput* merge_out) const override {
-    // If key doesn't exist (no existing value), use the first operand as the value
+public:
+  bool FullMergeV2(const MergeOperationInput &merge_in,
+                   MergeOperationOutput *merge_out) const override {
+    // If key doesn't exist (no existing value), use the first operand as the
+    // value
     if (!merge_in.existing_value) {
       merge_out->new_value = merge_in.operand_list[0].ToString();
       return true;
     }
 
     // Key exists - verify all operands match the existing value
-    for (const auto& operand : merge_in.operand_list) {
+    for (const auto &operand : merge_in.operand_list) {
       if (operand != *merge_in.existing_value) {
         // Content mismatch - this is a CAS invariant violation
         // Return false to fail the merge, which will fail the Merge() call
@@ -103,29 +104,28 @@ class PutIfAbsentMergeOperator : public rocksdb::MergeOperator {
     return true;
   }
 
-  bool PartialMerge(const rocksdb::Slice& /*key*/,
-                    const rocksdb::Slice& left_operand,
-                    const rocksdb::Slice& right_operand,
-                    std::string* new_value,
-                    rocksdb::Logger* /*logger*/) const override {
+  bool PartialMerge(const rocksdb::Slice & /*key*/,
+                    const rocksdb::Slice &left_operand,
+                    const rocksdb::Slice &right_operand, std::string *new_value,
+                    rocksdb::Logger * /*logger*/) const override {
     // Partial merge: verify operands are identical
     if (left_operand != right_operand) {
-      return false;  // Content mismatch
+      return false; // Content mismatch
     }
     *new_value = left_operand.ToString();
     return true;
   }
 
-  const char* Name() const override { return "PutIfAbsentMergeOperator"; }
+  const char *Name() const override { return "PutIfAbsentMergeOperator"; }
 };
 
-}  // namespace
+} // namespace
 
 // RocksDB-backed ObjectStore implementation.
 class ObjectStoreRocksDb : public ObjectStore {
- public:
-  static veritas::StatusOr<std::unique_ptr<ObjectStore>> Open(
-      const std::string& db_path) {
+public:
+  static veritas::StatusOr<std::unique_ptr<ObjectStore>>
+  Open(const std::string &db_path) {
     rocksdb::Options options;
     options.create_if_missing = true;
     options.merge_operator = std::make_shared<PutIfAbsentMergeOperator>();
@@ -137,8 +137,7 @@ class ObjectStoreRocksDb : public ObjectStore {
                                        status.ToString());
     }
 
-    return std::unique_ptr<ObjectStore>(
-        new ObjectStoreRocksDb(std::move(db)));
+    return std::unique_ptr<ObjectStore>(new ObjectStoreRocksDb(std::move(db)));
   }
 
   ~ObjectStoreRocksDb() override = default;
@@ -146,13 +145,14 @@ class ObjectStoreRocksDb : public ObjectStore {
   veritas::Status PutIfAbsent(std::string_view key,
                               std::span<const std::byte> bytes) override {
     std::string key_str(key);
-    std::string value_to_write(reinterpret_cast<const char*>(bytes.data()),
+    std::string value_to_write(reinterpret_cast<const char *>(bytes.data()),
                                bytes.size());
 
     // Use Merge with custom operator to atomically enforce put-if-absent with
-    // content verification. RocksDB guarantees atomicity of the merge operation.
-    rocksdb::Status status = db_->Merge(rocksdb::WriteOptions(), key_str,
-                                        value_to_write);
+    // content verification. RocksDB guarantees atomicity of the merge
+    // operation.
+    rocksdb::Status status =
+        db_->Merge(rocksdb::WriteOptions(), key_str, value_to_write);
     if (!status.ok()) {
       return veritas::Status::Internal("RocksDB Merge failed: " +
                                        status.ToString());
@@ -161,11 +161,11 @@ class ObjectStoreRocksDb : public ObjectStore {
     return veritas::Status::Ok();
   }
 
-  veritas::StatusOr<std::vector<std::byte>> Get(
-      std::string_view key) const override {
+  veritas::StatusOr<std::vector<std::byte>>
+  Get(std::string_view key) const override {
     std::string value;
-    rocksdb::Status status = db_->Get(rocksdb::ReadOptions(),
-                                      std::string(key), &value);
+    rocksdb::Status status =
+        db_->Get(rocksdb::ReadOptions(), std::string(key), &value);
 
     if (status.IsNotFound()) {
       return veritas::Status::NotFound("ObjectStore: key not found");
@@ -183,12 +183,12 @@ class ObjectStoreRocksDb : public ObjectStore {
 
   bool Exists(std::string_view key) const override {
     std::string value;
-    rocksdb::Status status = db_->Get(rocksdb::ReadOptions(),
-                                      std::string(key), &value);
+    rocksdb::Status status =
+        db_->Get(rocksdb::ReadOptions(), std::string(key), &value);
     return status.ok();
   }
 
- private:
+private:
   explicit ObjectStoreRocksDb(std::unique_ptr<rocksdb::DB> db)
       : db_(std::move(db)) {}
 
@@ -201,9 +201,9 @@ std::unique_ptr<ObjectStore> CreateInMemoryObjectStore() {
 }
 
 // Factory function for creating RocksDB stores.
-veritas::StatusOr<std::unique_ptr<ObjectStore>> CreateObjectStore(
-    const std::string& db_path) {
+veritas::StatusOr<std::unique_ptr<ObjectStore>>
+CreateObjectStore(const std::string &db_path) {
   return ObjectStoreRocksDb::Open(db_path);
 }
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb

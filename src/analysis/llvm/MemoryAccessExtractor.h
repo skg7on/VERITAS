@@ -22,14 +22,14 @@ namespace llvm {
 class Function;
 class Instruction;
 class Value;
-}  // namespace llvm
+} // namespace llvm
 
 namespace veritas::analysis::llvm {
 
 // MemoryAccessExtractor identifies memory read and write operations in LLVM
 // IR. It produces a conservative over-approximation of memory effects.
 class MemoryAccessExtractor {
- public:
+public:
   enum class AccessKind {
     kRead,
     kWrite,
@@ -38,8 +38,8 @@ class MemoryAccessExtractor {
 
   struct MemoryAccess {
     AccessKind kind;
-    std::string location;  // symbolic location (variable name or description)
-    const ::llvm::Instruction* instruction;
+    std::string location; // symbolic location (variable name or description)
+    const ::llvm::Instruction *instruction;
   };
 
   MemoryAccessExtractor() = default;
@@ -47,13 +47,13 @@ class MemoryAccessExtractor {
 
   // Extracts all memory accesses from a function. Returns loads, stores, and
   // calls that may access memory.
-  std::vector<MemoryAccess> ExtractMemoryAccesses(
-      const ::llvm::Function* func) const;
+  std::vector<MemoryAccess>
+  ExtractMemoryAccesses(const ::llvm::Function *func) const;
 
- private:
-  std::string GetLocationName(const ::llvm::Value* ptr) const;
+private:
+  std::string GetLocationName(const ::llvm::Value *ptr) const;
 };
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm
 
-#endif  // VERITAS_ANALYSIS_LLVM_MEMORYACCESSEXTRACTOR_H_
+#endif // VERITAS_ANALYSIS_LLVM_MEMORYACCESSEXTRACTOR_H_

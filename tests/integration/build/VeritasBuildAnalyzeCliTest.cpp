@@ -65,16 +65,16 @@ std::string ShellQuote(std::string_view value) {
   return out;
 }
 
-CliResult RunVeritasBuild(const std::vector<std::string>& arguments) {
+CliResult RunVeritasBuild(const std::vector<std::string> &arguments) {
   std::string command = ShellQuote(VERITAS_BUILD_BINARY);
-  for (const auto& argument : arguments) {
+  for (const auto &argument : arguments) {
     command.push_back(' ');
     command.append(ShellQuote(argument));
   }
   command.append(" 2>&1");
 
   CliResult result;
-  FILE* pipe = ::popen(command.c_str(), "r");
+  FILE *pipe = ::popen(command.c_str(), "r");
   if (pipe == nullptr) {
     result.exit_code = -1;
     return result;
@@ -99,8 +99,7 @@ TEST(VeritasBuildAnalyzeCliTest, AcceptsProjectLevelSourceInput) {
   const auto result =
       RunVeritasBuild({"analyze", "--project", project.string()});
   EXPECT_EQ(result.exit_code, 0) << result.stdout_text;
-  EXPECT_NE(result.stdout_text.find("Translation Units: 1"),
-            std::string::npos)
+  EXPECT_NE(result.stdout_text.find("Translation Units: 1"), std::string::npos)
       << result.stdout_text;
   EXPECT_NE(result.stdout_text.find("Repository: repo:sha256:"),
             std::string::npos)
@@ -111,15 +110,13 @@ TEST(VeritasBuildAnalyzeCliTest, AcceptsProjectLevelSourceInput) {
   // directory of its own. That is the requirement, and nothing pinned it: the
   // assertion above covers the manifest only, so an artifact written elsewhere
   // would have gone unnoticed.
-  EXPECT_TRUE(
-      fs::is_regular_file(project / ".veritas" / "run-metrics.json"));
+  EXPECT_TRUE(fs::is_regular_file(project / ".veritas" / "run-metrics.json"));
 }
 
 TEST(VeritasBuildAnalyzeCliTest, HonorsExplicitOutputDirectory) {
   const auto project = testing::FixtureProject("smoke");
   const auto output = fs::temp_directory_path() /
-                      ("veritas-cli-explicit-" +
-                       std::to_string(std::rand()));
+                      ("veritas-cli-explicit-" + std::to_string(std::rand()));
   const auto result = RunVeritasBuild(
       {"analyze", "--project", project.string(), "--output", output.string()});
   EXPECT_EQ(result.exit_code, 0) << result.stdout_text;
@@ -132,8 +129,7 @@ TEST(VeritasBuildAnalyzeCliTest, HonorsExplicitOutputDirectory) {
 TEST(VeritasBuildAnalyzeCliTest, RejectsMissingProjectFlag) {
   const auto result = RunVeritasBuild({"analyze"});
   EXPECT_NE(result.exit_code, 0);
-  EXPECT_NE(result.stdout_text.find("--project is required"),
-            std::string::npos)
+  EXPECT_NE(result.stdout_text.find("--project is required"), std::string::npos)
       << result.stdout_text;
 }
 
@@ -152,11 +148,10 @@ TEST(VeritasBuildAnalyzeCliTest, RejectsArtifactInputFlags) {
 
 TEST(VeritasBuildAnalyzeCliTest, RejectsUnknownFlag) {
   const auto project = testing::FixtureProject("smoke");
-  const auto result = RunVeritasBuild(
-      {"analyze", "--project", project.string(), "--unknown"});
+  const auto result =
+      RunVeritasBuild({"analyze", "--project", project.string(), "--unknown"});
   EXPECT_NE(result.exit_code, 0);
-  EXPECT_NE(result.stdout_text.find("unknown argument"),
-            std::string::npos)
+  EXPECT_NE(result.stdout_text.find("unknown argument"), std::string::npos)
       << result.stdout_text;
 }
 
@@ -175,10 +170,10 @@ TEST(VeritasBuildAnalyzeCliTest, WritesDeterministicDiagnosticManifest) {
 
   ASSERT_EQ(0, RunVeritasBuild({"analyze", "--project", project_a.string(),
                                 "--output", output_a.string()})
-                  .exit_code);
+                   .exit_code);
   ASSERT_EQ(0, RunVeritasBuild({"analyze", "--project", project_b.string(),
                                 "--output", output_b.string()})
-                  .exit_code);
+                   .exit_code);
 
   std::ifstream a(output_a / "manifest.json");
   std::ifstream b(output_b / "manifest.json");
@@ -193,8 +188,8 @@ TEST(VeritasBuildAnalyzeCliTest, RejectsFlagValueThatIsAnotherFlag) {
   // If --project consumed the next token unconditionally, `--compile-db`
   // would be swallowed as the project path and the rejection contract for
   // artifact-input flags would be bypassed.
-  const auto result = RunVeritasBuild(
-      {"analyze", "--project", "--compile-db", "/tmp/db.json"});
+  const auto result =
+      RunVeritasBuild({"analyze", "--project", "--compile-db", "/tmp/db.json"});
   EXPECT_NE(result.exit_code, 0);
   EXPECT_TRUE(result.stdout_text.find("does not accept --compile-db") !=
                   std::string::npos ||
@@ -206,8 +201,8 @@ TEST(VeritasBuildAnalyzeCliTest, WritesRunMetricsByDefault) {
   const auto project = testing::FixtureProject("multiple_tus");
   const auto output = fs::temp_directory_path() /
                       ("veritas-metrics-cli-" + std::to_string(std::rand()));
-  const auto result = RunVeritasBuild({"analyze", "--project", project.string(),
-                                       "--output", output.string()});
+  const auto result = RunVeritasBuild(
+      {"analyze", "--project", project.string(), "--output", output.string()});
   ASSERT_EQ(result.exit_code, 0) << result.stdout_text;
   EXPECT_TRUE(fs::is_regular_file(output / "run-metrics.json"));
   EXPECT_NE(result.stdout_text.find("Analysis phase report"), std::string::npos)
@@ -230,12 +225,12 @@ TEST(VeritasBuildAnalyzeCliTest, WritesRunMetricsByDefault) {
   // the folded count and wall time distinguish the real promoted root.
   auto parsed = llvm::json::parse(json);
   ASSERT_TRUE(static_cast<bool>(parsed)) << json.substr(0, 500);
-  const llvm::json::Object* root = parsed->getAsObject();
+  const llvm::json::Object *root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
-  const llvm::json::Array* phases = root->getArray("phases");
+  const llvm::json::Array *phases = root->getArray("phases");
   ASSERT_NE(phases, nullptr);
   ASSERT_FALSE(phases->empty());
-  const llvm::json::Object* run = phases->front().getAsObject();
+  const llvm::json::Object *run = phases->front().getAsObject();
   ASSERT_NE(run, nullptr);
   const std::optional<llvm::StringRef> run_name = run->getString("name");
   ASSERT_TRUE(run_name.has_value()) << json.substr(0, 500);
@@ -250,9 +245,9 @@ TEST(VeritasBuildAnalyzeCliTest, WritesRunMetricsByDefault) {
   // The identity block is what separates two differently-configured runs, so
   // an empty configuration coordinate would make the artifact record no
   // configuration at all. Each of these is a value the run itself produced.
-  const llvm::json::Object* identity = root->getObject("identity");
+  const llvm::json::Object *identity = root->getObject("identity");
   ASSERT_NE(identity, nullptr);
-  for (const char* key : {"run_id", "batch_id", "svf_config_hash",
+  for (const char *key : {"run_id", "batch_id", "svf_config_hash",
                           "wpa_config_hash", "engine_toolchain_identity"}) {
     const std::optional<llvm::StringRef> value = identity->getString(key);
     ASSERT_TRUE(value.has_value()) << key << " absent: " << json.substr(0, 500);
@@ -274,11 +269,11 @@ TEST(VeritasBuildAnalyzeCliTest, WritesRunMetricsByDefault) {
   // artifacts read "unchanged" for a count neither run ever measured. Asserted
   // on the parsed object, since a substring search for a name could be
   // satisfied by the diagnostic text elsewhere.
-  const llvm::json::Object* inventory = root->getObject("inventory");
+  const llvm::json::Object *inventory = root->getObject("inventory");
   ASSERT_NE(inventory, nullptr) << json.substr(0, 500);
-  const llvm::json::Object* inventory_output = inventory->getObject("output");
+  const llvm::json::Object *inventory_output = inventory->getObject("output");
   ASSERT_NE(inventory_output, nullptr) << json.substr(0, 500);
-  const llvm::json::Object* incrementality =
+  const llvm::json::Object *incrementality =
       inventory->getObject("incrementality");
   ASSERT_NE(incrementality, nullptr) << json.substr(0, 500);
   EXPECT_EQ(inventory_output->getInteger("svfg_edges"), std::nullopt)
@@ -300,12 +295,11 @@ TEST(VeritasBuildAnalyzeCliTest, MetricsFalseWritesNoArtifactAndNoReport) {
   // from an unseeded std::rand(), whose first value is the same in every
   // process. The two would then analyze into one store — a hazard this
   // repository has recorded, and one that a serial run never shows.
-  const auto output = fs::temp_directory_path() /
-                      ("veritas-metrics-disabled-" +
-                       std::to_string(std::rand()));
-  const auto result = RunVeritasBuild({"analyze", "--project", project.string(),
-                                       "--output", output.string(),
-                                       "--metrics", "false"});
+  const auto output = fs::temp_directory_path() / ("veritas-metrics-disabled-" +
+                                                   std::to_string(std::rand()));
+  const auto result =
+      RunVeritasBuild({"analyze", "--project", project.string(), "--output",
+                       output.string(), "--metrics", "false"});
   ASSERT_EQ(result.exit_code, 0) << result.stdout_text;
   EXPECT_FALSE(fs::exists(output / "run-metrics.json"));
   EXPECT_EQ(result.stdout_text.find("Analysis phase report"), std::string::npos)
@@ -313,8 +307,8 @@ TEST(VeritasBuildAnalyzeCliTest, MetricsFalseWritesNoArtifactAndNoReport) {
 }
 
 TEST(VeritasBuildAnalyzeCliTest, RejectsANonBooleanMetricsValue) {
-  const auto result = RunVeritasBuild(
-      {"analyze", "--project", "/tmp", "--metrics", "maybe"});
+  const auto result =
+      RunVeritasBuild({"analyze", "--project", "/tmp", "--metrics", "maybe"});
   EXPECT_NE(result.exit_code, 0);
   EXPECT_NE(result.stdout_text.find("--metrics must be true or false"),
             std::string::npos);
@@ -358,8 +352,8 @@ TEST(VeritasBuildAnalyzeCliTest, EmitsNoAbsolutePathInTheArtifact) {
   const auto project = testing::FixtureProject("multiple_tus");
   const auto output = fs::temp_directory_path() /
                       ("veritas-metrics-paths-" + std::to_string(std::rand()));
-  const auto result = RunVeritasBuild({"analyze", "--project", project.string(),
-                                       "--output", output.string()});
+  const auto result = RunVeritasBuild(
+      {"analyze", "--project", project.string(), "--output", output.string()});
   ASSERT_EQ(result.exit_code, 0) << result.stdout_text;
 
   std::ifstream artifact(output / "run-metrics.json");
@@ -384,24 +378,28 @@ TEST(VeritasBuildAnalyzeCliTest, EmitsNoAbsolutePathInTheArtifact) {
 // A missing file, unparseable JSON, or absent block all yield a null Value. The
 // caller must assert the block is present, or two missing blocks would compare
 // equal and the equivalence would pass for the wrong reason.
-llvm::json::Value ReadReportBlock(const fs::path& project,
+llvm::json::Value ReadReportBlock(const fs::path &project,
                                   llvm::StringRef block) {
   std::ifstream artifact(project / ".veritas" / "run-metrics.json");
-  if (!artifact.good()) return llvm::json::Value(nullptr);
+  if (!artifact.good())
+    return llvm::json::Value(nullptr);
   std::stringstream buffer;
   buffer << artifact.rdbuf();
   auto parsed = llvm::json::parse(buffer.str());
-  if (!parsed) return llvm::json::Value(nullptr);
-  const llvm::json::Object* root = parsed->getAsObject();
-  if (root == nullptr) return llvm::json::Value(nullptr);
-  const llvm::json::Value* found = root->get(block);
-  if (found == nullptr) return llvm::json::Value(nullptr);
+  if (!parsed)
+    return llvm::json::Value(nullptr);
+  const llvm::json::Object *root = parsed->getAsObject();
+  if (root == nullptr)
+    return llvm::json::Value(nullptr);
+  const llvm::json::Value *found = root->get(block);
+  if (found == nullptr)
+    return llvm::json::Value(nullptr);
   return *found;
 }
 
 // Render a block for a failure message. llvm::json::Value streams to a
 // raw_ostream, not to a std::ostream, so gtest cannot print it on its own.
-std::string RenderForMessage(const llvm::json::Value& value) {
+std::string RenderForMessage(const llvm::json::Value &value) {
   std::string text;
   llvm::raw_string_ostream os(text);
   value.print(os);
@@ -415,11 +413,11 @@ std::string RenderForMessage(const llvm::json::Value& value) {
 TEST(VeritasBuildAnalyzeCliTest, ScaleProfileDefaultsToBaseline) {
   const auto implicit_project = testing::FixtureProject("store_load");
   const auto explicit_project = testing::FixtureProject("store_load");
-  const auto implicit = RunVeritasBuild(
-      {"analyze", "--project", implicit_project.string()});
-  const auto explicit_run = RunVeritasBuild(
-      {"analyze", "--project", explicit_project.string(), "--scale-profile",
-       "baseline"});
+  const auto implicit =
+      RunVeritasBuild({"analyze", "--project", implicit_project.string()});
+  const auto explicit_run =
+      RunVeritasBuild({"analyze", "--project", explicit_project.string(),
+                       "--scale-profile", "baseline"});
   ASSERT_EQ(implicit.exit_code, 0) << implicit.stderr_text;
   ASSERT_EQ(explicit_run.exit_code, 0) << explicit_run.stderr_text;
 
@@ -479,5 +477,5 @@ TEST(VeritasBuildAnalyzeCliTest, UnknownScaleProfileIsAUsageError) {
       << result.stderr_text;
 }
 
-}  // namespace
-}  // namespace veritas::build
+} // namespace
+} // namespace veritas::build

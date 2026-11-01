@@ -250,8 +250,8 @@ TEST(SvfFactMapperTest, MergeDoesNotLeakWholeProgramFactsAcrossFunctions) {
       .provenance_ref = "svf:test",
   });
 
-  auto merged = MergeSvfFacts({foo_draft, bar_draft}, facts,
-                              program_ir->origin_map());
+  auto merged =
+      MergeSvfFacts({foo_draft, bar_draft}, facts, program_ir->origin_map());
   ASSERT_EQ(merged.size(), 2u);
 
   // Whole-program facts (value flows, aliases, memory effects) must not leak
@@ -303,8 +303,8 @@ TEST(SvfFactMapperTest, LocalAnalysisSvfFactsMergeIntoHashedOwnerSummary) {
                                             model_dir / "models.v1.manifest");
   ASSERT_TRUE(bundle.ok()) << bundle.status().message();
 
-  auto merged = MergeSvfFactsV2(std::move(local->summary_drafts),
-                                mapped.facts, *bundle);
+  auto merged =
+      MergeSvfFactsV2(std::move(local->summary_drafts), mapped.facts, *bundle);
   ASSERT_TRUE(merged.ok()) << merged.status().message();
   ASSERT_EQ(merged->size(), 1u);
   // Whole-program SVF value flows carry no recoverable per-function owner, so
@@ -325,8 +325,8 @@ TEST(SvfFactMapperTest, LocalAnalysisSvfFactsMergeIntoHashedOwnerSummary) {
 // pass never reported is still kept: this suppresses redundancy, not
 // discovery.
 TEST(SvfMergeTest, DropsSvfEffectAlreadyStatedMoreStronglyByLocalPass) {
-  const auto function_id = core::MakeStableId(
-      core::IdKind::kFunctionVariant, std::as_bytes(std::span("f", 1)));
+  const auto function_id = core::MakeStableId(core::IdKind::kFunctionVariant,
+                                              std::as_bytes(std::span("f", 1)));
   const auto shared = core::MakeStableId(core::IdKind::kMemoryRef,
                                          std::as_bytes(std::span("shared", 6)));
   const auto svf_only = core::MakeStableId(
@@ -338,13 +338,14 @@ TEST(SvfMergeTest, DropsSvfEffectAlreadyStatedMoreStronglyByLocalPass) {
 
   summary::v2::FunctionSummary draft;
   draft.mutable_header()->set_schema_version("summary.v2");
-  draft.mutable_identity()->set_function_variant_id(core::ToString(function_id));
-  auto* local = draft.add_memory_effects();
+  draft.mutable_identity()->set_function_variant_id(
+      core::ToString(function_id));
+  auto *local = draft.add_memory_effects();
   local->set_kind(summary::v1::EFFECT_KIND_WRITE);
   local->set_epistemic(summary::v1::EPISTEMIC_STATE_MUST);
   local->mutable_location()->set_memory_location_id(core::ToString(shared));
 
-  auto MakeEffect = [&](const core::StableId& location_id) {
+  auto MakeEffect = [&](const core::StableId &location_id) {
     semantic::NormalizedMemoryEffect effect;
     effect.operation = operation;
     effect.location.id = location_id;
@@ -376,7 +377,7 @@ TEST(SvfMergeTest, DropsSvfEffectAlreadyStatedMoreStronglyByLocalPass) {
 
   int shared_count = 0;
   int svf_only_count = 0;
-  for (const auto& effect : (*merged)[0].memory_effects()) {
+  for (const auto &effect : (*merged)[0].memory_effects()) {
     if (effect.location().memory_location_id() == core::ToString(shared))
       ++shared_count;
     if (effect.location().memory_location_id() == core::ToString(svf_only))
@@ -388,5 +389,5 @@ TEST(SvfMergeTest, DropsSvfEffectAlreadyStatedMoreStronglyByLocalPass) {
   EXPECT_EQ(svf_only_count, 1) << "SVF-only discovery must be preserved";
 }
 
-}  // namespace
+} // namespace
 } // namespace veritas::analysis::svf

@@ -29,7 +29,7 @@ EpistemicState Join(std::initializer_list<EpistemicState> inputs,
   return JoinEpistemic(std::vector<EpistemicState>(inputs), soundness);
 }
 
-}  // namespace
+} // namespace
 
 TEST(EpistemicTest, EmptyInputsAreUnknown) {
   EXPECT_EQ(Join({}), EpistemicState::kUnknown);

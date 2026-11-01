@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "veritas/review/StructuralIndex.h"
+
 namespace veritas::review {
 // One operator-registered harness. The harness source is trusted code that
 // calls the captured project entry point; the payload is the concrete input
@@ -26,12 +27,14 @@ namespace veritas::review {
 struct ReplayHarness {
   std::string source, payload;
 };
+
 struct ReplayLimits {
   uint64_t wall_ms = 60000;
   uint64_t output_bytes = 256 * 1024;
   uint64_t rss_bytes = 1024ull * 1024 * 1024;
   uint64_t max_processes = 16;
 };
+
 // Trusted replay policy, decoded from the operator backend configuration. An
 // empty isolation kind means replay authority is unavailable (UNSUPPORTED).
 struct ReplayConfig {
@@ -48,6 +51,7 @@ struct ReplayConfig {
   std::map<std::string, ReplayHarness> harnesses;
   ReplayLimits limits;
 };
+
 struct ReplayResult {
   // A closed VerificationResult document (never model-authored).
   Json verification;
@@ -59,9 +63,11 @@ struct ReplayResult {
   bool timed_out = false;
   bool compiled = false;
 };
+
 // Strict decode of the operator `verification` object. Unknown keys, unsafe
 // paths, an empty compiler or nonpositive/capped limits are refused.
 StatusOr<ReplayConfig> DecodeReplayConfig(const Json &);
+
 // Admits the captured compiler command for replay. Captured plugin-load,
 // response-file, explicit-target and unknown semantic flags are refused before
 // any process runs; the analysis target is not assumed to be the replay host.
@@ -70,16 +76,19 @@ struct AdmittedReplayCommand {
   std::string language;
   std::vector<std::string> flags;
 };
+
 StatusOr<AdmittedReplayCommand>
 AdmitReplayCompileCommand(const ReviewSnapshot &,
                           const CapturedCompileCommand &,
                           std::string_view input_root);
+
 // One sanitizer stack-frame module location. Darwin renders
 // `(module:arch+0xoff)`; ELF renders the arch-less `(module+0xoff)`.
 struct SanitizerFrameLocation {
   std::string module, architecture;
   uint64_t offset = 0;
 };
+
 // Exposed so tests cover both platform renderings; the producer uses the same
 // parser for its decisive site check.
 std::vector<SanitizerFrameLocation>

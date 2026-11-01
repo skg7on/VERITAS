@@ -42,7 +42,7 @@ CaptureCompilerProjection(const pipeline::ProgramIr &ir);
 // summaries; no native pointer or third-party ID may escape in a node, edge,
 // or diagnostic.
 struct CpgProjectionInput {
-  const pipeline::ProgramIr& program_ir;
+  const pipeline::ProgramIr &program_ir;
   std::span<const summary::v2::FunctionSummary> completed_summaries;
   core::StableId revision_id;
   core::StableId build_variant_id;
@@ -51,8 +51,8 @@ struct CpgProjectionInput {
 
 // BuildThinCpg projects the live ProgramIr and completed summaries into a
 // validated ThinCpg. It consumes borrowed objects only during the call.
-StatusOr<::veritas::cpg::ThinCpg> BuildThinCpg(const CpgProjectionInput& input);
+StatusOr<::veritas::cpg::ThinCpg> BuildThinCpg(const CpgProjectionInput &input);
 
-}  // namespace veritas::analysis::cpg
+} // namespace veritas::analysis::cpg
 
-#endif  // VERITAS_ANALYSIS_CPG_CPGPROJECTIONSTAGE_H_
+#endif // VERITAS_ANALYSIS_CPG_CPGPROJECTIONSTAGE_H_

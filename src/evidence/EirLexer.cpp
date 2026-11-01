@@ -53,7 +53,7 @@ std::size_t Utf8SequenceLengthAt(std::string_view source, std::size_t pos) {
       return 0;
     }
     return IsContinuationByte(static_cast<unsigned char>(source[pos + 1])) ? 2
-                                                                          : 0;
+                                                                           : 0;
   }
   if (lead >= 0xE0 && lead <= 0xEF) {
     if (pos + 2 >= source.size()) {
@@ -65,10 +65,10 @@ std::size_t Utf8SequenceLengthAt(std::string_view source, std::size_t pos) {
       return 0;
     }
     if (lead == 0xE0 && second < 0xA0) {
-      return 0;  // overlong: U+0800 and below
+      return 0; // overlong: U+0800 and below
     }
     if (lead == 0xED && second >= 0xA0) {
-      return 0;  // surrogate half: U+D800..U+DFFF
+      return 0; // surrogate half: U+D800..U+DFFF
     }
     return 3;
   }
@@ -84,10 +84,10 @@ std::size_t Utf8SequenceLengthAt(std::string_view source, std::size_t pos) {
       return 0;
     }
     if (lead == 0xF0 && second < 0x90) {
-      return 0;  // overlong: U+10000 and below
+      return 0; // overlong: U+10000 and below
     }
     if (lead == 0xF4 && second > 0x8F) {
-      return 0;  // above U+10FFFF
+      return 0; // above U+10FFFF
     }
     return 4;
   }
@@ -96,9 +96,9 @@ std::size_t Utf8SequenceLengthAt(std::string_view source, std::size_t pos) {
   return 0;
 }
 
-}  // namespace
+} // namespace
 
-EirLexer::EirLexer(std::string_view source, EirParseError* error)
+EirLexer::EirLexer(std::string_view source, EirParseError *error)
     : source_(source), error_(error) {}
 
 char EirLexer::Peek(std::size_t lookahead) const {
@@ -129,7 +129,7 @@ Status EirLexer::Fail(std::size_t offset, std::size_t line, std::size_t column,
   return Status::InvalidArgument(std::move(message));
 }
 
-Status EirLexer::Emit(TokenKind kind, std::vector<Token>* out) {
+Status EirLexer::Emit(TokenKind kind, std::vector<Token> *out) {
   const std::size_t start = cursor_;
   const std::size_t start_line = line_;
   const std::size_t start_column = Column();
@@ -138,7 +138,7 @@ Status EirLexer::Emit(TokenKind kind, std::vector<Token>* out) {
   return Status::Ok();
 }
 
-Status EirLexer::EmitPair(TokenKind kind, std::vector<Token>* out) {
+Status EirLexer::EmitPair(TokenKind kind, std::vector<Token> *out) {
   const std::size_t start = cursor_;
   const std::size_t start_line = line_;
   const std::size_t start_column = Column();
@@ -212,7 +212,7 @@ Status EirLexer::SkipWhitespaceAndComments() {
   }
 }
 
-Status EirLexer::LexIdentifier(std::vector<Token>* out) {
+Status EirLexer::LexIdentifier(std::vector<Token> *out) {
   const std::size_t start = cursor_;
   const std::size_t start_line = line_;
   const std::size_t start_column = Column();
@@ -224,8 +224,7 @@ Status EirLexer::LexIdentifier(std::vector<Token>* out) {
   // `a.b` followed by a stray dot, not an identifier with a trailing dot.
   while (Peek() == '.' && IsLetter(Peek(1))) {
     Advance();
-    while (!AtEnd() &&
-           (IsLetter(Peek()) || IsDigit(Peek()) || Peek() == '_')) {
+    while (!AtEnd() && (IsLetter(Peek()) || IsDigit(Peek()) || Peek() == '_')) {
       Advance();
     }
   }
@@ -236,11 +235,11 @@ Status EirLexer::LexIdentifier(std::vector<Token>* out) {
   return Status::Ok();
 }
 
-Status EirLexer::LexString(std::vector<Token>* out) {
+Status EirLexer::LexString(std::vector<Token> *out) {
   const std::size_t start = cursor_;
   const std::size_t start_line = line_;
   const std::size_t start_column = Column();
-  Advance();  // the opening quote
+  Advance(); // the opening quote
 
   std::string decoded;
   for (;;) {
@@ -257,34 +256,34 @@ Status EirLexer::LexString(std::vector<Token>* out) {
       const std::size_t escape_offset = cursor_;
       const std::size_t escape_line = line_;
       const std::size_t escape_column = Column();
-      Advance();  // the backslash
+      Advance(); // the backslash
       if (AtEnd()) {
         return Fail(start, start_line, start_column,
                     "unterminated string literal");
       }
       const char escaped = Advance();
       switch (escaped) {
-        case '"':
-          decoded.push_back('"');
-          break;
-        case '\\':
-          decoded.push_back('\\');
-          break;
-        case 'n':
-          decoded.push_back('\n');
-          break;
-        case 'r':
-          decoded.push_back('\r');
-          break;
-        case 't':
-          decoded.push_back('\t');
-          break;
-        default:
-          // The escape is rejected at its backslash, which is where a reader
-          // has to start deleting.
-          return Fail(escape_offset, escape_line, escape_column,
-                      std::string("invalid escape sequence \"\\") + escaped +
-                          "\" in string literal");
+      case '"':
+        decoded.push_back('"');
+        break;
+      case '\\':
+        decoded.push_back('\\');
+        break;
+      case 'n':
+        decoded.push_back('\n');
+        break;
+      case 'r':
+        decoded.push_back('\r');
+        break;
+      case 't':
+        decoded.push_back('\t');
+        break;
+      default:
+        // The escape is rejected at its backslash, which is where a reader
+        // has to start deleting.
+        return Fail(escape_offset, escape_line, escape_column,
+                    std::string("invalid escape sequence \"\\") + escaped +
+                        "\" in string literal");
       }
       continue;
     }
@@ -303,7 +302,7 @@ Status EirLexer::LexString(std::vector<Token>* out) {
   return Status::Ok();
 }
 
-Status EirLexer::LexInteger(std::vector<Token>* out) {
+Status EirLexer::LexInteger(std::vector<Token> *out) {
   const std::size_t start = cursor_;
   const std::size_t start_line = line_;
   const std::size_t start_column = Column();
@@ -315,8 +314,8 @@ Status EirLexer::LexInteger(std::vector<Token>* out) {
   }
 
   const std::string_view spelling = source_.substr(start, cursor_ - start);
-  const char* const first = spelling.data();
-  const char* const last = first + spelling.size();
+  const char *const first = spelling.data();
+  const char *const last = first + spelling.size();
   std::int64_t value = 0;
   const std::from_chars_result result = std::from_chars(first, last, value);
   if (result.ec != std::errc{} || result.ptr != last) {
@@ -330,7 +329,7 @@ Status EirLexer::LexInteger(std::vector<Token>* out) {
   return Status::Ok();
 }
 
-Status EirLexer::LexToken(std::vector<Token>* out) {
+Status EirLexer::LexToken(std::vector<Token> *out) {
   const std::size_t start = cursor_;
   const std::size_t start_line = line_;
   const std::size_t start_column = Column();
@@ -353,61 +352,61 @@ Status EirLexer::LexToken(std::vector<Token>* out) {
   }
 
   switch (c) {
-    case '"':
-      return LexString(out);
-    case '@':
-      return Emit(TokenKind::kAt, out);
-    case '$':
-      return Emit(TokenKind::kDollar, out);
-    case '{':
-      return Emit(TokenKind::kLeftBrace, out);
-    case '}':
-      return Emit(TokenKind::kRightBrace, out);
-    case '(':
-      return Emit(TokenKind::kLeftParen, out);
-    case ')':
-      return Emit(TokenKind::kRightParen, out);
-    case '[':
-      return Emit(TokenKind::kLeftBracket, out);
-    case ']':
-      return Emit(TokenKind::kRightBracket, out);
-    case ':':
-      // `AssignmentOp ::= "=" | ":="` is referenced by no production, so `:=`
-      // is left as the two tokens it is spelled with.
-      return Emit(TokenKind::kColon, out);
-    case ';':
-      return Emit(TokenKind::kSemicolon, out);
-    case ',':
-      return Emit(TokenKind::kComma, out);
-    case '=':
-      return Peek(1) == '=' ? EmitPair(TokenKind::kEqualEqual, out)
-                            : Emit(TokenKind::kEqual, out);
-    case '!':
-      if (Peek(1) == '=') {
-        return EmitPair(TokenKind::kNotEqual, out);
-      }
-      return Fail(start, start_line, start_column,
-                  "unexpected character '!': expected \"!=\"");
-    case '<':
-      return Peek(1) == '=' ? EmitPair(TokenKind::kLessEqual, out)
-                            : Emit(TokenKind::kLess, out);
-    case '>':
-      return Peek(1) == '=' ? EmitPair(TokenKind::kGreaterEqual, out)
-                            : Emit(TokenKind::kGreater, out);
-    case '-':
-      // One character of lookahead separates the only two things '-'
-      // introduces: `PathOp ::= "->"` and a signed `IntegerLiteral`.
-      if (Peek(1) == '>') {
-        return EmitPair(TokenKind::kArrow, out);
-      }
-      if (IsDigit(Peek(1))) {
-        return LexInteger(out);
-      }
-      return Fail(start, start_line, start_column,
-                  "unexpected character '-': expected \"->\" or a signed "
-                  "integer literal");
-    default:
-      break;
+  case '"':
+    return LexString(out);
+  case '@':
+    return Emit(TokenKind::kAt, out);
+  case '$':
+    return Emit(TokenKind::kDollar, out);
+  case '{':
+    return Emit(TokenKind::kLeftBrace, out);
+  case '}':
+    return Emit(TokenKind::kRightBrace, out);
+  case '(':
+    return Emit(TokenKind::kLeftParen, out);
+  case ')':
+    return Emit(TokenKind::kRightParen, out);
+  case '[':
+    return Emit(TokenKind::kLeftBracket, out);
+  case ']':
+    return Emit(TokenKind::kRightBracket, out);
+  case ':':
+    // `AssignmentOp ::= "=" | ":="` is referenced by no production, so `:=`
+    // is left as the two tokens it is spelled with.
+    return Emit(TokenKind::kColon, out);
+  case ';':
+    return Emit(TokenKind::kSemicolon, out);
+  case ',':
+    return Emit(TokenKind::kComma, out);
+  case '=':
+    return Peek(1) == '=' ? EmitPair(TokenKind::kEqualEqual, out)
+                          : Emit(TokenKind::kEqual, out);
+  case '!':
+    if (Peek(1) == '=') {
+      return EmitPair(TokenKind::kNotEqual, out);
+    }
+    return Fail(start, start_line, start_column,
+                "unexpected character '!': expected \"!=\"");
+  case '<':
+    return Peek(1) == '=' ? EmitPair(TokenKind::kLessEqual, out)
+                          : Emit(TokenKind::kLess, out);
+  case '>':
+    return Peek(1) == '=' ? EmitPair(TokenKind::kGreaterEqual, out)
+                          : Emit(TokenKind::kGreater, out);
+  case '-':
+    // One character of lookahead separates the only two things '-'
+    // introduces: `PathOp ::= "->"` and a signed `IntegerLiteral`.
+    if (Peek(1) == '>') {
+      return EmitPair(TokenKind::kArrow, out);
+    }
+    if (IsDigit(Peek(1))) {
+      return LexInteger(out);
+    }
+    return Fail(start, start_line, start_column,
+                "unexpected character '-': expected \"->\" or a signed "
+                "integer literal");
+  default:
+    break;
   }
   return Fail(start, start_line, start_column,
               std::string("unexpected character '") + c + "'");
@@ -425,8 +424,8 @@ StatusOr<std::vector<Token>> EirLexer::Tokenize() {
       return skipped;
     }
     if (AtEnd()) {
-      tokens.push_back(Token{TokenKind::kEnd, std::string(), cursor_, line_,
-                             Column()});
+      tokens.push_back(
+          Token{TokenKind::kEnd, std::string(), cursor_, line_, Column()});
       return tokens;
     }
     const Status lexed = LexToken(&tokens);
@@ -436,4 +435,4 @@ StatusOr<std::vector<Token>> EirLexer::Tokenize() {
   }
 }
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence

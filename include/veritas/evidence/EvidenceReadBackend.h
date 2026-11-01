@@ -57,18 +57,19 @@ struct SnapshotDescriptor {
 // "evidence snapshot changed; retry"; the query service propagates it and
 // never retries a subquery against a newer run.
 class EvidenceReadSnapshot {
- public:
+public:
   virtual ~EvidenceReadSnapshot() = default;
 
-  virtual const SnapshotDescriptor& descriptor() const = 0;
+  virtual const SnapshotDescriptor &descriptor() const = 0;
 
   // The facts currently bound in the pinned run, in backend order. Callers
   // sort by canonical semantic ID before applying any budget.
-  virtual StatusOr<std::vector<facts::AnalysisFact>> GetCurrentFacts() const = 0;
+  virtual StatusOr<std::vector<facts::AnalysisFact>>
+  GetCurrentFacts() const = 0;
 
   // Bounded explanation of one fact within the pinned run.
-  virtual StatusOr<veritas::fact::v1::ProvenanceGraph> Explain(
-      core::StableId fact_id, const facts::ExplainBudget& budget) const = 0;
+  virtual StatusOr<veritas::fact::v1::ProvenanceGraph>
+  Explain(core::StableId fact_id, const facts::ExplainBudget &budget) const = 0;
 
   // Current function summaries from this snapshot. An exact summary ID from
   // a selected witness must still be current in the same revision/build.
@@ -84,13 +85,13 @@ class EvidenceReadSnapshot {
 // pins every read to that run; a backend that cannot retain the binding
 // reports the stable retryable failure described on EvidenceReadSnapshot.
 class EvidenceReadBackend {
- public:
+public:
   virtual ~EvidenceReadBackend() = default;
 
-  virtual StatusOr<std::unique_ptr<EvidenceReadSnapshot>> OpenSnapshot(
-      core::StableId analysis_run_id) const = 0;
+  virtual StatusOr<std::unique_ptr<EvidenceReadSnapshot>>
+  OpenSnapshot(core::StableId analysis_run_id) const = 0;
 };
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EVIDENCE_READ_BACKEND_H_
+#endif // VERITAS_EVIDENCE_EVIDENCE_READ_BACKEND_H_

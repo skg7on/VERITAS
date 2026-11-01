@@ -23,7 +23,7 @@
 
 namespace veritas::analysis::pipeline {
 class ProgramIr;
-}  // namespace veritas::analysis::pipeline
+} // namespace veritas::analysis::pipeline
 
 namespace veritas::analysis::llvm {
 
@@ -32,18 +32,18 @@ namespace veritas::analysis::llvm {
 // does not expand callees; interprocedural facts arrive with M5. Facts resolve
 // through the ProgramIr origin map and are never persisted with LLVM pointers.
 class LocalFactExtractor {
- public:
-  veritas::StatusOr<std::vector<summary::FunctionLocalFacts>> Extract(
-      pipeline::ProgramIr& program_ir) const;
+public:
+  veritas::StatusOr<std::vector<summary::FunctionLocalFacts>>
+  Extract(pipeline::ProgramIr &program_ir) const;
 
   // V2 refinement of Extract: produces FunctionLocalFactsV2 with typed
   // call/memory/value-flow/alias facts. Call sites, values, and memory
   // locations carry collision-free StableIds via StableValueMapper and
   // AbstractMemoryBuilder. The V1 Extract path is unchanged.
-  veritas::StatusOr<std::vector<summary::FunctionLocalFactsV2>> ExtractV2(
-      pipeline::ProgramIr& program_ir) const;
+  veritas::StatusOr<std::vector<summary::FunctionLocalFactsV2>>
+  ExtractV2(pipeline::ProgramIr &program_ir) const;
 };
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm
 
-#endif  // VERITAS_ANALYSIS_LLVM_LOCALFACTEXTRACTOR_H_
+#endif // VERITAS_ANALYSIS_LLVM_LOCALFACTEXTRACTOR_H_

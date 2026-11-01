@@ -69,9 +69,9 @@ namespace {
 // that label. Only the handle is a declaration; the label it wraps is not.
 constexpr std::string_view kEntityHandlePrefix = "E_";
 
-bool HasCode(const EvidenceValidationReport& report,
+bool HasCode(const EvidenceValidationReport &report,
              EvidenceValidationCode code) {
-  for (const EvidenceValidationIssue& issue : report.issues) {
+  for (const EvidenceValidationIssue &issue : report.issues) {
     if (issue.code == code) {
       return true;
     }
@@ -79,17 +79,17 @@ bool HasCode(const EvidenceValidationReport& report,
   return false;
 }
 
-std::string FirstIssue(const EvidenceValidationReport& report) {
+std::string FirstIssue(const EvidenceValidationReport &report) {
   if (report.issues.empty()) {
     return "<no issues>";
   }
-  const EvidenceValidationIssue& issue = report.issues.front();
+  const EvidenceValidationIssue &issue = report.issues.front();
   return std::string(ToString(issue.code)) + " at '" + issue.member_id +
          "': " + issue.message;
 }
 
 template <typename T, typename Predicate>
-void EraseIf(std::vector<T>& values, Predicate predicate) {
+void EraseIf(std::vector<T> &values, Predicate predicate) {
   values.erase(std::remove_if(values.begin(), values.end(), predicate),
                values.end());
 }
@@ -104,8 +104,8 @@ Expression Connective(Expression::Kind kind, std::vector<Expression> operands) {
 }
 
 // The interrupted dominating-check unknown the truncated demo fixture records.
-const Unknown* InterruptedUnknown(const EvidenceCase& value) {
-  for (const Unknown& unknown : value.unknowns) {
+const Unknown *InterruptedUnknown(const EvidenceCase &value) {
+  for (const Unknown &unknown : value.unknowns) {
     if (unknown.reason_code == UnknownReasonCode::kAnalysisTimeout) {
       return &unknown;
     }
@@ -113,7 +113,7 @@ const Unknown* InterruptedUnknown(const EvidenceCase& value) {
   return nullptr;
 }
 
-}  // namespace
+} // namespace
 
 // --- VID-001: a minimal initial case is valid -------------------------------
 
@@ -281,7 +281,7 @@ TEST(EvidenceValidatorTest, VID003RejectsDerivedFactWithUndeclaredProvenance) {
 TEST(EvidenceValidatorTest, VID004RejectsInvalidExpressionArity) {
   auto value = MakeOverflowEvidenceCase();
   // A comparison is a binary operator; a third operand is not a predicate.
-  Expression& expression = value.constraints.front().expression;
+  Expression &expression = value.constraints.front().expression;
   expression.operands.push_back(expression.operands.front());
   const auto report = ValidateEvidenceCase(value);
   EXPECT_TRUE(HasCode(report, EvidenceValidationCode::kExpressionType));
@@ -292,7 +292,8 @@ TEST(EvidenceValidatorTest, VID004RejectsInvalidExpressionType) {
   auto value = MakeOverflowEvidenceCase();
   // A formula in a value position: the comparison's left operand becomes a
   // negation instead of the value it compares.
-  value.constraints.front().expression.operands[0].kind = Expression::Kind::kNot;
+  value.constraints.front().expression.operands[0].kind =
+      Expression::Kind::kNot;
   const auto report = ValidateEvidenceCase(value);
   EXPECT_TRUE(HasCode(report, EvidenceValidationCode::kExpressionType));
   EXPECT_EQ(report.issues.front().member_id, value.constraints.front().id);
@@ -354,16 +355,16 @@ TEST(EvidenceValidatorTest, VID004RejectsDirectlyNestedConnective) {
 TEST(EvidenceValidatorTest, VID004AcceptsConnectivesNestedInOtherShapes) {
   const EvidenceCase fixture = MakeOverflowEvidenceCase();
   const Expression predicate = fixture.constraints.front().expression;
-  const Expression conjunction = Connective(
-      Expression::Kind::kAnd, {predicate, predicate});
+  const Expression conjunction =
+      Connective(Expression::Kind::kAnd, {predicate, predicate});
 
   auto negated = fixture;
   negated.constraints.front().expression =
       Connective(Expression::Kind::kNot, {conjunction});
   {
     const auto report = ValidateEvidenceCase(negated);
-    EXPECT_TRUE(report.ok()) << "a conjunction under a negation: "
-                             << FirstIssue(report);
+    EXPECT_TRUE(report.ok())
+        << "a conjunction under a negation: " << FirstIssue(report);
   }
 
   auto disjoined = fixture;
@@ -371,8 +372,8 @@ TEST(EvidenceValidatorTest, VID004AcceptsConnectivesNestedInOtherShapes) {
       Connective(Expression::Kind::kOr, {conjunction, predicate});
   {
     const auto report = ValidateEvidenceCase(disjoined);
-    EXPECT_TRUE(report.ok()) << "a conjunction under a disjunction: "
-                             << FirstIssue(report);
+    EXPECT_TRUE(report.ok())
+        << "a conjunction under a disjunction: " << FirstIssue(report);
   }
 }
 
@@ -380,7 +381,8 @@ TEST(EvidenceValidatorTest, VID004RejectsDisconnectedPath) {
   auto value = MakeValidMinimalEvidenceCase();
   // The only edge runs from the length to the sink call; the reversed path
   // has no connecting segment.
-  std::swap(value.paths.front().entity_ids[0], value.paths.front().entity_ids[1]);
+  std::swap(value.paths.front().entity_ids[0],
+            value.paths.front().entity_ids[1]);
   const auto report = ValidateEvidenceCase(value);
   ASSERT_FALSE(report.ok());
   EXPECT_EQ(report.issues.front().code,
@@ -428,7 +430,7 @@ TEST(EvidenceValidatorTest, VID005RejectsPromotedCaseState) {
 
 TEST(EvidenceValidatorTest, VID005AcceptsDecidedResultWithProducer) {
   auto value = MakeOverflowEvidenceCase();
-  ProofObligation& obligation = value.proof_obligations.front();
+  ProofObligation &obligation = value.proof_obligations.front();
   obligation.status = ProofStatus::kProved;
   obligation.result_id = "R_smt_1";
   obligation.verification_producer = "verifier.smt";
@@ -479,7 +481,7 @@ TEST(EvidenceValidatorTest, VID005InterruptedResultsCannotVerifyACase) {
   for (const ProofStatus status :
        {ProofStatus::kTimeout, ProofStatus::kUnsupported}) {
     auto value = MakeOverflowEvidenceCase();
-    ProofObligation& obligation = value.proof_obligations.front();
+    ProofObligation &obligation = value.proof_obligations.front();
     obligation.status = status;
     obligation.result_id = "R_interrupted_1";
     obligation.verification_producer = "verifier.smt";
@@ -499,7 +501,7 @@ TEST(EvidenceValidatorTest, VID006RequiresVisibleOmissionForWithheldSummary) {
   // The expandable edge says the vendor summary can be expanded; dropping the
   // omission that declares it leaves the withheld detail implied by absence.
   const std::string summary_id = value.summaries.front().id;
-  EraseIf(value.omissions, [&](const Omission& omission) {
+  EraseIf(value.omissions, [&](const Omission &omission) {
     return omission.subject == summary_id;
   });
   const auto report = ValidateEvidenceCase(value);
@@ -512,7 +514,7 @@ TEST(EvidenceValidatorTest, VID006RejectsNonExpandableWithheldSummary) {
   auto value = MakeOverflowEvidenceCase();
   const std::string summary_id = value.summaries.front().id;
   bool found = false;
-  for (Omission& omission : value.omissions) {
+  for (Omission &omission : value.omissions) {
     if (omission.subject == summary_id) {
       omission.expandable = false;
       found = true;
@@ -527,12 +529,12 @@ TEST(EvidenceValidatorTest, VID006RejectsNonExpandableWithheldSummary) {
 
 TEST(EvidenceValidatorTest, VID006RejectsHiddenTruncation) {
   auto value = MakeOverflowEvidenceCase();
-  const Unknown* interrupted = InterruptedUnknown(value);
+  const Unknown *interrupted = InterruptedUnknown(value);
   ASSERT_NE(interrupted, nullptr);
   const std::string unknown_id = interrupted->id;
   // The unknown records the open question; without the omission that declares
   // the withheld result, the truncation is hidden from progressive disclosure.
-  EraseIf(value.omissions, [&](const Omission& omission) {
+  EraseIf(value.omissions, [&](const Omission &omission) {
     return omission.subject == unknown_id;
   });
   const auto report = ValidateEvidenceCase(value);
@@ -566,8 +568,7 @@ TEST(EvidenceValidatorTest, RejectsUnsupportedSchemaVersion) {
   value.schema_version = "eir.v2";
   const auto report = ValidateEvidenceCase(value);
   ASSERT_FALSE(report.ok());
-  EXPECT_EQ(report.issues.front().code,
-            EvidenceValidationCode::kSchemaVersion);
+  EXPECT_EQ(report.issues.front().code, EvidenceValidationCode::kSchemaVersion);
   EXPECT_EQ(report.issues.front().member_id, "schema_version");
 }
 
@@ -601,12 +602,13 @@ TEST(EvidenceValidatorTest, RejectsProvenanceFromAnotherAnalysisRun) {
   EXPECT_EQ(report.issues.front().member_id, value.provenance.front().id);
 }
 
-TEST(EvidenceValidatorTest, RejectsInterruptedQueryWithoutCompletionProvenance) {
+TEST(EvidenceValidatorTest,
+     RejectsInterruptedQueryWithoutCompletionProvenance) {
   auto value = MakeOverflowEvidenceCase();
-  EraseIf(value.provenance, [](const Provenance& record) {
+  EraseIf(value.provenance, [](const Provenance &record) {
     return record.producer == kQueryCompletionProducerId;
   });
-  const Unknown* interrupted = InterruptedUnknown(value);
+  const Unknown *interrupted = InterruptedUnknown(value);
   ASSERT_NE(interrupted, nullptr);
   const auto report = ValidateEvidenceCase(value);
   ASSERT_FALSE(report.ok());

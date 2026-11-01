@@ -42,22 +42,22 @@ std::unique_ptr<pipeline::ProgramIr> BuildDisjointAllocasProgramIr() {
   auto program_ir = std::make_unique<pipeline::ProgramIr>();
   auto module =
       std::make_unique<::llvm::Module>("disjoint", program_ir->GetContext());
-  auto* i32ty = ::llvm::Type::getInt32Ty(program_ir->GetContext());
+  auto *i32ty = ::llvm::Type::getInt32Ty(program_ir->GetContext());
 
-  auto* func = ::llvm::Function::Create(
+  auto *func = ::llvm::Function::Create(
       ::llvm::FunctionType::get(i32ty, {}, false),
       ::llvm::Function::ExternalLinkage, "disjoint", module.get());
-  auto* entry =
+  auto *entry =
       ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry", func);
   ::llvm::IRBuilder<> builder(entry);
 
-  auto* left = builder.CreateAlloca(i32ty, nullptr, "left");
-  auto* right = builder.CreateAlloca(i32ty, nullptr, "right");
+  auto *left = builder.CreateAlloca(i32ty, nullptr, "left");
+  auto *right = builder.CreateAlloca(i32ty, nullptr, "right");
   builder.CreateStore(::llvm::ConstantInt::get(i32ty, 1), left);
   builder.CreateStore(::llvm::ConstantInt::get(i32ty, 2), right);
-  auto* a = builder.CreateLoad(i32ty, left, "a");
-  auto* b = builder.CreateLoad(i32ty, right, "b");
-  auto* sum = builder.CreateAdd(a, b, "sum");
+  auto *a = builder.CreateLoad(i32ty, left, "a");
+  auto *b = builder.CreateLoad(i32ty, right, "b");
+  auto *sum = builder.CreateAdd(a, b, "sum");
   builder.CreateRet(sum);
 
   program_ir->SetModule(std::move(module));
@@ -75,20 +75,21 @@ veritas::StatusOr<SvfMappingResult> AnalyzeDisjointAllocas() {
 
   SvfMappingResult result;
   auto status = RunWithSvfSession(
-      *program_ir, SvfConfig::Default(), [&](const SvfSessionView& view) {
+      *program_ir, SvfConfig::Default(), [&](const SvfSessionView &view) {
         return MapSvfFacts(*program_ir, view, run_context, SvfConfig::Default(),
                            &result);
       });
-  if (!status.ok()) return status;
+  if (!status.ok())
+    return status;
   return result;
 }
 
-std::optional<semantic::NormalizedAlias> FindAlias(
-    const semantic::NormalizedAnalysisFacts& facts,
-    const std::string& left_name, const std::string& right_name) {
-  for (const auto& alias : facts.aliases) {
-    const std::string& a = alias.left.object.diagnostic_name;
-    const std::string& b = alias.right.object.diagnostic_name;
+std::optional<semantic::NormalizedAlias>
+FindAlias(const semantic::NormalizedAnalysisFacts &facts,
+          const std::string &left_name, const std::string &right_name) {
+  for (const auto &alias : facts.aliases) {
+    const std::string &a = alias.left.object.diagnostic_name;
+    const std::string &b = alias.right.object.diagnostic_name;
     if ((a == left_name && b == right_name) ||
         (a == right_name && b == left_name)) {
       return alias;
@@ -106,5 +107,5 @@ TEST(SvfAliasKindsTest, KeepsNoAliasAsSemanticNoAliasMust) {
   EXPECT_EQ(observation->epistemic, semantic::EpistemicState::kMust);
 }
 
-}  // namespace
-}  // namespace veritas::analysis::svf
+} // namespace
+} // namespace veritas::analysis::svf

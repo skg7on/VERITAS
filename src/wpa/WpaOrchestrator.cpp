@@ -45,11 +45,12 @@ namespace {
 // is a whole payload's worth of resident memory held for the entire run, and
 // the completed results outlive the run's last materialization anyway.
 std::vector<facts::AnalysisFact> SuccessorSupport(
-    const SccGraph& scc_graph, core::StableId scc_id, WpaComponentKind component,
-    const std::vector<WpaComponentCompletion>& completed,
-    const std::map<WpaComponentKey, std::size_t>& completed_index) {
+    const SccGraph &scc_graph, core::StableId scc_id,
+    WpaComponentKind component,
+    const std::vector<WpaComponentCompletion> &completed,
+    const std::map<WpaComponentKey, std::size_t> &completed_index) {
   std::set<facts::RelationId> expected;
-  for (const auto& domain : ComponentDomains(component)) {
+  for (const auto &domain : ComponentDomains(component)) {
     if (domain.support.has_value()) {
       expected.insert(domain.derived);
     }
@@ -59,12 +60,12 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
   if (!successors.ok()) {
     return support;
   }
-  for (const auto& successor : *successors) {
+  for (const auto &successor : *successors) {
     const auto it = completed_index.find(WpaComponentKey{successor, component});
     if (it == completed_index.end()) {
       continue;
     }
-    for (const auto& fact : completed[it->second].result.facts) {
+    for (const auto &fact : completed[it->second].result.facts) {
       if (expected.contains(fact.row.relation)) {
         support.push_back(fact);
       }
@@ -74,8 +75,8 @@ std::vector<facts::AnalysisFact> SuccessorSupport(
 }
 
 // Builds a WpaComponentResult from a canonicalized result and its input.
-WpaComponentResult MakeResult(const WpaLogicalComponentInput& logical,
-                              const facts::CanonicalizedResult& canonical) {
+WpaComponentResult MakeResult(const WpaLogicalComponentInput &logical,
+                              const facts::CanonicalizedResult &canonical) {
   WpaComponentResult result;
   result.scc_id = logical.scc_id;
   result.component = logical.component;
@@ -106,7 +107,7 @@ summary::v1::ComponentKind V1Component(WpaComponentKind component) {
 // Builds the minimal V1 SccResult the incremental scheduler needs to compare
 // the externally visible hash; facts are carried by the V2 run repository, not
 // here.
-SccResult ToSccResult(const WpaComponentResult& result) {
+SccResult ToSccResult(const WpaComponentResult &result) {
   SccResult scc;
   scc.scc_id = result.scc_id;
   scc.component_kind = V1Component(result.component);
@@ -122,8 +123,8 @@ SccResult ToSccResult(const WpaComponentResult& result) {
 // it came from: `<component-kind>/<scc-id>`. Minted only when a recorder is
 // present, because a null recorder discards the label and the component loop
 // must not allocate a string per occurrence for nothing.
-std::string ComponentSpanLabel(core::RunMetrics* metrics,
-                               const WpaComponentKey& key) {
+std::string ComponentSpanLabel(core::RunMetrics *metrics,
+                               const WpaComponentKey &key) {
   if (metrics == nullptr) {
     return {};
   }
@@ -131,17 +132,17 @@ std::string ComponentSpanLabel(core::RunMetrics* metrics,
          core::ToString(key.scc_id);
 }
 
-}  // namespace
+} // namespace
 
-WpaOrchestrator::WpaOrchestrator(WpaExecutor& executor,
-                                 WpaRunRepository& repository,
-                                 SccStateRepository* scc_state)
+WpaOrchestrator::WpaOrchestrator(WpaExecutor &executor,
+                                 WpaRunRepository &repository,
+                                 SccStateRepository *scc_state)
     : executor_(executor), repository_(repository), scc_state_(scc_state) {}
 
-StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
+StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest &request) {
   // Read once: the recorder is optional, non-owning, and never read for control
   // flow, so every span and counter below tests this one pointer.
-  core::RunMetrics* const metrics = request.metrics;
+  core::RunMetrics *const metrics = request.metrics;
 
   Status begin = repository_.BeginRun(request.run);
   if (!begin.ok()) {
@@ -191,7 +192,7 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
   result.run = request.run;
 
   const auto scc_order = scc_graph->ReverseTopologicalOrder();
-  for (const auto& scc_id : scc_order) {
+  for (const auto &scc_id : scc_order) {
     for (const auto component : request.components) {
       result.expected_components.push_back({scc_id, component});
     }
@@ -201,8 +202,9 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
   // the component loop below is `wpa.orchestrate`'s to account for.
   graph_build.reset();
 
-  // Where each completed component's result lives in `result.completed_components`,
-  // which is the single owner of every component's facts and witnesses.
+  // Where each completed component's result lives in
+  // `result.completed_components`, which is the single owner of every
+  // component's facts and witnesses.
   std::map<WpaComponentKey, std::size_t> completed_index;
 
   // Per-component totals, accumulated here because AddCounter inside the loop
@@ -215,7 +217,7 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
   {
     core::PhaseSpan orchestrate_span(metrics, "wpa.orchestrate",
                                      core::SpanMode::kBearing);
-    for (const auto& scc_id : scc_order) {
+    for (const auto &scc_id : scc_order) {
       for (const auto component : request.components) {
         const WpaComponentKey key{scc_id, component};
 
@@ -229,7 +231,7 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
 
           WpaMaterializationRequest materialization;
           materialization.semantics =
-              static_cast<const facts::AnalysisRunSemanticDescriptor&>(
+              static_cast<const facts::AnalysisRunSemanticDescriptor &>(
                   request.run);
           materialization.scc_id = scc_id;
           materialization.component = component;
@@ -239,9 +241,9 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
           materialization.scc_graph = &*scc_graph;
           // Keep the successor support alive for the duration of Build: the
           // span stored in the request points into this vector.
-          std::vector<facts::AnalysisFact> successor_support = SuccessorSupport(
-              *scc_graph, scc_id, component, result.completed_components,
-              completed_index);
+          std::vector<facts::AnalysisFact> successor_support =
+              SuccessorSupport(*scc_graph, scc_id, component,
+                               result.completed_components, completed_index);
           materialization.successor_support = successor_support;
           materialization.models = request.models;
 
@@ -253,11 +255,11 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
 
           // Collect the rooted input fact IDs and their full evidence for the
           // batch.
-          for (const auto& root : built->local_roots) {
+          for (const auto &root : built->local_roots) {
             result.rooted_input_fact_ids.push_back(root.fact.fact_id);
             result.rooted_input_facts.push_back(root);
           }
-          for (const auto& root : built->successor_roots) {
+          for (const auto &root : built->successor_roots) {
             result.rooted_input_fact_ids.push_back(root.fact.fact_id);
             result.rooted_input_facts.push_back(root);
           }
@@ -270,8 +272,9 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
           return logical.status();
         }
 
-        const ResultCacheDescriptor cache_descriptor = MakeResultCacheDescriptor(
-            request.run, key, logical->logical_input_hash);
+        const ResultCacheDescriptor cache_descriptor =
+            MakeResultCacheDescriptor(request.run, key,
+                                      logical->logical_input_hash);
         auto reusable = [&] {
           core::PhaseSpan span(metrics, "wpa.component.cache_lookup",
                                core::SpanMode::kDistributed);
@@ -372,10 +375,10 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
     metrics->AddCounter("wpa.components.executed", executed_count, "count");
 
     std::map<WpaComponentKind, std::uint64_t> per_kind;
-    for (const WpaComponentKey& expected : result.expected_components) {
+    for (const WpaComponentKey &expected : result.expected_components) {
       ++per_kind[expected.component];
     }
-    for (const auto& entry : per_kind) {
+    for (const auto &entry : per_kind) {
       metrics->AddCounter("wpa.component." +
                               std::string(ComponentKindName(entry.first)) +
                               ".expected",
@@ -384,10 +387,10 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
   }
 
   // The run's last batch of convergence state is committed here, before the run
-  // is marked complete and before `Run` returns. A later run reads these rows to
-  // decide whether a component's externally visible hash moved, so leaving the
-  // tail of the run queued would let it compare against a stale row. A failure
-  // takes the same path as every other store error in this run.
+  // is marked complete and before `Run` returns. A later run reads these rows
+  // to decide whether a component's externally visible hash moved, so leaving
+  // the tail of the run queued would let it compare against a stale row. A
+  // failure takes the same path as every other store error in this run.
   if (scc_state_ != nullptr) {
     core::PhaseSpan span(metrics, "wpa.scc_state_flush",
                          core::SpanMode::kBearing);
@@ -409,4 +412,4 @@ StatusOr<WpaRunResult> WpaOrchestrator::Run(const WpaRunRequest& request) {
   return result;
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

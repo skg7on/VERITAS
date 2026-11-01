@@ -67,7 +67,7 @@ struct SupportRef {
   core::StableId function_summary_id;
   std::string provenance_ref;
 
-  auto operator<=>(const SupportRef&) const = default;
+  auto operator<=>(const SupportRef &) const = default;
 };
 
 // CpgNode is a persistent graph node. node_id is a VERITAS stable ID; label is
@@ -125,6 +125,6 @@ struct ProjectionMetadata {
   std::vector<core::StableId> summary_ids;
 };
 
-}  // namespace veritas::cpg
+} // namespace veritas::cpg
 
-#endif  // VERITAS_CPG_CPGTYPES_H_
+#endif // VERITAS_CPG_CPGTYPES_H_

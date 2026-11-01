@@ -166,7 +166,8 @@ RenderWitnessSortKeys(const std::vector<WitnessEdge> &edges) {
   return rendered;
 }
 
-std::vector<std::string> RenderFactKeys(const std::vector<AnalysisFact> &facts) {
+std::vector<std::string>
+RenderFactKeys(const std::vector<AnalysisFact> &facts) {
   std::vector<std::string> rendered;
   rendered.reserve(facts.size());
   for (const auto &fact : facts) {
@@ -194,6 +195,7 @@ CanonicalWitnessOrderByStringKeys(const wpa::WpaRunResult &run) {
     std::uint32_t input_ordinal = 0;
     WitnessEdge edge;
   };
+
   std::vector<KeyedEdge> keyed;
   for (const auto &completion : run.completed_components) {
     for (const auto &edge : completion.result.witnesses) {
@@ -238,11 +240,10 @@ CanonicalFactOrderByStringKeys(const wpa::WpaRunResult &run) {
       facts.push_back(fact);
     }
   }
-  std::ranges::sort(facts,
-                    [](const AnalysisFact &left, const AnalysisFact &right) {
-                      return EncodeSemanticKey(left.row) <
-                             EncodeSemanticKey(right.row);
-                    });
+  std::ranges::sort(
+      facts, [](const AnalysisFact &left, const AnalysisFact &right) {
+        return EncodeSemanticKey(left.row) < EncodeSemanticKey(right.row);
+      });
   return facts;
 }
 
@@ -265,9 +266,12 @@ wpa::WpaRunResult TiebreakerRun() {
   const SemanticRow root_a = DirectCall("tie", "a");
   const SemanticRow root_b = DirectCall("tie", "b");
   const SemanticRow root_c = DirectCall("tie", "c");
-  const auto fact = [](const SemanticRow &row) { return MakeFact(row).value(); };
+  const auto fact = [](const SemanticRow &row) {
+    return MakeFact(row).value();
+  };
 
-  const auto component = [&](std::string_view scc, std::vector<SemanticRow> rows,
+  const auto component = [&](std::string_view scc,
+                             std::vector<SemanticRow> rows,
                              std::vector<WitnessEdge> edges) {
     wpa::WpaComponentCompletion completion;
     completion.key =
@@ -388,6 +392,7 @@ public:
   }
 
   const std::vector<AnalysisFactBatch> &batches() const { return batches_; }
+
   std::size_t logical_publication_count(const core::StableId &batch_id) const {
     const auto it = counts_.find(core::ToString(batch_id));
     return it == counts_.end() ? 0 : it->second;
@@ -672,14 +677,16 @@ TEST(AnalysisFactBusTest, ValidateStillRejectsEachTamperedIdentity) {
   // producer of a `StableId` from text. `funcvar` is the spelling this codebase
   // parses for a function-variant ID, and `callsite` for a call-site ID.
   auto zero_fact = core::ParseStableId("fact:sha256:" + std::string(64, '0'));
-  auto other_function = core::ParseStableId("funcvar:sha256:" + std::string(64, 'a'));
+  auto other_function =
+      core::ParseStableId("funcvar:sha256:" + std::string(64, 'a'));
   auto wrong_kind_function =
       core::ParseStableId("funcvar:sha256:" + std::string(64, 'b'));
   auto other_call_site =
       core::ParseStableId("callsite:sha256:" + std::string(64, 'b'));
   ASSERT_TRUE(zero_fact.ok()) << zero_fact.status().message();
   ASSERT_TRUE(other_function.ok()) << other_function.status().message();
-  ASSERT_TRUE(wrong_kind_function.ok()) << wrong_kind_function.status().message();
+  ASSERT_TRUE(wrong_kind_function.ok())
+      << wrong_kind_function.status().message();
   ASSERT_TRUE(other_call_site.ok()) << other_call_site.status().message();
 
   // A mutated fact id no longer matches its own row.

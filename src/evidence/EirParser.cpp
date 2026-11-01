@@ -18,8 +18,8 @@
 // TWO DIRECTIONAL RULES
 //
 // Every production of the stabilized grammar is parsed, including the optional
-// attributes Task 7a added, because a field the grammar can write and the parser
-// drops is a field that silently leaves `EvidenceID`.
+// attributes Task 7a added, because a field the grammar can write and the
+// parser drops is a field that silently leaves `EvidenceID`.
 //
 // The reverse direction is a rejection, not a lowering. The EIR-T 1.0 language
 // surface is deliberately wider than the V0.1 model, so a construct the model
@@ -38,18 +38,19 @@
 // WHAT IS LOWERED, AND HOW
 //
 // Three grammar forms have a plain `std::string` as their model carrier rather
-// than a structured record: `ResolutionAction` (`Unknown::suggested_resolution`),
-// `AssumptionSource` (`Assumption::source`), and `Scope` (`Assumption::scope`,
-// `Constraint::scope`). Each is `FunctionCall`-shaped, and the model holds no
-// call structure for any of them. They lower to the call's **canonical EIR-T
-// spelling** — `callee(arg, ...)`, with a reference argument written bare, as
-// the model writes every case-local handle. That spelling is a fixpoint of this
-// lowering: re-parsing it yields an expression that renders to the same string,
-// which is what keeps REP-001 true for those fields.
+// than a structured record: `ResolutionAction`
+// (`Unknown::suggested_resolution`), `AssumptionSource` (`Assumption::source`),
+// and `Scope` (`Assumption::scope`, `Constraint::scope`). Each is
+// `FunctionCall`-shaped, and the model holds no call structure for any of them.
+// They lower to the call's **canonical EIR-T spelling** — `callee(arg, ...)`,
+// with a reference argument written bare, as the model writes every case-local
+// handle. That spelling is a fixpoint of this lowering: re-parsing it yields an
+// expression that renders to the same string, which is what keeps REP-001 true
+// for those fields.
 //
-// `FactReference ::= "$" Identifier` lowers to its bare handle, like every other
-// case-local reference: the `$` and the `@` belong to EIR-T syntax, and the
-// model never stores them.
+// `FactReference ::= "$" Identifier` lowers to its bare handle, like every
+// other case-local reference: the `$` and the `@` belong to EIR-T syntax, and
+// the model never stores them.
 //
 // FOUR DELIBERATE WIDENINGS
 //
@@ -139,8 +140,9 @@ std::string UnsupportedAttribute(std::string_view member,
   message.append(Quoted(attribute));
   message += " is ";
   message.append(kUnsupportedInEirV01);
-  message += ": the eir.v1 model carries no member for it, and the parser never "
-             "drops it and never lowers it onto a neighbouring field";
+  message +=
+      ": the eir.v1 model carries no member for it, and the parser never "
+      "drops it and never lowers it onto a neighbouring field";
   return message;
 }
 
@@ -182,18 +184,18 @@ Expression MakeCall(std::string callee, std::vector<Expression> arguments) {
 
 // `kAnd` and `kOr` are n-ary and flat in the model, and `EvidenceValidator`
 // rejects a directly nested same-kind operand. Parentheses can build exactly
-// that shape (`(a and b) and c`), and the two spellings are the same formula, so
-// same-kind children are spliced into one operand list. Both spellings then
+// that shape (`(a and b) and c`), and the two spellings are the same formula,
+// so same-kind children are spliced into one operand list. Both spellings then
 // canonicalize to one node — and so to one `EvidenceID`.
 Expression MakeConnective(Expression::Kind kind,
                           std::vector<Expression> operands) {
   std::vector<Expression> flattened;
-  for (Expression& operand : operands) {
+  for (Expression &operand : operands) {
     if (operand.kind != kind) {
       flattened.push_back(std::move(operand));
       continue;
     }
-    for (Expression& nested : operand.operands) {
+    for (Expression &nested : operand.operands) {
       flattened.push_back(std::move(nested));
     }
   }
@@ -207,26 +209,26 @@ Expression MakeConnective(Expression::Kind kind,
 // none. `ComparisonOp ::= "==" | "!=" | "<" | "<=" | ">" | ">="`.
 std::string_view ComparisonText(TokenKind kind) {
   switch (kind) {
-    case TokenKind::kEqualEqual:
-      return "==";
-    case TokenKind::kNotEqual:
-      return "!=";
-    case TokenKind::kLess:
-      return "<";
-    case TokenKind::kLessEqual:
-      return "<=";
-    case TokenKind::kGreater:
-      return ">";
-    case TokenKind::kGreaterEqual:
-      return ">=";
-    default:
-      return {};
+  case TokenKind::kEqualEqual:
+    return "==";
+  case TokenKind::kNotEqual:
+    return "!=";
+  case TokenKind::kLess:
+    return "<";
+  case TokenKind::kLessEqual:
+    return "<=";
+  case TokenKind::kGreater:
+    return ">";
+  case TokenKind::kGreaterEqual:
+    return ">=";
+  default:
+    return {};
   }
 }
 
 // --- Call rendering ---------------------------------------------------------
 
-void AppendEscaped(std::string_view text, std::string* out) {
+void AppendEscaped(std::string_view text, std::string *out) {
   out->push_back('"');
   for (const char c : text) {
     if (c == '"' || c == '\\') {
@@ -241,39 +243,39 @@ void AppendEscaped(std::string_view text, std::string* out) {
 // reference is written bare because the model writes every case-local handle
 // bare; a string keeps its quotes so that a string argument is not read back as
 // a symbol.
-std::string RenderValue(const Expression& value) {
+std::string RenderValue(const Expression &value) {
   switch (value.kind) {
-    case Expression::Kind::kString: {
-      std::string out;
-      AppendEscaped(value.text, &out);
-      return out;
-    }
-    case Expression::Kind::kInteger:
-      return std::to_string(value.integer);
-    case Expression::Kind::kBool:
-      return value.boolean ? "true" : "false";
-    case Expression::Kind::kReference:
-    case Expression::Kind::kSymbol:
-      return value.text;
-    case Expression::Kind::kCall: {
-      std::string out = value.text;
-      out += '(';
-      for (std::size_t index = 0; index < value.operands.size(); ++index) {
-        if (index != 0) {
-          out += ", ";
-        }
-        out += RenderValue(value.operands[index]);
+  case Expression::Kind::kString: {
+    std::string out;
+    AppendEscaped(value.text, &out);
+    return out;
+  }
+  case Expression::Kind::kInteger:
+    return std::to_string(value.integer);
+  case Expression::Kind::kBool:
+    return value.boolean ? "true" : "false";
+  case Expression::Kind::kReference:
+  case Expression::Kind::kSymbol:
+    return value.text;
+  case Expression::Kind::kCall: {
+    std::string out = value.text;
+    out += '(';
+    for (std::size_t index = 0; index < value.operands.size(); ++index) {
+      if (index != 0) {
+        out += ", ";
       }
-      out += ')';
-      return out;
+      out += RenderValue(value.operands[index]);
     }
-    default:
-      break;
+    out += ')';
+    return out;
+  }
+  default:
+    break;
   }
   return value.text;
 }
 
-}  // namespace
+} // namespace
 
 // --- Attribute bodies -------------------------------------------------------
 
@@ -283,14 +285,14 @@ std::string RenderValue(const Expression& value) {
 // are single-valued, so a second spelling can only be a document whose two
 // readers would disagree on which one is the case.
 class EirParser::AttributeReader {
- public:
-  AttributeReader(EirParser* parser, std::string_view member)
+public:
+  AttributeReader(EirParser *parser, std::string_view member)
       : parser_(parser), member_(member) {}
 
   Status Open() {
-    return parser_->Expect(TokenKind::kLeftBrace,
-                           Joined("'{' after the ", member_)
-                               .append(" identifier"));
+    return parser_->Expect(
+        TokenKind::kLeftBrace,
+        Joined("'{' after the ", member_).append(" identifier"));
   }
 
   // The next attribute name, or a `kEnd` token once the body's `}` has been
@@ -310,30 +312,29 @@ class EirParser::AttributeReader {
   }
 
   // Records that `attribute` has been bound, refusing a repeat.
-  Status Bind(const Token& attribute) {
+  Status Bind(const Token &attribute) {
     const auto inserted = bound_.emplace(attribute.text, attribute.offset);
     if (inserted.second) {
       return Status::Ok();
     }
-    return parser_->FailAt(
-        attribute, Joined("the ", member_) + " attribute " +
-                       Quoted(attribute.text) + " appears more than once");
+    return parser_->FailAt(attribute, Joined("the ", member_) + " attribute " +
+                                          Quoted(attribute.text) +
+                                          " appears more than once");
   }
 
-  Status ExpectEqual(const Token& attribute) {
-    return parser_->Expect(
-        TokenKind::kEqual,
-        Joined("'=' after the attribute ", Quoted(attribute.text)));
+  Status ExpectEqual(const Token &attribute) {
+    return parser_->Expect(TokenKind::kEqual, Joined("'=' after the attribute ",
+                                                     Quoted(attribute.text)));
   }
 
-  Status ExpectSemicolon(const Token& attribute) {
+  Status ExpectSemicolon(const Token &attribute) {
     return parser_->Expect(
         TokenKind::kSemicolon,
         Joined("';' after the value of ", Quoted(attribute.text)));
   }
 
   // The refusal for an attribute the grammar admits and the model cannot carry.
-  Status Refuse(const Token& attribute) {
+  Status Refuse(const Token &attribute) {
     return parser_->FailAt(attribute,
                            UnsupportedAttribute(member_, attribute.text));
   }
@@ -341,7 +342,7 @@ class EirParser::AttributeReader {
   // The refusal for an attribute the production does not list at all. Distinct
   // from `Refuse`: this one is a misspelling or a construct EIR-T never had,
   // not a widening of the language surface.
-  Status Unknown(const Token& attribute) {
+  Status Unknown(const Token &attribute) {
     return parser_->FailAt(attribute, Joined("unknown ", member_) +
                                           " attribute " +
                                           Quoted(attribute.text));
@@ -357,8 +358,8 @@ class EirParser::AttributeReader {
                                        Quoted(attribute));
   }
 
- private:
-  EirParser* parser_;
+private:
+  EirParser *parser_;
   std::string_view member_;
   std::map<std::string, std::size_t> bound_;
   Token close_;
@@ -366,26 +367,26 @@ class EirParser::AttributeReader {
 
 // --- Cursor and diagnostics -------------------------------------------------
 
-std::string EirParser::Describe(const Token& token) {
+std::string EirParser::Describe(const Token &token) {
   switch (token.kind) {
-    case TokenKind::kEnd:
-      return "end of input";
-    case TokenKind::kIdentifier:
-      return Joined("identifier ", Quoted(token.text));
-    case TokenKind::kString:
-      return "a string literal";
-    case TokenKind::kInteger:
-      return Joined("the integer literal ", Quoted(token.text));
-    default:
-      break;
+  case TokenKind::kEnd:
+    return "end of input";
+  case TokenKind::kIdentifier:
+    return Joined("identifier ", Quoted(token.text));
+  case TokenKind::kString:
+    return "a string literal";
+  case TokenKind::kInteger:
+    return Joined("the integer literal ", Quoted(token.text));
+  default:
+    break;
   }
   return Joined("the token ", Quoted(token.text));
 }
 
-EirParser::EirParser(const std::vector<Token>& tokens, EirParseError* error)
+EirParser::EirParser(const std::vector<Token> &tokens, EirParseError *error)
     : tokens_(tokens), error_(error) {}
 
-const Token& EirParser::Peek(std::size_t lookahead) const {
+const Token &EirParser::Peek(std::size_t lookahead) const {
   // The lexer always appends exactly one `kEnd`, so the empty stream is only
   // reachable from a caller that built one by hand. It is answered with a
   // `kEnd` token rather than by reading past the end of an empty vector, so the
@@ -399,8 +400,8 @@ const Token& EirParser::Peek(std::size_t lookahead) const {
   return tokens_[index];
 }
 
-const Token& EirParser::Advance() {
-  const Token& token = Peek();
+const Token &EirParser::Advance() {
+  const Token &token = Peek();
   if (cursor_ + 1 < tokens_.size()) {
     ++cursor_;
   }
@@ -416,7 +417,7 @@ bool EirParser::Match(TokenKind kind) {
 }
 
 bool EirParser::MatchKeyword(std::string_view keyword) {
-  const Token& token = Peek();
+  const Token &token = Peek();
   if (token.kind != TokenKind::kIdentifier || token.text != keyword) {
     return false;
   }
@@ -424,7 +425,7 @@ bool EirParser::MatchKeyword(std::string_view keyword) {
   return true;
 }
 
-Status EirParser::FailAt(const Token& token, std::string message) {
+Status EirParser::FailAt(const Token &token, std::string message) {
   if (error_ != nullptr) {
     error_->offset = token.offset;
     error_->line = token.line;
@@ -447,10 +448,10 @@ Status EirParser::Expect(TokenKind kind, std::string_view what) {
 }
 
 Status EirParser::ExpectKeyword(std::string_view keyword) {
-  const Token& token = Peek();
+  const Token &token = Peek();
   if (token.kind != TokenKind::kIdentifier || token.text != keyword) {
-    return Fail(Joined("expected the keyword ", Quoted(keyword)) +
-                ", found " + Describe(token));
+    return Fail(Joined("expected the keyword ", Quoted(keyword)) + ", found " +
+                Describe(token));
   }
   Advance();
   return Status::Ok();
@@ -458,7 +459,7 @@ Status EirParser::ExpectKeyword(std::string_view keyword) {
 
 Status EirParser::ExpectPositionedKeyword(std::string_view keyword,
                                           std::string_view position) {
-  const Token& token = Peek();
+  const Token &token = Peek();
   if (token.kind == TokenKind::kIdentifier && token.text == keyword) {
     Advance();
     return Status::Ok();
@@ -478,7 +479,7 @@ Status EirParser::ExpectPositionedKeyword(std::string_view keyword,
 }
 
 StatusOr<Token> EirParser::TakeIdentifier(std::string_view what) {
-  const Token& token = Peek();
+  const Token &token = Peek();
   if (token.kind != TokenKind::kIdentifier) {
     return Fail(Joined("expected ", what) + ", found " + Describe(token));
   }
@@ -486,7 +487,7 @@ StatusOr<Token> EirParser::TakeIdentifier(std::string_view what) {
 }
 
 StatusOr<std::string> EirParser::TakeString(std::string_view what) {
-  const Token& token = Peek();
+  const Token &token = Peek();
   if (token.kind != TokenKind::kString) {
     return Fail(Joined("expected ", what) + ", found " + Describe(token));
   }
@@ -495,7 +496,7 @@ StatusOr<std::string> EirParser::TakeString(std::string_view what) {
 }
 
 StatusOr<std::string> EirParser::TakeReference(std::string_view what) {
-  const Token& token = Peek();
+  const Token &token = Peek();
   if (token.kind != TokenKind::kAt) {
     return Fail(Joined("expected ", what) + " introduced by '@', found " +
                 Describe(token));
@@ -510,7 +511,7 @@ StatusOr<std::string> EirParser::TakeReference(std::string_view what) {
 
 // --- Case and context -------------------------------------------------------
 
-Status EirParser::ParseEvidenceCase(EvidenceCase* out) {
+Status EirParser::ParseEvidenceCase(EvidenceCase *out) {
   Status status = ExpectKeyword("evidence");
   if (!status.ok()) {
     return status;
@@ -544,12 +545,12 @@ Status EirParser::ParseEvidenceCase(EvidenceCase* out) {
     return schema.status();
   }
   out->schema_version = std::move(schema).value();
-  // The literal is bound exactly as written, including a version this build does
-  // not implement. The accepted version is a semantic field of the case, so a
-  // different one is refused by the validator's `kSchemaVersion` check rather
-  // than by a spelling rule here: "the schema version is not supported" and "the
-  // schema declaration is malformed" are different rejections, and a caller that
-  // saw only the second could not tell them apart.
+  // The literal is bound exactly as written, including a version this build
+  // does not implement. The accepted version is a semantic field of the case,
+  // so a different one is refused by the validator's `kSchemaVersion` check
+  // rather than by a spelling rule here: "the schema version is not supported"
+  // and "the schema declaration is malformed" are different rejections, and a
+  // caller that saw only the second could not tell them apart.
   status = Expect(TokenKind::kSemicolon, "';' after the schema version");
   if (!status.ok()) {
     return status;
@@ -563,7 +564,8 @@ Status EirParser::ParseEvidenceCase(EvidenceCase* out) {
   if (!status.ok()) {
     return status;
   }
-  StatusOr<EvidenceLevel> level = TakeEnum("evidence level", ParseEvidenceLevel);
+  StatusOr<EvidenceLevel> level =
+      TakeEnum("evidence level", ParseEvidenceLevel);
   if (!level.ok()) {
     return level.status();
   }
@@ -615,7 +617,7 @@ Status EirParser::ParseEvidenceCase(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseContext(ProgramBinding* out) {
+Status EirParser::ParseContext(ProgramBinding *out) {
   const Status opened = ExpectPositionedKeyword("context", "after the state");
   if (!opened.ok()) {
     return opened;
@@ -648,7 +650,7 @@ Status EirParser::ParseContext(ProgramBinding* out) {
     // refused rather than letting the last spelling win, because every one of
     // these fields is hashed and two readers would otherwise disagree on the
     // identity of the same text.
-    bool* seen = nullptr;
+    bool *seen = nullptr;
     if (property.text == "repository") {
       seen = &seen_repository;
     } else if (property.text == "revision") {
@@ -664,8 +666,8 @@ Status EirParser::ParseContext(ProgramBinding* out) {
     } else if (property.text == "analysis_run") {
       seen = &seen_analysis_run;
     } else if (property.text != "analyzer") {
-      return FailAt(
-          property, Joined("unknown context property ", Quoted(property.text)));
+      return FailAt(property,
+                    Joined("unknown context property ", Quoted(property.text)));
     }
     if (seen != nullptr) {
       if (*seen) {
@@ -676,8 +678,8 @@ Status EirParser::ParseContext(ProgramBinding* out) {
       *seen = true;
     }
 
-    status = Expect(TokenKind::kEqual,
-                    Joined("'=' after ", Quoted(property.text)));
+    status =
+        Expect(TokenKind::kEqual, Joined("'=' after ", Quoted(property.text)));
     if (!status.ok()) {
       return status;
     }
@@ -719,8 +721,9 @@ Status EirParser::ParseContext(ProgramBinding* out) {
       }
     }
 
-    status = Expect(TokenKind::kSemicolon,
-                    Joined("';' after the ", property.text).append(" property"));
+    status =
+        Expect(TokenKind::kSemicolon,
+               Joined("';' after the ", property.text).append(" property"));
     if (!status.ok()) {
       return status;
     }
@@ -728,7 +731,7 @@ Status EirParser::ParseContext(ProgramBinding* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseAnalyzerVersion(AnalyzerVersion* out) {
+Status EirParser::ParseAnalyzerVersion(AnalyzerVersion *out) {
   // `AnalyzerVersion ::= Producer "(" [ StringLiteral [ "," StringLiteral ] ]
   // ")"`. The first argument is the analyzer's version and the second is the
   // configuration it ran under; both are optional, so a producer that ran with
@@ -738,9 +741,9 @@ Status EirParser::ParseAnalyzerVersion(AnalyzerVersion* out) {
     return callee.status();
   }
   out->producer = callee.value().text;
-  Status status = Expect(TokenKind::kLeftParen,
-                         Joined("'(' after the analyzer producer ",
-                                Quoted(out->producer)));
+  Status status =
+      Expect(TokenKind::kLeftParen,
+             Joined("'(' after the analyzer producer ", Quoted(out->producer)));
   if (!status.ok()) {
     return status;
   }
@@ -767,8 +770,8 @@ Status EirParser::ParseAnalyzerVersion(AnalyzerVersion* out) {
 
 // --- Members ----------------------------------------------------------------
 
-Status EirParser::ParseEvidenceMember(EvidenceCase* out) {
-  const Token& token = Peek();
+Status EirParser::ParseEvidenceMember(EvidenceCase *out) {
+  const Token &token = Peek();
   if (token.kind != TokenKind::kIdentifier) {
     return Fail(Joined("expected an evidence member, found ", Describe(token)));
   }
@@ -818,7 +821,7 @@ Status EirParser::ParseEvidenceMember(EvidenceCase* out) {
   return Fail(Joined("unknown evidence member ", Quoted(keyword)));
 }
 
-Status EirParser::ParseClaim(EvidenceCase* out) {
+Status EirParser::ParseClaim(EvidenceCase *out) {
   const Token keyword = Peek();
   Advance();
   if (claim_declared_) {
@@ -920,8 +923,8 @@ Status EirParser::ParseClaim(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseEntity(EvidenceCase* out) {
-  Advance();  // "entity"
+Status EirParser::ParseEntity(EvidenceCase *out) {
+  Advance(); // "entity"
   Entity entity;
   StatusOr<Token> id = TakeIdentifier("an entity identifier");
   if (!id.ok()) {
@@ -929,9 +932,9 @@ Status EirParser::ParseEntity(EvidenceCase* out) {
   }
   entity.id = id.value().text;
 
-  Status status = Expect(TokenKind::kColon,
-                         Joined("':' after the entity identifier ",
-                                Quoted(entity.id)));
+  Status status =
+      Expect(TokenKind::kColon,
+             Joined("':' after the entity identifier ", Quoted(entity.id)));
   if (!status.ok()) {
     return status;
   }
@@ -1009,8 +1012,8 @@ Status EirParser::ParseEntity(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseFact(EvidenceCase* out) {
-  Advance();  // "fact"
+Status EirParser::ParseFact(EvidenceCase *out) {
+  Advance(); // "fact"
   Fact fact;
   StatusOr<Token> id = TakeIdentifier("a fact identifier");
   if (!id.ok()) {
@@ -1058,8 +1061,7 @@ Status EirParser::ParseFact(EvidenceCase* out) {
       fact.epistemic = epistemic.value();
       have_epistemic = true;
     } else if (key.text == "confidence") {
-      StatusOr<Confidence> confidence =
-          TakeEnum("confidence", ParseConfidence);
+      StatusOr<Confidence> confidence = TakeEnum("confidence", ParseConfidence);
       if (!confidence.ok()) {
         return confidence.status();
       }
@@ -1083,9 +1085,10 @@ Status EirParser::ParseFact(EvidenceCase* out) {
       }
       StatusOr<core::StableId> stable = core::ParseStableId(text.value());
       if (!stable.ok()) {
-        return FailAt(key, Joined("the fact stable_id is not a stable ID of the "
-                                  "form <kind>:sha256:<digest>: ",
-                                  stable.status().message()));
+        return FailAt(key,
+                      Joined("the fact stable_id is not a stable ID of the "
+                             "form <kind>:sha256:<digest>: ",
+                             stable.status().message()));
       }
       fact.stable_id = std::move(stable).value();
     } else if (key.text == "derived") {
@@ -1116,8 +1119,8 @@ Status EirParser::ParseFact(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseAssumption(EvidenceCase* out) {
-  Advance();  // "assumption"
+Status EirParser::ParseAssumption(EvidenceCase *out) {
+  Advance(); // "assumption"
   Assumption assumption;
   StatusOr<Token> id = TakeIdentifier("an assumption identifier");
   if (!id.ok()) {
@@ -1187,8 +1190,8 @@ Status EirParser::ParseAssumption(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseHypothesis(EvidenceCase* out) {
-  Advance();  // "hypothesis"
+Status EirParser::ParseHypothesis(EvidenceCase *out) {
+  Advance(); // "hypothesis"
   Hypothesis hypothesis;
   StatusOr<Token> id = TakeIdentifier("a hypothesis identifier");
   if (!id.ok()) {
@@ -1241,8 +1244,7 @@ Status EirParser::ParseHypothesis(EvidenceCase* out) {
       }
       hypothesis.reason = std::move(reason).value();
     } else if (key.text == "confidence") {
-      StatusOr<Confidence> confidence =
-          TakeEnum("confidence", ParseConfidence);
+      StatusOr<Confidence> confidence = TakeEnum("confidence", ParseConfidence);
       if (!confidence.ok()) {
         return confidence.status();
       }
@@ -1265,8 +1267,8 @@ Status EirParser::ParseHypothesis(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseUnknown(EvidenceCase* out) {
-  Advance();  // "unknown"
+Status EirParser::ParseUnknown(EvidenceCase *out) {
+  Advance(); // "unknown"
   Unknown unknown;
   StatusOr<Token> id = TakeIdentifier("an unknown identifier");
   if (!id.ok()) {
@@ -1361,8 +1363,8 @@ Status EirParser::ParseUnknown(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseEdge(EvidenceCase* out) {
-  Advance();  // "edge"
+Status EirParser::ParseEdge(EvidenceCase *out) {
+  Advance(); // "edge"
   Edge edge;
   StatusOr<Token> id = TakeIdentifier("an edge identifier");
   if (!id.ok()) {
@@ -1390,9 +1392,10 @@ Status EirParser::ParseEdge(EvidenceCase* out) {
     // The three `EdgeDecl` attributes the model cannot carry are refused before
     // the attribute is recorded as bound, so a document that uses one is
     // rejected rather than reduced: `condition` is a predicate on the relation,
-    // `transfer` is its transfer function, and `summary` is the function call it
-    // expands to. `Edge` has no member for any of them, and dropping one would
-    // give two edges that differ only in their condition the same identity.
+    // `transfer` is its transfer function, and `summary` is the function call
+    // it expands to. `Edge` has no member for any of them, and dropping one
+    // would give two edges that differ only in their condition the same
+    // identity.
     if (key.text == "condition" || key.text == "transfer" ||
         key.text == "summary") {
       return body.Refuse(key);
@@ -1478,8 +1481,8 @@ Status EirParser::ParseEdge(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParsePath(EvidenceCase* out) {
-  Advance();  // "path"
+Status EirParser::ParsePath(EvidenceCase *out) {
+  Advance(); // "path"
   Path path;
   StatusOr<Token> id = TakeIdentifier("a path identifier");
   if (!id.ok()) {
@@ -1498,8 +1501,8 @@ Status EirParser::ParsePath(EvidenceCase* out) {
     return status;
   }
 
-  // `PathExpression ::= Reference { PathOp Reference } ";"`. The sequence is the
-  // path and is never reordered, so it is kept in source order.
+  // `PathExpression ::= Reference { PathOp Reference } ";"`. The sequence is
+  // the path and is never reordered, so it is kept in source order.
   StatusOr<std::string> first = TakeReference("the first path segment");
   if (!first.ok()) {
     return first.status();
@@ -1584,8 +1587,8 @@ Status EirParser::ParsePath(EvidenceCase* out) {
       }
       path.provenance_id = std::move(provenance).value();
     } else {
-      return FailAt(
-          attribute, Joined("unknown path attribute ", Quoted(attribute.text)));
+      return FailAt(attribute,
+                    Joined("unknown path attribute ", Quoted(attribute.text)));
     }
     status = Expect(TokenKind::kSemicolon,
                     Joined("';' after the value of ", Quoted(attribute.text)));
@@ -1597,8 +1600,8 @@ Status EirParser::ParsePath(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseConstraint(EvidenceCase* out) {
-  Advance();  // "constraint"
+Status EirParser::ParseConstraint(EvidenceCase *out) {
+  Advance(); // "constraint"
   Constraint constraint;
   StatusOr<Token> id = TakeIdentifier("a constraint identifier");
   if (!id.ok()) {
@@ -1671,8 +1674,8 @@ Status EirParser::ParseConstraint(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseProvenance(EvidenceCase* out) {
-  Advance();  // "provenance"
+Status EirParser::ParseProvenance(EvidenceCase *out) {
+  Advance(); // "provenance"
   Provenance record;
   StatusOr<Token> id = TakeIdentifier("a provenance identifier");
   if (!id.ok()) {
@@ -1695,8 +1698,8 @@ Status EirParser::ParseProvenance(EvidenceCase* out) {
     if (key.kind == TokenKind::kEnd) {
       break;
     }
-    // `location` is grammar-valid and model-unrepresentable. It is refused here,
-    // before it can be recorded as bound, and it is never lowered onto
+    // `location` is grammar-valid and model-unrepresentable. It is refused
+    // here, before it can be recorded as bound, and it is never lowered onto
     // `source_anchor_id`: `location` and `source_anchor` name different things,
     // and either a substitution or a silent drop would change `EvidenceID` for
     // such an input and break REP-001 (formal specification §11.1).
@@ -1755,8 +1758,8 @@ Status EirParser::ParseProvenance(EvidenceCase* out) {
       // Declared explicitly and never derived from the case binding: the run is
       // a semantic field of the record, so it has a textual representation of
       // its own, and the equality with the case's own run is a constraint the
-      // document satisfies rather than a substitution the parser performs on the
-      // reader's behalf (§11.1).
+      // document satisfies rather than a substitution the parser performs on
+      // the reader's behalf (§11.1).
       StatusOr<std::string> text =
           TakeString("the provenance analysis run string");
       if (!text.ok()) {
@@ -1785,8 +1788,8 @@ Status EirParser::ParseProvenance(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseVerification(EvidenceCase* out) {
-  Advance();  // "verify"
+Status EirParser::ParseVerification(EvidenceCase *out) {
+  Advance(); // "verify"
   ProofObligation obligation;
   StatusOr<Token> id = TakeIdentifier("a proof obligation identifier");
   if (!id.ok()) {
@@ -1882,8 +1885,8 @@ Status EirParser::ParseVerification(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseSummary(EvidenceCase* out) {
-  Advance();  // "summary"
+Status EirParser::ParseSummary(EvidenceCase *out) {
+  Advance(); // "summary"
   SummaryReference summary;
   StatusOr<Token> id = TakeIdentifier("a summary reference identifier");
   if (!id.ok()) {
@@ -1961,8 +1964,8 @@ Status EirParser::ParseSummary(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseDependency(EvidenceCase* out) {
-  Advance();  // "dependency"
+Status EirParser::ParseDependency(EvidenceCase *out) {
+  Advance(); // "dependency"
   Dependency dependency;
   StatusOr<Token> id = TakeIdentifier("a dependency identifier");
   if (!id.ok()) {
@@ -2034,8 +2037,8 @@ Status EirParser::ParseDependency(EvidenceCase* out) {
   return Status::Ok();
 }
 
-Status EirParser::ParseOmission(EvidenceCase* out) {
-  Advance();  // "omission"
+Status EirParser::ParseOmission(EvidenceCase *out) {
+  Advance(); // "omission"
   Omission omission;
   StatusOr<Token> id = TakeIdentifier("an omission identifier");
   if (!id.ok()) {
@@ -2147,7 +2150,8 @@ StatusOr<Expression> EirParser::ParseImplication() {
     return left;
   }
   // `ImplicationExpr ::= OrExpr [ "implies" ImplicationExpr ]` — right
-  // associative, so the consequent is parsed at this level rather than at `or`'s.
+  // associative, so the consequent is parsed at this level rather than at
+  // `or`'s.
   StatusOr<Expression> right = ParseImplication();
   if (!right.ok()) {
     return right.status();
@@ -2204,7 +2208,7 @@ StatusOr<Expression> EirParser::ParseComparison() {
   if (!left.ok()) {
     return left.status();
   }
-  const Token& token = Peek();
+  const Token &token = Peek();
   const std::string_view op = ComparisonText(token.kind);
   if (op.empty()) {
     return left;
@@ -2271,9 +2275,8 @@ StatusOr<Expression> EirParser::ParseQuantified(Expression::Kind kind) {
     if (!callee.ok()) {
       return callee.status();
     }
-    status =
-        Expect(TokenKind::kLeftParen,
-               Joined("'(' after the domain ", Quoted(callee.value().text)));
+    status = Expect(TokenKind::kLeftParen, Joined("'(' after the domain ",
+                                                  Quoted(callee.value().text)));
     if (!status.ok()) {
       return status;
     }
@@ -2307,7 +2310,7 @@ StatusOr<Expression> EirParser::ParseQuantified(Expression::Kind kind) {
 }
 
 StatusOr<Expression> EirParser::ParsePrimary() {
-  const Token& token = Peek();
+  const Token &token = Peek();
   if (token.kind == TokenKind::kLeftParen) {
     Advance();
     StatusOr<Expression> inner = ParsePredicate();
@@ -2330,8 +2333,7 @@ StatusOr<Expression> EirParser::ParsePrimary() {
     return ParseIntegerToken(token);
   }
   if (token.kind == TokenKind::kAt) {
-    StatusOr<std::string> reference =
-        TakeReference("an expression reference");
+    StatusOr<std::string> reference = TakeReference("an expression reference");
     if (!reference.ok()) {
       return reference.status();
     }
@@ -2371,7 +2373,7 @@ StatusOr<Expression> EirParser::ParsePrimary() {
 // --- Values -----------------------------------------------------------------
 
 StatusOr<Expression> EirParser::ParsePropertyValue() {
-  const Token& token = Peek();
+  const Token &token = Peek();
   if (token.kind == TokenKind::kString) {
     Advance();
     return MakeString(token.text);
@@ -2414,7 +2416,7 @@ StatusOr<Expression> EirParser::ParsePropertyValue() {
   return Fail(Joined("expected a property value, found ", Describe(token)));
 }
 
-StatusOr<std::string> EirParser::ParseCallOrQualifiedId(const Token& attribute,
+StatusOr<std::string> EirParser::ParseCallOrQualifiedId(const Token &attribute,
                                                         std::string_view what) {
   // `AssumptionSource ::= FunctionCall | QualifiedId`. It lowers to a string:
   // the call to its canonical EIR-T spelling, which is a fixpoint of this
@@ -2436,22 +2438,21 @@ StatusOr<std::string> EirParser::ParseCallOrQualifiedId(const Token& attribute,
                     "call");
 }
 
-StatusOr<std::string> EirParser::ParseScope(const Token& attribute,
-                                           std::string_view what) {
+StatusOr<std::string> EirParser::ParseScope(const Token &attribute,
+                                            std::string_view what) {
   // `Scope` is `FunctionCall` plus a closed set of six keywords, not the open
   // `QualifiedId` that `AssumptionSource` admits. The model carries the scope
   // as a plain string either way, so accepting any identifier here would admit
   // documents §10.1 does not define and would leave the grammar's only closed
   // enumeration of scopes unenforced.
-  const Token& token = Peek();
+  const Token &token = Peek();
   if (token.kind == TokenKind::kIdentifier &&
       Peek(1).kind != TokenKind::kLeftParen && !IsScopeKeyword(token.text)) {
-    return FailAt(token,
-                  Joined("the ", what) +
-                      " attribute takes one of the six scope keywords "
-                      "(global, function, path, basic_block, callsite, "
-                      "entity) or a function call, found " +
-                      Quoted(token.text));
+    return FailAt(token, Joined("the ", what) +
+                             " attribute takes one of the six scope keywords "
+                             "(global, function, path, basic_block, callsite, "
+                             "entity) or a function call, found " +
+                             Quoted(token.text));
   }
   return ParseCallOrQualifiedId(attribute, what);
 }
@@ -2517,8 +2518,8 @@ StatusOr<Expression> EirParser::ParseResourceBudget() {
   return Fail(Joined("expected a resource budget, found ", Describe(Peek())));
 }
 
-StatusOr<std::vector<std::string>> EirParser::ParseIdentifierList(
-    std::string_view what) {
+StatusOr<std::vector<std::string>>
+EirParser::ParseIdentifierList(std::string_view what) {
   Status status = Expect(TokenKind::kLeftBracket, "'[' opening the list");
   if (!status.ok()) {
     return status;
@@ -2544,8 +2545,8 @@ StatusOr<std::vector<std::string>> EirParser::ParseIdentifierList(
   return values;
 }
 
-StatusOr<std::vector<std::string>> EirParser::ParseReferenceList(
-    std::string_view what) {
+StatusOr<std::vector<std::string>>
+EirParser::ParseReferenceList(std::string_view what) {
   Status status = Expect(TokenKind::kLeftBracket, "'[' opening the list");
   if (!status.ok()) {
     return status;
@@ -2604,10 +2605,10 @@ StatusOr<std::vector<std::string>> EirParser::ParseFactReferenceList() {
   return values;
 }
 
-StatusOr<Expression> EirParser::ParseIntegerToken(const Token& token) {
+StatusOr<Expression> EirParser::ParseIntegerToken(const Token &token) {
   std::int64_t value = 0;
-  const char* const first = token.text.data();
-  const char* const last = first + token.text.size();
+  const char *const first = token.text.data();
+  const char *const last = first + token.text.size();
   const std::from_chars_result result = std::from_chars(first, last, value);
   if (result.ec != std::errc() || result.ptr != last) {
     return FailAt(token,
@@ -2616,8 +2617,8 @@ StatusOr<Expression> EirParser::ParseIntegerToken(const Token& token) {
   }
   Expression expression;
   // `text` stays empty. The per-kind contract carries an integer in `integer`
-  // alone, and the assembly path writes it the same way, so one formula does not
-  // depend on which boundary produced it.
+  // alone, and the assembly path writes it the same way, so one formula does
+  // not depend on which boundary produced it.
   expression.kind = Expression::Kind::kInteger;
   expression.integer = value;
   return expression;
@@ -2640,7 +2641,7 @@ StatusOr<EvidenceCase> EirParser::Parse() {
 }
 
 StatusOr<EvidenceCase> ParseEirText(std::string_view source,
-                                    EirParseError* error) {
+                                    EirParseError *error) {
   EirLexer lexer(source, error);
   StatusOr<std::vector<Token>> tokens = lexer.Tokenize();
   if (!tokens.ok()) {
@@ -2673,4 +2674,4 @@ StatusOr<EvidenceCase> ParseEirText(std::string_view source,
   return result;
 }
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence

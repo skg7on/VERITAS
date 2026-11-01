@@ -15,6 +15,7 @@
 #ifndef VERITAS_REVIEW_LOCAL_EVIDENCE_H_
 #define VERITAS_REVIEW_LOCAL_EVIDENCE_H_
 #include "veritas/review/StructuralIndex.h"
+
 namespace veritas::review {
 struct LocalRequest {
   // Native capability resolved by the backend, never supplied on the wire.
@@ -25,23 +26,28 @@ struct LocalRequest {
   std::vector<std::string> requested_slots;
   uint64_t max_examined;
 };
+
 struct CopyOperands {
   EntityRef destination, source, length;
 };
+
 struct ByteExtent {
   uint64_t bytes;
 };
+
 struct LocalGuard {
   EntityRef condition_ref;
   bool dominates;
   std::vector<EntityRef> operand_refs;
 };
+
 struct LocalObservation {
   std::string slot;
   EntityRef subject_ref;
   std::variant<CopyOperands, ByteExtent, LocalGuard> value;
   std::vector<ContextId> source_refs;
 };
+
 struct LocalEvidence {
   LocalEvidenceId local_evidence_id;
   ReviewBinding binding;
@@ -53,6 +59,7 @@ struct LocalEvidence {
   ProviderVersion producer;
   Usage usage;
 };
+
 // Rejects stale/foreign/non-callsite refs, unregistered predicates and invalid
 // budgets/slots. Unsupported slots remain absent with a coverage reason.
 StatusOr<LocalEvidence> InvestigateLocal(const LocalRequest &);

@@ -43,30 +43,36 @@
 #endif
 
 extern char **environ;
+
 namespace veritas::review {
 namespace {
 using Clock = std::chrono::steady_clock;
 constexpr std::string_view kRoot = "/veritas-input/";
+
 Json Strings(const std::vector<std::string> &strings) {
   Json::Array a;
   for (const auto &s : strings)
     a.push_back(s);
   return a;
 }
+
 void Gap(Coverage &coverage, std::string ref, std::string reason) {
   coverage.supported = false;
   coverage.traversal = "INCOMPLETE";
   coverage.frontier_refs.push_back(std::move(ref));
   coverage.reasons.push_back(std::move(reason));
 }
+
 struct Command {
   std::string file;
   std::vector<std::string> args;
 };
+
 Status Refuse(std::string_view detail) {
   return Status::FailedPrecondition("unsupported captured compiler command: " +
                                     std::string(detail));
 }
+
 Status Expand(const ReviewSnapshot &snapshot,
               const CapturedCompileCommand &command,
               const std::vector<std::string> &input,
@@ -106,6 +112,7 @@ Status Expand(const ReviewSnapshot &snapshot,
   }
   return Status::Ok();
 }
+
 StatusOr<Command> Admit(const ReviewSnapshot &snapshot,
                         const CapturedCompileCommand &command) {
   if (command.arguments.empty())
@@ -235,6 +242,7 @@ StatusOr<Command> Admit(const ReviewSnapshot &snapshot,
 class Diagnostics : public clang::DiagnosticConsumer {
 public:
   bool failed = false;
+
   void HandleDiagnostic(clang::DiagnosticsEngine::Level level,
                         const clang::Diagnostic &info) override {
     clang::DiagnosticConsumer::HandleDiagnostic(level, info);
@@ -242,6 +250,7 @@ public:
       failed = true;
   }
 };
+
 // This producer deliberately admits less than general C/C++ semantics. It uses
 // compiler layout and AST identity; it never guesses a pointee extent or proves
 // feasibility. Guard admission is limited to unsigned unchanged parameter sizes
@@ -253,7 +262,9 @@ public:
             Json::Array &entities, Json::Array &copies, uint64_t limit)
       : ctx_(context), contexts_(contexts), entities_(entities),
         copies_(copies), limit_(limit) {}
+
   bool truncated = false;
+
   bool TraverseDecl(clang::Decl *decl) {
     if (entities_.size() >= limit_) {
       truncated = true;
@@ -261,6 +272,7 @@ public:
     }
     return clang::RecursiveASTVisitor<Collector>::TraverseDecl(decl);
   }
+
   bool TraverseFunctionDecl(clang::FunctionDecl *decl) {
     auto *old = function_;
     function_ = decl;
@@ -269,18 +281,21 @@ public:
     function_ = old;
     return result;
   }
+
   bool VisitFunctionDecl(clang::FunctionDecl *decl) {
     if (decl->isThisDeclarationADefinition())
       Add("FUNCTION", decl->getQualifiedNameAsString(),
           decl->getType().getAsString(), decl->getSourceRange());
     return !truncated;
   }
+
   bool VisitVarDecl(clang::VarDecl *decl) {
     if (decl->hasLocalStorage() && ctx_.getAsConstantArrayType(decl->getType()))
       Add("MEMORY", decl->getNameAsString(), decl->getType().getAsString(),
           decl->getSourceRange());
     return !truncated;
   }
+
   bool VisitCallExpr(clang::CallExpr *call) {
     auto *callee = call->getDirectCallee();
     auto ordinal = Add(
@@ -456,6 +471,7 @@ private:
   Json::Array &entities_, &copies_;
   uint64_t limit_;
   clang::FunctionDecl *function_ = nullptr;
+
   template <class F> static void Scan(const clang::Stmt *stmt, const F &f) {
     if (!stmt)
       return;
@@ -463,6 +479,7 @@ private:
     for (const auto *child : stmt->children())
       Scan(child, f);
   }
+
   static bool References(const clang::Stmt *stmt,
                          const clang::ValueDecl *decl) {
     bool found = false;
@@ -473,6 +490,7 @@ private:
     });
     return found;
   }
+
   static bool Refers(const clang::Expr *expr, const clang::ValueDecl *decl) {
     if (!expr)
       return false;
@@ -480,6 +498,7 @@ private:
         llvm::dyn_cast<clang::DeclRefExpr>(expr->IgnoreParenImpCasts());
     return ref && ref->getDecl() == decl;
   }
+
   static bool Contains(const clang::Stmt *container,
                        const clang::Stmt *needle) {
     bool found = false;
@@ -489,6 +508,7 @@ private:
     });
     return found;
   }
+
   std::optional<uint32_t> Add(std::string kind, std::string name,
                               std::string type, clang::SourceRange range,
                               std::optional<unsigned> operand = {}) {
@@ -526,6 +546,7 @@ private:
     return ordinal;
   }
 };
+
 uint64_t Rss(pid_t pid) {
 #ifdef __APPLE__
   proc_taskinfo task{};
@@ -540,6 +561,7 @@ uint64_t Rss(pid_t pid) {
 #endif
   return 0;
 }
+
 uint64_t RusageRss(const rusage &usage) {
 #ifdef __APPLE__
   return usage.ru_maxrss;
@@ -547,10 +569,12 @@ uint64_t RusageRss(const rusage &usage) {
   return static_cast<uint64_t>(usage.ru_maxrss) * 1024;
 #endif
 }
+
 struct WorkerResult {
   Json document;
   uint64_t rss, cpu_ms, bytes;
 };
+
 StatusOr<WorkerResult>
 ParseWorker(const std::vector<Command> &commands,
             const std::map<std::string, std::string> &files,
@@ -704,6 +728,7 @@ Json CoverageJson(const Coverage &c) {
                       {"reasons", Strings(c.reasons)},
                       {"examined", c.examined}};
 }
+
 Json UsageJson(const Usage &u) {
   return Json::Object{{"wall_ms", u.wall_ms},
                       {"cpu_ms", u.cpu_ms},
@@ -711,9 +736,11 @@ Json UsageJson(const Usage &u) {
                       {"output_bytes", u.output_bytes},
                       {"examined", u.examined}};
 }
+
 Json RefJson(const EntityRef &r) {
   return Json::Object{{"index_id", r.index_id.value()}, {"ordinal", r.ordinal}};
 }
+
 StatusOr<StructuralIndex> BuildStructuralIndex(const ReviewSnapshot &snapshot,
                                                const StructuralBudget &budget) {
   auto start = Clock::now();
@@ -870,16 +897,23 @@ StatusOr<StructuralIndex> BuildStructuralIndex(const ReviewSnapshot &snapshot,
                  coverage.examined};
   return StructuralIndex(std::move(data));
 }
+
 const StructuralIndexId &StructuralIndex::id() const { return data_->id; }
+
 const ReviewBinding &StructuralIndex::binding() const { return data_->binding; }
+
 const std::vector<StructuralEntity> &StructuralIndex::entities() const {
   return data_->entities;
 }
+
 const Coverage &StructuralIndex::coverage() const { return data_->coverage; }
+
 const Usage &StructuralIndex::usage() const { return data_->usage; }
+
 const StructuralMetrics &StructuralIndex::metrics() const {
   return data_->metrics;
 }
+
 StatusOr<ContextArtifact> StructuralIndex::Context(std::string_view path,
                                                    uint64_t start,
                                                    uint64_t end) const {

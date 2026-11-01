@@ -47,7 +47,7 @@ namespace tooling = clang::tooling;
 // -- domain-separated hashing ------------------------------------------------
 
 llvm::ArrayRef<uint8_t> AsBytes(std::string_view s) {
-  return {reinterpret_cast<const uint8_t*>(s.data()), s.size()};
+  return {reinterpret_cast<const uint8_t *>(s.data()), s.size()};
 }
 
 std::string DomainHash(std::string_view domain, std::string_view bytes) {
@@ -69,7 +69,7 @@ std::string TaggedIdentifier(std::string_view kind, std::string_view domain,
 
 // -- file I/O ----------------------------------------------------------------
 
-StatusOr<std::string> ReadFile(const fs::path& path) {
+StatusOr<std::string> ReadFile(const fs::path &path) {
   std::ifstream stream(path, std::ios::binary);
   if (!stream) {
     return Status::FailedPrecondition("cannot read " + path.string());
@@ -82,26 +82,31 @@ StatusOr<std::string> ReadFile(const fs::path& path) {
 // -- path classification -----------------------------------------------------
 
 // Returns true when `child` lies inside `parent` (both must be canonical).
-bool IsWithin(const fs::path& child, const fs::path& parent) {
+bool IsWithin(const fs::path &child, const fs::path &parent) {
   const auto p = parent.lexically_normal();
   const auto c = child.lexically_normal();
   auto pi = p.begin();
   auto ci = c.begin();
   for (; pi != p.end() && ci != c.end(); ++pi, ++ci) {
-    if (*pi != *ci) return false;
+    if (*pi != *ci)
+      return false;
   }
   return pi == p.end();
 }
 
-TaggedPath ClassifyPath(const fs::path& absolute, const fs::path& project_root) {
+TaggedPath ClassifyPath(const fs::path &absolute,
+                        const fs::path &project_root) {
   if (IsWithin(absolute, project_root)) {
     return TaggedPath{
-        PathRootKind::kRepository, "repository",
+        PathRootKind::kRepository,
+        "repository",
         fs::relative(absolute, project_root).lexically_normal(),
     };
   }
   return TaggedPath{
-      PathRootKind::kExternal, "external", absolute.lexically_normal(),
+      PathRootKind::kExternal,
+      "external",
+      absolute.lexically_normal(),
   };
 }
 
@@ -118,7 +123,8 @@ TaggedPath ClassifyPath(const fs::path& absolute, const fs::path& project_root) 
 
 std::string BasenameOf(std::string_view program) {
   const auto slash = program.find_last_of('/');
-  if (slash == std::string_view::npos) return std::string(program);
+  if (slash == std::string_view::npos)
+    return std::string(program);
   return std::string(program.substr(slash + 1));
 }
 
@@ -143,12 +149,13 @@ std::string SubstituteProjectRoot(std::string_view argument,
   return out;
 }
 
-std::vector<std::string> NormalizeArguments(
-    const std::vector<std::string>& raw,
-    std::string_view project_root_string) {
+std::vector<std::string>
+NormalizeArguments(const std::vector<std::string> &raw,
+                   std::string_view project_root_string) {
   std::vector<std::string> normalized;
   normalized.reserve(raw.size());
-  if (raw.empty()) return normalized;
+  if (raw.empty())
+    return normalized;
   normalized.push_back(BasenameOf(raw.front()));
   for (std::size_t i = 1; i < raw.size(); ++i) {
     normalized.push_back(SubstituteProjectRoot(raw[i], project_root_string));
@@ -162,17 +169,19 @@ std::string JoinNul(std::initializer_list<std::string_view> parts) {
   std::string joined;
   bool first = true;
   for (const auto part : parts) {
-    if (!first) joined.push_back('\0');
+    if (!first)
+      joined.push_back('\0');
     first = false;
     joined.append(part);
   }
   return joined;
 }
 
-std::string JoinArguments(const std::vector<std::string>& args) {
+std::string JoinArguments(const std::vector<std::string> &args) {
   std::string joined;
   for (std::size_t i = 0; i < args.size(); ++i) {
-    if (i > 0) joined.push_back('\0');
+    if (i > 0)
+      joined.push_back('\0');
     joined.append(args[i]);
   }
   return joined;
@@ -186,7 +195,8 @@ std::string SortedUniqueJoined(std::vector<std::string> records, char sep) {
   records.erase(std::unique(records.begin(), records.end()), records.end());
   std::string joined;
   for (std::size_t i = 0; i < records.size(); ++i) {
-    if (i > 0) joined.push_back(sep);
+    if (i > 0)
+      joined.push_back(sep);
     joined.append(records[i]);
   }
   return joined;
@@ -201,9 +211,9 @@ struct NormalizedCommand {
   std::string source_content_hash;
 };
 
-StatusOr<NormalizedCommand> NormalizeCommand(
-    const tooling::CompileCommand& command,
-    const fs::path& project_root) {
+StatusOr<NormalizedCommand>
+NormalizeCommand(const tooling::CompileCommand &command,
+                 const fs::path &project_root) {
   if (command.Directory.empty()) {
     return Status::FailedPrecondition(
         "compile command has empty working directory for: " + command.Filename);
@@ -221,8 +231,7 @@ StatusOr<NormalizedCommand> NormalizeCommand(
     resolved_source = canonical_working_dir / resolved_source;
   }
   std::error_code canonical_error;
-  resolved_source =
-      fs::weakly_canonical(resolved_source, canonical_error);
+  resolved_source = fs::weakly_canonical(resolved_source, canonical_error);
   if (canonical_error) {
     return Status::FailedPrecondition(
         "cannot canonicalize translation-unit source: " + command.Filename);
@@ -230,12 +239,13 @@ StatusOr<NormalizedCommand> NormalizeCommand(
 
   std::error_code stat_error;
   if (!fs::is_regular_file(resolved_source, stat_error) || stat_error) {
-    return Status::FailedPrecondition(
-        "translation-unit source is missing: " + resolved_source.string());
+    return Status::FailedPrecondition("translation-unit source is missing: " +
+                                      resolved_source.string());
   }
 
   auto contents = ReadFile(resolved_source);
-  if (!contents.ok()) return contents.status();
+  if (!contents.ok())
+    return contents.status();
 
   NormalizedCommand out;
   out.source_tagged = ClassifyPath(resolved_source, project_root);
@@ -243,8 +253,7 @@ StatusOr<NormalizedCommand> NormalizeCommand(
       ClassifyPath(canonical_working_dir, project_root);
   out.arguments =
       NormalizeArguments(command.CommandLine, project_root.generic_string());
-  out.source_content_hash =
-      DomainHash("veritas.source_file.v1", *contents);
+  out.source_content_hash = DomainHash("veritas.source_file.v1", *contents);
   return out;
 }
 
@@ -255,11 +264,11 @@ StatusOr<NormalizedCommand> NormalizeCommand(
 // compiling `a.cpp` with -DTARGET=A and -DTARGET=B) contribute exactly once,
 // so a restructured project that compiles each source once produces the same
 // source_tree_hash as one that compiles it under N variants.
-std::string ComputeSourceTreeHash(
-    const std::vector<NormalizedCommand>& normalized) {
+std::string
+ComputeSourceTreeHash(const std::vector<NormalizedCommand> &normalized) {
   std::vector<std::string> lines;
   lines.reserve(normalized.size());
-  for (const auto& command : normalized) {
+  for (const auto &command : normalized) {
     lines.push_back(JoinNul({
         command.source_tagged.relative_path.generic_string(),
         command.source_content_hash,
@@ -269,12 +278,11 @@ std::string ComputeSourceTreeHash(
                     SortedUniqueJoined(std::move(lines), '\n'));
 }
 
-std::string ComputeCompileOptionsHash(
-    const std::vector<NormalizedCommand>& normalized) {
+std::string
+ComputeCompileOptionsHash(const std::vector<NormalizedCommand> &normalized) {
   std::vector<std::string> args;
-  for (const auto& command : normalized) {
-    args.insert(args.end(), command.arguments.begin(),
-                command.arguments.end());
+  for (const auto &command : normalized) {
+    args.insert(args.end(), command.arguments.begin(), command.arguments.end());
   }
   return DomainHash("veritas.compile_options.v1",
                     SortedUniqueJoined(std::move(args), '\0'));
@@ -285,11 +293,10 @@ std::string ComputeCompileOptionsHash(
 // reordering entries between one clang++ TU and one gcc TU flipped
 // `compiler_id`) and collapses to a single token when every TU uses the same
 // compiler.
-std::string DetectCompilerId(
-    const std::vector<NormalizedCommand>& normalized) {
+std::string DetectCompilerId(const std::vector<NormalizedCommand> &normalized) {
   std::vector<std::string> compilers;
   compilers.reserve(normalized.size());
-  for (const auto& command : normalized) {
+  for (const auto &command : normalized) {
     if (!command.arguments.empty()) {
       compilers.push_back(command.arguments.front());
     }
@@ -310,7 +317,7 @@ constexpr std::string_view kTargetFlags[] = {"--target", "-target", "-triple"};
 
 // The target named by one normalized command, or "" when it names none.
 // Searches from index 1: index 0 is the compiler basename, never a flag.
-std::string DetectCommandTarget(const std::vector<std::string>& arguments) {
+std::string DetectCommandTarget(const std::vector<std::string> &arguments) {
   for (std::size_t i = 1; i < arguments.size(); ++i) {
     const std::string_view argument = arguments[i];
     for (const std::string_view flag : kTargetFlags) {
@@ -336,29 +343,31 @@ std::string DetectCommandTarget(const std::vector<std::string>& arguments) {
 // default triple is the honest answer rather than "". This is consequently
 // host-derived, and deliberately so: a cross-host-stable value here would
 // describe a target the build does not have.
-std::string DetectTargetTriple(
-    const std::vector<NormalizedCommand>& normalized) {
+std::string
+DetectTargetTriple(const std::vector<NormalizedCommand> &normalized) {
   std::vector<std::string> targets;
   targets.reserve(normalized.size());
-  for (const auto& command : normalized) {
+  for (const auto &command : normalized) {
     std::string target = DetectCommandTarget(command.arguments);
-    if (!target.empty()) targets.push_back(std::move(target));
+    if (!target.empty())
+      targets.push_back(std::move(target));
   }
-  if (targets.empty()) return llvm::sys::getDefaultTargetTriple();
+  if (targets.empty())
+    return llvm::sys::getDefaultTargetTriple();
   return SortedUniqueJoined(std::move(targets), ',');
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
+StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput &input) {
   std::string error;
   auto database = tooling::JSONCompilationDatabase::loadFromFile(
       input.compile_database_path.string(), error,
       tooling::JSONCommandLineSyntax::AutoDetect);
   if (!database) {
-    return Status::InvalidArgument(
-        "invalid compile_commands.json (" +
-        input.compile_database_path.string() + "): " + error);
+    return Status::InvalidArgument("invalid compile_commands.json (" +
+                                   input.compile_database_path.string() +
+                                   "): " + error);
   }
   const auto all_commands = database->getAllCompileCommands();
   if (all_commands.empty()) {
@@ -369,9 +378,10 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
 
   std::vector<NormalizedCommand> normalized;
   normalized.reserve(all_commands.size());
-  for (const auto& command : all_commands) {
+  for (const auto &command : all_commands) {
     auto result = NormalizeCommand(command, input.project_root);
-    if (!result.ok()) return result.status();
+    if (!result.ok())
+      return result.status();
     normalized.push_back(std::move(*result));
   }
 
@@ -380,13 +390,14 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
   // second pass would either recompute or hoist them, and hoisting is the
   // cheaper option.
   struct PreparedTu {
-    std::string relative_path;  // repository-relative, generic form
-    std::string joined_args;    // NUL-joined arguments
-    std::string command_hash;   // SHA-256 over joined_args
+    std::string relative_path; // repository-relative, generic form
+    std::string joined_args;   // NUL-joined arguments
+    std::string command_hash;  // SHA-256 over joined_args
   };
+
   std::vector<PreparedTu> prepared;
   prepared.reserve(normalized.size());
-  for (const auto& command : normalized) {
+  for (const auto &command : normalized) {
     PreparedTu p;
     p.relative_path = command.source_tagged.relative_path.generic_string();
     p.joined_args = JoinArguments(command.arguments);
@@ -406,8 +417,9 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
   // `build_variant_id` — adding them there would re-identify every stored row
   // in the tree.
   const auto target_triple = DetectTargetTriple(normalized);
-  const auto type_layout_hash = TaggedIdentifier(
-      "layout", "veritas.type_layout.v1", JoinNul({target_triple, compiler_id}));
+  const auto type_layout_hash =
+      TaggedIdentifier("layout", "veritas.type_layout.v1",
+                       JoinNul({target_triple, compiler_id}));
 
   // The compilation-database hash summarizes the canonical set of entries,
   // not the raw JSON bytes on disk. Raw bytes would leak the checkout path
@@ -416,24 +428,24 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
   // (path, args) tuples keeps the identity stable.
   std::vector<std::string> database_lines;
   database_lines.reserve(prepared.size());
-  for (const auto& p : prepared) {
+  for (const auto &p : prepared) {
     database_lines.push_back(JoinNul({p.relative_path, p.joined_args}));
   }
   const auto compilation_database_hash =
       DomainHash("veritas.compilation_database.v1",
                  SortedUniqueJoined(std::move(database_lines), '\n'));
 
-  const auto build_variant_id = TaggedIdentifier(
-      "bv", "veritas.build_variant.v1",
-      JoinNul({compiler_id, compile_options_hash}));
-  const auto repository_id = TaggedIdentifier(
-      "repo", "veritas.repository.v1",
-      JoinNul({source_tree_hash, compilation_database_hash}));
+  const auto build_variant_id =
+      TaggedIdentifier("bv", "veritas.build_variant.v1",
+                       JoinNul({compiler_id, compile_options_hash}));
+  const auto repository_id =
+      TaggedIdentifier("repo", "veritas.repository.v1",
+                       JoinNul({source_tree_hash, compilation_database_hash}));
   const auto revision_id =
       TaggedIdentifier("rev", "veritas.revision.v1", source_tree_hash);
 
   AnalysisManifest manifest;
-  auto& ctx = manifest.context;
+  auto &ctx = manifest.context;
   ctx.repository_id = repository_id;
   ctx.revision_id = revision_id;
   ctx.build_variant_id = build_variant_id;
@@ -472,8 +484,8 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
 
   manifest.translation_units.reserve(prepared.size());
   for (const auto index : tu_order) {
-    const auto& command = normalized[index];
-    const auto& p = prepared[index];
+    const auto &command = normalized[index];
+    const auto &p = prepared[index];
     TranslationUnitCommand tu;
     tu.revision_id = revision_id;
     tu.build_variant_id = build_variant_id;
@@ -490,4 +502,4 @@ StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input) {
   return manifest;
 }
 
-}  // namespace veritas::build
+} // namespace veritas::build

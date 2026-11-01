@@ -53,12 +53,12 @@ namespace {
 // The versioned external-model bundle is a checked-in source resource. Its
 // directory is baked in at configure time (VERITAS_LOGIC_MODELS_DIR) so the
 // analyzer loads the exact bundle it was built against.
-constexpr const char* kModelBundleRows =
+constexpr const char *kModelBundleRows =
     VERITAS_LOGIC_MODELS_DIR "/models.v1.tsv";
-constexpr const char* kModelBundleManifest =
+constexpr const char *kModelBundleManifest =
     VERITAS_LOGIC_MODELS_DIR "/models.v1.manifest";
 
-}  // namespace
+} // namespace
 
 AnalysisConfig AnalysisConfig::Default() {
   auto svf_config = svf::SvfConfig::Default();
@@ -117,7 +117,8 @@ std::string WpaConfigurationHash(const AnalysisConfig &config) {
   std::string canonical = "veritas.wpa.config.v3";
   append_field(&canonical, "reachability");
   append_field(&canonical, "memory_effects");
-  append_field(&canonical, std::to_string(config.wpa_component_timeout.count()));
+  append_field(&canonical,
+               std::to_string(config.wpa_component_timeout.count()));
   append_field(&canonical, std::to_string(config.wpa_component_memory_mb));
   append_field(&canonical, std::to_string(config.wpa_threads));
   append_field(&canonical, "relations.v2");
@@ -186,8 +187,7 @@ Status RunWpa(const std::filesystem::path &output_root,
               const AnalysisConfig &config,
               const std::vector<summary::v2::FunctionSummary> &summaries,
               const build::AnalysisManifest &manifest,
-              ProjectAnalysisResult *result,
-              core::RunMetrics *metrics) {
+              ProjectAnalysisResult *result, core::RunMetrics *metrics) {
   auto revision = core::ParseStableId(manifest.context.revision_id);
   if (!revision.ok())
     return revision.status();
@@ -210,8 +210,8 @@ Status RunWpa(const std::filesystem::path &output_root,
   std::string toolchain_identity;
   if (config.wpa_engine == WpaEngineMode::kSouffle) {
 #ifdef VERITAS_SOUFFLE_PROVENANCE_PATH
-    auto provenance = SouffleProvenance::Load(
-        VERITAS_SOUFFLE_PROVENANCE_PATH, VERITAS_SOUFFLE_EXECUTABLE_PATH);
+    auto provenance = SouffleProvenance::Load(VERITAS_SOUFFLE_PROVENANCE_PATH,
+                                              VERITAS_SOUFFLE_EXECUTABLE_PATH);
     if (!provenance.ok()) {
       return provenance.status();
     }
@@ -253,8 +253,7 @@ Status RunWpa(const std::filesystem::path &output_root,
 
   const std::array<wpa::WpaComponentKind, 4> components = {
       wpa::WpaComponentKind::kReachability,
-      wpa::WpaComponentKind::kMemoryEffects,
-      wpa::WpaComponentKind::kFlow,
+      wpa::WpaComponentKind::kMemoryEffects, wpa::WpaComponentKind::kFlow,
       wpa::WpaComponentKind::kEffects};
 
   wpa::WpaRunRequest wpa_request;
@@ -264,10 +263,12 @@ Status RunWpa(const std::filesystem::path &output_root,
   wpa_request.limits = limits;
   wpa_request.metrics = metrics;
 
-  StatusOr<wpa::WpaRunResult> wpa_result = [&]() -> StatusOr<wpa::WpaRunResult> {
+  StatusOr<wpa::WpaRunResult> wpa_result =
+      [&]() -> StatusOr<wpa::WpaRunResult> {
     if (config.wpa_engine == WpaEngineMode::kSouffle) {
 #ifdef VERITAS_SOUFFLE_WORKER
-      wpa::SouffleWpaExecutor executor(VERITAS_SOUFFLE_WORKER, toolchain_identity);
+      wpa::SouffleWpaExecutor executor(VERITAS_SOUFFLE_WORKER,
+                                       toolchain_identity);
       wpa::WpaOrchestrator orchestrator(executor, *repo, &scc_state);
       return orchestrator.Run(wpa_request);
 #else
@@ -325,8 +326,7 @@ Status RunWpa(const std::filesystem::path &output_root,
     conformance_request.metrics = nullptr;
     wpa::WpaOrchestrator conformance_orchestrator(*conformance_executor, *repo,
                                                   &scc_state);
-    auto conformance_result =
-        conformance_orchestrator.Run(conformance_request);
+    auto conformance_result = conformance_orchestrator.Run(conformance_request);
     if (!conformance_result.ok()) {
       repo->MarkIncomplete(wpa_result->run);
       result->wpa_diagnostics =
@@ -363,8 +363,7 @@ Status RunWpa(const std::filesystem::path &output_root,
   // surfaced from here rather than re-derived by a caller.
   result->batch_id = core::ToString(batch.batch_id);
   auto fact_store = [&] {
-    core::PhaseSpan span(metrics, "facts.store_open",
-                         core::SpanMode::kBearing);
+    core::PhaseSpan span(metrics, "facts.store_open", core::SpanMode::kBearing);
     return facts::FactStore::Open(output_root);
   }();
   if (!fact_store.ok()) {
@@ -382,10 +381,9 @@ Status RunWpa(const std::filesystem::path &output_root,
     return published;
   }
 
-  result->wpa_diagnostics =
-      config.wpa_engine == WpaEngineMode::kCppEmergency
-          ? "degraded: cpp-emergency WPA"
-          : "";
+  result->wpa_diagnostics = config.wpa_engine == WpaEngineMode::kCppEmergency
+                                ? "degraded: cpp-emergency WPA"
+                                : "";
   return Status::Ok();
 }
 
@@ -512,10 +510,9 @@ public:
       if (!persist.ok())
         return persist;
       summaries = *merged;
-      auto published_result =
-          (*coordinator)
-              ->Publish(CompletedProjectAnalysis{std::move(*merged),
-                                                 std::move(*graph)});
+      auto published_result = (*coordinator)
+                                  ->Publish(CompletedProjectAnalysis{
+                                      std::move(*merged), std::move(*graph)});
       if (!published_result.ok())
         return published_result.status();
       published = std::move(*published_result);

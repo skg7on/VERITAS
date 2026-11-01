@@ -39,7 +39,7 @@ constexpr std::string_view kUsage =
     "  veritas-diff --db <dir> --old <summary-id> --new <summary-id> "
     "[--max-consumers N --max-depth N]\n";
 
-std::string TakeValue(const std::vector<std::string>& args, std::size_t* i,
+std::string TakeValue(const std::vector<std::string> &args, std::size_t *i,
                       std::string_view flag) {
   if (*i + 1 >= args.size()) {
     std::cerr << flag << " requires a value\n";
@@ -54,14 +54,15 @@ int ReportError(std::string_view message) {
 }
 
 // Non-throwing unsigned parse (VERITAS builds with -fno-exceptions).
-bool ParseSize(std::string_view text, std::size_t* out) {
+bool ParseSize(std::string_view text, std::size_t *out) {
   const auto [ptr, ec] =
       std::from_chars(text.data(), text.data() + text.size(), *out);
   return ec == std::errc() && ptr == text.data() + text.size();
 }
 
 // Human-readable component name, with the proto's COMPONENT_KIND_ prefix
-// stripped so output reads "RANGE_FACTS" rather than "COMPONENT_KIND_RANGE_FACTS".
+// stripped so output reads "RANGE_FACTS" rather than
+// "COMPONENT_KIND_RANGE_FACTS".
 std::string ComponentName(veritas::summary::v1::ComponentKind kind) {
   const std::string name = veritas::summary::v1::ComponentKind_Name(kind);
   constexpr std::string_view kPrefix = "COMPONENT_KIND_";
@@ -72,9 +73,9 @@ std::string ComponentName(veritas::summary::v1::ComponentKind kind) {
   return name;
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   if (argc == 2 && std::strcmp(argv[1], "--version") == 0) {
     std::cout << veritas::FormatVersion(veritas::GetVersion()) << '\n';
     return 0;
@@ -85,7 +86,8 @@ int main(int argc, char* argv[]) {
   }
 
   std::vector<std::string> args;
-  for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
+  for (int i = 1; i < argc; ++i)
+    args.emplace_back(argv[i]);
 
   std::string db_path;
   std::string old_str;
@@ -93,7 +95,7 @@ int main(int argc, char* argv[]) {
   veritas::summarydb::ImpactBudget budget;
 
   for (std::size_t i = 0; i < args.size(); ++i) {
-    const std::string& arg = args[i];
+    const std::string &arg = args[i];
     if (arg == "--db") {
       db_path = TakeValue(args, &i, "--db");
     } else if (arg == "--old") {
@@ -114,9 +116,12 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  if (db_path.empty()) return ReportError("--db <dir> is required");
-  if (old_str.empty()) return ReportError("--old <summary-id> is required");
-  if (new_str.empty()) return ReportError("--new <summary-id> is required");
+  if (db_path.empty())
+    return ReportError("--db <dir> is required");
+  if (old_str.empty())
+    return ReportError("--old <summary-id> is required");
+  if (new_str.empty())
+    return ReportError("--new <summary-id> is required");
 
   auto old_id = ParseStableId(old_str);
   auto new_id = ParseStableId(new_str);
@@ -125,20 +130,25 @@ int main(int argc, char* argv[]) {
   }
 
   auto repo_result = veritas::summarydb::SummaryRepository::Open(db_path);
-  if (!repo_result.ok()) return ReportError(repo_result.status().message());
+  if (!repo_result.ok())
+    return ReportError(repo_result.status().message());
   auto repo = std::move(*repo_result);
 
   auto old_summary = repo->GetSummary(*old_id);
-  if (!old_summary.ok()) return ReportError(old_summary.status().message());
+  if (!old_summary.ok())
+    return ReportError(old_summary.status().message());
   auto new_summary = repo->GetSummary(*new_id);
-  if (!new_summary.ok()) return ReportError(new_summary.status().message());
+  if (!new_summary.ok())
+    return ReportError(new_summary.status().message());
 
   auto delta = veritas::summarydb::DiffSummaries(*old_summary, *new_summary);
-  if (!delta.ok()) return ReportError(delta.status().message());
+  if (!delta.ok())
+    return ReportError(delta.status().message());
 
   veritas::summarydb::DependencyIndex index(repo->metadata_store());
   auto impact = index.GetImpactSet(*delta, budget);
-  if (!impact.ok()) return ReportError(impact.status().message());
+  if (!impact.ok())
+    return ReportError(impact.status().message());
 
   std::cout << "Function: " << old_summary->identity().function_variant_id()
             << '\n';
@@ -150,12 +160,12 @@ int main(int argc, char* argv[]) {
             << '\n';
 
   std::cout << "Changed components:\n";
-  for (const auto& component : delta->changed_components) {
+  for (const auto &component : delta->changed_components) {
     std::cout << "  " << ComponentName(component.component_kind) << '\n';
   }
 
   std::cout << "Impacted consumers: " << impact->consumers.size() << '\n';
-  for (const auto& consumer : impact->consumers) {
+  for (const auto &consumer : impact->consumers) {
     std::cout << "  " << veritas::core::ToString(consumer.consumer_id) << ' '
               << ComponentName(consumer.consumer_component) << '\n';
   }

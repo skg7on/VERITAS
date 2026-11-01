@@ -71,8 +71,8 @@ enum class ClaimKind {
   kBufferOverflow,
 };
 
-// Severity classifies a finding seed. M10B owns this enum for the same reason it
-// owns ClaimKind: the seed crosses the M10B/M10C boundary.
+// Severity classifies a finding seed. M10B owns this enum for the same reason
+// it owns ClaimKind: the seed crosses the M10B/M10C boundary.
 enum class Severity {
   kUnspecified,
   kCritical,
@@ -105,7 +105,7 @@ struct QueryResultMetadata {
   core::StableId analysis_run_id;
   core::StableId query_provenance_id;
 
-  auto operator<=>(const QueryResultMetadata&) const = default;
+  auto operator<=>(const QueryResultMetadata &) const = default;
 };
 
 // EvidenceQueryBudget bounds every query. All limits must be positive; reaching
@@ -118,17 +118,17 @@ struct EvidenceQueryBudget {
   std::size_t max_facts_per_query = 0;
   std::size_t max_provenance_depth = 0;
 
-  auto operator<=>(const EvidenceQueryBudget&) const = default;
+  auto operator<=>(const EvidenceQueryBudget &) const = default;
 };
 
 // Validates result metadata at a public boundary. Rejects unspecified
 // completeness, a complete result carrying reasons, a truncated result without
 // a reason, duplicate or unspecified reasons, and missing/wrong-kind analysis
 // run and query provenance references.
-Status ValidateQueryResultMetadata(const QueryResultMetadata& metadata);
+Status ValidateQueryResultMetadata(const QueryResultMetadata &metadata);
 
 // Validates a budget: every limit must be positive.
-Status ValidateEvidenceQueryBudget(const EvidenceQueryBudget& budget);
+Status ValidateEvidenceQueryBudget(const EvidenceQueryBudget &budget);
 
 // EvidenceFactSet is one bounded fact query result: the canonical facts plus
 // their shared completion metadata.
@@ -207,9 +207,8 @@ struct EvidenceBuildInput {
 // Builds an empty fact set whose metadata validates for its declared state:
 // synthetic but well-formed analysis-run and query-provenance references are
 // attached, so complete-empty and truncated-empty stay distinguishable.
-EvidenceFactSet EmptyFactSet(
-    QueryCompleteness completeness,
-    std::vector<TruncationReason> truncation_reasons);
+EvidenceFactSet EmptyFactSet(QueryCompleteness completeness,
+                             std::vector<TruncationReason> truncation_reasons);
 
 // Deterministically applies max_facts_per_query to a candidate list. Candidates
 // are sorted by fact ID before the limit applies, so the returned prefix is
@@ -219,14 +218,14 @@ EvidenceFactSet EmptyFactSet(
 // budget truncates only the returned prefix, never the assessment itself. This
 // matches RunFactQuery's open-world count so the two budget paths agree.
 EvidenceFactSet ApplyFactBudget(std::vector<facts::AnalysisFact> candidates,
-                                const EvidenceQueryBudget& budget,
+                                const EvidenceQueryBudget &budget,
                                 QueryResultMetadata base_metadata);
 
 // Deterministic diagnostic JSON (canonical semantic ordering by stable ID, one
 // trailing newline). This is a debug representation; M10C never parses it.
-std::string ToDiagnosticJson(const EvidenceFactSet& set);
-std::string ToDiagnosticJson(const EvidenceBuildInput& input);
+std::string ToDiagnosticJson(const EvidenceFactSet &set);
+std::string ToDiagnosticJson(const EvidenceBuildInput &input);
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_SLICE_TYPES_H_
+#endif // VERITAS_EVIDENCE_SLICE_TYPES_H_

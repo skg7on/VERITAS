@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // EirSyntax.h — the internal token model and lexer for EIR-T, the Evidence IR
-// text format specified by `docs/specs/veritas-evidence-ir-formal-specification.md`.
+// text format specified by
+// `docs/specs/veritas-evidence-ir-formal-specification.md`.
 //
 // This header is private to `src/evidence`. Its public half is
 // `veritas/evidence/EirText.h`, which carries `EirParseError` alone: the token
@@ -152,10 +153,10 @@ struct Token {
 // The lexer borrows the source and the error sink; neither may be destroyed or
 // moved while it is in use.
 class EirLexer {
- public:
+public:
   // `error` receives the position and message of the first rejection, and may
   // be null when the caller only needs the returned `Status`.
-  EirLexer(std::string_view source, EirParseError* error);
+  EirLexer(std::string_view source, EirParseError *error);
 
   // Tokenizes the whole source, ending with exactly one `kEnd` token positioned
   // one byte past the last byte of input.
@@ -170,7 +171,7 @@ class EirLexer {
   // source.
   StatusOr<std::vector<Token>> Tokenize();
 
- private:
+private:
   // The character `lookahead` bytes past the cursor, or `'\0'` when that is
   // past the end. Callers must test `AtEnd` rather than this sentinel, because
   // a source may legitimately contain a NUL byte.
@@ -186,16 +187,16 @@ class EirLexer {
   Status SkipWhitespaceAndComments();
 
   // Cuts one token beginning at the cursor and appends it to `*out`.
-  Status LexToken(std::vector<Token>* out);
+  Status LexToken(std::vector<Token> *out);
 
   // The cursor methods of the lexical grammar.
-  Status LexIdentifier(std::vector<Token>* out);
-  Status LexString(std::vector<Token>* out);
-  Status LexInteger(std::vector<Token>* out);
+  Status LexIdentifier(std::vector<Token> *out);
+  Status LexString(std::vector<Token> *out);
+  Status LexInteger(std::vector<Token> *out);
 
   // Appends a one- and a two-byte token whose text is its own spelling.
-  Status Emit(TokenKind kind, std::vector<Token>* out);
-  Status EmitPair(TokenKind kind, std::vector<Token>* out);
+  Status Emit(TokenKind kind, std::vector<Token> *out);
+  Status EmitPair(TokenKind kind, std::vector<Token> *out);
 
   // Records a rejection at `offset`/`line`/`column` in the error sink, when one
   // was supplied, and returns it as the `Status` to propagate.
@@ -208,7 +209,7 @@ class EirLexer {
   std::size_t Column() const { return cursor_ - line_start_ + 1; }
 
   std::string_view source_;
-  EirParseError* error_;
+  EirParseError *error_;
 
   std::size_t cursor_ = 0;
   std::size_t line_ = 1;
@@ -234,15 +235,15 @@ class EirLexer {
 //     does not list is refused rather than ignored.
 //
 // The third rule is what makes the widening of the language surface safe: a
-// construct the model cannot carry is refused with a typed diagnostic instead of
-// being dropped or lowered onto a neighbouring field, so no two documents that
-// differ only in such an attribute can share an `EvidenceID`.
+// construct the model cannot carry is refused with a typed diagnostic instead
+// of being dropped or lowered onto a neighbouring field, so no two documents
+// that differ only in such an attribute can share an `EvidenceID`.
 class EirParser {
- public:
+public:
   // `tokens` must be the lexer's output and must still be alive, and must end
   // with `kEnd`. `error` receives the position and message of the first
   // rejection and may be null.
-  EirParser(const std::vector<Token>& tokens, EirParseError* error);
+  EirParser(const std::vector<Token> &tokens, EirParseError *error);
 
   // Parses one `EvidenceCase`. Does not validate and does not compute an
   // identity: `ParseEirText` owns both, so a parser test can inspect a case the
@@ -252,11 +253,12 @@ class EirParser {
   // admit, and for the first construct it admits but the model cannot carry.
   StatusOr<EvidenceCase> Parse();
 
- private:
+private:
   // --- Cursor ---------------------------------------------------------------
 
-  const Token& Peek(std::size_t lookahead = 0) const;
-  const Token& Advance();
+  const Token &Peek(std::size_t lookahead = 0) const;
+  const Token &Advance();
+
   bool AtEnd() const { return Peek().kind == TokenKind::kEnd; }
 
   // Consumes the token when it has `kind` (or is an identifier spelling
@@ -292,7 +294,7 @@ class EirParser {
   template <typename T>
   StatusOr<T> TakeEnum(std::string_view what,
                        StatusOr<T> (*parse)(std::string_view)) {
-    const Token& token = Peek();
+    const Token &token = Peek();
     if (token.kind != TokenKind::kIdentifier) {
       std::string message = "expected ";
       message.append(what);
@@ -317,36 +319,36 @@ class EirParser {
 
   // The spelling of `token` as a diagnostic names it. Defined in the
   // implementation with the rest of the message vocabulary.
-  static std::string Describe(const Token& token);
+  static std::string Describe(const Token &token);
 
   // --- Diagnostics ----------------------------------------------------------
 
   // Records a rejection at `token` and returns it as the `Status` to propagate.
-  Status FailAt(const Token& token, std::string message);
+  Status FailAt(const Token &token, std::string message);
   // `FailAt(Peek(), message)`.
   Status Fail(std::string message);
 
   // --- Productions ----------------------------------------------------------
 
-  Status ParseEvidenceCase(EvidenceCase* out);
-  Status ParseContext(ProgramBinding* out);
-  Status ParseAnalyzerVersion(AnalyzerVersion* out);
-  Status ParseEvidenceMember(EvidenceCase* out);
+  Status ParseEvidenceCase(EvidenceCase *out);
+  Status ParseContext(ProgramBinding *out);
+  Status ParseAnalyzerVersion(AnalyzerVersion *out);
+  Status ParseEvidenceMember(EvidenceCase *out);
 
-  Status ParseClaim(EvidenceCase* out);
-  Status ParseEntity(EvidenceCase* out);
-  Status ParseFact(EvidenceCase* out);
-  Status ParseAssumption(EvidenceCase* out);
-  Status ParseHypothesis(EvidenceCase* out);
-  Status ParseUnknown(EvidenceCase* out);
-  Status ParseEdge(EvidenceCase* out);
-  Status ParsePath(EvidenceCase* out);
-  Status ParseConstraint(EvidenceCase* out);
-  Status ParseProvenance(EvidenceCase* out);
-  Status ParseVerification(EvidenceCase* out);
-  Status ParseSummary(EvidenceCase* out);
-  Status ParseDependency(EvidenceCase* out);
-  Status ParseOmission(EvidenceCase* out);
+  Status ParseClaim(EvidenceCase *out);
+  Status ParseEntity(EvidenceCase *out);
+  Status ParseFact(EvidenceCase *out);
+  Status ParseAssumption(EvidenceCase *out);
+  Status ParseHypothesis(EvidenceCase *out);
+  Status ParseUnknown(EvidenceCase *out);
+  Status ParseEdge(EvidenceCase *out);
+  Status ParsePath(EvidenceCase *out);
+  Status ParseConstraint(EvidenceCase *out);
+  Status ParseProvenance(EvidenceCase *out);
+  Status ParseVerification(EvidenceCase *out);
+  Status ParseSummary(EvidenceCase *out);
+  Status ParseDependency(EvidenceCase *out);
+  Status ParseOmission(EvidenceCase *out);
 
   // `Predicate ::= QuantifiedPredicate | ImplicationExpr`, and the precedence
   // chain the grammar factors out of it (§5.1).
@@ -371,7 +373,7 @@ class EirParser {
   // Re-reads an `IntegerLiteral` token under the `std::int64_t` bound the lexer
   // already applied, so the parser never depends on a property of its input
   // beyond the token contract, and lowers it into a `kInteger` expression.
-  StatusOr<Expression> ParseIntegerToken(const Token& token);
+  StatusOr<Expression> ParseIntegerToken(const Token &token);
 
   // `"[" Identifier { "," Identifier } "]"` for `using`, `components`, and the
   // backend lists.
@@ -392,13 +394,14 @@ class EirParser {
   // into a `std::string` carrier — the call as its canonical EIR-T spelling,
   // the identifier as itself — and `attribute` is the attribute being read, for
   // the diagnostic.
-  StatusOr<std::string> ParseCallOrQualifiedId(const Token& attribute,
+  StatusOr<std::string> ParseCallOrQualifiedId(const Token &attribute,
                                                std::string_view what);
 
   // `Scope ::= "global" | "function" | "path" | "basic_block" | "callsite" |
   // "entity" | FunctionCall`. It lowers like `ParseCallOrQualifiedId`, but its
   // identifier-shaped half is that closed set rather than every `QualifiedId`.
-  StatusOr<std::string> ParseScope(const Token& attribute, std::string_view what);
+  StatusOr<std::string> ParseScope(const Token &attribute,
+                                   std::string_view what);
 
   // Reads one `{ attribute = value ";" ... }` body, refusing an attribute named
   // twice and one the production does not list. It owns the attribute names and
@@ -407,11 +410,11 @@ class EirParser {
   class AttributeReader;
 
   std::vector<Token> tokens_;
-  EirParseError* error_;
+  EirParseError *error_;
   std::size_t cursor_ = 0;
   bool claim_declared_ = false;
 };
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EIR_SYNTAX_H_
+#endif // VERITAS_EVIDENCE_EIR_SYNTAX_H_

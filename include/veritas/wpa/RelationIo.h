@@ -37,21 +37,21 @@
 namespace veritas::wpa {
 
 class RelationIo {
- public:
+public:
   // Writes one "<Relation>.facts" file per EDB relation present in the input,
   // tab-separated, in schema column order. Fails if a symbol cell contains a
   // tab or newline, which would silently shift columns.
-  static Status WriteInput(const std::filesystem::path& directory,
-                           const WpaLogicalComponentInput& input);
+  static Status WriteInput(const std::filesystem::path &directory,
+                           const WpaLogicalComponentInput &input);
 
   // Reads "<Derived>.csv" and "Witness.csv" back into a raw evaluation.
   // Results arrive as dense cells and are mapped back through the input;
   // witnesses arrive as semantic keys and are decoded against the schema.
-  static StatusOr<facts::RawWpaEvaluation> ReadOutput(
-      const std::filesystem::path& directory,
-      const WpaLogicalComponentInput& input);
+  static StatusOr<facts::RawWpaEvaluation>
+  ReadOutput(const std::filesystem::path &directory,
+             const WpaLogicalComponentInput &input);
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_RELATION_IO_H_
+#endif // VERITAS_WPA_RELATION_IO_H_

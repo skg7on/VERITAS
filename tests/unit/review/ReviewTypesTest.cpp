@@ -21,12 +21,14 @@ TEST(ReviewTypesTest, LocalBindingHasNoNativeRun) {
   ReviewBinding binding;
   EXPECT_FALSE(binding.native_binding.has_value());
 }
+
 TEST(ReviewTypesTest, ArtifactKindsCannotBeSubstituted) {
   static_assert(!std::is_convertible_v<ContextId, SnapshotId>);
   EXPECT_FALSE(
       ParseArtifactId<SnapshotTag>("context:sha256:" + std::string(64, 'a'))
           .ok());
 }
+
 TEST(ReviewTypesTest, RejectsDuplicateAndUnknownKeys) {
   EXPECT_FALSE(
       DecodeV2(
@@ -37,6 +39,7 @@ TEST(ReviewTypesTest, RejectsDuplicateAndUnknownKeys) {
           R"({"protocol":"veritas.review.backend.v2","request_id":"x","request_id":"y","operation":"handshake","parameters":{"accepted_protocols":[]}})")
           .ok());
 }
+
 TEST(ReviewTypesTest, HandshakeHasNoBinding) {
   auto value = DecodeV2(
       R"({"protocol":"veritas.review.backend.v2","request_id":"x","operation":"handshake","parameters":{"accepted_protocols":["veritas.review.backend.v2"]}})");
@@ -47,6 +50,7 @@ TEST(ReviewTypesTest, HandshakeHasNoBinding) {
           R"({"protocol":"veritas.review.backend.v1","request_id":"x","operation":"handshake","parameters":{"accepted_protocols":[]}})")
           .ok());
 }
+
 TEST(ReviewTypesTest, CanonicalIdsIgnoreAuditTiming) {
   auto a = MakeArtifactId<ContextTag>(
       Json::Object{{"text", "hé\n"}, {"n", uint64_t{18446744073709551615ULL}}});
@@ -62,6 +66,7 @@ TEST(ReviewTypesTest, CanonicalIdsIgnoreAuditTiming) {
   EXPECT_EQ(*json,
             "{\"a\":\"\\u0001/é\",\"n\":-9223372036854775808,\"z\":null}");
 }
+
 TEST(ReviewTypesTest, RejectsNonIntegerAndInvalidUnicode) {
   for (auto text :
        {"{\"n\":1.0}", "{\"n\":1e0}", "{\"n\":18446744073709551616}",

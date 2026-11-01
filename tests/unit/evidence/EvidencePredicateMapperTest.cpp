@@ -21,7 +21,8 @@
 //   * it copies the epistemic state instead of strengthening it;
 //   * it resolves *every* entity reference a relation carries, not just the
 //     first one;
-//   * it refuses a relation it has no mapping for rather than dropping the fact;
+//   * it refuses a relation it has no mapping for rather than dropping the
+//   fact;
 //   * every producer and predicate spelling it emits is a legal EIR-T
 //     `QualifiedId`, so a mapped fact is always writable.
 
@@ -52,7 +53,8 @@ constexpr std::string_view kMemoryHandle = "E_scratch";
 
 // The resolver the builder owns, populated by hand so a test can assert exactly
 // which stable ID each operand was resolved from.
-LocalIdTable MakeTable(const core::StableId& left, const core::StableId& right) {
+LocalIdTable MakeTable(const core::StableId &left,
+                       const core::StableId &right) {
   LocalIdTable table;
   table.Bind(left, std::string(kLeftHandle));
   table.Bind(right, std::string(kRightHandle));
@@ -91,10 +93,11 @@ TEST(EvidencePredicateMapperTest, AliasResolvesBothReferences) {
       left, right, sem::AliasKind::kMayAlias, sem::EpistemicState::kMay);
 
   const LocalIdTable table = MakeTable(left, right);
-  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_alias"));
+  auto mapped =
+      EvidencePredicateMapper().MapFact(fact, table, Handle("F_alias"));
 
   ASSERT_TRUE(mapped.ok()) << mapped.status().message();
-  const Fact& value = mapped.value();
+  const Fact &value = mapped.value();
   EXPECT_EQ(value.predicate.kind, Expression::Kind::kCall);
   EXPECT_EQ(value.predicate.text, "alias");
   ASSERT_EQ(value.predicate.operands.size(), 2u);
@@ -110,7 +113,8 @@ TEST(EvidencePredicateMapperTest, MemoryEffectResolvesBothReferences) {
   const EvidenceScenarioBuilder scenario;
   const core::StableId function =
       scenario.Id(core::IdKind::kFunctionVariant, "decode");
-  const core::StableId memory = scenario.Id(core::IdKind::kMemoryRef, "scratch");
+  const core::StableId memory =
+      scenario.Id(core::IdKind::kMemoryRef, "scratch");
 
   LocalIdTable table;
   table.Bind(function, std::string(kFunctionHandle));
@@ -120,14 +124,14 @@ TEST(EvidencePredicateMapperTest, MemoryEffectResolvesBothReferences) {
       {facts::RelationId::kMayRead, "reads"},
       {facts::RelationId::kMayWrite, "writes"},
   };
-  for (const auto& [relation, predicate] : directions) {
-    const facts::AnalysisFact fact = MakeRow(
-        relation, {function, memory, sem::EpistemicState::kMay});
+  for (const auto &[relation, predicate] : directions) {
+    const facts::AnalysisFact fact =
+        MakeRow(relation, {function, memory, sem::EpistemicState::kMay});
     auto mapped =
         EvidencePredicateMapper().MapFact(fact, table, Handle("F_effect"));
 
     ASSERT_TRUE(mapped.ok()) << mapped.status().message();
-    const Fact& value = mapped.value();
+    const Fact &value = mapped.value();
     EXPECT_EQ(value.predicate.text, predicate);
     ASSERT_EQ(value.predicate.operands.size(), 2u);
     EXPECT_EQ(value.predicate.operands[0].text, kFunctionHandle);
@@ -149,7 +153,8 @@ TEST(EvidencePredicateMapperTest, UnresolvedReferenceIsRefused) {
   // The table binds only the left reference.
   LocalIdTable table;
   table.Bind(left, std::string(kLeftHandle));
-  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_alias"));
+  auto mapped =
+      EvidencePredicateMapper().MapFact(fact, table, Handle("F_alias"));
 
   EXPECT_FALSE(mapped.ok());
   EXPECT_EQ(mapped.status().code(), StatusCode::kInvalidArgument);
@@ -175,9 +180,9 @@ TEST(EvidencePredicateMapperTest, CopiesEpistemicStateWithoutStrengthening) {
       {sem::EpistemicState::kUnknown, EpistemicState::kUnknown},
       {sem::EpistemicState::kMustNot, EpistemicState::kMustNot},
   };
-  for (const auto& [input, output] : expected) {
-    const facts::AnalysisFact fact = scenario.MakeAliasFact(
-        left, right, sem::AliasKind::kMayAlias, input);
+  for (const auto &[input, output] : expected) {
+    const facts::AnalysisFact fact =
+        scenario.MakeAliasFact(left, right, sem::AliasKind::kMayAlias, input);
     auto mapped =
         EvidencePredicateMapper().MapFact(fact, table, Handle("F_alias"));
 
@@ -246,7 +251,8 @@ TEST(EvidencePredicateMapperTest, UnsupportedRelationIsRefused) {
   const facts::AnalysisFact fact = scenario.MakeCheckFact("check:memcpy");
 
   LocalIdTable table;
-  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_check"));
+  auto mapped =
+      EvidencePredicateMapper().MapFact(fact, table, Handle("F_check"));
 
   EXPECT_FALSE(mapped.ok());
   EXPECT_EQ(mapped.status().code(), StatusCode::kInvalidArgument);
@@ -298,16 +304,13 @@ bool IsQualifiedId(std::string_view text) {
 
 // Every producer and predicate the mapper emits is a legal EIR-T `QualifiedId`,
 // which is what makes a mapped fact writable at all. `Producer` was
-// deliberately not widened for this milestone (ruling L43), so the mapper is the
-// layer that has to spell things EIR can carry.
+// deliberately not widened for this milestone (ruling L43), so the mapper is
+// the layer that has to spell things EIR can carry.
 TEST(EvidencePredicateMapperTest, EveryEmittedSpellingIsAQualifiedId) {
   const facts::RelationId supported[] = {
-      facts::RelationId::kDirectRead,
-      facts::RelationId::kDirectWrite,
-      facts::RelationId::kReachableCall,
-      facts::RelationId::kAlias,
-      facts::RelationId::kMayRead,
-      facts::RelationId::kMayWrite,
+      facts::RelationId::kDirectRead,    facts::RelationId::kDirectWrite,
+      facts::RelationId::kReachableCall, facts::RelationId::kAlias,
+      facts::RelationId::kMayRead,       facts::RelationId::kMayWrite,
       facts::RelationId::kGlobalFlow,
   };
   for (facts::RelationId relation : supported) {
@@ -321,9 +324,9 @@ TEST(EvidencePredicateMapperTest, EveryEmittedSpellingIsAQualifiedId) {
 
   // The relations EIR cannot state have no spelling at all, rather than a
   // lossy one.
-  EXPECT_FALSE(
-      EvidencePredicateMapper::PredicateName(facts::RelationId::kQueryCompletion)
-          .has_value());
+  EXPECT_FALSE(EvidencePredicateMapper::PredicateName(
+                   facts::RelationId::kQueryCompletion)
+                   .has_value());
   EXPECT_FALSE(
       EvidencePredicateMapper::ProducerName(facts::RelationId::kQueryCompletion)
           .has_value());
@@ -341,7 +344,8 @@ TEST(EvidencePredicateMapperTest, KeepsTheStableIdentityOfTheSourceFact) {
       left, right, sem::AliasKind::kMayAlias, sem::EpistemicState::kMay);
 
   const LocalIdTable table = MakeTable(left, right);
-  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_alias"));
+  auto mapped =
+      EvidencePredicateMapper().MapFact(fact, table, Handle("F_alias"));
 
   ASSERT_TRUE(mapped.ok());
   ASSERT_TRUE(mapped.value().stable_id.has_value());
@@ -359,7 +363,8 @@ TEST(EvidencePredicateMapperTest, KeepsTheStableIdentityOfTheSourceFact) {
 // zero-length, provably-safe window — for an access the analysis explicitly
 // refused to bound, which is the epistemic strengthening this milestone exists
 // to prevent. The mapper refuses the row instead.
-TEST(EvidencePredicateMapperTest, UnboundedReadWindowIsRefusedNotLoweredToZero) {
+TEST(EvidencePredicateMapperTest,
+     UnboundedReadWindowIsRefusedNotLoweredToZero) {
   const EvidenceScenarioBuilder scenario;
   const core::StableId function =
       scenario.Id(core::IdKind::kFunctionVariant, "decode");
@@ -372,12 +377,13 @@ TEST(EvidencePredicateMapperTest, UnboundedReadWindowIsRefusedNotLoweredToZero) 
   // Exactly the shape `WpaInputMaterializer::MemoryEffectsOf` emits for an
   // effect the analyzer declined to bound: `kUnknown` with the `0/0` sentinels
   // and an epistemic state that is emphatically `kMust`.
-  const facts::AnalysisFact fact = MakeRow(
-      facts::RelationId::kDirectRead,
-      {function, memory, sem::ByteRangeKind::kUnknown, std::int64_t{0},
-       std::uint64_t{0}, sem::EpistemicState::kMust});
+  const facts::AnalysisFact fact =
+      MakeRow(facts::RelationId::kDirectRead,
+              {function, memory, sem::ByteRangeKind::kUnknown, std::int64_t{0},
+               std::uint64_t{0}, sem::EpistemicState::kMust});
 
-  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_range"));
+  auto mapped =
+      EvidencePredicateMapper().MapFact(fact, table, Handle("F_range"));
 
   ASSERT_FALSE(mapped.ok())
       << "an unbounded read window was lowered into a bounded interval";
@@ -388,7 +394,8 @@ TEST(EvidencePredicateMapperTest, UnboundedReadWindowIsRefusedNotLoweredToZero) 
 
 // The same gate covers `DirectWrite` -> `capacity(@memory, bytes)`: an
 // unbounded write's sentinel `size` would state an object with no room in it.
-TEST(EvidencePredicateMapperTest, UnboundedWriteWindowIsRefusedNotLoweredToZero) {
+TEST(EvidencePredicateMapperTest,
+     UnboundedWriteWindowIsRefusedNotLoweredToZero) {
   const EvidenceScenarioBuilder scenario;
   const core::StableId function =
       scenario.Id(core::IdKind::kFunctionVariant, "decode");
@@ -398,10 +405,10 @@ TEST(EvidencePredicateMapperTest, UnboundedWriteWindowIsRefusedNotLoweredToZero)
   LocalIdTable table;
   table.Bind(memory, std::string(kLeftHandle));
 
-  const facts::AnalysisFact fact = MakeRow(
-      facts::RelationId::kDirectWrite,
-      {function, memory, sem::ByteRangeKind::kUnknown, std::int64_t{0},
-       std::uint64_t{0}, sem::EpistemicState::kMust});
+  const facts::AnalysisFact fact =
+      MakeRow(facts::RelationId::kDirectWrite,
+              {function, memory, sem::ByteRangeKind::kUnknown, std::int64_t{0},
+               std::uint64_t{0}, sem::EpistemicState::kMust});
 
   auto mapped =
       EvidencePredicateMapper().MapFact(fact, table, Handle("F_capacity"));
@@ -425,12 +432,13 @@ TEST(EvidencePredicateMapperTest, KnownWindowOfTheSameShapeStillMaps) {
   LocalIdTable table;
   table.Bind(memory, std::string(kLeftHandle));
 
-  const facts::AnalysisFact fact = MakeRow(
-      facts::RelationId::kDirectRead,
-      {function, memory, sem::ByteRangeKind::kKnown, std::int64_t{0},
-       std::uint64_t{0}, sem::EpistemicState::kMust});
+  const facts::AnalysisFact fact =
+      MakeRow(facts::RelationId::kDirectRead,
+              {function, memory, sem::ByteRangeKind::kKnown, std::int64_t{0},
+               std::uint64_t{0}, sem::EpistemicState::kMust});
 
-  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_range"));
+  auto mapped =
+      EvidencePredicateMapper().MapFact(fact, table, Handle("F_range"));
   ASSERT_TRUE(mapped.ok()) << mapped.status().message();
   EXPECT_EQ(mapped.value().predicate.text, "range");
 }
@@ -452,15 +460,16 @@ TEST(EvidencePredicateMapperTest, RangeStatesTheWindowBoundsNotItsLength) {
   table.Bind(memory, std::string(kLeftHandle));
 
   // A 16-byte read starting at byte 8 covers [8, 24).
-  const facts::AnalysisFact fact = MakeRow(
-      facts::RelationId::kDirectRead,
-      {function, memory, sem::ByteRangeKind::kKnown, std::int64_t{8},
-       std::uint64_t{16}, sem::EpistemicState::kMust});
+  const facts::AnalysisFact fact =
+      MakeRow(facts::RelationId::kDirectRead,
+              {function, memory, sem::ByteRangeKind::kKnown, std::int64_t{8},
+               std::uint64_t{16}, sem::EpistemicState::kMust});
 
-  auto mapped = EvidencePredicateMapper().MapFact(fact, table, Handle("F_range"));
+  auto mapped =
+      EvidencePredicateMapper().MapFact(fact, table, Handle("F_range"));
 
   ASSERT_TRUE(mapped.ok()) << mapped.status().message();
-  const Expression& predicate = mapped.value().predicate;
+  const Expression &predicate = mapped.value().predicate;
   ASSERT_EQ(predicate.kind, Expression::Kind::kCall);
   EXPECT_EQ(predicate.text, "range");
   ASSERT_EQ(predicate.operands.size(), 3u);
@@ -469,14 +478,16 @@ TEST(EvidencePredicateMapperTest, RangeStatesTheWindowBoundsNotItsLength) {
   EXPECT_EQ(predicate.operands[1].integer, 8);
   EXPECT_EQ(predicate.operands[2].kind, Expression::Kind::kInteger);
   EXPECT_EQ(predicate.operands[2].integer, 24)
-      << "the window [8, 24) was lowered as [8, " << predicate.operands[2].integer
+      << "the window [8, 24) was lowered as [8, "
+      << predicate.operands[2].integer
       << "): the length was passed through where the end belongs";
 }
 
 // `capacity(@memory, bytes)` takes the row's `size` cell unchanged: the extent
 // of an object is its length, not a window bound, so a non-zero offset must not
 // inflate it the way F2's correction does for `range`.
-TEST(EvidencePredicateMapperTest, CapacityStatesTheObjectsExtentNotTheWindowEnd) {
+TEST(EvidencePredicateMapperTest,
+     CapacityStatesTheObjectsExtentNotTheWindowEnd) {
   const EvidenceScenarioBuilder scenario;
   const core::StableId function =
       scenario.Id(core::IdKind::kFunctionVariant, "decode");
@@ -486,21 +497,21 @@ TEST(EvidencePredicateMapperTest, CapacityStatesTheObjectsExtentNotTheWindowEnd)
   LocalIdTable table;
   table.Bind(memory, std::string(kLeftHandle));
 
-  const facts::AnalysisFact fact = MakeRow(
-      facts::RelationId::kDirectWrite,
-      {function, memory, sem::ByteRangeKind::kKnown, std::int64_t{8},
-       std::uint64_t{2048}, sem::EpistemicState::kMust});
+  const facts::AnalysisFact fact =
+      MakeRow(facts::RelationId::kDirectWrite,
+              {function, memory, sem::ByteRangeKind::kKnown, std::int64_t{8},
+               std::uint64_t{2048}, sem::EpistemicState::kMust});
 
   auto mapped =
       EvidencePredicateMapper().MapFact(fact, table, Handle("F_capacity"));
 
   ASSERT_TRUE(mapped.ok()) << mapped.status().message();
-  const Expression& predicate = mapped.value().predicate;
+  const Expression &predicate = mapped.value().predicate;
   ASSERT_EQ(predicate.kind, Expression::Kind::kCall);
   EXPECT_EQ(predicate.text, "capacity");
   ASSERT_EQ(predicate.operands.size(), 2u);
   EXPECT_EQ(predicate.operands[1].integer, 2048);
 }
 
-}  // namespace
-}  // namespace veritas::evidence
+} // namespace
+} // namespace veritas::evidence

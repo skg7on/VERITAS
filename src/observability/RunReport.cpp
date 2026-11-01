@@ -56,12 +56,11 @@ constexpr double kNanosPerMilli = 1000000.0;
 // have sorted. stable_sort keeps a repeated key in its input order, which makes
 // the result deterministic even for a duplicate name.
 template <typename T, typename Key>
-std::vector<T> SortedCopy(const std::vector<T>& items, Key key) {
+std::vector<T> SortedCopy(const std::vector<T> &items, Key key) {
   std::vector<T> copy = items;
-  std::stable_sort(copy.begin(), copy.end(),
-                   [&key](const T& left, const T& right) {
-                     return key(left) < key(right);
-                   });
+  std::stable_sort(
+      copy.begin(), copy.end(),
+      [&key](const T &left, const T &right) { return key(left) < key(right); });
   return copy;
 }
 
@@ -70,7 +69,8 @@ std::vector<T> SortedCopy(const std::vector<T>& items, Key key) {
 // is a wrong number.
 std::string PadLeft(std::string_view text, std::size_t width) {
   std::string padded;
-  if (text.size() < width) padded.assign(width - text.size(), ' ');
+  if (text.size() < width)
+    padded.assign(width - text.size(), ' ');
   padded.append(text);
   return padded;
 }
@@ -85,7 +85,8 @@ std::size_t DisplayWidth(std::string_view text) {
   for (const char c : text) {
     // 0b10xxxxxx is a UTF-8 continuation byte; every other byte opens a
     // character, and every character a label can hold is one column wide.
-    if ((static_cast<unsigned char>(c) & 0xc0) != 0x80) ++columns;
+    if ((static_cast<unsigned char>(c) & 0xc0) != 0x80)
+      ++columns;
   }
   return columns;
 }
@@ -96,7 +97,8 @@ std::size_t DisplayWidth(std::string_view text) {
 std::string PadRight(std::string_view text, std::size_t width) {
   std::string padded(text);
   const std::size_t columns = DisplayWidth(text);
-  if (columns < width) padded.append(width - columns, ' ');
+  if (columns < width)
+    padded.append(width - columns, ' ');
   return padded;
 }
 
@@ -125,20 +127,23 @@ std::string PadRight(std::string_view text, std::size_t width) {
 // through this helper would mean making `SpanStats::cpu_measured` optional. So
 // what this helper guarantees is that the inventory and identity omissions are
 // uniform — not that no other key in this file is ever omitted.
-void EmitIfMeasured(llvm::json::OStream& j, llvm::StringRef key,
-                    const std::string& value) {
-  if (!value.empty()) j.attribute(key, value);
+void EmitIfMeasured(llvm::json::OStream &j, llvm::StringRef key,
+                    const std::string &value) {
+  if (!value.empty())
+    j.attribute(key, value);
 }
 
-void EmitIfMeasured(llvm::json::OStream& j, llvm::StringRef key,
-                    const std::optional<std::uint64_t>& value) {
-  if (value.has_value()) j.attribute(key, static_cast<std::int64_t>(*value));
+void EmitIfMeasured(llvm::json::OStream &j, llvm::StringRef key,
+                    const std::optional<std::uint64_t> &value) {
+  if (value.has_value())
+    j.attribute(key, static_cast<std::int64_t>(*value));
 }
 
-void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
+void EmitSpan(llvm::json::OStream &j, const core::SpanStats &span) {
   j.object([&] {
     j.attributeArray("children", [&] {
-      for (const core::SpanStats& child : span.children) EmitSpan(j, child);
+      for (const core::SpanStats &child : span.children)
+        EmitSpan(j, child);
     });
     j.attribute("count", static_cast<std::int64_t>(span.count));
     // Measured only on interval-bearing spans; see SpanMode.
@@ -148,18 +153,14 @@ void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
     }
     if (span.distribution.has_value()) {
       j.attributeObject("distribution", [&] {
-        j.attribute(
-            "max_ns",
-            static_cast<std::int64_t>(span.distribution->max.count()));
-        j.attribute(
-            "p50_ns",
-            static_cast<std::int64_t>(span.distribution->p50.count()));
-        j.attribute(
-            "p95_ns",
-            static_cast<std::int64_t>(span.distribution->p95.count()));
-        j.attribute(
-            "p99_ns",
-            static_cast<std::int64_t>(span.distribution->p99.count()));
+        j.attribute("max_ns",
+                    static_cast<std::int64_t>(span.distribution->max.count()));
+        j.attribute("p50_ns",
+                    static_cast<std::int64_t>(span.distribution->p50.count()));
+        j.attribute("p95_ns",
+                    static_cast<std::int64_t>(span.distribution->p95.count()));
+        j.attribute("p99_ns",
+                    static_cast<std::int64_t>(span.distribution->p99.count()));
         j.attribute("samples_truncated", span.distribution->samples_truncated);
       });
     }
@@ -172,8 +173,7 @@ void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
                     static_cast<std::int64_t>(span.memory->footprint_peak));
         j.attribute("peak_within",
                     static_cast<std::int64_t>(span.memory->peak_within));
-        j.attribute("rss_end",
-                    static_cast<std::int64_t>(span.memory->rss_end));
+        j.attribute("rss_end", static_cast<std::int64_t>(span.memory->rss_end));
         j.attribute("rss_start",
                     static_cast<std::int64_t>(span.memory->rss_start));
       });
@@ -189,9 +189,8 @@ void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
           j.object([&] {
             j.attribute("label", span.top_n[i].label);
             j.attribute("rank", static_cast<std::int64_t>(i + 1));
-            j.attribute(
-                "wall_ns",
-                static_cast<std::int64_t>(span.top_n[i].wall.count()));
+            j.attribute("wall_ns",
+                        static_cast<std::int64_t>(span.top_n[i].wall.count()));
           });
         }
       });
@@ -203,7 +202,7 @@ void EmitSpan(llvm::json::OStream& j, const core::SpanStats& span) {
   });
 }
 
-void EmitIdentity(llvm::json::OStream& j, const RunIdentity& identity) {
+void EmitIdentity(llvm::json::OStream &j, const RunIdentity &identity) {
   // An unset coordinate is omitted rather than written as "" — the reading this
   // block exists to prevent, since it is the block a comparison script keys on.
   // The object itself stays, so a consumer can still address `identity`
@@ -222,7 +221,8 @@ void EmitIdentity(llvm::json::OStream& j, const RunIdentity& identity) {
   });
 }
 
-void EmitEnvironment(llvm::json::OStream& j, const RunEnvironment& environment) {
+void EmitEnvironment(llvm::json::OStream &j,
+                     const RunEnvironment &environment) {
   j.attributeObject("environment", [&] {
     j.attribute("arch", environment.arch);
     j.attribute("build_type", environment.build_type);
@@ -236,14 +236,15 @@ void EmitEnvironment(llvm::json::OStream& j, const RunEnvironment& environment) 
   });
 }
 
-void EmitInventory(llvm::json::OStream& j, const RunInventory& inventory) {
-  const RunIncrementality& incrementality = inventory.incrementality;
-  const RunInputInventory& input = inventory.input;
-  const RunOutputInventory& output = inventory.output;
+void EmitInventory(llvm::json::OStream &j, const RunInventory &inventory) {
+  const RunIncrementality &incrementality = inventory.incrementality;
+  const RunInputInventory &input = inventory.input;
+  const RunOutputInventory &output = inventory.output;
   j.attributeObject("inventory", [&] {
     j.attributeObject("incrementality", [&] {
-      j.attribute("components_executed",
-                  static_cast<std::int64_t>(incrementality.components_executed));
+      j.attribute(
+          "components_executed",
+          static_cast<std::int64_t>(incrementality.components_executed));
       j.attribute("components_reused",
                   static_cast<std::int64_t>(incrementality.components_reused));
       EmitIfMeasured(j, "summaries_recomputed",
@@ -263,10 +264,10 @@ void EmitInventory(llvm::json::OStream& j, const RunInventory& inventory) {
       j.attribute("canonical_facts",
                   static_cast<std::int64_t>(output.canonical_facts));
       j.attributeObject("components_by_kind", [&] {
-        for (const auto& kind : SortedCopy(
-                 output.components_by_kind,
-                 [](const std::pair<std::string, std::uint64_t>& entry)
-                     -> const std::string& { return entry.first; })) {
+        for (const auto &kind :
+             SortedCopy(output.components_by_kind,
+                        [](const std::pair<std::string, std::uint64_t> &entry)
+                            -> const std::string & { return entry.first; })) {
           j.attribute(kind.first, static_cast<std::int64_t>(kind.second));
         }
       });
@@ -279,10 +280,10 @@ void EmitInventory(llvm::json::OStream& j, const RunInventory& inventory) {
       EmitIfMeasured(j, "svfg_edges", output.svfg_edges);
       j.attribute("svfg_nodes", static_cast<std::int64_t>(output.svfg_nodes));
       j.attributeObject("unknowns_by_reason", [&] {
-        for (const auto& reason : SortedCopy(
-                 output.unknowns_by_reason,
-                 [](const std::pair<std::string, std::uint64_t>& entry)
-                     -> const std::string& { return entry.first; })) {
+        for (const auto &reason :
+             SortedCopy(output.unknowns_by_reason,
+                        [](const std::pair<std::string, std::uint64_t> &entry)
+                            -> const std::string & { return entry.first; })) {
           j.attribute(reason.first, static_cast<std::int64_t>(reason.second));
         }
       });
@@ -290,23 +291,22 @@ void EmitInventory(llvm::json::OStream& j, const RunInventory& inventory) {
   });
 }
 
-void EmitStore(llvm::json::OStream& j, const StoreSummary& store) {
+void EmitStore(llvm::json::OStream &j, const StoreSummary &store) {
   j.attributeObject("store", [&] {
     j.attributeObject("bytes", [&] {
-      for (const NamedBytes& entry : SortedCopy(
-               store.bytes,
-               [](const NamedBytes& named) -> const std::string& {
+      for (const NamedBytes &entry : SortedCopy(
+               store.bytes, [](const NamedBytes &named) -> const std::string & {
                  return named.name;
                })) {
         j.attribute(entry.name, static_cast<std::int64_t>(entry.bytes));
       }
     });
     j.attributeArray("cross_checks", [&] {
-      for (const CrossCheck& check : SortedCopy(
-               store.cross_checks,
-               [](const CrossCheck& entry) -> const std::string& {
-                 return entry.name;
-               })) {
+      for (const CrossCheck &check :
+           SortedCopy(store.cross_checks,
+                      [](const CrossCheck &entry) -> const std::string & {
+                        return entry.name;
+                      })) {
         j.object([&] {
           j.attribute("agrees", check.agrees);
           j.attribute("from_memory",
@@ -318,9 +318,9 @@ void EmitStore(llvm::json::OStream& j, const StoreSummary& store) {
       }
     });
     j.attributeArray("tables", [&] {
-      for (const TableRowCount& table :
+      for (const TableRowCount &table :
            SortedCopy(store.tables,
-                      [](const TableRowCount& entry) -> const std::string& {
+                      [](const TableRowCount &entry) -> const std::string & {
                         return entry.table;
                       })) {
         j.object([&] {
@@ -332,17 +332,17 @@ void EmitStore(llvm::json::OStream& j, const StoreSummary& store) {
   });
 }
 
-void EmitMemory(llvm::json::OStream& j, const core::RunMetricsStats& metrics,
+void EmitMemory(llvm::json::OStream &j, const core::RunMetricsStats &metrics,
                 bool emit_series) {
   // The presence test is "was it measured", never "was it emitted". Those are
   // different questions: a run with no sampler, or none that measured
   // successfully, has nothing to report, while a run whose series was
   // suppressed still has a peak. A span's block follows the same rule.
-  if (!metrics.memory_measured) return;
+  if (!metrics.memory_measured)
+    return;
   j.attributeObject("memory", [&] {
     j.attributeObject("peak", [&] {
-      j.attribute("at_ms",
-                  static_cast<std::int64_t>(metrics.peak_at.count()));
+      j.attribute("at_ms", static_cast<std::int64_t>(metrics.peak_at.count()));
       j.attribute("footprint_bytes",
                   static_cast<std::int64_t>(metrics.peak_footprint_bytes));
       j.attribute("rss_bytes",
@@ -352,7 +352,7 @@ void EmitMemory(llvm::json::OStream& j, const core::RunMetricsStats& metrics,
     // third rendering, and reads as "nothing was measured".
     if (emit_series) {
       j.attributeArray("series", [&] {
-        for (const core::MemorySample& sample : metrics.series) {
+        for (const core::MemorySample &sample : metrics.series) {
           j.object([&] {
             j.attribute("footprint_bytes",
                         static_cast<std::int64_t>(sample.footprint_bytes));
@@ -376,14 +376,14 @@ void EmitMemory(llvm::json::OStream& j, const core::RunMetricsStats& metrics,
 // the column width can be measured before anything is written.
 struct PhaseRow {
   std::string label;
-  const core::SpanStats* span = nullptr;
+  const core::SpanStats *span = nullptr;
 };
 
-void CollectPhaseRows(const core::SpanStats& span, std::string_view prefix,
-                      bool is_root, bool is_last,
-                      std::vector<PhaseRow>* rows) {
+void CollectPhaseRows(const core::SpanStats &span, std::string_view prefix,
+                      bool is_root, bool is_last, std::vector<PhaseRow> *rows) {
   std::string label(prefix);
-  if (!is_root) label.append(is_last ? "└─ " : "├─ ");
+  if (!is_root)
+    label.append(is_last ? "└─ " : "├─ ");
   label.append(span.name);
   rows->push_back(PhaseRow{label, &span});
 
@@ -423,16 +423,15 @@ std::string FormatSignedBytes(std::int64_t bytes) {
 // and go ragged, since PadLeft pads but does not truncate. No run reaches that,
 // and the alternative — sizing for FormatBytes(UINT64_MAX), 18 columns — would
 // widen every row for a value no machine produces.
-constexpr std::size_t kPeakColumnWidth = sizeof("1024.00 MiB") - 1;    // 11
-constexpr std::size_t kDeltaColumnWidth = sizeof("-1024.00 MiB") - 1;  // 12
+constexpr std::size_t kPeakColumnWidth = sizeof("1024.00 MiB") - 1;   // 11
+constexpr std::size_t kDeltaColumnWidth = sizeof("-1024.00 MiB") - 1; // 12
 
-std::string FormatPhaseRow(const PhaseRow& row, std::size_t width) {
-  const core::SpanStats& span = *row.span;
+std::string FormatPhaseRow(const PhaseRow &row, std::size_t width) {
+  const core::SpanStats &span = *row.span;
   // "-" rather than zero wherever the producer recorded no measurement: an
   // uninstrumented zero must not be mistaken for a measured one.
-  const std::string cpu = span.cpu_measured
-                              ? FormatDuration(span.cpu_inclusive)
-                              : std::string("-");
+  const std::string cpu =
+      span.cpu_measured ? FormatDuration(span.cpu_inclusive) : std::string("-");
   const std::string peak = span.memory.has_value()
                                ? FormatBytes(span.memory->peak_within)
                                : std::string("-");
@@ -457,16 +456,17 @@ std::string FormatPhaseRow(const PhaseRow& row, std::size_t width) {
   return line;
 }
 
-void CollectDistributedSpans(const core::SpanStats& span,
-                             std::vector<const core::SpanStats*>* out) {
-  if (span.distribution.has_value()) out->push_back(&span);
-  for (const core::SpanStats& child : span.children) {
+void CollectDistributedSpans(const core::SpanStats &span,
+                             std::vector<const core::SpanStats *> *out) {
+  if (span.distribution.has_value())
+    out->push_back(&span);
+  for (const core::SpanStats &child : span.children) {
     CollectDistributedSpans(child, out);
   }
 }
 
-void AppendPhaseBlock(std::string_view name, const core::SpanStats& span,
-                      std::string* out) {
+void AppendPhaseBlock(std::string_view name, const core::SpanStats &span,
+                      std::string *out) {
   out->append("  ");
   out->append(name);
   out->append(" p50 ");
@@ -478,10 +478,12 @@ void AppendPhaseBlock(std::string_view name, const core::SpanStats& span,
   out->append(" · max ");
   out->append(FormatDuration(span.distribution->max));
   out->push_back('\n');
-  if (span.top_n.empty()) return;
+  if (span.top_n.empty())
+    return;
   out->append("  slowest:");
   for (std::size_t i = 0; i < span.top_n.size(); ++i) {
-    if (i != 0) out->append(" ·");
+    if (i != 0)
+      out->append(" ·");
     out->push_back(' ');
     out->append(span.top_n[i].label);
     out->push_back(' ');
@@ -490,9 +492,9 @@ void AppendPhaseBlock(std::string_view name, const core::SpanStats& span,
   out->push_back('\n');
 }
 
-}  // namespace
+} // namespace
 
-std::string RenderRunReportJson(const RunReport& report) {
+std::string RenderRunReportJson(const RunReport &report) {
   std::string out;
   llvm::raw_string_ostream os(out);
   llvm::json::OStream j(os, /*IndentSize=*/2);
@@ -512,7 +514,7 @@ std::string RenderRunReportJson(const RunReport& report) {
     // deliberately absent — RunReport does not depend on the analysis library,
     // and svf_config_hash and wpa_config_hash cover every other field.
     // See design 6.3.
-    const core::RunMetricsOptions& options = report.metrics_options;
+    const core::RunMetricsOptions &options = report.metrics_options;
     j.attributeObject("config", [&] {
       j.attribute("conformance_oracle", report.conformance_oracle);
       j.attributeObject("metrics", [&] {
@@ -528,11 +530,11 @@ std::string RenderRunReportJson(const RunReport& report) {
     });
 
     j.attributeArray("counters", [&] {
-      for (const core::Counter& counter : SortedCopy(
-               report.metrics.counters,
-               [](const core::Counter& entry) -> const std::string& {
-                 return entry.name;
-               })) {
+      for (const core::Counter &counter :
+           SortedCopy(report.metrics.counters,
+                      [](const core::Counter &entry) -> const std::string & {
+                        return entry.name;
+                      })) {
         j.object([&] {
           j.attribute("name", counter.name);
           j.attribute("unit", counter.unit);
@@ -542,7 +544,7 @@ std::string RenderRunReportJson(const RunReport& report) {
     });
 
     j.attributeArray("diagnostics", [&] {
-      for (const std::string& message : report.metrics.diagnostics) {
+      for (const std::string &message : report.metrics.diagnostics) {
         j.value(message);
       }
     });
@@ -576,22 +578,23 @@ std::string RenderRunReportJson(const RunReport& report) {
   return out;
 }
 
-std::string RenderRunReportText(const RunReport& report) {
+std::string RenderRunReportText(const RunReport &report) {
   std::vector<PhaseRow> rows;
   CollectPhaseRows(report.metrics.root, "  ", /*is_root=*/true,
                    /*is_last=*/true, &rows);
 
   std::size_t width = 0;
-  for (const PhaseRow& row : rows) {
+  for (const PhaseRow &row : rows) {
     width = std::max(width, DisplayWidth(row.label));
   }
 
   std::string out = "Analysis phase report\n";
-  for (const PhaseRow& row : rows) out.append(FormatPhaseRow(row, width));
+  for (const PhaseRow &row : rows)
+    out.append(FormatPhaseRow(row, width));
 
-  std::vector<const core::SpanStats*> distributed;
+  std::vector<const core::SpanStats *> distributed;
   CollectDistributedSpans(report.metrics.root, &distributed);
-  for (const core::SpanStats* span : distributed) {
+  for (const core::SpanStats *span : distributed) {
     AppendPhaseBlock(span->name, *span, &out);
   }
 
@@ -599,10 +602,10 @@ std::string RenderRunReportText(const RunReport& report) {
   // field, and the kinds partition the components. The line is omitted when
   // nothing was recorded, so a zero can never be read as a measurement.
   std::uint64_t expected_components = 0;
-  for (const auto& kind : report.inventory.output.components_by_kind) {
+  for (const auto &kind : report.inventory.output.components_by_kind) {
     expected_components += kind.second;
   }
-  const RunIncrementality& incrementality = report.inventory.incrementality;
+  const RunIncrementality &incrementality = report.inventory.incrementality;
   if (!report.inventory.output.components_by_kind.empty() ||
       incrementality.components_reused != 0 ||
       incrementality.components_executed != 0) {
@@ -618,24 +621,26 @@ std::string RenderRunReportText(const RunReport& report) {
   if (!report.store.tables.empty() || !report.store.bytes.empty()) {
     std::string body;
     std::uint64_t total_bytes = 0;
-    for (const TableRowCount& table :
+    for (const TableRowCount &table :
          SortedCopy(report.store.tables,
-                    [](const TableRowCount& entry) -> const std::string& {
+                    [](const TableRowCount &entry) -> const std::string & {
                       return entry.table;
                     })) {
-      if (!body.empty()) body.append(" · ");
+      if (!body.empty())
+        body.append(" · ");
       body.append(table.table);
       body.push_back(' ');
       body.append(std::to_string(table.rows));
       body.append(" rows");
     }
-    for (const NamedBytes& entry : SortedCopy(
-             report.store.bytes,
-             [](const NamedBytes& named) -> const std::string& {
-               return named.name;
-             })) {
+    for (const NamedBytes &entry :
+         SortedCopy(report.store.bytes,
+                    [](const NamedBytes &named) -> const std::string & {
+                      return named.name;
+                    })) {
       total_bytes += entry.bytes;
-      if (!body.empty()) body.append(" · ");
+      if (!body.empty())
+        body.append(" · ");
       body.append(entry.name);
       body.push_back(' ');
       body.append(FormatBytes(entry.bytes));
@@ -643,7 +648,8 @@ std::string RenderRunReportText(const RunReport& report) {
     // The total is the sum of the named stores, so it is printed only when at
     // least one was measured: a total with no parts is not a measurement.
     if (!report.store.bytes.empty()) {
-      if (!body.empty()) body.append(" · ");
+      if (!body.empty())
+        body.append(" · ");
       body.append("total ");
       body.append(FormatBytes(total_bytes));
     }
@@ -652,11 +658,11 @@ std::string RenderRunReportText(const RunReport& report) {
     out.push_back('\n');
   }
 
-  for (const CrossCheck& check : SortedCopy(
-           report.store.cross_checks,
-           [](const CrossCheck& entry) -> const std::string& {
-             return entry.name;
-           })) {
+  for (const CrossCheck &check :
+       SortedCopy(report.store.cross_checks,
+                  [](const CrossCheck &entry) -> const std::string & {
+                    return entry.name;
+                  })) {
     out.append("Cross-check: ");
     out.append(check.name);
     out.push_back(' ');
@@ -672,7 +678,8 @@ std::string RenderRunReportText(const RunReport& report) {
 }
 
 std::string FormatDuration(std::chrono::nanoseconds value) {
-  if (value.count() == 0) return "0ns";
+  if (value.count() == 0)
+    return "0ns";
   const double nanos = static_cast<double>(value.count());
   char buffer[32];
   if (value >= std::chrono::seconds(1)) {
@@ -707,4 +714,4 @@ std::string FormatBytes(std::uint64_t bytes) {
   return std::string(buffer);
 }
 
-}  // namespace veritas::observability
+} // namespace veritas::observability

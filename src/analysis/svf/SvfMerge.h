@@ -26,11 +26,11 @@ namespace veritas::analysis::svf {
 
 namespace semantic = veritas::analysis::semantic;
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf
 
 namespace veritas::analysis::llvm {
 class OriginMap;
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm
 
 namespace veritas::analysis::svf {
 
@@ -44,10 +44,10 @@ namespace veritas::analysis::svf {
 // fabricate cross-function facts (e.g. a MUST-level NO_ALIAS inside an
 // unrelated function). Task 9 re-adds them with precise per-function
 // attribution against summary.v2.
-std::vector<::veritas::summary::v1::FunctionSummary> MergeSvfFacts(
-    std::vector<::veritas::summary::v1::FunctionSummary> drafts,
-    const semantic::NormalizedAnalysisFacts& svf_facts,
-    const ::veritas::analysis::llvm::OriginMap& origin_map);
+std::vector<::veritas::summary::v1::FunctionSummary>
+MergeSvfFacts(std::vector<::veritas::summary::v1::FunctionSummary> drafts,
+              const semantic::NormalizedAnalysisFacts &svf_facts,
+              const ::veritas::analysis::llvm::OriginMap &origin_map);
 
 // Merge SVF-mapped facts into summary.v2 drafts by stable owning function ID.
 //
@@ -65,11 +65,11 @@ std::vector<::veritas::summary::v1::FunctionSummary> MergeSvfFacts(
 // whose kValueRef identities carry no owner — remain gated out. Component
 // digests are recomputed after the merge so the resulting summaries are
 // content-addressed over their merged semantic content.
-StatusOr<std::vector<::veritas::summary::v2::FunctionSummary>> MergeSvfFactsV2(
-    std::vector<::veritas::summary::v2::FunctionSummary> drafts,
-    const semantic::NormalizedAnalysisFacts& svf_facts,
-    const semantic::ModelBundle& model_bundle);
+StatusOr<std::vector<::veritas::summary::v2::FunctionSummary>>
+MergeSvfFactsV2(std::vector<::veritas::summary::v2::FunctionSummary> drafts,
+                const semantic::NormalizedAnalysisFacts &svf_facts,
+                const semantic::ModelBundle &model_bundle);
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf
 
-#endif  // VERITAS_ANALYSIS_SVF_SVFMERGE_H_
+#endif // VERITAS_ANALYSIS_SVF_SVFMERGE_H_

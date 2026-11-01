@@ -21,8 +21,8 @@ namespace veritas::build {
 
 namespace fs = std::filesystem;
 
-StatusOr<ProjectInput> ResolveProjectInput(
-    const analysis::ProjectAnalysisRequest& request) {
+StatusOr<ProjectInput>
+ResolveProjectInput(const analysis::ProjectAnalysisRequest &request) {
   if (request.project_root.empty()) {
     return Status::InvalidArgument("project root path is empty");
   }
@@ -30,14 +30,14 @@ StatusOr<ProjectInput> ResolveProjectInput(
   std::error_code canonical_error;
   auto root = fs::weakly_canonical(request.project_root, canonical_error);
   if (canonical_error) {
-    return Status::InvalidArgument(
-        "cannot canonicalize project root: " + canonical_error.message());
+    return Status::InvalidArgument("cannot canonicalize project root: " +
+                                   canonical_error.message());
   }
 
   std::error_code stat_error;
   if (!fs::is_directory(root, stat_error) || stat_error) {
-    return Status::InvalidArgument(
-        "project root is not a directory: " + root.string());
+    return Status::InvalidArgument("project root is not a directory: " +
+                                   root.string());
   }
 
   auto database = root / "compile_commands.json";
@@ -50,8 +50,8 @@ StatusOr<ProjectInput> ResolveProjectInput(
   std::error_code size_error;
   const auto database_size = fs::file_size(database, size_error);
   if (size_error || database_size == 0) {
-    return Status::FailedPrecondition(
-        "compile_commands.json is empty: " + database.string());
+    return Status::FailedPrecondition("compile_commands.json is empty: " +
+                                      database.string());
   }
 
   fs::path output;
@@ -64,9 +64,9 @@ StatusOr<ProjectInput> ResolveProjectInput(
       std::error_code absolute_error;
       output = fs::absolute(request.output_root, absolute_error);
       if (absolute_error) {
-        return Status::InvalidArgument(
-            "cannot resolve output root " + request.output_root.string() +
-            ": " + absolute_error.message());
+        return Status::InvalidArgument("cannot resolve output root " +
+                                       request.output_root.string() + ": " +
+                                       absolute_error.message());
       }
     }
   }
@@ -78,4 +78,4 @@ StatusOr<ProjectInput> ResolveProjectInput(
   };
 }
 
-}  // namespace veritas::build
+} // namespace veritas::build

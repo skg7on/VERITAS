@@ -157,17 +157,17 @@ struct RunReport {
 // RenderRunReportJson emits the versioned artifact. Object keys are written in
 // sorted order, durations are integer nanoseconds, and no absolute path
 // appears anywhere, so two artifacts can be diffed byte for byte.
-std::string RenderRunReportJson(const RunReport& report);
+std::string RenderRunReportJson(const RunReport &report);
 
 // RenderRunReportText emits the human report with a wall/self/CPU table and a
 // memory column, then the component, store and cross-check summaries.
-std::string RenderRunReportText(const RunReport& report);
+std::string RenderRunReportText(const RunReport &report);
 
 // FormatDuration renders 1234567890ns as "1.235s"; FormatBytes renders
 // 9223372036 as "8.59 GiB".
 std::string FormatDuration(std::chrono::nanoseconds value);
 std::string FormatBytes(std::uint64_t bytes);
 
-}  // namespace veritas::observability
+} // namespace veritas::observability
 
-#endif  // VERITAS_OBSERVABILITY_RUNREPORT_H_
+#endif // VERITAS_OBSERVABILITY_RUNREPORT_H_

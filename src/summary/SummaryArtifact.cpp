@@ -24,26 +24,26 @@
 
 namespace veritas::summary {
 
-std::string_view SchemaVersion(const SummaryArtifact& artifact) {
+std::string_view SchemaVersion(const SummaryArtifact &artifact) {
   return std::visit(
-      [](const auto& summary) -> std::string_view {
+      [](const auto &summary) -> std::string_view {
         return summary.header().schema_version();
       },
       artifact);
 }
 
-const v1::FunctionIdentity& Identity(const SummaryArtifact& artifact) {
+const v1::FunctionIdentity &Identity(const SummaryArtifact &artifact) {
   return std::visit(
-      [](const auto& summary) -> const v1::FunctionIdentity& {
+      [](const auto &summary) -> const v1::FunctionIdentity & {
         return summary.identity();
       },
       artifact);
 }
 
-StatusOr<std::vector<std::byte>> SerializeSummaryArtifact(
-    const SummaryArtifact& artifact) {
+StatusOr<std::vector<std::byte>>
+SerializeSummaryArtifact(const SummaryArtifact &artifact) {
   return std::visit(
-      [](const auto& summary) -> StatusOr<std::vector<std::byte>> {
+      [](const auto &summary) -> StatusOr<std::vector<std::byte>> {
         std::string serialized;
         if (!summary.SerializeToString(&serialized)) {
           return Status::Internal("Failed to serialize summary artifact");
@@ -54,8 +54,9 @@ StatusOr<std::vector<std::byte>> SerializeSummaryArtifact(
       artifact);
 }
 
-StatusOr<SummaryArtifact> ParseSummaryArtifact(
-    std::string_view schema_version, std::span<const std::byte> bytes) {
+StatusOr<SummaryArtifact>
+ParseSummaryArtifact(std::string_view schema_version,
+                     std::span<const std::byte> bytes) {
   if (schema_version == "summary.v1") {
     v1::FunctionSummary summary;
     if (!summary.ParseFromArray(bytes.data(), static_cast<int>(bytes.size()))) {
@@ -74,31 +75,31 @@ StatusOr<SummaryArtifact> ParseSummaryArtifact(
                                     std::string(schema_version));
 }
 
-StatusOr<core::StableId> ComputeFunctionSummaryId(
-    const SummaryArtifact& artifact) {
+StatusOr<core::StableId>
+ComputeFunctionSummaryId(const SummaryArtifact &artifact) {
   return std::visit(
-      [](const auto& summary) -> StatusOr<core::StableId> {
+      [](const auto &summary) -> StatusOr<core::StableId> {
         return ComputeFunctionSummaryId(summary);
       },
       artifact);
 }
 
-std::vector<ComponentDigestInfo> ComputeComponentDigests(
-    const SummaryArtifact& artifact) {
+std::vector<ComponentDigestInfo>
+ComputeComponentDigests(const SummaryArtifact &artifact) {
   return std::visit(
-      [](const auto& summary) -> std::vector<ComponentDigestInfo> {
+      [](const auto &summary) -> std::vector<ComponentDigestInfo> {
         return ComputeComponentDigests(summary);
       },
       artifact);
 }
 
 ComponentDigestInfo ComputeComponentDigest(v1::ComponentKind kind,
-                                           const SummaryArtifact& artifact) {
+                                           const SummaryArtifact &artifact) {
   return std::visit(
-      [kind](const auto& summary) -> ComponentDigestInfo {
+      [kind](const auto &summary) -> ComponentDigestInfo {
         return ComputeComponentDigest(kind, summary);
       },
       artifact);
 }
 
-}  // namespace veritas::summary
+} // namespace veritas::summary

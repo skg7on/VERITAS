@@ -44,9 +44,9 @@ struct RuleSpec {
 };
 
 class RuleRegistry {
- public:
+public:
   // Returns nullptr when the id is not registered.
-  const RuleSpec* Find(std::string_view rule_id) const;
+  const RuleSpec *Find(std::string_view rule_id) const;
   std::span<const RuleSpec> Rules() const;
 };
 
@@ -54,8 +54,8 @@ class RuleRegistry {
 std::string_view RuleBundleVersionV2();
 
 // Returns the immutable rules.v2 registry.
-const RuleRegistry& RulesV2();
+const RuleRegistry &RulesV2();
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_RULE_REGISTRY_H_
+#endif // VERITAS_FACTS_RULE_REGISTRY_H_

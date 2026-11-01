@@ -79,15 +79,23 @@ std::vector<summary::SummaryArtifact> SemanticZooProgram() {
   AddMemoryWrite(&shapes, "mem:zoo_union_overlap", /*known_range=*/false);
   AddMemoryWrite(&shapes, "mem:zoo_alias", /*known_range=*/false);
 
-  return {entry, self, even, odd, leaf, V2Summary("zoo_callback_left"),
-          V2Summary("zoo_callback_right"), select,
-          V2Summary("zoo_single_override"), V2Summary("zoo_multiple_override"),
+  return {entry,
+          self,
+          even,
+          odd,
+          leaf,
+          V2Summary("zoo_callback_left"),
+          V2Summary("zoo_callback_right"),
+          select,
+          V2Summary("zoo_single_override"),
+          V2Summary("zoo_multiple_override"),
           shapes};
 }
 
-StatusOr<facts::CanonicalizedResult> RunPermutation(
-    const std::vector<summary::SummaryArtifact>& program,
-    WpaComponentKind component, std::string_view root, std::uint32_t seed) {
+StatusOr<facts::CanonicalizedResult>
+RunPermutation(const std::vector<summary::SummaryArtifact> &program,
+               WpaComponentKind component, std::string_view root,
+               std::uint32_t seed) {
   auto shuffled = program;
   std::mt19937 rng(seed);
   std::ranges::shuffle(shuffled, rng);
@@ -96,8 +104,8 @@ StatusOr<facts::CanonicalizedResult> RunPermutation(
   if (!logical.ok())
     return logical.status();
 
-  const auto manifest = MakeManifest(facts::EngineIdentity::kCppConformance,
-                                     "cpp-toolchain");
+  const auto manifest =
+      MakeManifest(facts::EngineIdentity::kCppConformance, "cpp-toolchain");
   WpaExecutionEnvelope envelope{manifest, *logical};
   auto cpp = CppConformanceExecutor::Create(
       facts::EngineIdentity::kCppConformance, "cpp-toolchain");
@@ -114,7 +122,7 @@ StatusOr<facts::CanonicalizedResult> RunPermutation(
 // facts, witnesses, and hashes. Determinism is asserted from the outputs, not
 // from a run identity.
 void ExpectOneResultAcrossPermutations(
-    const std::vector<summary::SummaryArtifact>& program,
+    const std::vector<summary::SummaryArtifact> &program,
     WpaComponentKind component, std::string_view root) {
   auto canonical = RunPermutation(program, component, root, 0);
   ASSERT_TRUE(canonical.ok()) << canonical.status().message();
@@ -145,5 +153,5 @@ TEST(WpaDeterminismQualificationTest, SemanticZooPermutationsHaveOneResult) {
                                     "zoo_memory_shapes");
 }
 
-}  // namespace
-}  // namespace veritas::wpa::qualification
+} // namespace
+} // namespace veritas::wpa::qualification

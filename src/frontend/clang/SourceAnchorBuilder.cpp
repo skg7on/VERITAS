@@ -21,9 +21,9 @@
 
 namespace veritas::frontend::clang {
 
-SourceAnchor SourceAnchorBuilder::Build(
-    const ::clang::SourceRange& range,
-    const ::clang::SourceManager& source_manager) {
+SourceAnchor
+SourceAnchorBuilder::Build(const ::clang::SourceRange &range,
+                           const ::clang::SourceManager &source_manager) {
   SourceAnchor anchor;
 
   auto start_loc = range.getBegin();
@@ -36,7 +36,8 @@ SourceAnchor SourceAnchorBuilder::Build(
     anchor.start_line = source_manager.getSpellingLineNumber(spelling_loc);
     anchor.start_column = source_manager.getSpellingColumnNumber(spelling_loc);
 
-    if (auto file_id = source_manager.getFileID(spelling_loc); file_id.isValid()) {
+    if (auto file_id = source_manager.getFileID(spelling_loc);
+        file_id.isValid()) {
       if (auto file_entry = source_manager.getFileEntryRefForID(file_id)) {
         anchor.file_path = file_entry->getName().str();
       }
@@ -55,4 +56,4 @@ SourceAnchor SourceAnchorBuilder::Build(
   return anchor;
 }
 
-}  // namespace veritas::frontend::clang
+} // namespace veritas::frontend::clang

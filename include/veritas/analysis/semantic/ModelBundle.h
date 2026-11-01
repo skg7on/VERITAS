@@ -48,11 +48,11 @@ namespace veritas::analysis::semantic {
 // "source", "destination") that the WPA materializer resolves to a stable
 // subject identity; it is deliberately not typed here.
 enum class ModelEffectKind : std::uint8_t {
-  kRead,        // the modeled function reads the subject
-  kWrite,       // the modeled function writes the subject
-  kAllocate,    // the modeled function allocates memory named by the subject
-  kDeallocate,  // the modeled function deallocates memory named by the subject
-  kUnknown,     // opaque/unspecified effect
+  kRead,       // the modeled function reads the subject
+  kWrite,      // the modeled function writes the subject
+  kAllocate,   // the modeled function allocates memory named by the subject
+  kDeallocate, // the modeled function deallocates memory named by the subject
+  kUnknown,    // opaque/unspecified effect
 };
 
 // One external-function model row.
@@ -67,13 +67,13 @@ struct FunctionModel {
 // A loaded, validated model bundle. Immutable after construction; Lookup
 // returns spans into the internal (sorted) model table.
 class ModelBundle {
- public:
+public:
   // Load the bundle from `rows` (the TSV) and `manifest` (one line,
   // `model_bundle_version=<version>`). Returns InvalidArgument on malformed
   // input (wrong field count, duplicate model IDs, unknown enum tokens,
   // control characters, unsorted rows, or a manifest/version mismatch).
-  static StatusOr<ModelBundle> Load(const std::filesystem::path& rows,
-                                    const std::filesystem::path& manifest);
+  static StatusOr<ModelBundle> Load(const std::filesystem::path &rows,
+                                    const std::filesystem::path &manifest);
 
   // The bundle version, e.g. "models.v1".
   std::string_view version() const { return version_; }
@@ -85,7 +85,7 @@ class ModelBundle {
   // Returns an empty span when no model matches.
   std::span<const FunctionModel> Lookup(std::string_view symbol) const;
 
- private:
+private:
   std::string version_;
   std::string hash_;
   std::vector<FunctionModel> models_;
@@ -93,6 +93,6 @@ class ModelBundle {
   std::map<std::string, std::pair<std::size_t, std::size_t>> index_;
 };
 
-}  // namespace veritas::analysis::semantic
+} // namespace veritas::analysis::semantic
 
-#endif  // VERITAS_ANALYSIS_SEMANTIC_MODEL_BUNDLE_H_
+#endif // VERITAS_ANALYSIS_SEMANTIC_MODEL_BUNDLE_H_

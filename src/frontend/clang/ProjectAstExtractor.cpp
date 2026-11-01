@@ -48,13 +48,15 @@ struct ClangToolCommand {
   std::vector<std::string> arguments;
 };
 
-StatusOr<ClangToolCommand> ToClangToolCommand(
-    const std::filesystem::path& project_root,
-    const build::TranslationUnitCommand& command) {
+StatusOr<ClangToolCommand>
+ToClangToolCommand(const std::filesystem::path &project_root,
+                   const build::TranslationUnitCommand &command) {
   ClangToolCommand result;
 
-  result.working_directory = (project_root / command.working_directory.relative_path).string();
-  result.source_path = (project_root / command.source_path.relative_path).string();
+  result.working_directory =
+      (project_root / command.working_directory.relative_path).string();
+  result.source_path =
+      (project_root / command.source_path.relative_path).string();
   result.arguments = build::CompileFlags(command, project_root);
 
   return result;
@@ -62,20 +64,28 @@ StatusOr<ClangToolCommand> ToClangToolCommand(
 
 std::string GetLinkageName(::clang::Linkage linkage) {
   switch (linkage) {
-    case ::clang::Linkage::Invalid: return "invalid";
-    case ::clang::Linkage::None: return "none";
-    case ::clang::Linkage::Internal: return "internal";
-    case ::clang::Linkage::UniqueExternal: return "unique_external";
-    case ::clang::Linkage::VisibleNone: return "visible_none";
-    case ::clang::Linkage::Module: return "module";
-    case ::clang::Linkage::External: return "external";
-    default: return "unknown";
+  case ::clang::Linkage::Invalid:
+    return "invalid";
+  case ::clang::Linkage::None:
+    return "none";
+  case ::clang::Linkage::Internal:
+    return "internal";
+  case ::clang::Linkage::UniqueExternal:
+    return "unique_external";
+  case ::clang::Linkage::VisibleNone:
+    return "visible_none";
+  case ::clang::Linkage::Module:
+    return "module";
+  case ::clang::Linkage::External:
+    return "external";
+  default:
+    return "unknown";
   }
 }
 
-std::string MangleFunctionName(const ::clang::FunctionDecl& decl,
-                                ::clang::ASTContext& context) {
-  auto* mangle_ctx = context.createMangleContext();
+std::string MangleFunctionName(const ::clang::FunctionDecl &decl,
+                               ::clang::ASTContext &context) {
+  auto *mangle_ctx = context.createMangleContext();
   if (!mangle_ctx) {
     return decl.getNameAsString();
   }
@@ -83,10 +93,12 @@ std::string MangleFunctionName(const ::clang::FunctionDecl& decl,
   std::string mangled;
   llvm::raw_string_ostream stream(mangled);
 
-  if (const auto* ctor = ::clang::dyn_cast<::clang::CXXConstructorDecl>(&decl)) {
+  if (const auto *ctor =
+          ::clang::dyn_cast<::clang::CXXConstructorDecl>(&decl)) {
     ::clang::GlobalDecl GD(ctor, ::clang::Ctor_Complete);
     mangle_ctx->mangleName(GD, stream);
-  } else if (const auto* dtor = ::clang::dyn_cast<::clang::CXXDestructorDecl>(&decl)) {
+  } else if (const auto *dtor =
+                 ::clang::dyn_cast<::clang::CXXDestructorDecl>(&decl)) {
     ::clang::GlobalDecl GD(dtor, ::clang::Dtor_Complete);
     mangle_ctx->mangleName(GD, stream);
   } else if (mangle_ctx->shouldMangleDeclName(&decl)) {
@@ -102,22 +114,23 @@ std::string MangleFunctionName(const ::clang::FunctionDecl& decl,
   return mangled;
 }
 
-std::string GetCanonicalSignature(const ::clang::FunctionDecl& decl) {
+std::string GetCanonicalSignature(const ::clang::FunctionDecl &decl) {
   std::string sig = decl.getReturnType().getAsString();
   sig += " ";
   sig += decl.getQualifiedNameAsString();
   sig += "(";
 
   bool first = true;
-  for (const auto* param : decl.parameters()) {
-    if (!first) sig += ", ";
+  for (const auto *param : decl.parameters()) {
+    if (!first)
+      sig += ", ";
     sig += param->getType().getAsString();
     first = false;
   }
 
   sig += ")";
 
-  if (const auto* method = ::clang::dyn_cast<::clang::CXXMethodDecl>(&decl)) {
+  if (const auto *method = ::clang::dyn_cast<::clang::CXXMethodDecl>(&decl)) {
     if (method->isConst()) {
       sig += " const";
     }
@@ -126,8 +139,8 @@ std::string GetCanonicalSignature(const ::clang::FunctionDecl& decl) {
   return sig;
 }
 
-std::string GetTemplateIdentity(const ::clang::FunctionDecl& decl) {
-  if (const auto* tmpl = decl.getPrimaryTemplate()) {
+std::string GetTemplateIdentity(const ::clang::FunctionDecl &decl) {
+  if (const auto *tmpl = decl.getPrimaryTemplate()) {
     std::string result = "template<";
     result += tmpl->getNameAsString();
     result += ">";
@@ -144,9 +157,10 @@ std::string GetTemplateIdentity(const ::clang::FunctionDecl& decl) {
   return "";
 }
 
-core::StableId BuildFunctionSymbolId(const ::clang::FunctionDecl& decl,
-                                      const std::string& mangled_name,
-                                      const core::StableId& translation_unit_id) {
+core::StableId
+BuildFunctionSymbolId(const ::clang::FunctionDecl &decl,
+                      const std::string &mangled_name,
+                      const core::StableId &translation_unit_id) {
   std::string canonical_form;
   canonical_form += decl.getQualifiedNameAsString();
   canonical_form += "|";
@@ -173,21 +187,21 @@ core::StableId BuildFunctionSymbolId(const ::clang::FunctionDecl& decl,
                             std::as_bytes(std::span(digest)));
 }
 
-class FunctionDeclVisitor : public ::clang::RecursiveASTVisitor<FunctionDeclVisitor> {
- public:
-  FunctionDeclVisitor(::clang::ASTContext& context,
-                       const core::StableId& translation_unit_id,
-                       ProjectAstIndex* output)
-      : context_(context),
-        translation_unit_id_(translation_unit_id),
+class FunctionDeclVisitor
+    : public ::clang::RecursiveASTVisitor<FunctionDeclVisitor> {
+public:
+  FunctionDeclVisitor(::clang::ASTContext &context,
+                      const core::StableId &translation_unit_id,
+                      ProjectAstIndex *output)
+      : context_(context), translation_unit_id_(translation_unit_id),
         output_(output) {}
 
-  bool VisitFunctionDecl(::clang::FunctionDecl* decl) {
+  bool VisitFunctionDecl(::clang::FunctionDecl *decl) {
     if (!decl || !decl->hasBody()) {
       return true;
     }
 
-    const auto* canonical = decl->getCanonicalDecl();
+    const auto *canonical = decl->getCanonicalDecl();
     if (!canonical) {
       canonical = decl;
     }
@@ -203,74 +217,75 @@ class FunctionDeclVisitor : public ::clang::RecursiveASTVisitor<FunctionDeclVisi
     extracted.canonical_signature = GetCanonicalSignature(*canonical);
     extracted.linkage_kind = GetLinkageName(canonical->getLinkageInternal());
     extracted.template_identity = GetTemplateIdentity(*canonical);
-    extracted.source_anchor = anchor_builder.Build(
-        canonical->getSourceRange(), context_.getSourceManager());
-    extracted.function_symbol_id = BuildFunctionSymbolId(
-        *canonical, mangled, translation_unit_id_);
+    extracted.source_anchor = anchor_builder.Build(canonical->getSourceRange(),
+                                                   context_.getSourceManager());
+    extracted.function_symbol_id =
+        BuildFunctionSymbolId(*canonical, mangled, translation_unit_id_);
 
     output_->declarations.push_back(std::move(extracted));
 
     return true;
   }
 
- private:
-  ::clang::ASTContext& context_;
+private:
+  ::clang::ASTContext &context_;
   core::StableId translation_unit_id_;
-  ProjectAstIndex* output_;
+  ProjectAstIndex *output_;
 };
 
 class FunctionDeclConsumer : public ::clang::ASTConsumer {
- public:
-  FunctionDeclConsumer(::clang::ASTContext& context,
-                        const core::StableId& translation_unit_id,
-                        ProjectAstIndex* output)
+public:
+  FunctionDeclConsumer(::clang::ASTContext &context,
+                       const core::StableId &translation_unit_id,
+                       ProjectAstIndex *output)
       : visitor_(context, translation_unit_id, output) {}
 
-  void HandleTranslationUnit(::clang::ASTContext& context) override {
+  void HandleTranslationUnit(::clang::ASTContext &context) override {
     visitor_.TraverseDecl(context.getTranslationUnitDecl());
   }
 
- private:
+private:
   FunctionDeclVisitor visitor_;
 };
 
 class ProjectAstAction : public ::clang::ASTFrontendAction {
- public:
-  ProjectAstAction(const core::StableId& translation_unit_id,
-                    ProjectAstIndex* output)
+public:
+  ProjectAstAction(const core::StableId &translation_unit_id,
+                   ProjectAstIndex *output)
       : translation_unit_id_(translation_unit_id), output_(output) {}
 
-  std::unique_ptr<::clang::ASTConsumer> CreateASTConsumer(
-      ::clang::CompilerInstance& compiler, llvm::StringRef /*file*/) override {
+  std::unique_ptr<::clang::ASTConsumer>
+  CreateASTConsumer(::clang::CompilerInstance &compiler,
+                    llvm::StringRef /*file*/) override {
     return std::make_unique<FunctionDeclConsumer>(
         compiler.getASTContext(), translation_unit_id_, output_);
   }
 
- private:
+private:
   core::StableId translation_unit_id_;
-  ProjectAstIndex* output_;
+  ProjectAstIndex *output_;
 };
 
 class ProjectAstActionFactory : public ::clang::tooling::FrontendActionFactory {
- public:
-  ProjectAstActionFactory(const core::StableId& translation_unit_id,
-                           ProjectAstIndex* output)
+public:
+  ProjectAstActionFactory(const core::StableId &translation_unit_id,
+                          ProjectAstIndex *output)
       : translation_unit_id_(translation_unit_id), output_(output) {}
 
   std::unique_ptr<::clang::FrontendAction> create() override {
     return std::make_unique<ProjectAstAction>(translation_unit_id_, output_);
   }
 
- private:
+private:
   core::StableId translation_unit_id_;
-  ProjectAstIndex* output_;
+  ProjectAstIndex *output_;
 };
 
-}  // namespace
+} // namespace
 
-const ExtractedFunctionDecl* ProjectAstIndex::FindByMangledName(
-    std::string_view mangled_name) const {
-  for (const auto& decl : declarations) {
+const ExtractedFunctionDecl *
+ProjectAstIndex::FindByMangledName(std::string_view mangled_name) const {
+  for (const auto &decl : declarations) {
     if (decl.mangled_name == mangled_name) {
       return &decl;
     }
@@ -278,16 +293,17 @@ const ExtractedFunctionDecl* ProjectAstIndex::FindByMangledName(
   return nullptr;
 }
 
-StatusOr<ProjectAstIndex> ProjectAstExtractor::ExtractProject(
-    const build::AnalysisManifest& manifest) {
+StatusOr<ProjectAstIndex>
+ProjectAstExtractor::ExtractProject(const build::AnalysisManifest &manifest) {
   ProjectAstIndex index;
 
-  for (const auto& command : manifest.translation_units) {
-    auto invocation = ToClangToolCommand(manifest.context.project_root, command);
+  for (const auto &command : manifest.translation_units) {
+    auto invocation =
+        ToClangToolCommand(manifest.context.project_root, command);
     if (!invocation.ok()) {
       return Status::FailedPrecondition(
-                    "Failed to convert translation unit command: " +
-                    std::string(invocation.status().message()));
+          "Failed to convert translation unit command: " +
+          std::string(invocation.status().message()));
     }
 
     ::clang::tooling::FixedCompilationDatabase database(
@@ -297,16 +313,16 @@ StatusOr<ProjectAstIndex> ProjectAstExtractor::ExtractProject(
 
     auto tu_id = core::ParseStableId(command.translation_unit_id);
     if (!tu_id.ok()) {
-      return Status::FailedPrecondition(
-                    "Invalid translation unit ID: " + command.translation_unit_id);
+      return Status::FailedPrecondition("Invalid translation unit ID: " +
+                                        command.translation_unit_id);
     }
 
-    auto action_factory = std::make_unique<ProjectAstActionFactory>(
-        tu_id.value(), &index);
+    auto action_factory =
+        std::make_unique<ProjectAstActionFactory>(tu_id.value(), &index);
 
     if (tool.run(action_factory.get()) != 0) {
-      return Status::FailedPrecondition(
-                    "Clang AST extraction failed for " + command.translation_unit_id);
+      return Status::FailedPrecondition("Clang AST extraction failed for " +
+                                        command.translation_unit_id);
     }
 
     ++index.processed_translation_units;
@@ -315,4 +331,4 @@ StatusOr<ProjectAstIndex> ProjectAstExtractor::ExtractProject(
   return index;
 }
 
-}  // namespace veritas::frontend::clang
+} // namespace veritas::frontend::clang

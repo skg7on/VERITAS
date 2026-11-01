@@ -39,7 +39,8 @@
 namespace veritas::facts {
 
 // The codec version. Any change to the encoding requires a new tag.
-inline constexpr std::string_view kSemanticKeyVersion = "veritas.semantic-key.v1";
+inline constexpr std::string_view kSemanticKeyVersion =
+    "veritas.semantic-key.v1";
 
 // A field's domain. Tags keep domains apart, so the symbol "1" and the number
 // 1 never encode alike, and a stable id is never mistaken for a plain string
@@ -56,18 +57,18 @@ struct KeyField {
   KeyFieldTag tag;
   std::string value;
 
-  auto operator<=>(const KeyField&) const = default;
-  bool operator==(const KeyField&) const = default;
+  auto operator<=>(const KeyField &) const = default;
+  bool operator==(const KeyField &) const = default;
 };
 
 // Appends the canonical encoding of one field to `out`. Every `Encode*Field`
 // below is defined as this function plus a fresh string, so a caller that
 // already owns a reusable buffer encodes the identical bytes without paying a
 // per-field allocation. This is the only place the field grammar is written.
-void AppendField(std::string* out, KeyFieldTag tag, std::string_view value);
+void AppendField(std::string *out, KeyFieldTag tag, std::string_view value);
 
 // Appends the key header (codec version, relation name, arity) to `out`.
-void AppendKeyHeader(std::string* out, std::string_view relation_name,
+void AppendKeyHeader(std::string *out, std::string_view relation_name,
                      std::size_t arity);
 
 std::string EncodeField(KeyFieldTag tag, std::string_view value);
@@ -97,6 +98,6 @@ struct DecodedKey {
 // count -- otherwise a truncated key could impersonate a shorter valid fact.
 StatusOr<DecodedKey> DecodeKey(std::string_view encoded);
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_SEMANTIC_KEY_CODEC_H_
+#endif // VERITAS_FACTS_SEMANTIC_KEY_CODEC_H_

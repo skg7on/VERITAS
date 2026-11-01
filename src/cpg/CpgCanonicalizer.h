@@ -27,16 +27,16 @@ namespace veritas::cpg {
 // native pointers, and hash-table order never affect the result: nodes, edges,
 // summary IDs, and support records are sorted by canonical key first.
 class CpgCanonicalizer {
- public:
+public:
   // Deterministic length-prefixed byte string covering schema version, revision
   // and build-variant identity, module hash, sorted summary IDs, sorted nodes,
   // and sorted edges (including support records).
-  static std::string CanonicalBytes(const ThinCpg& graph);
+  static std::string CanonicalBytes(const ThinCpg &graph);
 
   // Content-addressed ProjectionID derived from the canonical bytes.
-  static core::StableId ProjectionId(const ThinCpg& graph);
+  static core::StableId ProjectionId(const ThinCpg &graph);
 };
 
-}  // namespace veritas::cpg
+} // namespace veritas::cpg
 
-#endif  // VERITAS_CPG_CPGCANONICALIZER_H_
+#endif // VERITAS_CPG_CPGCANONICALIZER_H_

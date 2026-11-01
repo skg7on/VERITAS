@@ -68,5 +68,5 @@ TEST(ProjectAnalyzerTest, PublishesSummariesForFixture) {
   EXPECT_FALSE(result->published_summary_ids.empty());
 }
 
-}  // namespace
-}  // namespace veritas::analysis
+} // namespace
+} // namespace veritas::analysis

@@ -25,11 +25,11 @@
 
 namespace veritas::summarydb {
 class SummaryRepository;
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb
 
 namespace veritas::cpg {
 class CpgRepository;
-}  // namespace veritas::cpg
+} // namespace veritas::cpg
 
 namespace veritas::analysis {
 
@@ -43,21 +43,22 @@ struct CompletedProjectAnalysis {
 // ProjectPublicationCoordinator publishes summaries and the CPG projection in
 // one SQLite transaction so neither current binding advances without the other.
 class ProjectPublicationCoordinator {
- public:
+public:
   ~ProjectPublicationCoordinator();
 
-  static StatusOr<std::unique_ptr<ProjectPublicationCoordinator>> Open(
-      const std::string& db_path);
+  static StatusOr<std::unique_ptr<ProjectPublicationCoordinator>>
+  Open(const std::string &db_path);
 
   // Persist the M1 program context so summary/CPG bindings resolve their
   // revision/build foreign keys.
-  Status PersistManifestContext(const build::AnalysisManifest& manifest);
+  Status PersistManifestContext(const build::AnalysisManifest &manifest);
 
   // Publish summaries and the CPG projection atomically. Returns the published
   // FunctionSummaryIDs in input order.
-  StatusOr<std::vector<core::StableId>> Publish(CompletedProjectAnalysis completed);
+  StatusOr<std::vector<core::StableId>>
+  Publish(CompletedProjectAnalysis completed);
 
- private:
+private:
   explicit ProjectPublicationCoordinator(
       std::unique_ptr<summarydb::SummaryRepository> summaries);
 
@@ -65,6 +66,6 @@ class ProjectPublicationCoordinator {
   std::unique_ptr<::veritas::cpg::CpgRepository> cpg_;
 };
 
-}  // namespace veritas::analysis
+} // namespace veritas::analysis
 
-#endif  // VERITAS_ANALYSIS_PROJECTPUBLICATIONCOORDINATOR_H_
+#endif // VERITAS_ANALYSIS_PROJECTPUBLICATIONCOORDINATOR_H_

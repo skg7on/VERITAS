@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IR/IRBuilder.h>
 
 #include "analysis/pipeline/ProgramIr.h"
 
@@ -26,27 +26,24 @@ namespace veritas::analysis::svf {
 namespace {
 
 // Helper to build a minimal fixture ProgramIr
-std::unique_ptr<pipeline::ProgramIr> BuildFixtureProgramIr(
-    const std::string& fixture_name) {
+std::unique_ptr<pipeline::ProgramIr>
+BuildFixtureProgramIr(const std::string &fixture_name) {
   auto program_ir = std::make_unique<pipeline::ProgramIr>();
 
   // Create a simple module with a function
-  auto module = std::make_unique<::llvm::Module>(
-      fixture_name, program_ir->GetContext());
+  auto module =
+      std::make_unique<::llvm::Module>(fixture_name, program_ir->GetContext());
 
   // Create a simple function: int parameter_return(int arg0) { return arg0; }
-  auto* func_type = ::llvm::FunctionType::get(
+  auto *func_type = ::llvm::FunctionType::get(
       ::llvm::Type::getInt32Ty(program_ir->GetContext()),
-      {::llvm::Type::getInt32Ty(program_ir->GetContext())},
-      false);
-  auto* func = ::llvm::Function::Create(
-      func_type,
-      ::llvm::Function::ExternalLinkage,
-      "parameter_return",
-      module.get());
+      {::llvm::Type::getInt32Ty(program_ir->GetContext())}, false);
+  auto *func =
+      ::llvm::Function::Create(func_type, ::llvm::Function::ExternalLinkage,
+                               "parameter_return", module.get());
 
-  auto* entry = ::llvm::BasicBlock::Create(
-      program_ir->GetContext(), "entry", func);
+  auto *entry =
+      ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry", func);
   ::llvm::IRBuilder<> builder(entry);
   builder.CreateRet(func->getArg(0));
 
@@ -58,15 +55,14 @@ TEST(SvfSessionTest, BuildsDirectlyFromLiveLlvmModule) {
   auto program_ir = BuildFixtureProgramIr("parameter_return");
   int callback_count = 0;
 
-  auto status = RunWithSvfSession(
-      *program_ir, SvfConfig::Default(),
-      [&](const SvfSessionView& view) {
-        ++callback_count;
-        EXPECT_NE(view.svf_ir, nullptr);
-        EXPECT_NE(view.andersen, nullptr);
-        EXPECT_NE(view.svfg, nullptr);
-        return Status::Ok();
-      });
+  auto status = RunWithSvfSession(*program_ir, SvfConfig::Default(),
+                                  [&](const SvfSessionView &view) {
+                                    ++callback_count;
+                                    EXPECT_NE(view.svf_ir, nullptr);
+                                    EXPECT_NE(view.andersen, nullptr);
+                                    EXPECT_NE(view.svfg, nullptr);
+                                    return Status::Ok();
+                                  });
 
   EXPECT_TRUE(status.ok());
   EXPECT_EQ(callback_count, 1);
@@ -78,9 +74,7 @@ TEST(SvfSessionTest, ReleasesSingletonStateBetweenRuns) {
 
     auto status = RunWithSvfSession(
         *program_ir, SvfConfig::Default(),
-        [](const SvfSessionView& view) {
-          return Status::Ok();
-        });
+        [](const SvfSessionView &view) { return Status::Ok(); });
 
     EXPECT_TRUE(status.ok());
     EXPECT_TRUE(SvfGlobalStateIsCleanForTest());
@@ -94,9 +88,10 @@ TEST(SvfSessionTest, FieldInsensitiveConfigCompletesAndRestoresCleanState) {
 
   // The field-insensitive path lowers SVF's MaxFieldLimit to 0 and must build
   // and tear down a complete session without crashing.
-  auto status = RunWithSvfSession(
-      *program_ir, config,
-      [](const SvfSessionView& view) { return Status::Ok(); });
+  auto status =
+      RunWithSvfSession(*program_ir, config, [](const SvfSessionView &view) {
+        return Status::Ok();
+      });
 
   EXPECT_TRUE(status.ok());
 
@@ -105,7 +100,7 @@ TEST(SvfSessionTest, FieldInsensitiveConfigCompletesAndRestoresCleanState) {
   auto program_ir2 = BuildFixtureProgramIr("parameter_return");
   auto status2 = RunWithSvfSession(
       *program_ir2, SvfConfig::Default(),
-      [](const SvfSessionView& view) { return Status::Ok(); });
+      [](const SvfSessionView &view) { return Status::Ok(); });
   EXPECT_TRUE(status2.ok());
 }
 
@@ -113,8 +108,7 @@ TEST(SvfSessionTest, CallbackErrorPreservesCleanup) {
   auto program_ir = BuildFixtureProgramIr("parameter_return");
 
   auto status = RunWithSvfSession(
-      *program_ir, SvfConfig::Default(),
-      [](const SvfSessionView& view) {
+      *program_ir, SvfConfig::Default(), [](const SvfSessionView &view) {
         return Status::Internal("deliberate callback failure");
       });
 
@@ -124,12 +118,10 @@ TEST(SvfSessionTest, CallbackErrorPreservesCleanup) {
   auto program_ir2 = BuildFixtureProgramIr("parameter_return");
   auto status2 = RunWithSvfSession(
       *program_ir2, SvfConfig::Default(),
-      [](const SvfSessionView& view) {
-        return Status::Ok();
-      });
+      [](const SvfSessionView &view) { return Status::Ok(); });
 
   EXPECT_TRUE(status2.ok());
 }
 
-}  // namespace
-}  // namespace veritas::analysis::svf
+} // namespace
+} // namespace veritas::analysis::svf

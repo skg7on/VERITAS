@@ -54,8 +54,12 @@ build::ProgramContext Context() {
 // Build a FunctionLocalFactsV2 with identity populated and no semantic records.
 FunctionLocalFactsV2 MinimalFacts() {
   FunctionLocalFactsV2 facts;
-  facts.function_symbol_id = "funcsym:sha256:0000000000000000000000000000000000000000000000000000000000000000";
-  facts.function_variant_id = "funcvar:sha256:1111111111111111111111111111111111111111111111111111111111111111";
+  facts.function_symbol_id =
+      "funcsym:sha256:"
+      "0000000000000000000000000000000000000000000000000000000000000000";
+  facts.function_variant_id =
+      "funcvar:sha256:"
+      "1111111111111111111111111111111111111111111111111111111111111111";
   return facts;
 }
 
@@ -133,8 +137,9 @@ TEST(SummaryV2BuilderTest, EquivalentInputOrderHasOneSummaryId) {
   auto right = BuildLocalSummaryV2(FactsInReverseOrder(), Context());
   ASSERT_TRUE(left.ok());
   ASSERT_TRUE(right.ok());
-  EXPECT_EQ(*ComputeFunctionSummaryId(*left), *ComputeFunctionSummaryId(*right));
+  EXPECT_EQ(*ComputeFunctionSummaryId(*left),
+            *ComputeFunctionSummaryId(*right));
 }
 
-}  // namespace
-}  // namespace veritas::summary
+} // namespace
+} // namespace veritas::summary

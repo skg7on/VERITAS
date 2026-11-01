@@ -46,20 +46,20 @@
 namespace veritas::testing {
 namespace {
 
-std::vector<core::StableId> SortedFactIds(
-    const std::vector<facts::AnalysisFact>& facts) {
+std::vector<core::StableId>
+SortedFactIds(const std::vector<facts::AnalysisFact> &facts) {
   std::vector<core::StableId> ids;
   ids.reserve(facts.size());
-  for (const auto& fact : facts) {
+  for (const auto &fact : facts) {
     ids.push_back(fact.fact_id);
   }
   std::sort(ids.begin(), ids.end());
   return ids;
 }
 
-bool HasRelation(const std::vector<facts::AnalysisFact>& facts,
+bool HasRelation(const std::vector<facts::AnalysisFact> &facts,
                  facts::RelationId relation) {
-  for (const auto& fact : facts) {
+  for (const auto &fact : facts) {
     if (fact.row.relation == relation) {
       return true;
     }
@@ -728,7 +728,7 @@ TEST(EvidenceHandoffIntegrationTest, SummaryFixtureIsDeterministicAcrossRoots) {
   // Summary references are present in the provenance of a derived flow fact,
   // while no source text is copied into the handoff (facts are semantic rows).
   core::StableId flow_fact_id;
-  for (const auto& fact : *first_facts) {
+  for (const auto &fact : *first_facts) {
     if (fact.row.relation == facts::RelationId::kGlobalFlow) {
       flow_fact_id = fact.fact_id;
       break;
@@ -744,7 +744,7 @@ TEST(EvidenceHandoffIntegrationTest, SummaryFixtureIsDeterministicAcrossRoots) {
   ASSERT_TRUE(graph.ok()) << graph.status().message();
 
   bool saw_summary_ref = false;
-  for (const auto& node : graph->nodes()) {
+  for (const auto &node : graph->nodes()) {
     if (!node.summary_id().empty()) {
       saw_summary_ref = true;
       break;
@@ -753,5 +753,5 @@ TEST(EvidenceHandoffIntegrationTest, SummaryFixtureIsDeterministicAcrossRoots) {
   EXPECT_TRUE(saw_summary_ref) << "no summary reference in provenance closure";
 }
 
-}  // namespace
-}  // namespace veritas::testing
+} // namespace
+} // namespace veritas::testing

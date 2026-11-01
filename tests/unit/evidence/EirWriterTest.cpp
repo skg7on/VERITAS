@@ -26,10 +26,11 @@
 //     not a deletion — a deletion would also be caught by a length check.
 //   * `CanonicalTextOfTheHandAuthoredFixtureHasTheSameIdentity` compares the
 //     writer's canonical output for the shared fixture against
-//     `kOverflowEirText`, the document `tests/support/evidence/EirFixtureText.h`
-//     hands down from the formal specification's §15 example. Two documents
-//     agree on `EvidenceID` only if they agree on every hashed field, so this
-//     is a semantic equality against an independently authored oracle.
+//     `kOverflowEirText`, the document
+//     `tests/support/evidence/EirFixtureText.h` hands down from the formal
+//     specification's §15 example. Two documents agree on `EvidenceID` only if
+//     they agree on every hashed field, so this is a semantic equality against
+//     an independently authored oracle.
 //
 // The remaining tests fall into four groups:
 //
@@ -80,7 +81,7 @@ using testing::MakeValidMinimalEvidenceCase;
 // refused: every caller of this helper is a positive test, and a refusal there
 // should surface the writer's own message alongside the caller's assertions
 // instead of hiding behind a fatal return.
-std::string MustWrite(const EvidenceCase& value, EirTextStyle style) {
+std::string MustWrite(const EvidenceCase &value, EirTextStyle style) {
   StatusOr<std::string> text = WriteEirText(value, style);
   if (!text.ok()) {
     ADD_FAILURE() << "WriteEirText refused: " << text.status().message();
@@ -89,7 +90,7 @@ std::string MustWrite(const EvidenceCase& value, EirTextStyle style) {
   return std::move(text).value();
 }
 
-std::string Canonical(const EvidenceCase& value) {
+std::string Canonical(const EvidenceCase &value) {
   return MustWrite(value, EirTextStyle::kCanonical);
 }
 
@@ -118,7 +119,7 @@ EvidenceCase Finalized(EvidenceCase value) {
 // `base` with `mutate` applied and the identity recomputed, so the result is a
 // case that is well-formed and self-addressed with respect to its mutation.
 template <typename Mutate>
-EvidenceCase Derive(const EvidenceCase& base, Mutate mutate) {
+EvidenceCase Derive(const EvidenceCase &base, Mutate mutate) {
   EvidenceCase value = base;
   mutate(&value);
   return Finalized(std::move(value));
@@ -130,8 +131,8 @@ bool Contains(std::string_view haystack, std::string_view needle) {
 
 // The entity with local handle `id`, or null. The M10C fixtures use readable
 // deterministic handles, so a test can name the member it is about.
-const Entity* FindEntity(const EvidenceCase& value, std::string_view id) {
-  for (const Entity& entity : value.entities) {
+const Entity *FindEntity(const EvidenceCase &value, std::string_view id) {
+  for (const Entity &entity : value.entities) {
     if (entity.id == id) {
       return &entity;
     }
@@ -311,8 +312,8 @@ EvidenceCase HandBuiltCase() {
 
   Fact fact;
   fact.id = "F_range";
-  fact.predicate = Call("range", {Reference("E_len"), Integer(0),
-                                  Integer(65535)});
+  fact.predicate =
+      Call("range", {Reference("E_len"), Integer(0), Integer(65535)});
   fact.epistemic = EpistemicState::kMust;
   fact.confidence = Confidence::kExact;
   fact.producer = "clang";
@@ -336,9 +337,9 @@ EvidenceCase HandBuiltCase() {
 // document only where §19.1's canonical ordering fixes a difference:
 //
 //   * members are grouped by category and, within a category, sorted by the
-//     canonicalizer's `(kind, stable-id, local-id)` key — so the facts lead with
-//     the two that have no stable ID, `provenance` follows `constraint`, and
-//     the dependencies lead with the `configuration` one;
+//     canonicalizer's `(kind, stable-id, local-id)` key — so the facts lead
+//     with the two that have no stable ID, `provenance` follows `constraint`,
+//     and the dependencies lead with the `configuration` one;
 //   * the four reference lists are sorted (`inputs` is
 //     `[$F_capacity, $F_range]`, not the fixture's source order);
 //   * the `analyzer` lines are sorted.
@@ -659,7 +660,7 @@ TEST(EirWriterTest, EscapesTheFiveLexerEscapesInsideStringLiterals) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
   ASSERT_FALSE(base.entities.empty());
   const std::string original = "quote:\" back:\\ newline:\n return:\r tab:\t";
-  const EvidenceCase value = Derive(base, [&original](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [&original](EvidenceCase *case_) {
     case_->entities[0].properties["note"] = String(original);
   });
 
@@ -675,8 +676,8 @@ TEST(EirWriterTest, EscapesTheFiveLexerEscapesInsideStringLiterals) {
   EXPECT_EQ(text.find("note = "), text.rfind("note = "));
 
   const EvidenceCase reparsed = MustParse(text);
-  const Entity* entity = nullptr;
-  for (const Entity& candidate : reparsed.entities) {
+  const Entity *entity = nullptr;
+  for (const Entity &candidate : reparsed.entities) {
     if (candidate.id == base.entities[0].id) {
       entity = &candidate;
     }
@@ -731,9 +732,8 @@ TEST(EirWriterTest, EmitsContextTypeLayoutAndAnalysisRun) {
 
 TEST(EirWriterTest, EmitsEveryAnalyzerVersionInCanonicalOrder) {
   const std::string text = Canonical(MustParse(kOverflowEirTextWithoutLabel));
-  EXPECT_TRUE(Contains(text,
-                       "analyzer = veritas.clang(\"17.0.6\", "
-                       "\"veritas.default\");"))
+  EXPECT_TRUE(Contains(text, "analyzer = veritas.clang(\"17.0.6\", "
+                             "\"veritas.default\");"))
       << text;
   EXPECT_TRUE(Contains(text, "analyzer = veritas.wpa(\"1.0\");")) << text;
   // Sorted, so the WPA analyzer follows the clang one even though the two
@@ -744,13 +744,13 @@ TEST(EirWriterTest, EmitsEveryAnalyzerVersionInCanonicalOrder) {
 TEST(EirWriterTest, EmitsTheEntityStableId) {
   const EvidenceCase value = MustParse(kOverflowEirTextWithoutLabel);
   const std::string text = Canonical(value);
-  const Entity* entity = FindEntity(value, "E_len");
+  const Entity *entity = FindEntity(value, "E_len");
   ASSERT_NE(entity, nullptr);
   ASSERT_TRUE(entity->stable_id.has_value());
   // The value comes from the case; its presence in the text comes from the
   // writer. Disabling the emission removes the line and fails this test.
   EXPECT_TRUE(Contains(text, "stable_id = \"" +
-                                  core::ToString(*entity->stable_id) + "\";"))
+                                 core::ToString(*entity->stable_id) + "\";"))
       << text;
 }
 
@@ -758,10 +758,10 @@ TEST(EirWriterTest, EmitsTheFactStableIdAndDerivedFlag) {
   const EvidenceCase value = MustParse(kOverflowEirTextWithoutLabel);
   const std::string text = Canonical(value);
   ASSERT_FALSE(value.facts.empty());
-  const Fact& fact = value.facts[0];
+  const Fact &fact = value.facts[0];
   ASSERT_TRUE(fact.stable_id.has_value());
-  EXPECT_TRUE(
-      Contains(text, "stable_id = \"" + core::ToString(*fact.stable_id) + "\";"))
+  EXPECT_TRUE(Contains(text, "stable_id = \"" +
+                                 core::ToString(*fact.stable_id) + "\";"))
       << text;
   EXPECT_TRUE(Contains(text, "derived = true;")) << text;
 }
@@ -769,8 +769,8 @@ TEST(EirWriterTest, EmitsTheFactStableIdAndDerivedFlag) {
 TEST(EirWriterTest, EmitsEveryProvenanceField) {
   const EvidenceCase value = MustParse(kOverflowEirTextWithoutLabel);
   const std::string text = Canonical(value);
-  const Provenance* record = nullptr;
-  for (const Provenance& candidate : value.provenance) {
+  const Provenance *record = nullptr;
+  for (const Provenance &candidate : value.provenance) {
     if (candidate.id == "PR_check") {
       record = &candidate;
     }
@@ -816,11 +816,12 @@ TEST(EirWriterTest, EmitsTheVerificationProducer) {
   // Scoped to the obligation: provenance record `PR_result` writes the same
   // `producer = veritas.smt;`, so an unscoped needle passes even with this
   // emission disabled.
-  const std::string block = BlockBody(text, "verify " + value.proof_obligations[0].id);
+  const std::string block =
+      BlockBody(text, "verify " + value.proof_obligations[0].id);
   ASSERT_FALSE(block.empty()) << text;
   EXPECT_TRUE(Contains(
-      block, "producer = " + value.proof_obligations[0].verification_producer +
-                 ";"))
+      block,
+      "producer = " + value.proof_obligations[0].verification_producer + ";"))
       << text;
   EXPECT_TRUE(Contains(block, "prove = @E_len <= capacity(@E_dst);")) << text;
 }
@@ -830,7 +831,7 @@ TEST(EirWriterTest, EmitsTheVerificationProducer) {
 // two carriers whose emptiness is unwritable rather than omissible.
 TEST(EirWriterTest, EmitsTheHypothesisProducer) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     Hypothesis record;
     record.id = "H1";
     record.predicate = Symbol("guessed");
@@ -876,7 +877,7 @@ TEST(EirWriterTest, CallShapedCarriersRoundTripThroughTheCanonicalSpelling) {
       "infer_contract(E_vendor_validate, \"packet\", 1)";
   const std::string call_scope = "decode_frame(E_sink)";
 
-  const EvidenceCase value = Derive(base, [&](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [&](EvidenceCase *case_) {
     Assumption assumption;
     assumption.id = "A1";
     assumption.predicate = Symbol("assumed");
@@ -929,10 +930,10 @@ TEST(EirWriterTest, AnalyzerVersionOrderDoesNotChangeTextOrIdentity) {
   std::vector<AnalyzerVersion> reversed = forward;
   testing::EvidenceScenarioBuilder::Reverse(reversed);
 
-  const EvidenceCase left = Derive(base, [&forward](EvidenceCase* case_) {
+  const EvidenceCase left = Derive(base, [&forward](EvidenceCase *case_) {
     case_->program.analyzer_versions = forward;
   });
-  const EvidenceCase right = Derive(base, [&reversed](EvidenceCase* case_) {
+  const EvidenceCase right = Derive(base, [&reversed](EvidenceCase *case_) {
     case_->program.analyzer_versions = reversed;
   });
 
@@ -941,7 +942,8 @@ TEST(EirWriterTest, AnalyzerVersionOrderDoesNotChangeTextOrIdentity) {
   EXPECT_EQ(*left.evidence_id, *right.evidence_id);
   const std::string text = Canonical(left);
   EXPECT_EQ(Canonical(right), text);
-  EXPECT_TRUE(Contains(text, "analyzer = veritas.smt(\"\", \"z3.4\");")) << text;
+  EXPECT_TRUE(Contains(text, "analyzer = veritas.smt(\"\", \"z3.4\");"))
+      << text;
 }
 
 // §4.1: an entity may declare a `stable_id` identity *and* carry a property
@@ -956,7 +958,7 @@ TEST(EirWriterTest, EntityIdentityIsEmittedBeforeASameNamedProperty) {
       "55555555";
   const std::string property = "not an identity";
 
-  const EvidenceCase value = Derive(base, [&](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [&](EvidenceCase *case_) {
     case_->entities[0].stable_id = StableId(identity);
     case_->entities[0].properties["stable_id"] = String(property);
   });
@@ -972,8 +974,8 @@ TEST(EirWriterTest, EntityIdentityIsEmittedBeforeASameNamedProperty) {
   ASSERT_TRUE(reparsed.evidence_id.has_value());
   EXPECT_EQ(*reparsed.evidence_id, *value.evidence_id);
 
-  const Entity* entity = nullptr;
-  for (const Entity& candidate : reparsed.entities) {
+  const Entity *entity = nullptr;
+  for (const Entity &candidate : reparsed.entities) {
     if (candidate.id == base.entities[0].id) {
       entity = &candidate;
     }
@@ -992,7 +994,7 @@ TEST(EirWriterTest, EntityIdentityIsEmittedBeforeASameNamedProperty) {
 // admissible at the primary level. Re-serialisation must stay inside that set.
 TEST(EirWriterTest, WidenedValueShapesRoundTrip) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     ASSERT_FALSE(case_->entities.empty());
     case_->entities[0].properties["bare"] = Symbol("some_symbol");
     case_->entities[0].properties["text"] = String("a string");
@@ -1019,7 +1021,7 @@ TEST(EirWriterTest, LiteralPrimariesAndNestedCallsRoundTrip) {
   const std::string left = base.entities[0].id;
   const std::string right = base.entities[1].id;
 
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     case_->facts[0].predicate = Integer(65535);
   });
   const std::string text = Canonical(value);
@@ -1027,9 +1029,9 @@ TEST(EirWriterTest, LiteralPrimariesAndNestedCallsRoundTrip) {
   EXPECT_EQ(Canonical(MustParse(text)), text);
 
   const EvidenceCase nested =
-      Derive(base, [&left, &right](EvidenceCase* case_) {
-        case_->facts[0].predicate = Not(
-            Call("dominates", {Reference(left), Reference(right)}));
+      Derive(base, [&left, &right](EvidenceCase *case_) {
+        case_->facts[0].predicate =
+            Not(Call("dominates", {Reference(left), Reference(right)}));
       });
   const std::string nested_text = Canonical(nested);
   EXPECT_TRUE(Contains(nested_text, "predicate = not dominates(@" + left +
@@ -1045,12 +1047,12 @@ TEST(EirWriterTest, PrecedenceDecidesWhereParenthesesGo) {
 
   // A conjunction nested inside a disjunction needs no parentheses when it is
   // on the left, and the model's `and` is n-ary and flat.
-  const EvidenceCase flat = Derive(base, [](EvidenceCase* case_) {
-    case_->facts[0].predicate = Connective(
-        Expression::Kind::kOr,
-        {Connective(Expression::Kind::kAnd,
-                    {Symbol("a"), Symbol("b"), Symbol("c")}),
-         Symbol("d")});
+  const EvidenceCase flat = Derive(base, [](EvidenceCase *case_) {
+    case_->facts[0].predicate =
+        Connective(Expression::Kind::kOr,
+                   {Connective(Expression::Kind::kAnd,
+                               {Symbol("a"), Symbol("b"), Symbol("c")}),
+                    Symbol("d")});
   });
   const std::string flat_text = Canonical(flat);
   EXPECT_TRUE(Contains(flat_text, "predicate = a and b and c or d;"))
@@ -1059,11 +1061,11 @@ TEST(EirWriterTest, PrecedenceDecidesWhereParenthesesGo) {
 
   // The mirror image does need them: a disjunction inside a conjunction binds
   // more loosely than the position admits.
-  const EvidenceCase nested = Derive(base, [](EvidenceCase* case_) {
-    case_->facts[0].predicate = Connective(
-        Expression::Kind::kAnd,
-        {Symbol("a"),
-         Connective(Expression::Kind::kOr, {Symbol("b"), Symbol("c")})});
+  const EvidenceCase nested = Derive(base, [](EvidenceCase *case_) {
+    case_->facts[0].predicate =
+        Connective(Expression::Kind::kAnd,
+                   {Symbol("a"), Connective(Expression::Kind::kOr,
+                                            {Symbol("b"), Symbol("c")})});
   });
   const std::string nested_text = Canonical(nested);
   EXPECT_TRUE(Contains(nested_text, "predicate = a and (b or c);"))
@@ -1073,7 +1075,7 @@ TEST(EirWriterTest, PrecedenceDecidesWhereParenthesesGo) {
   // A comparison binds tighter than `not`, so the negation needs none; but the
   // comparison's own operands may not be formulas, so this is the only shape in
   // which a comparison can sit inside one.
-  const EvidenceCase negated = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase negated = Derive(base, [](EvidenceCase *case_) {
     case_->facts[0].predicate = Not(Compare("<", Symbol("a"), Symbol("b")));
   });
   const std::string negated_text = Canonical(negated);
@@ -1082,11 +1084,11 @@ TEST(EirWriterTest, PrecedenceDecidesWhereParenthesesGo) {
   EXPECT_EQ(Canonical(MustParse(negated_text)), negated_text);
 
   // `implies` is right-associative: a right-nested chain is written bare...
-  const EvidenceCase right = Derive(base, [](EvidenceCase* case_) {
-    case_->facts[0].predicate = Connective(
-        Expression::Kind::kImplies,
-        {Symbol("a"),
-         Connective(Expression::Kind::kImplies, {Symbol("b"), Symbol("c")})});
+  const EvidenceCase right = Derive(base, [](EvidenceCase *case_) {
+    case_->facts[0].predicate =
+        Connective(Expression::Kind::kImplies,
+                   {Symbol("a"), Connective(Expression::Kind::kImplies,
+                                            {Symbol("b"), Symbol("c")})});
   });
   const std::string right_text = Canonical(right);
   EXPECT_TRUE(Contains(right_text, "predicate = a implies b implies c;"))
@@ -1095,7 +1097,7 @@ TEST(EirWriterTest, PrecedenceDecidesWhereParenthesesGo) {
 
   // ...and a left-nested one must be parenthesised, or the chain would re-read
   // as the right-nested case above.
-  const EvidenceCase left = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase left = Derive(base, [](EvidenceCase *case_) {
     case_->facts[0].predicate = Connective(
         Expression::Kind::kImplies,
         {Connective(Expression::Kind::kImplies, {Symbol("a"), Symbol("b")}),
@@ -1107,7 +1109,7 @@ TEST(EirWriterTest, PrecedenceDecidesWhereParenthesesGo) {
   EXPECT_EQ(Canonical(MustParse(left_text)), left_text);
 
   // An `and` antecedent binds tighter than the implication, so it is bare.
-  const EvidenceCase antecedent = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase antecedent = Derive(base, [](EvidenceCase *case_) {
     case_->facts[0].predicate = Connective(
         Expression::Kind::kImplies,
         {Connective(Expression::Kind::kAnd, {Symbol("a"), Symbol("b")}),
@@ -1156,7 +1158,7 @@ TEST(EirWriterTest, MemberOrderIsIndependentOfInsertionOrder) {
 
 TEST(EirWriterTest, RefusesAScopeOutsideTheSixKeywordsAndFunctionCall) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     Constraint constraint;
     constraint.id = "K_scope";
     constraint.expression = Symbol("holds");
@@ -1178,11 +1180,10 @@ TEST(EirWriterTest, RefusesAScopeOutsideTheSixKeywordsAndFunctionCall) {
 TEST(EirWriterTest, RefusesAProducerTheQualifiedIdAlphabetCannotSpell) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
   for (const std::string_view producer : {"veritas-wpa", "veritas wpa"}) {
-    const EvidenceCase value =
-        Derive(base, [&producer](EvidenceCase* case_) {
-          ASSERT_FALSE(case_->facts.empty());
-          case_->facts[0].producer = std::string(producer);
-        });
+    const EvidenceCase value = Derive(base, [&producer](EvidenceCase *case_) {
+      ASSERT_FALSE(case_->facts.empty());
+      case_->facts[0].producer = std::string(producer);
+    });
     // Still a well-formed case that carries an identity: the refusal is the
     // writer's own, because the value genuinely has no spelling.
     EXPECT_TRUE(RequireValidEvidenceCase(value).ok()) << producer;
@@ -1199,7 +1200,7 @@ TEST(EirWriterTest, RefusesAProducerTheQualifiedIdAlphabetCannotSpell) {
   // producer, so an empty one is spelled by writing nothing and reads back as
   // empty. Pinned here so the guard above cannot be widened into a blanket
   // "empty producer is fatal" rule that would refuse writable cases.
-  const EvidenceCase omitted = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase omitted = Derive(base, [](EvidenceCase *case_) {
     ASSERT_FALSE(case_->facts.empty());
     case_->facts[0].producer.clear();
   });
@@ -1215,7 +1216,7 @@ TEST(EirWriterTest, RefusesAProducerTheQualifiedIdAlphabetCannotSpell) {
   // string is genuinely unwritable. Without these two cases the emptiness
   // guard in `ProducerCarrier` is dead code — no test fails when it is
   // removed, which is the defect this test exists to prevent.
-  const EvidenceCase hypothesis = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase hypothesis = Derive(base, [](EvidenceCase *case_) {
     Hypothesis record;
     record.id = "H1";
     record.predicate = Symbol("guessed");
@@ -1236,7 +1237,7 @@ TEST(EirWriterTest, RefusesAProducerTheQualifiedIdAlphabetCannotSpell) {
                        "empty spelling"))
       << hypothesis_text.status().message();
 
-  const EvidenceCase provenance = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase provenance = Derive(base, [](EvidenceCase *case_) {
     ASSERT_FALSE(case_->provenance.empty());
     case_->provenance[0].producer.clear();
   });
@@ -1253,7 +1254,7 @@ TEST(EirWriterTest, RefusesAProducerTheQualifiedIdAlphabetCannotSpell) {
 
 TEST(EirWriterTest, RefusesAStableIdPropertyOnAnEntityWithNoIdentity) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     ASSERT_FALSE(case_->entities.empty());
     case_->entities[0].stable_id.reset();
     case_->entities[0].properties["stable_id"] = String("not an identity");
@@ -1307,7 +1308,7 @@ TEST(EirWriterTest, RefusesAnEvidenceIdThatIsNotTheContentAddress) {
 
 TEST(EirWriterTest, RefusesARawLineBreakInACallShapedCarrier) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     case_->facts[0].provenance_id = "";
     Assumption assumption;
     assumption.id = "A1";
@@ -1326,7 +1327,7 @@ TEST(EirWriterTest, RefusesACarrierThatIsNotACanonicalCallSpelling) {
   for (const std::string_view source :
        {"infer_contract(a,b)", "infer_contract(@E_x)",
         "infer_contract() trailing", "infer_contract(\"a\\nb\")"}) {
-    const EvidenceCase value = Derive(base, [&source](EvidenceCase* case_) {
+    const EvidenceCase value = Derive(base, [&source](EvidenceCase *case_) {
       Assumption assumption;
       assumption.id = "A1";
       assumption.predicate = Symbol("assumed");
@@ -1342,11 +1343,10 @@ TEST(EirWriterTest, RefusesACarrierThatIsNotACanonicalCallSpelling) {
 
 TEST(EirWriterTest, RefusesACompoundPropertyValue) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     ASSERT_FALSE(case_->entities.empty());
     case_->entities[0].properties["x"] =
-        Connective(Expression::Kind::kAnd,
-                   {Symbol("a"), Symbol("b")});
+        Connective(Expression::Kind::kAnd, {Symbol("a"), Symbol("b")});
   });
   // The property position admits no parenthesised sub-expression, so the value
   // is unspellable there — and the validator, which checks only that the
@@ -1360,7 +1360,7 @@ TEST(EirWriterTest, RefusesACompoundPropertyValue) {
 
 TEST(EirWriterTest, RefusesAnIdentifierThatIsNotAnIdentifier) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     ASSERT_FALSE(case_->facts.empty());
     case_->facts[0].id = "not an identifier";
   });
@@ -1373,9 +1373,9 @@ TEST(EirWriterTest, RefusesAnIdentifierThatIsNotAnIdentifier) {
 
 TEST(EirWriterTest, RefusesASymbolThatWouldReadBackAsAnOperatorOrLiteral) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
-  for (const std::string_view name : {"not", "and", "or", "implies", "forall",
-                                      "exists", "true", "false"}) {
-    const EvidenceCase value = Derive(base, [&name](EvidenceCase* case_) {
+  for (const std::string_view name :
+       {"not", "and", "or", "implies", "forall", "exists", "true", "false"}) {
+    const EvidenceCase value = Derive(base, [&name](EvidenceCase *case_) {
       case_->facts[0].predicate = Symbol(std::string(name));
     });
     const StatusOr<std::string> text =
@@ -1404,7 +1404,7 @@ TEST(EirWriterTest, RefusesAPropertyKeyTheGrammarCannotDerive) {
 
   // `not` is an operator, so the parser stops at `expected '=' after the
   // attribute 'not'` — `REP-001` broken by text the writer produced itself.
-  const EvidenceCase unparsable = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase unparsable = Derive(base, [](EvidenceCase *case_) {
     case_->entities[0].properties["not an identifier"] = String("v");
   });
   // The refusal is the writer's own: the case is well-formed and identified.
@@ -1429,10 +1429,10 @@ TEST(EirWriterTest, RefusesAPropertyKeyThatWouldSubstituteADifferentCase) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
   ASSERT_FALSE(base.entities.empty());
 
-  const EvidenceCase injected = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase injected = Derive(base, [](EvidenceCase *case_) {
     case_->entities[0].properties["x = 1; y"] = String("v");
   });
-  const EvidenceCase denoted = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase denoted = Derive(base, [](EvidenceCase *case_) {
     case_->entities[0].properties["x"] = Integer(1);
     case_->entities[0].properties["y"] = String("v");
   });
@@ -1459,7 +1459,7 @@ TEST(EirWriterTest, WritesALegalPropertyKeyVerbatimAndRoundTrips) {
   ASSERT_FALSE(base.entities.empty());
   const std::string owner = base.entities[0].id;
 
-  const EvidenceCase legal = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase legal = Derive(base, [](EvidenceCase *case_) {
     case_->entities[0].properties["note"] = String("v");
   });
   const std::string text = Canonical(legal);
@@ -1467,10 +1467,10 @@ TEST(EirWriterTest, WritesALegalPropertyKeyVerbatimAndRoundTrips) {
       << text;
   EXPECT_EQ(*MustParse(text).evidence_id, *legal.evidence_id);
 
-  const EvidenceCase injected = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase injected = Derive(base, [](EvidenceCase *case_) {
     case_->entities[0].properties["x = 1; y"] = String("v");
   });
-  const EvidenceCase denoted = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase denoted = Derive(base, [](EvidenceCase *case_) {
     case_->entities[0].properties["x"] = Integer(1);
     case_->entities[0].properties["y"] = String("v");
   });
@@ -1498,7 +1498,7 @@ TEST(EirWriterTest, SummaryAndDependencyOrderMatchesTheCanonicalizer) {
   const std::string high = "summary:sha256:" + std::string(64, 'f');
   const std::string low = "summary:sha256:" + std::string(64, '0');
 
-  const EvidenceCase value = Derive(base, [&](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [&](EvidenceCase *case_) {
     // Inserted in the order the pre-fix writer would have printed them, so the
     // assertion below is not satisfied by the model happening to be sorted.
     SummaryReference second;
@@ -1551,7 +1551,7 @@ TEST(EirWriterTest, SummaryAndDependencyOrderMatchesTheCanonicalizer) {
 TEST(EirWriterTest, RefusesABooleanSpellingAsAPropertyValueSymbol) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
   for (const std::string_view name : {"true", "false"}) {
-    const EvidenceCase value = Derive(base, [&name](EvidenceCase* case_) {
+    const EvidenceCase value = Derive(base, [&name](EvidenceCase *case_) {
       case_->entities[0].properties["flag"] = Symbol(std::string(name));
     });
     EXPECT_TRUE(RequireValidEvidenceCase(value).ok()) << name;
@@ -1570,9 +1570,8 @@ TEST(EirWriterTest, RefusesABooleanSpellingAsAPropertyValueSymbol) {
 TEST(EirWriterTest, RefusesAReservedWordAsAPredicatePositionCallee) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
   for (const std::string_view name : {"not", "forall", "exists"}) {
-    const EvidenceCase value = Derive(base, [&name](EvidenceCase* case_) {
-      case_->facts[0].predicate =
-          Call(std::string(name), {Symbol("p")});
+    const EvidenceCase value = Derive(base, [&name](EvidenceCase *case_) {
+      case_->facts[0].predicate = Call(std::string(name), {Symbol("p")});
     });
     EXPECT_TRUE(RequireValidEvidenceCase(value).ok()) << name;
     const StatusOr<std::string> text =
@@ -1589,7 +1588,7 @@ TEST(EirWriterTest, RefusesAReservedWordAsAPredicatePositionCallee) {
 // the arity and the bound variable, so a symbol domain reaches the writer.
 TEST(EirWriterTest, RefusesAQuantifierDomainThatIsNeitherCallNorReference) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     Expression quantified;
     quantified.kind = Expression::Kind::kForAll;
     quantified.text = "i";
@@ -1612,7 +1611,7 @@ TEST(EirWriterTest, RefusesAQuantifierDomainThatIsNeitherCallNorReference) {
 TEST(EirWriterTest, RefusesAProofBudgetThatIsNeitherIntegerNorCall) {
   const EvidenceCase base = Finalized(MakeValidMinimalEvidenceCase());
   ASSERT_FALSE(base.facts.empty());
-  const EvidenceCase value = Derive(base, [](EvidenceCase* case_) {
+  const EvidenceCase value = Derive(base, [](EvidenceCase *case_) {
     ProofObligation obligation;
     obligation.id = "V1";
     obligation.goal_kind = ProofGoalKind::kProve;
@@ -1630,5 +1629,5 @@ TEST(EirWriterTest, RefusesAProofBudgetThatIsNeitherIntegerNorCall) {
       << text.status().message();
 }
 
-}  // namespace
-}  // namespace veritas::evidence
+} // namespace
+} // namespace veritas::evidence

@@ -171,7 +171,7 @@ Rejection Reject(std::string_view source) {
 // Parses a document that must succeed, reporting the diagnostic when it does
 // not. `context` names the test's own source for the failure message.
 StatusOr<EvidenceCase> Accept(std::string_view source,
-                             std::string_view context) {
+                              std::string_view context) {
   EirParseError error;
   StatusOr<EvidenceCase> value = ParseEirText(source, &error);
   EXPECT_TRUE(value.ok()) << context << ": " << error.line << ':'
@@ -197,7 +197,8 @@ StatusOr<EvidenceCase> ParseUnvalidated(std::string_view source) {
 }
 
 // The path of one file of the malformed corpus of
-// `docs/specs/milestones/m10b-m10c-api-to-evidence-ir-test-design-spec.md` §6.3.
+// `docs/specs/milestones/m10b-m10c-api-to-evidence-ir-test-design-spec.md`
+// §6.3.
 fs::path CorpusPath(std::string_view name) {
   return testing::TestSourceRoot() / "fixtures" / "evidence" / "invalid" / name;
 }
@@ -216,7 +217,8 @@ std::string ReadCorpus(std::string_view name) {
 
 TEST(EirParserTest, ParsesCompleteOverflowCase) {
   EirParseError error;
-  StatusOr<EvidenceCase> value = ParseEirText(testing::kOverflowEirText, &error);
+  StatusOr<EvidenceCase> value =
+      ParseEirText(testing::kOverflowEirText, &error);
   ASSERT_TRUE(value.ok()) << error.line << ':' << error.column << ' '
                           << error.message;
   EXPECT_EQ(value->schema_version, "eir.v1");
@@ -253,15 +255,18 @@ TEST(EirParserTest, CaseLabelCarriesNoSemanticContent) {
 TEST(EirParserTest, AcceptsAnyWellFormedLabel) {
   const std::string source = MinimalCase();
   const std::string labelled =
-      "evidence Some_Label_9 {\n" + source.substr(std::string("evidence {\n").size());
+      "evidence Some_Label_9 {\n" +
+      source.substr(std::string("evidence {\n").size());
   EirParseError error;
   StatusOr<EvidenceCase> value = ParseEirText(labelled, &error);
   ASSERT_TRUE(value.ok()) << error.message;
   EXPECT_EQ(value->primary_claim.id, "C1");
 }
 
-TEST(EirParserTest, RejectsMalformedLabel) {  // a label that is not an identifier
-  const Rejection rejected = Reject("evidence 7 {\n    schema = \"eir.v1\";\n}\n");
+TEST(EirParserTest,
+     RejectsMalformedLabel) { // a label that is not an identifier
+  const Rejection rejected =
+      Reject("evidence 7 {\n    schema = \"eir.v1\";\n}\n");
   EXPECT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected '{', found the integer"),
             std::string::npos)
@@ -308,9 +313,9 @@ TEST(EirParserTest, ParsesRepeatableAnalyzerVersions) {
 
 TEST(EirParserTest, ParsesAnalyzerVersionWithNoArguments) {
   const std::string source = MinimalCase();
-  const std::string with_analyzer = source.substr(
-      0, source.find("    }\n\n")) + "        analyzer = veritas.bare();\n" +
-      source.substr(source.find("    }\n\n"));
+  const std::string with_analyzer = source.substr(0, source.find("    }\n\n")) +
+                                    "        analyzer = veritas.bare();\n" +
+                                    source.substr(source.find("    }\n\n"));
   StatusOr<EvidenceCase> value = Accept(with_analyzer, "a bare analyzer");
   ASSERT_TRUE(value.ok());
   ASSERT_EQ(value->program.analyzer_versions.size(), 1U);
@@ -326,8 +331,8 @@ TEST(EirParserTest, ParsesAmendedEntityAttributes) {
       Accept(testing::kOverflowEirText, "the overflow fixture");
   ASSERT_TRUE(value.ok());
 
-  const Entity* length = nullptr;
-  for (const Entity& entity : value->entities) {
+  const Entity *length = nullptr;
+  for (const Entity &entity : value->entities) {
     if (entity.id == "E_len") {
       length = &entity;
     }
@@ -347,7 +352,7 @@ TEST(EirParserTest, ParsesEntityWithoutStableId) {
   StatusOr<EvidenceCase> value =
       Accept(testing::kOverflowEirText, "the overflow fixture");
   ASSERT_TRUE(value.ok());
-  for (const Entity& entity : value->entities) {
+  for (const Entity &entity : value->entities) {
     if (entity.id == "E_sink") {
       EXPECT_FALSE(entity.stable_id.has_value());
     }
@@ -360,19 +365,20 @@ TEST(EirParserTest, ParsesEntityWithoutStableId) {
 // bag — the same document carries both, and the model holds both.
 TEST(EirParserTest, ParsesAnEntityWithBothAnIdentityAndAStableIdProperty) {
   StatusOr<EvidenceCase> value = Accept(
-      Case(std::string(kBaseEntities) +
-           "    entity E_ident : value {\n"
-           "        stable_id = "
-           "\"valref:sha256:1111111111111111111111111111111111111111111111111111"
-           "111111111111\";\n"
-           "        stable_id = \"the bag entry, which is not the identity\";\n"
-           "    }\n" +
-           std::string(kPrimaryClaim)),
+      Case(
+          std::string(kBaseEntities) +
+          "    entity E_ident : value {\n"
+          "        stable_id = "
+          "\"valref:sha256:1111111111111111111111111111111111111111111111111111"
+          "111111111111\";\n"
+          "        stable_id = \"the bag entry, which is not the identity\";\n"
+          "    }\n" +
+          std::string(kPrimaryClaim)),
       "an entity carrying an identity and a same-named property");
   ASSERT_TRUE(value.ok());
 
-  const Entity* named = nullptr;
-  for (const Entity& entity : value->entities) {
+  const Entity *named = nullptr;
+  for (const Entity &entity : value->entities) {
     if (entity.id == "E_ident") {
       named = &entity;
     }
@@ -383,8 +389,7 @@ TEST(EirParserTest, ParsesAnEntityWithBothAnIdentityAndAStableIdProperty) {
   EXPECT_EQ(named->stable_id->kind, core::IdKind::kValueRef);
   // The second is an ordinary bag entry, with its own value and its own type.
   ASSERT_EQ(named->properties.count("stable_id"), 1U);
-  EXPECT_EQ(named->properties.at("stable_id").kind,
-            Expression::Kind::kString);
+  EXPECT_EQ(named->properties.at("stable_id").kind, Expression::Kind::kString);
   EXPECT_EQ(named->properties.at("stable_id").text,
             "the bag entry, which is not the identity");
 }
@@ -414,9 +419,9 @@ TEST(EirParserTest, ParsesAmendedFactAttributes) {
       Accept(testing::kOverflowEirText, "the overflow fixture");
   ASSERT_TRUE(value.ok());
 
-  const Fact* range = nullptr;
-  const Fact* missing = nullptr;
-  for (const Fact& fact : value->facts) {
+  const Fact *range = nullptr;
+  const Fact *missing = nullptr;
+  for (const Fact &fact : value->facts) {
     if (fact.id == "F_range") {
       range = &fact;
     }
@@ -444,11 +449,12 @@ TEST(EirParserTest, ParsesAmendedUnknownAttributes) {
   ASSERT_TRUE(value.ok());
 
   ASSERT_EQ(value->unknowns.size(), 1U);
-  const Unknown& unknown = value->unknowns[0];
+  const Unknown &unknown = value->unknowns[0];
   EXPECT_EQ(unknown.reason_code, UnknownReasonCode::kExternalFunction);
   // Both halves of the classification are kept: the closed code and the
   // observed sentence the analysis recorded.
-  EXPECT_EQ(unknown.reason, "vendor_validate has no body in this build variant");
+  EXPECT_EQ(unknown.reason,
+            "vendor_validate has no body in this build variant");
   // `blocking` is a `ReferenceList`; the `@` belongs to the syntax.
   ASSERT_EQ(unknown.blocking_ids.size(), 1U);
   EXPECT_EQ(unknown.blocking_ids[0], "F_missing_check");
@@ -462,8 +468,8 @@ TEST(EirParserTest, ParsesAmendedProvenanceAttributes) {
       Accept(testing::kOverflowEirText, "the overflow fixture");
   ASSERT_TRUE(value.ok());
 
-  const Provenance* record = nullptr;
-  for (const Provenance& candidate : value->provenance) {
+  const Provenance *record = nullptr;
+  for (const Provenance &candidate : value->provenance) {
     if (candidate.id == "PR_check") {
       record = &candidate;
     }
@@ -489,7 +495,7 @@ TEST(EirParserTest, ParsesAmendedVerificationAttributes) {
   ASSERT_TRUE(value.ok());
 
   ASSERT_EQ(value->proof_obligations.size(), 1U);
-  const ProofObligation& obligation = value->proof_obligations[0];
+  const ProofObligation &obligation = value->proof_obligations[0];
   EXPECT_EQ(obligation.id, "V1");
   EXPECT_EQ(obligation.goal_kind, ProofGoalKind::kProve);
   ASSERT_EQ(obligation.verifier_kinds.size(), 2U);
@@ -509,7 +515,8 @@ TEST(EirParserTest, ParsesAmendedSummaryAndDependencyAttributes) {
 
   ASSERT_EQ(value->summaries.size(), 1U);
   EXPECT_EQ(value->summaries[0].function_id, "E_vendor_validate");
-  EXPECT_EQ(value->summaries[0].summary_id.kind, core::IdKind::kFunctionSummary);
+  EXPECT_EQ(value->summaries[0].summary_id.kind,
+            core::IdKind::kFunctionSummary);
   ASSERT_EQ(value->summaries[0].components.size(), 2U);
   EXPECT_EQ(value->summaries[0].components[0], "range");
   EXPECT_EQ(value->summaries[0].components[1], "value_flow");
@@ -526,7 +533,7 @@ TEST(EirParserTest, ParsesThePathExpressionInSourceOrder) {
   ASSERT_TRUE(value.ok());
 
   ASSERT_EQ(value->paths.size(), 1U);
-  const Path& path = value->paths[0];
+  const Path &path = value->paths[0];
   EXPECT_EQ(path.kind, PathKind::kValueFlow);
   ASSERT_EQ(path.entity_ids.size(), 2U);
   EXPECT_EQ(path.entity_ids[0], "E_len");
@@ -561,24 +568,28 @@ TEST(EirParserTest, LowersCallShapedCarriersToCanonicalEirText) {
 // pins the `", "` separator and the quoted string argument too.
 TEST(EirParserTest, CanonicalCallSpellingIsAFixpoint) {
   constexpr std::string_view kSingle = "infer_contract(E_vendor_validate)";
-  StatusOr<EvidenceCase> single = Accept(CasePlus(
-      "    assumption A1 {\n"
-      "        predicate = reachable(@E_sink);\n"
-      "        source = " + std::string(kSingle) + ";\n"
-      "    }\n"),
-      "the rendered single-argument spelling, fed back in");
+  StatusOr<EvidenceCase> single =
+      Accept(CasePlus("    assumption A1 {\n"
+                      "        predicate = reachable(@E_sink);\n"
+                      "        source = " +
+                      std::string(kSingle) +
+                      ";\n"
+                      "    }\n"),
+             "the rendered single-argument spelling, fed back in");
   ASSERT_TRUE(single.ok());
   ASSERT_EQ(single->assumptions.size(), 1U);
   EXPECT_EQ(single->assumptions[0].source, kSingle);
 
   constexpr std::string_view kMany =
       "infer_contract(E_vendor_validate, \"packet\", 1)";
-  StatusOr<EvidenceCase> many = Accept(CasePlus(
-      "    assumption A1 {\n"
-      "        predicate = reachable(@E_sink);\n"
-      "        source = " + std::string(kMany) + ";\n"
-      "    }\n"),
-      "the rendered multi-argument spelling, fed back in");
+  StatusOr<EvidenceCase> many =
+      Accept(CasePlus("    assumption A1 {\n"
+                      "        predicate = reachable(@E_sink);\n"
+                      "        source = " +
+                      std::string(kMany) +
+                      ";\n"
+                      "    }\n"),
+             "the rendered multi-argument spelling, fed back in");
   ASSERT_TRUE(many.ok());
   ASSERT_EQ(many->assumptions.size(), 1U);
   EXPECT_EQ(many->assumptions[0].source, kMany);
@@ -586,7 +597,7 @@ TEST(EirParserTest, CanonicalCallSpellingIsAFixpoint) {
 
 // --- Positive: precedence and associativity ---------------------------------
 
-const Expression& SolePredicate(const StatusOr<EvidenceCase>& value) {
+const Expression &SolePredicate(const StatusOr<EvidenceCase> &value) {
   return value->primary_claim.predicate;
 }
 
@@ -599,7 +610,7 @@ TEST(EirParserTest, NotBindsTighterThanComparison) {
   StatusOr<EvidenceCase> value =
       ParseUnvalidated(ClaimCase("not @E_sink == @E_len"));
   ASSERT_TRUE(value.ok()) << error.message;
-  const Expression& predicate = value->primary_claim.predicate;
+  const Expression &predicate = value->primary_claim.predicate;
   ASSERT_EQ(predicate.kind, Expression::Kind::kCompare);
   EXPECT_EQ(predicate.text, "==");
   ASSERT_EQ(predicate.operands.size(), 2U);
@@ -613,7 +624,7 @@ TEST(EirParserTest, NotBindsTighterThanComparison) {
       Accept(ClaimCase("not reachable(@E_sink) and reachable(@E_len)"),
              "`not a and b`");
   ASSERT_TRUE(typed.ok());
-  const Expression& conjunction = SolePredicate(typed);
+  const Expression &conjunction = SolePredicate(typed);
   ASSERT_EQ(conjunction.kind, Expression::Kind::kAnd);
   ASSERT_EQ(conjunction.operands.size(), 2U);
   EXPECT_EQ(conjunction.operands[0].kind, Expression::Kind::kNot);
@@ -623,7 +634,7 @@ TEST(EirParserTest, AndBindsTighterThanOr) {
   StatusOr<EvidenceCase> value =
       Accept(ClaimCase("@E_sink and @E_len or @E_sink"), "`a and b or c`");
   ASSERT_TRUE(value.ok());
-  const Expression& predicate = SolePredicate(value);
+  const Expression &predicate = SolePredicate(value);
   ASSERT_EQ(predicate.kind, Expression::Kind::kOr);
   ASSERT_EQ(predicate.operands.size(), 2U);
   EXPECT_EQ(predicate.operands[0].kind, Expression::Kind::kAnd);
@@ -634,7 +645,7 @@ TEST(EirParserTest, ConjunctionsAreFlattenedIntoOneOperandList) {
   StatusOr<EvidenceCase> value =
       Accept(ClaimCase("@E_sink and @E_len and @E_sink"), "`a and b and c`");
   ASSERT_TRUE(value.ok());
-  const Expression& predicate = SolePredicate(value);
+  const Expression &predicate = SolePredicate(value);
   ASSERT_EQ(predicate.kind, Expression::Kind::kAnd);
   // Left-associative grouping would build `and(and(a, b), c)`. The model is
   // n-ary flat and the validator rejects a directly nested same-kind operand,
@@ -647,19 +658,20 @@ TEST(EirParserTest, ParenthesisedConjunctionIsSplicedNotNested) {
   StatusOr<EvidenceCase> value = Accept(
       ClaimCase("(@E_sink and @E_len) and @E_sink"), "`(a and b) and c`");
   ASSERT_TRUE(value.ok());
-  const Expression& predicate = SolePredicate(value);
+  const Expression &predicate = SolePredicate(value);
   ASSERT_EQ(predicate.kind, Expression::Kind::kAnd);
   EXPECT_EQ(predicate.operands.size(), 3U);
-  for (const Expression& operand : predicate.operands) {
+  for (const Expression &operand : predicate.operands) {
     EXPECT_NE(operand.kind, Expression::Kind::kAnd);
   }
 }
 
 TEST(EirParserTest, ImplicationIsRightAssociative) {
-  StatusOr<EvidenceCase> value = Accept(
-      ClaimCase("@E_sink implies @E_len implies @E_sink"), "`a implies b implies c`");
+  StatusOr<EvidenceCase> value =
+      Accept(ClaimCase("@E_sink implies @E_len implies @E_sink"),
+             "`a implies b implies c`");
   ASSERT_TRUE(value.ok());
-  const Expression& predicate = SolePredicate(value);
+  const Expression &predicate = SolePredicate(value);
   ASSERT_EQ(predicate.kind, Expression::Kind::kImplies);
   ASSERT_EQ(predicate.operands.size(), 2U);
   EXPECT_EQ(predicate.operands[0].kind, Expression::Kind::kReference);
@@ -670,18 +682,18 @@ TEST(EirParserTest, ImplicationBindsLoosestOfTheLogicalOperators) {
   StatusOr<EvidenceCase> value = Accept(
       ClaimCase("@E_sink and @E_len implies @E_sink"), "`a and b implies c`");
   ASSERT_TRUE(value.ok());
-  const Expression& predicate = SolePredicate(value);
+  const Expression &predicate = SolePredicate(value);
   ASSERT_EQ(predicate.kind, Expression::Kind::kImplies);
   ASSERT_EQ(predicate.operands.size(), 2U);
   EXPECT_EQ(predicate.operands[0].kind, Expression::Kind::kAnd);
 }
 
 TEST(EirParserTest, QuantifierOwnsEverythingAfterItsColon) {
-  StatusOr<EvidenceCase> value = Accept(
-      ClaimCase("forall x in entities(@E_sink): @E_sink and @E_len"),
-      "`forall x in D: P and Q`");
+  StatusOr<EvidenceCase> value =
+      Accept(ClaimCase("forall x in entities(@E_sink): @E_sink and @E_len"),
+             "`forall x in D: P and Q`");
   ASSERT_TRUE(value.ok());
-  const Expression& predicate = SolePredicate(value);
+  const Expression &predicate = SolePredicate(value);
   ASSERT_EQ(predicate.kind, Expression::Kind::kForAll);
   EXPECT_EQ(predicate.text, "x");
   ASSERT_EQ(predicate.operands.size(), 2U);
@@ -694,7 +706,7 @@ TEST(EirParserTest, QuantifierDomainMayBeAReference) {
   StatusOr<EvidenceCase> value = Accept(
       ClaimCase("exists v in @E_len: reachable(v)"), "`exists v in @E: P`");
   ASSERT_TRUE(value.ok());
-  const Expression& predicate = SolePredicate(value);
+  const Expression &predicate = SolePredicate(value);
   ASSERT_EQ(predicate.kind, Expression::Kind::kExists);
   ASSERT_EQ(predicate.operands.size(), 2U);
   EXPECT_EQ(predicate.operands[0].kind, Expression::Kind::kReference);
@@ -733,16 +745,15 @@ TEST(EirParserTest, CommentsAreIgnored) {
 }
 
 TEST(EirParserTest, TheSignOfAnIntegerIsPartOfTheLiteral) {
-  const std::string source = CasePlus(
-                                  "    constraint K1 {\n"
-                                  "        expr = @E_len > -1;\n"
-                                  "        epistemic = must;\n"
-                                  "    }\n"
-                                  "    verify V1 {\n"
-                                  "        prove = @E_len > -1;\n"
-                                  "        budget = -5;\n"
-                                  "        status = PENDING;\n"
-                                  "    }\n");
+  const std::string source = CasePlus("    constraint K1 {\n"
+                                      "        expr = @E_len > -1;\n"
+                                      "        epistemic = must;\n"
+                                      "    }\n"
+                                      "    verify V1 {\n"
+                                      "        prove = @E_len > -1;\n"
+                                      "        budget = -5;\n"
+                                      "        status = PENDING;\n"
+                                      "    }\n");
   StatusOr<EvidenceCase> value = Accept(source, "a negative integer");
   ASSERT_TRUE(value.ok());
   ASSERT_EQ(value->proof_obligations.size(), 1U);
@@ -762,7 +773,7 @@ TEST(EirParserTest, IntegerLiteralDoesNotAlsoCarryItsText) {
   StatusOr<EvidenceCase> value =
       Accept(testing::kOverflowEirText, "the overflow fixture");
   ASSERT_TRUE(value.ok());
-  for (const Fact& fact : value->facts) {
+  for (const Fact &fact : value->facts) {
     if (fact.id != "F_range") {
       continue;
     }
@@ -782,7 +793,7 @@ TEST(EirParserTest, BareIdentifierLowersToSymbol) {
   StatusOr<EvidenceCase> value =
       Accept(ClaimCase("@E_sink == EXTENSION"), "`@e == EXTENSION`");
   ASSERT_TRUE(value.ok());
-  const Expression& predicate = SolePredicate(value);
+  const Expression &predicate = SolePredicate(value);
   ASSERT_EQ(predicate.kind, Expression::Kind::kCompare);
   ASSERT_EQ(predicate.operands.size(), 2U);
   EXPECT_EQ(predicate.operands[1].kind, Expression::Kind::kSymbol);
@@ -790,13 +801,12 @@ TEST(EirParserTest, BareIdentifierLowersToSymbol) {
 }
 
 TEST(EirParserTest, BareIdentifierLowersToSymbolInAPropertyBag) {
-  const std::string source = CasePlus(
-                                  "    entity E_kind : value {\n"
-                                  "        domain = EXTENSION;\n"
-                                  "    }\n");
+  const std::string source = CasePlus("    entity E_kind : value {\n"
+                                      "        domain = EXTENSION;\n"
+                                      "    }\n");
   StatusOr<EvidenceCase> value = Accept(source, "a symbol property");
   ASSERT_TRUE(value.ok());
-  for (const Entity& entity : value->entities) {
+  for (const Entity &entity : value->entities) {
     if (entity.id != "E_kind") {
       continue;
     }
@@ -808,23 +818,25 @@ TEST(EirParserTest, BareIdentifierLowersToSymbolInAPropertyBag) {
 
 TEST(EirParserTest, BooleanLiteralsLowerToBool) {
   const std::string source = CasePlus(
-                                  "    fact F_observed {\n"
-                                  "        predicate = reachable(@E_sink);\n"
-                                  "        epistemic = must;\n"
-                                  "        confidence = exact;\n"
-                                  "        derived = false;\n"
-                                  "    }\n"
-                                  "    fact F_derived {\n"
-                                  "        predicate = reachable(@E_len);\n"
-                                  "        epistemic = inferred;\n"
-                                  "        confidence = exact;\n"
-                                  "        derived = true;\n"
-                                  "        provenance = @PR1;\n"
-                                  "    }\n"
-                                  "    provenance PR1 {\n"
-                                  "        producer = veritas.wpa;\n"
-                                  "        analysis_run = \"run:sha256:0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5\";\n"
-                                  "    }\n");
+      "    fact F_observed {\n"
+      "        predicate = reachable(@E_sink);\n"
+      "        epistemic = must;\n"
+      "        confidence = exact;\n"
+      "        derived = false;\n"
+      "    }\n"
+      "    fact F_derived {\n"
+      "        predicate = reachable(@E_len);\n"
+      "        epistemic = inferred;\n"
+      "        confidence = exact;\n"
+      "        derived = true;\n"
+      "        provenance = @PR1;\n"
+      "    }\n"
+      "    provenance PR1 {\n"
+      "        producer = veritas.wpa;\n"
+      "        analysis_run = "
+      "\"run:sha256:"
+      "0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5\";\n"
+      "    }\n");
   StatusOr<EvidenceCase> value = Accept(source, "boolean flags");
   ASSERT_TRUE(value.ok());
   ASSERT_EQ(value->facts.size(), 2U);
@@ -833,13 +845,13 @@ TEST(EirParserTest, BooleanLiteralsLowerToBool) {
 }
 
 TEST(EirParserTest, StringEscapesAreDecoded) {
-  const std::string source = CasePlus(
-                                  "    entity E_text : value {\n"
-                                  "        quote = \"a \\\" b \\\\ c \\n\";\n"
-                                  "    }\n");
+  const std::string source =
+      CasePlus("    entity E_text : value {\n"
+               "        quote = \"a \\\" b \\\\ c \\n\";\n"
+               "    }\n");
   StatusOr<EvidenceCase> value = Accept(source, "an escaped string");
   ASSERT_TRUE(value.ok());
-  for (const Entity& entity : value->entities) {
+  for (const Entity &entity : value->entities) {
     if (entity.id != "E_text") {
       continue;
     }
@@ -850,13 +862,12 @@ TEST(EirParserTest, StringEscapesAreDecoded) {
 
 // `kBool` likewise carries only `boolean`.
 TEST(EirParserTest, BoolLiteralDoesNotAlsoCarryItsText) {
-  const std::string source = CasePlus(
-                                  "    entity E_flag : value {\n"
-                                  "        flag = true;\n"
-                                  "    }\n");
+  const std::string source = CasePlus("    entity E_flag : value {\n"
+                                      "        flag = true;\n"
+                                      "    }\n");
   StatusOr<EvidenceCase> value = Accept(source, "a boolean property");
   ASSERT_TRUE(value.ok());
-  for (const Entity& entity : value->entities) {
+  for (const Entity &entity : value->entities) {
     if (entity.id != "E_flag") {
       continue;
     }
@@ -914,69 +925,66 @@ TEST(EirParserTest, RejectsMissingHeaderBrace) {
 }
 
 TEST(EirParserTest, RejectsRepeatedSchemaDeclaration) {
-  const Rejection rejected = Reject(
-      "evidence {\n"
-      "    schema = \"eir.v1\";\n"
-      "    schema = \"eir.v1\";\n"
-      "    level = l1;\n"
-      "    state = POSSIBLE_DEFECT;\n}\n");
+  const Rejection rejected = Reject("evidence {\n"
+                                    "    schema = \"eir.v1\";\n"
+                                    "    schema = \"eir.v1\";\n"
+                                    "    level = l1;\n"
+                                    "    state = POSSIBLE_DEFECT;\n}\n");
   ASSERT_TRUE(rejected.rejected);
-  EXPECT_NE(rejected.error.message
-                .find("expected the 'level' declaration after the schema"),
+  EXPECT_NE(rejected.error.message.find(
+                "expected the 'level' declaration after the schema"),
             std::string::npos)
       << rejected.error.message;
 }
 
 TEST(EirParserTest, RejectsRepeatedLevelDeclaration) {
-  const Rejection rejected = Reject(
-      "evidence {\n"
-      "    schema = \"eir.v1\";\n"
-      "    level = l1;\n"
-      "    level = l2;\n"
-      "    state = POSSIBLE_DEFECT;\n}\n");
+  const Rejection rejected = Reject("evidence {\n"
+                                    "    schema = \"eir.v1\";\n"
+                                    "    level = l1;\n"
+                                    "    level = l2;\n"
+                                    "    state = POSSIBLE_DEFECT;\n}\n");
   ASSERT_TRUE(rejected.rejected);
-  EXPECT_NE(rejected.error.message
-                .find("expected the 'state' declaration after the level"),
+  EXPECT_NE(rejected.error.message.find(
+                "expected the 'state' declaration after the level"),
             std::string::npos)
       << rejected.error.message;
 }
 
 TEST(EirParserTest, RejectsRepeatedStateDeclaration) {
-  const Rejection rejected = Reject(
-      "evidence {\n"
-      "    schema = \"eir.v1\";\n"
-      "    level = l1;\n"
-      "    state = POSSIBLE_DEFECT;\n"
-      "    state = INCONCLUSIVE;\n}\n");
+  const Rejection rejected = Reject("evidence {\n"
+                                    "    schema = \"eir.v1\";\n"
+                                    "    level = l1;\n"
+                                    "    state = POSSIBLE_DEFECT;\n"
+                                    "    state = INCONCLUSIVE;\n}\n");
   ASSERT_TRUE(rejected.rejected);
-  EXPECT_NE(rejected.error.message
-                .find("expected the 'context' declaration after the state"),
+  EXPECT_NE(rejected.error.message.find(
+                "expected the 'context' declaration after the state"),
             std::string::npos)
       << rejected.error.message;
 }
 
 TEST(EirParserTest, RejectsMemberBeforeContext) {
-  const Rejection rejected = Reject(
-      "evidence {\n"
-      "    schema = \"eir.v1\";\n"
-      "    level = l1;\n"
-      "    state = POSSIBLE_DEFECT;\n" +
-      std::string(kBaseEntities) + std::string(kPrimaryClaim) + "}\n");
+  const Rejection rejected =
+      Reject("evidence {\n"
+             "    schema = \"eir.v1\";\n"
+             "    level = l1;\n"
+             "    state = POSSIBLE_DEFECT;\n" +
+             std::string(kBaseEntities) + std::string(kPrimaryClaim) + "}\n");
   ASSERT_TRUE(rejected.rejected);
-  EXPECT_NE(rejected.error.message
-                .find("expected the 'context' declaration after the state"),
+  EXPECT_NE(rejected.error.message.find(
+                "expected the 'context' declaration after the state"),
             std::string::npos)
       << rejected.error.message;
 }
 
 TEST(EirParserTest, RejectsSecondPrimaryClaim) {
-  const Rejection rejected = Reject(CaseWith(
-      "    claim C2 {\n"
-      "        kind = buffer_overflow;\n"
-      "        subject = @E_sink;\n"
-      "        predicate = reachable(@E_len);\n"
-      "        severity = low;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    claim C2 {\n"
+                      "        kind = buffer_overflow;\n"
+                      "        subject = @E_sink;\n"
+                      "        predicate = reachable(@E_len);\n"
+                      "        severity = low;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("second primary claim"),
             std::string::npos)
@@ -984,9 +992,8 @@ TEST(EirParserTest, RejectsSecondPrimaryClaim) {
 }
 
 TEST(EirParserTest, RejectsNonIdentifierWhereAMemberIsExpected) {
-  const Rejection rejected = Reject(Case(std::string(kBaseEntities) +
-                                         "    7\n" +
-                                         std::string(kPrimaryClaim)));
+  const Rejection rejected = Reject(Case(
+      std::string(kBaseEntities) + "    7\n" + std::string(kPrimaryClaim)));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected an evidence member, found "
                                         "the integer literal"),
@@ -1004,8 +1011,8 @@ TEST(EirParserTest, RejectsUnknownEvidenceMember) {
 
 TEST(EirParserTest, RejectsUnterminatedCase) {
   std::string source = MinimalCase();
-  source.pop_back();  // the final newline
-  source.pop_back();  // the closing brace
+  source.pop_back(); // the final newline
+  source.pop_back(); // the closing brace
   const Rejection rejected = Reject(source);
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unterminated evidence case"),
@@ -1014,8 +1021,7 @@ TEST(EirParserTest, RejectsUnterminatedCase) {
 }
 
 TEST(EirParserTest, RejectsTrailingTokensAfterTheCase) {
-  const Rejection rejected =
-      Reject(MinimalCase() + "evidence\n");
+  const Rejection rejected = Reject(MinimalCase() + "evidence\n");
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected the end of the document"),
             std::string::npos)
@@ -1025,14 +1031,14 @@ TEST(EirParserTest, RejectsTrailingTokensAfterTheCase) {
 // --- Reject sites: the attribute bodies -------------------------------------
 
 TEST(EirParserTest, RejectsUnknownAttributeInAMemberBody) {
-  const Rejection rejected = Reject(CaseWith(
-      "    claim C2 {\n"
-      "        kind = buffer_overflow;\n"
-      "        subject = @E_sink;\n"
-      "        predicate = reachable(@E_len);\n"
-      "        severity = low;\n"
-      "        colour = \"red\";\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    claim C2 {\n"
+                      "        kind = buffer_overflow;\n"
+                      "        subject = @E_sink;\n"
+                      "        predicate = reachable(@E_len);\n"
+                      "        severity = low;\n"
+                      "        colour = \"red\";\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unknown claim attribute 'colour'"),
             std::string::npos)
@@ -1040,14 +1046,14 @@ TEST(EirParserTest, RejectsUnknownAttributeInAMemberBody) {
 }
 
 TEST(EirParserTest, RejectsRepeatedAttributeInAMemberBody) {
-  const Rejection rejected = Reject(CaseWith(
-      "    claim C2 {\n"
-      "        kind = buffer_overflow;\n"
-      "        kind = null_dereference;\n"
-      "        subject = @E_sink;\n"
-      "        predicate = reachable(@E_len);\n"
-      "        severity = low;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    claim C2 {\n"
+                      "        kind = buffer_overflow;\n"
+                      "        kind = null_dereference;\n"
+                      "        subject = @E_sink;\n"
+                      "        predicate = reachable(@E_len);\n"
+                      "        severity = low;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("appears more than once"),
             std::string::npos)
@@ -1055,12 +1061,12 @@ TEST(EirParserTest, RejectsRepeatedAttributeInAMemberBody) {
 }
 
 TEST(EirParserTest, RejectsMissingRequiredAttributeInAMemberBody) {
-  const Rejection rejected = Reject(CaseWith(
-      "    claim C2 {\n"
-      "        kind = buffer_overflow;\n"
-      "        subject = @E_sink;\n"
-      "        predicate = reachable(@E_len);\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    claim C2 {\n"
+                      "        kind = buffer_overflow;\n"
+                      "        subject = @E_sink;\n"
+                      "        predicate = reachable(@E_len);\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("omits its required attribute "
                                         "'severity'"),
@@ -1081,13 +1087,13 @@ TEST(EirParserTest, RejectsUnterminatedMemberBody) {
 }
 
 TEST(EirParserTest, RejectsAttributeWithoutEqual) {
-  const Rejection rejected = Reject(CaseWith(
-      "    claim C2 {\n"
-      "        kind buffer_overflow;\n"
-      "        subject = @E_sink;\n"
-      "        predicate = reachable(@E_len);\n"
-      "        severity = low;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    claim C2 {\n"
+                      "        kind buffer_overflow;\n"
+                      "        subject = @E_sink;\n"
+                      "        predicate = reachable(@E_len);\n"
+                      "        severity = low;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("'=' after the attribute 'kind'"),
             std::string::npos)
@@ -1095,13 +1101,13 @@ TEST(EirParserTest, RejectsAttributeWithoutEqual) {
 }
 
 TEST(EirParserTest, RejectsAttributeWithoutSemicolon) {
-  const Rejection rejected = Reject(CaseWith(
-      "    claim C2 {\n"
-      "        kind = buffer_overflow;\n"
-      "        subject = @E_sink;\n"
-      "        predicate = reachable(@E_len);\n"
-      "        severity = low\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    claim C2 {\n"
+                      "        kind = buffer_overflow;\n"
+                      "        subject = @E_sink;\n"
+                      "        predicate = reachable(@E_len);\n"
+                      "        severity = low\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("';' after the value of 'severity'"),
             std::string::npos)
@@ -1109,9 +1115,9 @@ TEST(EirParserTest, RejectsAttributeWithoutSemicolon) {
 }
 
 TEST(EirParserTest, RejectsMissingMemberBodyBrace) {
-  const Rejection rejected = Reject(CaseWith(
-      "    claim C2\n"
-      "        kind = buffer_overflow;\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    claim C2\n"
+                      "        kind = buffer_overflow;\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("'{' after the claim identifier"),
             std::string::npos)
@@ -1129,7 +1135,9 @@ TEST(EirParserTest, RejectsUnsupportedProvenanceLocation) {
       "    provenance PR1 {\n"
       "        producer = veritas.wpa;\n"
       "        location = src(\"decode.cpp\", 281, 9);\n"
-      "        analysis_run = \"run:sha256:0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5\";\n"
+      "        analysis_run = "
+      "\"run:sha256:"
+      "0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5\";\n"
       "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unsupported in EIR V0.1"),
@@ -1144,11 +1152,13 @@ TEST(EirParserTest, RejectsUnsupportedProvenanceLocation) {
 // latter exists in the model.
 TEST(EirParserTest, ProvenanceSourceAnchorIsNotTheUnsupportedAttribute) {
   const std::string source = CasePlus(
-                                  "    provenance PR1 {\n"
-                                  "        producer = veritas.wpa;\n"
-                                  "        source_anchor = \"decode.cpp:281:9\";\n"
-                                  "        analysis_run = \"run:sha256:0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5\";\n"
-                                  "    }\n");
+      "    provenance PR1 {\n"
+      "        producer = veritas.wpa;\n"
+      "        source_anchor = \"decode.cpp:281:9\";\n"
+      "        analysis_run = "
+      "\"run:sha256:"
+      "0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5\";\n"
+      "    }\n");
   StatusOr<EvidenceCase> value = Accept(source, "a source anchor");
   ASSERT_TRUE(value.ok());
   ASSERT_EQ(value->provenance.size(), 1U);
@@ -1156,13 +1166,12 @@ TEST(EirParserTest, ProvenanceSourceAnchorIsNotTheUnsupportedAttribute) {
 }
 
 TEST(EirParserTest, RejectsUnsupportedEdgeCondition) {
-  const Rejection rejected = Reject(CaseWith(
-      "    edge ED1 {\n"
-      "        from = @E_len;\n"
-      "        to = @E_sink;\n"
-      "        kind = FLOWS_TO;\n"
-      "        condition = @E_len > 0;\n"
-      "    }\n"));
+  const Rejection rejected = Reject(CaseWith("    edge ED1 {\n"
+                                             "        from = @E_len;\n"
+                                             "        to = @E_sink;\n"
+                                             "        kind = FLOWS_TO;\n"
+                                             "        condition = @E_len > 0;\n"
+                                             "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unsupported in EIR V0.1"),
             std::string::npos)
@@ -1172,13 +1181,13 @@ TEST(EirParserTest, RejectsUnsupportedEdgeCondition) {
 }
 
 TEST(EirParserTest, RejectsUnsupportedEdgeTransfer) {
-  const Rejection rejected = Reject(CaseWith(
-      "    edge ED1 {\n"
-      "        from = @E_len;\n"
-      "        to = @E_sink;\n"
-      "        kind = FLOWS_TO;\n"
-      "        transfer = \"identity\";\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    edge ED1 {\n"
+                      "        from = @E_len;\n"
+                      "        to = @E_sink;\n"
+                      "        kind = FLOWS_TO;\n"
+                      "        transfer = \"identity\";\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unsupported in EIR V0.1"),
             std::string::npos)
@@ -1188,13 +1197,13 @@ TEST(EirParserTest, RejectsUnsupportedEdgeTransfer) {
 }
 
 TEST(EirParserTest, RejectsUnsupportedEdgeSummary) {
-  const Rejection rejected = Reject(CaseWith(
-      "    edge ED1 {\n"
-      "        from = @E_len;\n"
-      "        to = @E_sink;\n"
-      "        kind = FLOWS_TO;\n"
-      "        summary = infer_contract(@E_sink);\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    edge ED1 {\n"
+                      "        from = @E_len;\n"
+                      "        to = @E_sink;\n"
+                      "        kind = FLOWS_TO;\n"
+                      "        summary = infer_contract(@E_sink);\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unsupported in EIR V0.1"),
             std::string::npos)
@@ -1207,20 +1216,19 @@ TEST(EirParserTest, RejectsUnsupportedEdgeSummary) {
 // the model cannot carry is not the same diagnostic as an attribute the
 // production does not list.
 TEST(EirParserTest, UnsupportedAndUnknownAttributesAreDistinctDiagnostics) {
-  const Rejection unsupported = Reject(CaseWith(
-      "    edge ED1 {\n"
-      "        from = @E_len;\n"
-      "        to = @E_sink;\n"
-      "        kind = FLOWS_TO;\n"
-      "        condition = @E_len > 0;\n"
-      "    }\n"));
-  const Rejection unknown = Reject(CaseWith(
-      "    edge ED1 {\n"
-      "        from = @E_len;\n"
-      "        to = @E_sink;\n"
-      "        kind = FLOWS_TO;\n"
-      "        conditon = @E_len > 0;\n"
-      "    }\n"));
+  const Rejection unsupported =
+      Reject(CaseWith("    edge ED1 {\n"
+                      "        from = @E_len;\n"
+                      "        to = @E_sink;\n"
+                      "        kind = FLOWS_TO;\n"
+                      "        condition = @E_len > 0;\n"
+                      "    }\n"));
+  const Rejection unknown = Reject(CaseWith("    edge ED1 {\n"
+                                            "        from = @E_len;\n"
+                                            "        to = @E_sink;\n"
+                                            "        kind = FLOWS_TO;\n"
+                                            "        conditon = @E_len > 0;\n"
+                                            "    }\n"));
   ASSERT_TRUE(unsupported.rejected);
   ASSERT_TRUE(unknown.rejected);
   EXPECT_NE(unsupported.error.message.find("unsupported in EIR V0.1"),
@@ -1236,11 +1244,11 @@ TEST(EirParserTest, UnsupportedAndUnknownAttributesAreDistinctDiagnostics) {
 // --- Reject sites: the context block ----------------------------------------
 
 TEST(EirParserTest, RejectsUnknownContextProperty) {
-  const Rejection rejected = Reject(
-      "evidence {\n    schema = \"eir.v1\";\n    level = l1;\n"
-      "    state = POSSIBLE_DEFECT;\n\n"
-      "    context {\n        repository = \"radio-stack\";\n"
-      "        bogus = \"x\";\n    }\n}\n");
+  const Rejection rejected =
+      Reject("evidence {\n    schema = \"eir.v1\";\n    level = l1;\n"
+             "    state = POSSIBLE_DEFECT;\n\n"
+             "    context {\n        repository = \"radio-stack\";\n"
+             "        bogus = \"x\";\n    }\n}\n");
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unknown context property 'bogus'"),
             std::string::npos)
@@ -1248,11 +1256,11 @@ TEST(EirParserTest, RejectsUnknownContextProperty) {
 }
 
 TEST(EirParserTest, RejectsRepeatedContextProperty) {
-  const Rejection rejected = Reject(
-      "evidence {\n    schema = \"eir.v1\";\n    level = l1;\n"
-      "    state = POSSIBLE_DEFECT;\n\n"
-      "    context {\n        repository = \"radio-stack\";\n"
-      "        repository = \"radio-stack\";\n    }\n}\n");
+  const Rejection rejected =
+      Reject("evidence {\n    schema = \"eir.v1\";\n    level = l1;\n"
+             "    state = POSSIBLE_DEFECT;\n\n"
+             "    context {\n        repository = \"radio-stack\";\n"
+             "        repository = \"radio-stack\";\n    }\n}\n");
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("'repository' appears more than once"),
             std::string::npos)
@@ -1260,10 +1268,10 @@ TEST(EirParserTest, RejectsRepeatedContextProperty) {
 }
 
 TEST(EirParserTest, RejectsUnterminatedContextDeclaration) {
-  const Rejection rejected = Reject(
-      "evidence {\n    schema = \"eir.v1\";\n    level = l1;\n"
-      "    state = POSSIBLE_DEFECT;\n\n"
-      "    context {\n        repository = \"radio-stack\";\n");
+  const Rejection rejected =
+      Reject("evidence {\n    schema = \"eir.v1\";\n    level = l1;\n"
+             "    state = POSSIBLE_DEFECT;\n\n"
+             "    context {\n        repository = \"radio-stack\";\n");
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unterminated context declaration"),
             std::string::npos)
@@ -1297,9 +1305,9 @@ TEST(EirParserTest, RejectsMalformedAnalyzerVersion) {
 TEST(EirParserTest, RejectsEnumTerminalOutsideTheV01Subset) {
   // `LevelDecl` is closed to `l0`, `l1`, `l2`; the grammar's other spellings
   // are the full EIR-T 1.0 surface and are not part of the model's subset.
-  const Rejection rejected = Reject(
-      "evidence {\n    schema = \"eir.v1\";\n    level = l9;\n"
-      "    state = POSSIBLE_DEFECT;\n}\n");
+  const Rejection rejected =
+      Reject("evidence {\n    schema = \"eir.v1\";\n    level = l9;\n"
+             "    state = POSSIBLE_DEFECT;\n}\n");
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected evidence level, found "
                                         "\"l9\", which is not a valid evidence "
@@ -1312,12 +1320,12 @@ TEST(EirParserTest, RejectsEnumTerminalOutsideTheV01Subset) {
 // family; the name is the part of the diagnostic a reader matches on, so it is
 // asserted for a second family rather than assumed from the first.
 TEST(EirParserTest, RejectsConfidenceSpellingOutsideTheFamily) {
-  const Rejection rejected = Reject(CaseWith(
-      "    fact F_bogus {\n"
-      "        predicate = reachable(@E_len);\n"
-      "        epistemic = must;\n"
-      "        confidence = unspecified;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    fact F_bogus {\n"
+                      "        predicate = reachable(@E_len);\n"
+                      "        epistemic = must;\n"
+                      "        confidence = unspecified;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected confidence, found "
                                         "\"unspecified\", which is not a valid "
@@ -1327,9 +1335,9 @@ TEST(EirParserTest, RejectsConfidenceSpellingOutsideTheFamily) {
 }
 
 TEST(EirParserTest, RejectsNonIdentifierWhereAnEnumTerminalIsExpected) {
-  const Rejection rejected = Reject(
-      "evidence {\n    schema = \"eir.v1\";\n    level = l1;\n"
-      "    state = \"POSSIBLE_DEFECT\";\n}\n");
+  const Rejection rejected =
+      Reject("evidence {\n    schema = \"eir.v1\";\n    level = l1;\n"
+             "    state = \"POSSIBLE_DEFECT\";\n}\n");
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected verification state, found a "
                                         "string literal"),
@@ -1340,7 +1348,8 @@ TEST(EirParserTest, RejectsNonIdentifierWhereAnEnumTerminalIsExpected) {
 // --- Reject sites: predicates -----------------------------------------------
 
 TEST(EirParserTest, RejectsChainedComparison) {
-  const Rejection rejected = Reject(PredicateOnlyCase("@E_len == @E_len == @E_len"));
+  const Rejection rejected =
+      Reject(PredicateOnlyCase("@E_len == @E_len == @E_len"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("a comparison is not associative"),
             std::string::npos)
@@ -1394,26 +1403,26 @@ TEST(EirParserTest, RejectsPredicateCallWithoutClosingParenthesis) {
 // --- Reject sites: references, lists, and literals --------------------------
 
 TEST(EirParserTest, RejectsReferenceWithoutSigil) {
-  const Rejection rejected = Reject(CaseWith(
-      "    claim C2 {\n"
-      "        kind = buffer_overflow;\n"
-      "        subject = E_sink;\n"
-      "        predicate = reachable(@E_len);\n"
-      "        severity = low;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    claim C2 {\n"
+                      "        kind = buffer_overflow;\n"
+                      "        subject = E_sink;\n"
+                      "        predicate = reachable(@E_len);\n"
+                      "        severity = low;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("introduced by '@'"), std::string::npos)
       << rejected.error.message;
 }
 
 TEST(EirParserTest, RejectsReferenceWithoutIdentifier) {
-  const Rejection rejected = Reject(CaseWith(
-      "    claim C2 {\n"
-      "        kind = buffer_overflow;\n"
-      "        subject = @;\n"
-      "        predicate = reachable(@E_len);\n"
-      "        severity = low;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    claim C2 {\n"
+                      "        kind = buffer_overflow;\n"
+                      "        subject = @;\n"
+                      "        predicate = reachable(@E_len);\n"
+                      "        severity = low;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("after '@'"), std::string::npos)
       << rejected.error.message;
@@ -1424,7 +1433,9 @@ TEST(EirParserTest, RejectsFactReferenceWithoutSigil) {
       "    provenance PR1 {\n"
       "        producer = veritas.wpa;\n"
       "        inputs = [F_range];\n"
-      "        analysis_run = \"run:sha256:0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5\";\n"
+      "        analysis_run = "
+      "\"run:sha256:"
+      "0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5\";\n"
       "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("'$' introducing a fact reference"),
@@ -1459,12 +1470,12 @@ TEST(EirParserTest, RejectsListWithoutClosingBracket) {
 }
 
 TEST(EirParserTest, RejectsReferenceListWithoutClosingBracket) {
-  const Rejection rejected = Reject(CaseWith(
-      "    unknown U1 {\n"
-      "        property = reachable(@E_len);\n"
-      "        reason = UNKNOWN_ALIAS;\n"
-      "        blocking = [@E_len;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    unknown U1 {\n"
+                      "        property = reachable(@E_len);\n"
+                      "        reason = UNKNOWN_ALIAS;\n"
+                      "        blocking = [@E_len;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("']' closing the list"),
             std::string::npos)
@@ -1472,9 +1483,9 @@ TEST(EirParserTest, RejectsReferenceListWithoutClosingBracket) {
 }
 
 TEST(EirParserTest, RejectsNonStringWhereAStringIsExpected) {
-  const Rejection rejected = Reject(
-      "evidence {\n    schema = eir.v1;\n    level = l1;\n"
-      "    state = POSSIBLE_DEFECT;\n}\n");
+  const Rejection rejected =
+      Reject("evidence {\n    schema = eir.v1;\n    level = l1;\n"
+             "    state = POSSIBLE_DEFECT;\n}\n");
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected the schema version string"),
             std::string::npos)
@@ -1493,12 +1504,12 @@ TEST(EirParserTest, RejectsNonStableIdEntityStableId) {
 }
 
 TEST(EirParserTest, RejectsNonStableIdFactStableId) {
-  const Rejection rejected = Reject(Case(std::string(kBaseEntities) +
-                                         "    fact F_bad {\n"
-                                         "        predicate = reachable(@E_len);\n"
-                                         "        epistemic = must;\n"
-                                         "        stable_id = \"nonsense\";\n"
-                                         "    }\n"));
+  const Rejection rejected = Reject(Case(
+      std::string(kBaseEntities) + "    fact F_bad {\n"
+                                   "        predicate = reachable(@E_len);\n"
+                                   "        epistemic = must;\n"
+                                   "        stable_id = \"nonsense\";\n"
+                                   "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("not a stable ID of the form"),
             std::string::npos)
@@ -1518,12 +1529,12 @@ TEST(EirParserTest, RejectsNonStableIdDependencyStableId) {
 }
 
 TEST(EirParserTest, RejectsNonStableIdSummarySummaryId) {
-  const Rejection rejected = Reject(CasePlus(
-      "    summary S1 {\n"
-      "        function = @E_sink;\n"
-      "        summary_id = \"nonsense\";\n"
-      "        components = [range];\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CasePlus("    summary S1 {\n"
+                      "        function = @E_sink;\n"
+                      "        summary_id = \"nonsense\";\n"
+                      "        components = [range];\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("not a stable ID of the form"),
             std::string::npos)
@@ -1531,11 +1542,11 @@ TEST(EirParserTest, RejectsNonStableIdSummarySummaryId) {
 }
 
 TEST(EirParserTest, RejectsNonStableIdProvenanceAnalysisRun) {
-  const Rejection rejected = Reject(CaseWith(
-      "    provenance PR1 {\n"
-      "        producer = veritas.wpa;\n"
-      "        analysis_run = \"nonsense\";\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    provenance PR1 {\n"
+                      "        producer = veritas.wpa;\n"
+                      "        analysis_run = \"nonsense\";\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("not a stable ID of the form"),
             std::string::npos)
@@ -1543,12 +1554,12 @@ TEST(EirParserTest, RejectsNonStableIdProvenanceAnalysisRun) {
 }
 
 TEST(EirParserTest, RejectsNonBooleanWhereABooleanIsExpected) {
-  const Rejection rejected = Reject(Case(std::string(kBaseEntities) +
-                                         "    fact F_bad {\n"
-                                         "        predicate = reachable(@E_len);\n"
-                                         "        epistemic = must;\n"
-                                         "        derived = \"yes\";\n"
-                                         "    }\n"));
+  const Rejection rejected = Reject(Case(
+      std::string(kBaseEntities) + "    fact F_bad {\n"
+                                   "        predicate = reachable(@E_len);\n"
+                                   "        epistemic = must;\n"
+                                   "        derived = \"yes\";\n"
+                                   "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("'derived' attribute takes a boolean "
                                         "literal"),
@@ -1557,12 +1568,12 @@ TEST(EirParserTest, RejectsNonBooleanWhereABooleanIsExpected) {
 }
 
 TEST(EirParserTest, RejectsNonCallWhereACallIsExpected) {
-  const Rejection rejected = Reject(CaseWith(
-      "    unknown U1 {\n"
-      "        property = reachable(@E_len);\n"
-      "        reason = UNKNOWN_ALIAS;\n"
-      "        suggested_resolution = \"infer\";\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CaseWith("    unknown U1 {\n"
+                      "        property = reachable(@E_len);\n"
+                      "        reason = UNKNOWN_ALIAS;\n"
+                      "        suggested_resolution = \"infer\";\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("takes a function call"),
             std::string::npos)
@@ -1570,15 +1581,16 @@ TEST(EirParserTest, RejectsNonCallWhereACallIsExpected) {
 }
 
 TEST(EirParserTest, RejectsNonCallWhereAnAssumptionSourceIsExpected) {
-  const Rejection rejected = Reject(CasePlus(
-      "    assumption A1 {\n"
-      "        predicate = reachable(@E_sink);\n"
-      "        source = 7;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CasePlus("    assumption A1 {\n"
+                      "        predicate = reachable(@E_sink);\n"
+                      "        source = 7;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
-  EXPECT_NE(rejected.error.message.find("the source attribute takes a qualified "
-                                        "identifier or a function call"),
-            std::string::npos)
+  EXPECT_NE(
+      rejected.error.message.find("the source attribute takes a qualified "
+                                  "identifier or a function call"),
+      std::string::npos)
       << rejected.error.message;
 }
 
@@ -1594,14 +1606,15 @@ TEST(EirParserTest, MapsEveryProofGoalSpellingAndRefusesTheRest) {
       {"refute", ProofGoalKind::kRefute},
       {"check", ProofGoalKind::kCheck},
   };
-  for (const auto& [spelling, kind] : kGoals) {
-    StatusOr<EvidenceCase> value = Accept(
-        CasePlus("    verify V1 {\n"
-                 "        " + std::string(spelling) +
-                 " = reachable(@E_len);\n"
-                 "        status = PENDING;\n"
-                 "    }\n"),
-        std::string("the goal spelling ") + std::string(spelling));
+  for (const auto &[spelling, kind] : kGoals) {
+    StatusOr<EvidenceCase> value =
+        Accept(CasePlus("    verify V1 {\n"
+                        "        " +
+                        std::string(spelling) +
+                        " = reachable(@E_len);\n"
+                        "        status = PENDING;\n"
+                        "    }\n"),
+               std::string("the goal spelling ") + std::string(spelling));
     ASSERT_TRUE(value.ok());
     ASSERT_EQ(value->proof_obligations.size(), 1U);
     EXPECT_EQ(value->proof_obligations[0].goal_kind, kind);
@@ -1609,11 +1622,11 @@ TEST(EirParserTest, MapsEveryProofGoalSpellingAndRefusesTheRest) {
   // `witness` is not a `ProofGoalKind`, so the branch does not take it and the
   // body reports it as an attribute the declaration does not list. A reader
   // that widened the branch without widening the helper would fail here.
-  const Rejection rejected = Reject(CasePlus(
-      "    verify V1 {\n"
-      "        witness = reachable(@E_len);\n"
-      "        status = PENDING;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CasePlus("    verify V1 {\n"
+                      "        witness = reachable(@E_len);\n"
+                      "        status = PENDING;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unknown verify attribute 'witness'"),
             std::string::npos)
@@ -1625,40 +1638,42 @@ TEST(EirParserTest, MapsEveryProofGoalSpellingAndRefusesTheRest) {
 // production is the only place the enumeration is enforced: every keyword must
 // be admitted, the call form must be admitted, and nothing else may be.
 TEST(EirParserTest, AcceptsEveryScopeKeywordAndTheCallForm) {
-  constexpr std::string_view kKeywords[] = {"global",      "function", "path",
-                                            "basic_block", "callsite", "entity"};
+  constexpr std::string_view kKeywords[] = {
+      "global", "function", "path", "basic_block", "callsite", "entity"};
   for (const std::string_view keyword : kKeywords) {
-    StatusOr<EvidenceCase> value = Accept(
-        CasePlus("    constraint K1 {\n"
-                 "        expr = reachable(@E_len);\n"
-                 "        scope = " + std::string(keyword) + ";\n"
-                 "        epistemic = must;\n"
-                 "    }\n"),
-        std::string("the scope keyword ") + std::string(keyword));
+    StatusOr<EvidenceCase> value =
+        Accept(CasePlus("    constraint K1 {\n"
+                        "        expr = reachable(@E_len);\n"
+                        "        scope = " +
+                        std::string(keyword) +
+                        ";\n"
+                        "        epistemic = must;\n"
+                        "    }\n"),
+               std::string("the scope keyword ") + std::string(keyword));
     ASSERT_TRUE(value.ok());
     ASSERT_EQ(value->constraints.size(), 1U);
     EXPECT_EQ(value->constraints[0].scope, keyword);
   }
 
-  StatusOr<EvidenceCase> call = Accept(
-      CasePlus("    constraint K1 {\n"
-               "        expr = reachable(@E_len);\n"
-               "        scope = decode_frame(@E_sink);\n"
-               "        epistemic = must;\n"
-               "    }\n"),
-      "a call-shaped scope");
+  StatusOr<EvidenceCase> call =
+      Accept(CasePlus("    constraint K1 {\n"
+                      "        expr = reachable(@E_len);\n"
+                      "        scope = decode_frame(@E_sink);\n"
+                      "        epistemic = must;\n"
+                      "    }\n"),
+             "a call-shaped scope");
   ASSERT_TRUE(call.ok());
   ASSERT_EQ(call->constraints.size(), 1U);
   EXPECT_EQ(call->constraints[0].scope, "decode_frame(E_sink)");
 }
 
 TEST(EirParserTest, RejectsAnIdentifierOutsideTheScopeKeywords) {
-  const Rejection constraint = Reject(CasePlus(
-      "    constraint K1 {\n"
-      "        expr = reachable(@E_len);\n"
-      "        scope = everywhere;\n"
-      "        epistemic = must;\n"
-      "    }\n"));
+  const Rejection constraint =
+      Reject(CasePlus("    constraint K1 {\n"
+                      "        expr = reachable(@E_len);\n"
+                      "        scope = everywhere;\n"
+                      "        epistemic = must;\n"
+                      "    }\n"));
   ASSERT_TRUE(constraint.rejected);
   EXPECT_NE(constraint.error.message.find("one of the six scope keywords"),
             std::string::npos)
@@ -1667,12 +1682,12 @@ TEST(EirParserTest, RejectsAnIdentifierOutsideTheScopeKeywords) {
   // The same attribute name on `assumption`, whose `source` is the open
   // `AssumptionSource` and whose `scope` is the closed `Scope`. The two must
   // not share the looser rule.
-  const Rejection assumption = Reject(CasePlus(
-      "    assumption A1 {\n"
-      "        predicate = reachable(@E_sink);\n"
-      "        source = veritas.eval;\n"
-      "        scope = everywhere;\n"
-      "    }\n"));
+  const Rejection assumption =
+      Reject(CasePlus("    assumption A1 {\n"
+                      "        predicate = reachable(@E_sink);\n"
+                      "        source = veritas.eval;\n"
+                      "        scope = everywhere;\n"
+                      "    }\n"));
   ASSERT_TRUE(assumption.rejected);
   EXPECT_NE(assumption.error.message.find("one of the six scope keywords"),
             std::string::npos)
@@ -1693,10 +1708,10 @@ TEST(EirParserTest, RejectsSecondVerificationGoal) {
 }
 
 TEST(EirParserTest, RejectsMalformedPathExpression) {
-  const Rejection rejected = Reject(Case(std::string(kBaseEntities) +
-                                         "    path P1 call {\n"
-                                         "        E_len -> @E_sink;\n"
-                                         "    }\n"));
+  const Rejection rejected =
+      Reject(Case(std::string(kBaseEntities) + "    path P1 call {\n"
+                                               "        E_len -> @E_sink;\n"
+                                               "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("the first path segment"),
             std::string::npos)
@@ -1704,11 +1719,11 @@ TEST(EirParserTest, RejectsMalformedPathExpression) {
 }
 
 TEST(EirParserTest, RejectsUnknownPathAttribute) {
-  const Rejection rejected = Reject(Case(std::string(kBaseEntities) +
-                                         "    path P1 call {\n"
-                                         "        @E_len -> @E_sink;\n"
-                                         "        bogus = 1;\n"
-                                         "    }\n"));
+  const Rejection rejected =
+      Reject(Case(std::string(kBaseEntities) + "    path P1 call {\n"
+                                               "        @E_len -> @E_sink;\n"
+                                               "        bogus = 1;\n"
+                                               "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("unknown path attribute 'bogus'"),
             std::string::npos)
@@ -1751,12 +1766,12 @@ TEST(EirParserTest, RejectsUnterminatedPathConditionsBlock) {
 }
 
 TEST(EirParserTest, RejectsRepeatedPathConditionsBlock) {
-  const Rejection rejected = Reject(CasePlus(
-      "    path P1 call {\n"
-      "        @E_len -> @E_sink;\n"
-      "        conditions { @E_len > 0; }\n"
-      "        conditions { @E_len > 0; }\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CasePlus("    path P1 call {\n"
+                      "        @E_len -> @E_sink;\n"
+                      "        conditions { @E_len > 0; }\n"
+                      "        conditions { @E_len > 0; }\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("the path 'conditions' block appears "
                                         "more than once"),
@@ -1765,12 +1780,11 @@ TEST(EirParserTest, RejectsRepeatedPathConditionsBlock) {
 }
 
 TEST(EirParserTest, RejectsRepeatedPathFeasibility) {
-  const Rejection rejected = Reject(CasePlus(
-      "    path P1 call {\n"
-      "        @E_len -> @E_sink;\n"
-      "        feasible = SAT;\n"
-      "        feasible = UNSAT;\n"
-      "    }\n"));
+  const Rejection rejected = Reject(CasePlus("    path P1 call {\n"
+                                             "        @E_len -> @E_sink;\n"
+                                             "        feasible = SAT;\n"
+                                             "        feasible = UNSAT;\n"
+                                             "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("the path 'feasible' attribute appears "
                                         "more than once"),
@@ -1779,26 +1793,25 @@ TEST(EirParserTest, RejectsRepeatedPathFeasibility) {
 }
 
 TEST(EirParserTest, RejectsRepeatedPathProvenance) {
-  const Rejection rejected = Reject(CasePlus(
-      "    path P1 call {\n"
-      "        @E_len -> @E_sink;\n"
-      "        provenance = @PR1;\n"
-      "        provenance = @PR1;\n"
-      "    }\n"));
+  const Rejection rejected = Reject(CasePlus("    path P1 call {\n"
+                                             "        @E_len -> @E_sink;\n"
+                                             "        provenance = @PR1;\n"
+                                             "        provenance = @PR1;\n"
+                                             "    }\n"));
   ASSERT_TRUE(rejected.rejected);
-  EXPECT_NE(rejected.error.message
-                .find("the path 'provenance' attribute appears more than once"),
+  EXPECT_NE(rejected.error.message.find(
+                "the path 'provenance' attribute appears more than once"),
             std::string::npos)
       << rejected.error.message;
 }
 
 TEST(EirParserTest, RejectsMalformedResourceBudget) {
-  const Rejection rejected = Reject(CasePlus(
-      "    verify V1 {\n"
-      "        prove = reachable(@E_len);\n"
-      "        budget = ;\n"
-      "        status = PENDING;\n"
-      "    }\n"));
+  const Rejection rejected =
+      Reject(CasePlus("    verify V1 {\n"
+                      "        prove = reachable(@E_len);\n"
+                      "        budget = ;\n"
+                      "        status = PENDING;\n"
+                      "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected a resource budget, found the "
                                         "token ';'"),
@@ -1807,10 +1820,9 @@ TEST(EirParserTest, RejectsMalformedResourceBudget) {
 }
 
 TEST(EirParserTest, RejectsMalformedPropertyValue) {
-  const Rejection rejected = Reject(CasePlus(
-      "    entity E_bad : value {\n"
-      "        origin = ;\n"
-      "    }\n"));
+  const Rejection rejected = Reject(CasePlus("    entity E_bad : value {\n"
+                                             "        origin = ;\n"
+                                             "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected a property value, found the "
                                         "token ';'"),
@@ -1819,10 +1831,10 @@ TEST(EirParserTest, RejectsMalformedPropertyValue) {
 }
 
 TEST(EirParserTest, RejectsNonIdentifierWhereANameIsExpected) {
-  const Rejection rejected = Reject(Case(std::string(kBaseEntities) +
-                                         "    entity 7 : value {\n"
-                                         "        origin = \"x\";\n"
-                                         "    }\n"));
+  const Rejection rejected =
+      Reject(Case(std::string(kBaseEntities) + "    entity 7 : value {\n"
+                                               "        origin = \"x\";\n"
+                                               "    }\n"));
   ASSERT_TRUE(rejected.rejected);
   EXPECT_NE(rejected.error.message.find("expected an entity identifier"),
             std::string::npos)
@@ -1842,7 +1854,7 @@ TEST(EirParserTest, RejectsIntegerTokenOutsideTheInt64Range) {
   ASSERT_TRUE(tokens.ok()) << error.message;
 
   std::size_t replaced = 0;
-  for (Token& token : tokens.value()) {
+  for (Token &token : tokens.value()) {
     if (token.kind == TokenKind::kInteger) {
       token.text = "99999999999999999999";
       ++replaced;
@@ -1880,7 +1892,8 @@ TEST(EirParserTest, CorpusDuplicateMemberIdFailsForItsOwnReason) {
   ASSERT_FALSE(source.empty());
   const Rejection rejected = Reject(source);
   ASSERT_TRUE(rejected.rejected) << "the corpus file parsed";
-  EXPECT_NE(rejected.error.message.find("duplicate_local_id"), std::string::npos)
+  EXPECT_NE(rejected.error.message.find("duplicate_local_id"),
+            std::string::npos)
       << rejected.error.message;
 }
 
@@ -1891,7 +1904,8 @@ TEST(EirParserTest, CorpusDanglingReferenceFailsForItsOwnReason) {
   ASSERT_FALSE(source.empty());
   const Rejection rejected = Reject(source);
   ASSERT_TRUE(rejected.rejected) << "the corpus file parsed";
-  EXPECT_NE(rejected.error.message.find("dangling_reference"), std::string::npos)
+  EXPECT_NE(rejected.error.message.find("dangling_reference"),
+            std::string::npos)
       << rejected.error.message;
   EXPECT_EQ(rejected.error.message.find("missing_program_context"),
             std::string::npos)
@@ -1926,5 +1940,5 @@ TEST(EirParserTest, CorpusUnterminatedStringFailsForItsOwnReason) {
       << rejected.error.message;
 }
 
-}  // namespace
-}  // namespace veritas::evidence
+} // namespace
+} // namespace veritas::evidence

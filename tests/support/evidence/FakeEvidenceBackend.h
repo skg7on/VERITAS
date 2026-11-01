@@ -40,12 +40,10 @@ namespace fake_proto = veritas::fact::v1;
 // mutable; OpenSnapshot captures the generation and any read after a later
 // BumpGeneration fails with the stable retryable text.
 class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
- public:
+public:
   explicit FakeEvidenceBackend(evidence::SnapshotDescriptor descriptor)
-      : descriptor_(std::move(descriptor)),
-        generation_(0),
-        provenance_depth_(3),
-        auto_bump_(false) {}
+      : descriptor_(std::move(descriptor)), generation_(0),
+        provenance_depth_(3), auto_bump_(false) {}
 
   void SetFacts(std::vector<facts::AnalysisFact> facts) {
     facts_ = std::move(facts);
@@ -61,12 +59,13 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
   // next read (e.g. the next BuildEvidenceInput subquery) sees a stale binding
   // and fails with the stable retryable text.
   void SetAutoBump(bool enabled) { auto_bump_ = enabled; }
+
   void SetAutoBumpOnExplain(bool enabled) { auto_bump_on_explain_ = enabled; }
 
   core::StableId run_id() const { return descriptor_.analysis_run_id; }
 
-  StatusOr<std::unique_ptr<evidence::EvidenceReadSnapshot>> OpenSnapshot(
-      core::StableId analysis_run_id) const override {
+  StatusOr<std::unique_ptr<evidence::EvidenceReadSnapshot>>
+  OpenSnapshot(core::StableId analysis_run_id) const override {
     if (analysis_run_id != descriptor_.analysis_run_id) {
       return Status::NotFound("unknown analysis run");
     }
@@ -74,17 +73,18 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
         new Snapshot(this, generation_));
   }
 
- private:
+private:
   class Snapshot : public evidence::EvidenceReadSnapshot {
-   public:
-    Snapshot(const FakeEvidenceBackend* backend, std::uint64_t generation)
+  public:
+    Snapshot(const FakeEvidenceBackend *backend, std::uint64_t generation)
         : backend_(backend), generation_(generation) {}
 
-    const evidence::SnapshotDescriptor& descriptor() const override {
+    const evidence::SnapshotDescriptor &descriptor() const override {
       return backend_->descriptor_;
     }
 
-    StatusOr<std::vector<facts::AnalysisFact>> GetCurrentFacts() const override {
+    StatusOr<std::vector<facts::AnalysisFact>>
+    GetCurrentFacts() const override {
       if (backend_->generation_ != generation_) {
         return Status::FailedPrecondition("evidence snapshot changed; retry");
       }
@@ -95,9 +95,9 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
       return facts;
     }
 
-    StatusOr<fake_proto::ProvenanceGraph> Explain(
-        core::StableId fact_id,
-        const facts::ExplainBudget& budget) const override {
+    StatusOr<fake_proto::ProvenanceGraph>
+    Explain(core::StableId fact_id,
+            const facts::ExplainBudget &budget) const override {
       if (backend_->generation_ != generation_) {
         return Status::FailedPrecondition("evidence snapshot changed; retry");
       }
@@ -114,8 +114,8 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
       return std::vector<summary::SummaryArtifact>{};
     }
 
-   private:
-    const FakeEvidenceBackend* backend_;
+  private:
+    const FakeEvidenceBackend *backend_;
     std::uint64_t generation_;
   };
 
@@ -123,10 +123,10 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
   // always present, followed by a witness chain of provenance_depth_ nodes. The
   // graph truncates with "max_depth" when the budget cannot reach the full
   // chain, mirroring ProvenanceStore::Explain's fact-preserving truncation.
-  StatusOr<fake_proto::ProvenanceGraph> Explain(
-      core::StableId fact_id, const facts::ExplainBudget& budget) const {
-    const facts::AnalysisFact* fact = nullptr;
-    for (const auto& candidate : facts_) {
+  StatusOr<fake_proto::ProvenanceGraph>
+  Explain(core::StableId fact_id, const facts::ExplainBudget &budget) const {
+    const facts::AnalysisFact *fact = nullptr;
+    for (const auto &candidate : facts_) {
       if (candidate.fact_id == fact_id) {
         fact = &candidate;
         break;
@@ -146,14 +146,14 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
     }
     *graph.mutable_fact() = std::move(*proto_fact);
 
-    auto* binding = graph.mutable_binding();
+    auto *binding = graph.mutable_binding();
     binding->set_analysis_run_id(core::ToString(descriptor_.analysis_run_id));
     binding->set_fact_id(core::ToString(fact_id));
     binding->set_selected_witness_id("w0");
     binding->set_is_current(true);
 
     for (std::uint32_t i = 0; i < provenance_depth_; ++i) {
-      auto* node = graph.add_nodes();
+      auto *node = graph.add_nodes();
       node->set_analysis_run_id(core::ToString(descriptor_.analysis_run_id));
       node->set_output_fact_id(core::ToString(fact_id));
       node->set_witness_id("w" + std::to_string(i));
@@ -176,6 +176,6 @@ class FakeEvidenceBackend : public evidence::EvidenceReadBackend {
   bool auto_bump_on_explain_ = false;
 };
 
-}  // namespace veritas::testing
+} // namespace veritas::testing
 
-#endif  // VERITAS_TESTING_FAKE_EVIDENCE_BACKEND_H_
+#endif // VERITAS_TESTING_FAKE_EVIDENCE_BACKEND_H_

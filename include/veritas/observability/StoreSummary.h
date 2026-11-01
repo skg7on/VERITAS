@@ -39,8 +39,8 @@ namespace veritas::observability {
 // Returns NotFound when `output_root` holds no `metadata.db`, and propagates a
 // failed count query rather than reporting zero — a table name the schema does
 // not define must not read as an empty table.
-StatusOr<StoreSummary> CollectStoreSummary(
-    const std::filesystem::path& output_root);
+StatusOr<StoreSummary>
+CollectStoreSummary(const std::filesystem::path &output_root);
 
 // FillEnvironment reads the machine and build identity for the artifact's
 // environment block: uname for os/arch, sysctlbyname on Darwin for cores, RAM
@@ -53,14 +53,14 @@ StatusOr<StoreSummary> CollectStoreSummary(
 // and leaves it empty. An empty string is the honest rendering of "not
 // measured here" — do not fill it with a placeholder, and do not let a comment
 // claim the Linux branch provides it.
-void FillEnvironment(RunEnvironment* environment);
+void FillEnvironment(RunEnvironment *environment);
 
 // FillInventoryFromManifest copies the input-scale fields the manifest
 // already carries. The manifest types are plain structs in a header, so a
 // consumer of this declaration needs no link against veritas_build.
-void FillInventoryFromManifest(const build::AnalysisManifest& manifest,
-                               RunInputInventory* input);
+void FillInventoryFromManifest(const build::AnalysisManifest &manifest,
+                               RunInputInventory *input);
 
-}  // namespace veritas::observability
+} // namespace veritas::observability
 
-#endif  // VERITAS_OBSERVABILITY_STORESUMMARY_H_
+#endif // VERITAS_OBSERVABILITY_STORESUMMARY_H_

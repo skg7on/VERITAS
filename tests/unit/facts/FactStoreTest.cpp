@@ -54,8 +54,7 @@ core::StableId BatchId(std::string_view text) {
 
 SemanticRow Reachable(std::string_view from, std::string_view to) {
   return SemanticRow{RelationId::kReachableCall,
-                     {FunctionId(from), FunctionId(to),
-                      EpistemicState::kMay}};
+                     {FunctionId(from), FunctionId(to), EpistemicState::kMay}};
 }
 
 SemanticRow DirectCall(std::string_view from, std::string_view to) {
@@ -65,8 +64,8 @@ SemanticRow DirectCall(std::string_view from, std::string_view to) {
                       EpistemicState::kMay}};
 }
 
-WitnessEdge Edge(const SemanticRow& result, std::string_view rule,
-                 const SemanticRow& input, std::uint32_t ordinal) {
+WitnessEdge Edge(const SemanticRow &result, std::string_view rule,
+                 const SemanticRow &input, std::uint32_t ordinal) {
   return WitnessEdge{.result = SemanticKey{result},
                      .rule_id = std::string(rule),
                      .input = SemanticKey{input},
@@ -77,11 +76,12 @@ AnalysisRunManifest TestRun(std::string_view seed = "run") {
   AnalysisRunDescriptor descriptor;
   const std::string rev = std::string(seed) + "-revision";
   const std::string bv = std::string(seed) + "-variant";
-  descriptor.revision_id = core::MakeStableId(
-      core::IdKind::kRevision, std::as_bytes(std::span(rev.data(), rev.size())));
-  descriptor.build_variant_id = core::MakeStableId(
-      core::IdKind::kBuildVariant,
-      std::as_bytes(std::span(bv.data(), bv.size())));
+  descriptor.revision_id =
+      core::MakeStableId(core::IdKind::kRevision,
+                         std::as_bytes(std::span(rev.data(), rev.size())));
+  descriptor.build_variant_id =
+      core::MakeStableId(core::IdKind::kBuildVariant,
+                         std::as_bytes(std::span(bv.data(), bv.size())));
   descriptor.summary_schema_version = "summary.v2";
   descriptor.relation_schema_version = "relations.v2";
   descriptor.rule_bundle_version = "rules.v2";
@@ -97,11 +97,11 @@ std::filesystem::path TempDbPath() {
   std::string tmpl =
       (std::filesystem::temp_directory_path() / "veritas-factstore-XXXXXX")
           .string();
-  char* made = ::mkdtemp(tmpl.data());
+  char *made = ::mkdtemp(tmpl.data());
   return std::filesystem::path(made);
 }
 
-AnalysisFactBatch SuccessfulBatch(const AnalysisRunManifest& run) {
+AnalysisFactBatch SuccessfulBatch(const AnalysisRunManifest &run) {
   const auto root = MakeFact(DirectCall("f", "g")).value();
   const auto derived = MakeFact(Reachable("f", "g")).value();
   AnalysisFactBatch batch;
@@ -109,11 +109,12 @@ AnalysisFactBatch SuccessfulBatch(const AnalysisRunManifest& run) {
   batch.batch_id = BatchId("batch");
   batch.rooted_input_fact_ids = {root.fact_id};
   batch.facts = {derived};
-  batch.witnesses = {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)};
+  batch.witnesses = {
+      Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0)};
   return batch;
 }
 
-AnalysisFactBatch PublicationRegressionBatch(const AnalysisRunManifest& run) {
+AnalysisFactBatch PublicationRegressionBatch(const AnalysisRunManifest &run) {
   const auto root_fg = MakeFact(DirectCall("f", "g")).value();
   const auto root_gh = MakeFact(DirectCall("g", "h")).value();
   const auto root_gi = MakeFact(DirectCall("g", "i")).value();
@@ -157,21 +158,21 @@ AnalysisFactBatch PublicationRegressionBatch(const AnalysisRunManifest& run) {
   return batch;
 }
 
-std::vector<std::vector<std::string>> SortedRows(
-    std::vector<std::vector<std::string>> rows) {
+std::vector<std::vector<std::string>>
+SortedRows(std::vector<std::vector<std::string>> rows) {
   std::ranges::sort(rows);
   return rows;
 }
 
-std::vector<std::vector<std::string>> SortedEdgeRows(
-    std::vector<std::vector<std::string>> rows) {
-  std::ranges::sort(rows, [](const auto& lhs, const auto& rhs) {
+std::vector<std::vector<std::string>>
+SortedEdgeRows(std::vector<std::vector<std::string>> rows) {
+  std::ranges::sort(rows, [](const auto &lhs, const auto &rhs) {
     return std::tie(lhs[0], lhs[4]) < std::tie(rhs[0], rhs[4]);
   });
   return rows;
 }
 
-}  // namespace
+} // namespace
 
 TEST(FactStoreTest, PublishStoresFactsAndBindings) {
   const auto db = TempDbPath();
@@ -288,7 +289,7 @@ TEST(FactStoreTest,
   const auto reachable_fg = MakeFact(Reachable("f", "g")).value();
   const auto reachable_fh = MakeFact(Reachable("f", "h")).value();
   const auto reachable_fi = MakeFact(Reachable("f", "i")).value();
-  for (const AnalysisFact* expected :
+  for (const AnalysisFact *expected :
        {&root_fg, &root_gh, &root_gi, &reachable_fg, &reachable_fh,
         &reachable_fi}) {
     auto fact = store->GetFact(expected->fact_id);
@@ -315,7 +316,7 @@ TEST(FactStoreTest,
   ASSERT_TRUE(binding_rows.ok()) << binding_rows.status().message();
   ASSERT_EQ(binding_rows->size(), 3u);
   std::map<std::string, std::string> selected_witnesses;
-  for (const auto& row : *binding_rows) {
+  for (const auto &row : *binding_rows) {
     ASSERT_EQ(row.size(), 2u);
     selected_witnesses.emplace(row[0], row[1]);
   }
@@ -333,22 +334,21 @@ TEST(FactStoreTest,
       " FROM provenance_nodes WHERE run_id = ? ORDER BY output_fact_id",
       {run_id});
   ASSERT_TRUE(node_rows.ok()) << node_rows.status().message();
-  EXPECT_EQ(
-      *node_rows,
-      SortedRows({
-          {core::ToString(reachable_fg.fact_id),
-           selected_witnesses[core::ToString(reachable_fg.fact_id)], "1", "0",
-           "producer-fg", std::string(kDirect), "anchor-fg", "summary-fg",
-           "direct f to g"},
-          {core::ToString(reachable_fh.fact_id),
-           selected_witnesses[core::ToString(reachable_fh.fact_id)], "1", "0",
-           "producer-gh", std::string(kTransitive), "anchor-gh", "summary-gh",
-           "direct g to h"},
-          {core::ToString(reachable_fi.fact_id),
-           selected_witnesses[core::ToString(reachable_fi.fact_id)], "1", "0",
-           "producer-fg", std::string(kTransitive), "anchor-fg", "summary-fg",
-           "direct f to g"},
-      }));
+  EXPECT_EQ(*node_rows,
+            SortedRows({
+                {core::ToString(reachable_fg.fact_id),
+                 selected_witnesses[core::ToString(reachable_fg.fact_id)], "1",
+                 "0", "producer-fg", std::string(kDirect), "anchor-fg",
+                 "summary-fg", "direct f to g"},
+                {core::ToString(reachable_fh.fact_id),
+                 selected_witnesses[core::ToString(reachable_fh.fact_id)], "1",
+                 "0", "producer-gh", std::string(kTransitive), "anchor-gh",
+                 "summary-gh", "direct g to h"},
+                {core::ToString(reachable_fi.fact_id),
+                 selected_witnesses[core::ToString(reachable_fi.fact_id)], "1",
+                 "0", "producer-fg", std::string(kTransitive), "anchor-fg",
+                 "summary-fg", "direct f to g"},
+            }));
 
   auto edge_rows = store->metadata_store().Query(
       "SELECT output_fact_id, witness_id, input_kind, input_id, input_ordinal"
@@ -356,25 +356,24 @@ TEST(FactStoreTest,
       " ORDER BY output_fact_id, input_ordinal",
       {run_id});
   ASSERT_TRUE(edge_rows.ok()) << edge_rows.status().message();
-  EXPECT_EQ(
-      *edge_rows,
-      SortedEdgeRows({
-          {core::ToString(reachable_fg.fact_id),
-           selected_witnesses[core::ToString(reachable_fg.fact_id)], "rooted",
-           core::ToString(root_fg.fact_id), "0"},
-          {core::ToString(reachable_fh.fact_id),
-           selected_witnesses[core::ToString(reachable_fh.fact_id)], "derived",
-           core::ToString(reachable_fg.fact_id), "0"},
-          {core::ToString(reachable_fh.fact_id),
-           selected_witnesses[core::ToString(reachable_fh.fact_id)], "rooted",
-           core::ToString(root_gh.fact_id), "1"},
-          {core::ToString(reachable_fi.fact_id),
-           selected_witnesses[core::ToString(reachable_fi.fact_id)], "rooted",
-           core::ToString(root_fg.fact_id), "0"},
-          {core::ToString(reachable_fi.fact_id),
-           selected_witnesses[core::ToString(reachable_fi.fact_id)], "rooted",
-           core::ToString(root_gi.fact_id), "1"},
-      }));
+  EXPECT_EQ(*edge_rows,
+            SortedEdgeRows({
+                {core::ToString(reachable_fg.fact_id),
+                 selected_witnesses[core::ToString(reachable_fg.fact_id)],
+                 "rooted", core::ToString(root_fg.fact_id), "0"},
+                {core::ToString(reachable_fh.fact_id),
+                 selected_witnesses[core::ToString(reachable_fh.fact_id)],
+                 "derived", core::ToString(reachable_fg.fact_id), "0"},
+                {core::ToString(reachable_fh.fact_id),
+                 selected_witnesses[core::ToString(reachable_fh.fact_id)],
+                 "rooted", core::ToString(root_gh.fact_id), "1"},
+                {core::ToString(reachable_fi.fact_id),
+                 selected_witnesses[core::ToString(reachable_fi.fact_id)],
+                 "rooted", core::ToString(root_fg.fact_id), "0"},
+                {core::ToString(reachable_fi.fact_id),
+                 selected_witnesses[core::ToString(reachable_fi.fact_id)],
+                 "rooted", core::ToString(root_gi.fact_id), "1"},
+            }));
 
   const auto before_redelivery_counts = *counts;
   const auto before_redelivery_bindings = *binding_rows;

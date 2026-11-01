@@ -41,7 +41,7 @@
 
 namespace veritas::core {
 class RunMetrics;
-}  // namespace veritas::core
+} // namespace veritas::core
 
 namespace veritas::facts {
 

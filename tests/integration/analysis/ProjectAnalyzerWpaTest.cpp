@@ -31,7 +31,8 @@ ProjectAnalysisRequest FixtureRequest() {
 
 TEST(ProjectAnalyzerWpaTest, DefaultAnalysisPublishesSouffleRunIdentity) {
   ProjectAnalyzer analyzer;
-  auto result = analyzer.AnalyzeProject(FixtureRequest(), AnalysisConfig::Default());
+  auto result =
+      analyzer.AnalyzeProject(FixtureRequest(), AnalysisConfig::Default());
   ASSERT_TRUE(result.ok()) << result.status().message();
   EXPECT_EQ(result->wpa_engine, WpaEngineMode::kSouffle);
   EXPECT_FALSE(result->wpa_run_id.empty());
@@ -41,7 +42,8 @@ TEST(ProjectAnalyzerWpaTest, DefaultAnalysisPublishesSouffleRunIdentity) {
 TEST(ProjectAnalyzerWpaTest, ExplicitEmergencyUsesDistinctRunIdentity) {
   ProjectAnalyzer analyzer;
 
-  auto souffle = analyzer.AnalyzeProject(FixtureRequest(), AnalysisConfig::Default());
+  auto souffle =
+      analyzer.AnalyzeProject(FixtureRequest(), AnalysisConfig::Default());
   ASSERT_TRUE(souffle.ok()) << souffle.status().message();
 
   auto config = AnalysisConfig::Default();
@@ -96,5 +98,5 @@ TEST(ProjectAnalyzerWpaTest, SemanticZooCorpusDifferentialAndPublication) {
   EXPECT_EQ(again->wpa_run_id, result->wpa_run_id);
 }
 
-}  // namespace
-}  // namespace veritas::analysis
+} // namespace
+} // namespace veritas::analysis

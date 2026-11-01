@@ -30,7 +30,7 @@ std::string ComponentKey(core::StableId id, summary::v1::ComponentKind kind) {
   return core::ToString(id) + '\x1f' + std::to_string(static_cast<int>(kind));
 }
 
-std::string ConsumerKey(const ConsumerRef& ref) {
+std::string ConsumerKey(const ConsumerRef &ref) {
   return core::ToString(ref.consumer_id) + '\x1f' +
          std::to_string(static_cast<int>(ref.consumer_component));
 }
@@ -49,25 +49,25 @@ std::optional<int> ParseInt(std::string_view text) {
 
 Sensitivity SensitivityFromInt(int value) {
   switch (value) {
-    case static_cast<int>(Sensitivity::kSemantic):
-      return Sensitivity::kSemantic;
-    case static_cast<int>(Sensitivity::kEvidenceOnly):
-      return Sensitivity::kEvidenceOnly;
-    case static_cast<int>(Sensitivity::kIdentity):
-      return Sensitivity::kIdentity;
-    default:
-      return Sensitivity::kConfiguration;
+  case static_cast<int>(Sensitivity::kSemantic):
+    return Sensitivity::kSemantic;
+  case static_cast<int>(Sensitivity::kEvidenceOnly):
+    return Sensitivity::kEvidenceOnly;
+  case static_cast<int>(Sensitivity::kIdentity):
+    return Sensitivity::kIdentity;
+  default:
+    return Sensitivity::kConfiguration;
   }
 }
 
-}  // namespace
+} // namespace
 
-DependencyIndex::DependencyIndex(MetadataStore& metadata_store)
+DependencyIndex::DependencyIndex(MetadataStore &metadata_store)
     : metadata_store_(metadata_store) {}
 
 Status DependencyIndex::ReplaceCurrentDependencies(
     core::StableId consumer_summary_id,
-    const std::vector<DependencyEdge>& edges) {
+    const std::vector<DependencyEdge> &edges) {
   const std::string consumer_id = core::ToString(consumer_summary_id);
 
   auto begin = metadata_store_.BeginTransaction();
@@ -85,7 +85,7 @@ Status DependencyIndex::ReplaceCurrentDependencies(
     return remove;
   }
 
-  for (const auto& edge : edges) {
+  for (const auto &edge : edges) {
     auto insert_current = metadata_store_.Execute(
         "INSERT OR REPLACE INTO reverse_dependency_index (consumer_id, "
         "consumer_component, producer_id, producer_component, sensitivity) "
@@ -117,9 +117,9 @@ Status DependencyIndex::ReplaceCurrentDependencies(
   return metadata_store_.CommitTransaction();
 }
 
-StatusOr<std::vector<ConsumerRef>> DependencyIndex::UsersOf(
-    core::StableId producer_id,
-    summary::v1::ComponentKind producer_component) const {
+StatusOr<std::vector<ConsumerRef>>
+DependencyIndex::UsersOf(core::StableId producer_id,
+                         summary::v1::ComponentKind producer_component) const {
   auto query = metadata_store_.Query(
       "SELECT consumer_id, consumer_component, sensitivity "
       "FROM reverse_dependency_index "
@@ -132,7 +132,7 @@ StatusOr<std::vector<ConsumerRef>> DependencyIndex::UsersOf(
   }
 
   std::vector<ConsumerRef> consumers;
-  for (const auto& row : *query) {
+  for (const auto &row : *query) {
     auto id = core::ParseStableId(row[0]);
     if (!id.ok()) {
       return id.status();
@@ -152,8 +152,8 @@ StatusOr<std::vector<ConsumerRef>> DependencyIndex::UsersOf(
   return consumers;
 }
 
-StatusOr<ImpactGraph> DependencyIndex::GetImpactSet(
-    const SummaryDelta& delta, ImpactBudget budget) const {
+StatusOr<ImpactGraph> DependencyIndex::GetImpactSet(const SummaryDelta &delta,
+                                                    ImpactBudget budget) const {
   ImpactGraph graph;
 
   // Seed the frontier with each changed component's producer, carrying the
@@ -163,8 +163,9 @@ StatusOr<ImpactGraph> DependencyIndex::GetImpactSet(
     summary::v1::ComponentKind component;
     Sensitivity scope;
   };
+
   std::map<std::string, FrontierItem> frontier;
-  for (const auto& component : delta.changed_components) {
+  for (const auto &component : delta.changed_components) {
     const Sensitivity scope = component.SemanticChanged()
                                   ? Sensitivity::kSemantic
                                   : Sensitivity::kEvidenceOnly;
@@ -184,7 +185,7 @@ StatusOr<ImpactGraph> DependencyIndex::GetImpactSet(
     }
 
     std::map<std::string, FrontierItem> next_frontier;
-    for (const auto& [key, item] : frontier) {
+    for (const auto &[key, item] : frontier) {
       if (graph.truncated) {
         break;
       }
@@ -192,7 +193,7 @@ StatusOr<ImpactGraph> DependencyIndex::GetImpactSet(
       if (!users.ok()) {
         return users.status();
       }
-      for (const auto& consumer : *users) {
+      for (const auto &consumer : *users) {
         ++graph.explored_edges;
         // Only follow edges whose sensitivity matches this delta's scope: a
         // semantic delta must not schedule evidence-only consumers and vice
@@ -218,10 +219,10 @@ StatusOr<ImpactGraph> DependencyIndex::GetImpactSet(
   }
 
   graph.consumers.reserve(collected.size());
-  for (const auto& [key, ref] : collected) {
+  for (const auto &[key, ref] : collected) {
     graph.consumers.push_back(ref);
   }
   return graph;
 }
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb

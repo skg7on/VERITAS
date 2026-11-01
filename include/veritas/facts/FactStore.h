@@ -56,7 +56,7 @@ ProducerKind ProducerKindForEngine(EngineIdentity engine);
 struct RunFactBinding {
   core::StableId run_id;
   core::StableId fact_id;
-  std::optional<double> confidence;  // separate from epistemic state
+  std::optional<double> confidence; // separate from epistemic state
   ProducerKind producer_kind = ProducerKind::kWpaSouffle;
   std::string analyzer_run_id;
   std::string scope_kind;
@@ -66,18 +66,18 @@ struct RunFactBinding {
 };
 
 class FactStore : public AnalysisFactSink {
- public:
+public:
   // Opens (or creates) the fact database at <db_path>/metadata.db (the same
   // file the WPA run repository uses) and applies the schema.
-  static StatusOr<FactStore> Open(const std::filesystem::path& db_path);
+  static StatusOr<FactStore> Open(const std::filesystem::path &db_path);
 
-  FactStore(FactStore&&) noexcept;
-  FactStore& operator=(FactStore&&) noexcept;
+  FactStore(FactStore &&) noexcept;
+  FactStore &operator=(FactStore &&) noexcept;
   ~FactStore();
 
   // Publishes one canonical batch atomically: facts, bindings, and the witness
   // DAG are all committed together or not at all.
-  Status Publish(const AnalysisFactBatch& batch) override;
+  Status Publish(const AnalysisFactBatch &batch) override;
 
   // The canonical fact, or NotFound if it was never published.
   StatusOr<AnalysisFact> GetFact(core::StableId fact_id);
@@ -94,27 +94,27 @@ class FactStore : public AnalysisFactSink {
   StatusOr<std::vector<AnalysisFact>> GetCurrentFacts(core::StableId run_id);
 
   // The shared SQLite connection, for ProvenanceStore::Explain.
-  summarydb::MetadataStore& metadata_store() { return metadata_store_; }
+  summarydb::MetadataStore &metadata_store() { return metadata_store_; }
 
- private:
+private:
   explicit FactStore(summarydb::MetadataStore store);
 
   // Queues one fact on a bulk writer instead of writing a statement per fact.
-  Status AppendFact(summarydb::BulkInsertBatcher& facts,
-                    const AnalysisFact& fact);
+  Status AppendFact(summarydb::BulkInsertBatcher &facts,
+                    const AnalysisFact &fact);
   // Clears the fact's prior current binding, then queues the new one. The
   // lookup is served by the partial unique index on (run_id, fact_id) with
   // is_current = 1, so the clear stays a statement per binding while the insert
   // is batched.
-  Status AppendBinding(summarydb::BulkInsertBatcher& bindings,
-                       const RunFactBinding& binding);
+  Status AppendBinding(summarydb::BulkInsertBatcher &bindings,
+                       const RunFactBinding &binding);
 
   summarydb::MetadataStore metadata_store_;
 
-  FactStore(const FactStore&) = delete;
-  FactStore& operator=(const FactStore&) = delete;
+  FactStore(const FactStore &) = delete;
+  FactStore &operator=(const FactStore &) = delete;
 };
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_FACT_STORE_H_
+#endif // VERITAS_FACTS_FACT_STORE_H_

@@ -44,8 +44,7 @@ std::string Suffixed(std::string_view name, std::string_view suffix) {
 
 // Builds a fact from a known-valid row. Test-support setup failures abort
 // rather than throw (the project builds with exceptions disabled).
-veritas::facts::AnalysisFact MakeFactOrAbort(
-    veritas::facts::SemanticRow row) {
+veritas::facts::AnalysisFact MakeFactOrAbort(veritas::facts::SemanticRow row) {
   auto fact = veritas::facts::MakeFact(std::move(row));
   if (!fact.ok()) {
     std::abort();
@@ -55,26 +54,26 @@ veritas::facts::AnalysisFact MakeFactOrAbort(
 
 core::IdKind NodeIdKind(veritas::cpg::NodeKind kind) {
   switch (kind) {
-    case veritas::cpg::NodeKind::kFunction:
-      return core::IdKind::kFunctionVariant;
-    case veritas::cpg::NodeKind::kParameter:
-      return core::IdKind::kValueRef;
-    case veritas::cpg::NodeKind::kGlobal:
-    case veritas::cpg::NodeKind::kMemoryObject:
-      return core::IdKind::kMemoryRef;
-    case veritas::cpg::NodeKind::kCallSite:
-      return core::IdKind::kCallSite;
-    case veritas::cpg::NodeKind::kBasicBlockSummary:
-      return core::IdKind::kBasicBlockSummary;
-    case veritas::cpg::NodeKind::kSummary:
-      return core::IdKind::kFunctionSummary;
-    case veritas::cpg::NodeKind::kUnknown:
-      return core::IdKind::kUnknownNode;
+  case veritas::cpg::NodeKind::kFunction:
+    return core::IdKind::kFunctionVariant;
+  case veritas::cpg::NodeKind::kParameter:
+    return core::IdKind::kValueRef;
+  case veritas::cpg::NodeKind::kGlobal:
+  case veritas::cpg::NodeKind::kMemoryObject:
+    return core::IdKind::kMemoryRef;
+  case veritas::cpg::NodeKind::kCallSite:
+    return core::IdKind::kCallSite;
+  case veritas::cpg::NodeKind::kBasicBlockSummary:
+    return core::IdKind::kBasicBlockSummary;
+  case veritas::cpg::NodeKind::kSummary:
+    return core::IdKind::kFunctionSummary;
+  case veritas::cpg::NodeKind::kUnknown:
+    return core::IdKind::kUnknownNode;
   }
   return core::IdKind::kUnknownNode;
 }
 
-}  // namespace
+} // namespace
 
 core::StableId EvidenceScenarioBuilder::Id(core::IdKind kind,
                                            std::string_view name) const {
@@ -82,9 +81,10 @@ core::StableId EvidenceScenarioBuilder::Id(core::IdKind kind,
       kind, std::as_bytes(std::span<const char>(name.data(), name.size())));
 }
 
-facts::AnalysisFact EvidenceScenarioBuilder::MakeAliasFact(
-    std::string_view name, sem::AliasKind alias,
-    sem::EpistemicState epistemic) const {
+facts::AnalysisFact
+EvidenceScenarioBuilder::MakeAliasFact(std::string_view name,
+                                       sem::AliasKind alias,
+                                       sem::EpistemicState epistemic) const {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kAlias;
   row.cells = {Id(core::IdKind::kMemoryRef, Suffixed(name, ":left")),
@@ -108,24 +108,30 @@ facts::AnalysisFact EvidenceScenarioBuilder::MakeRangeFact(
   row.relation = facts::RelationId::kDirectRead;
   row.cells = {Id(core::IdKind::kFunctionVariant, Suffixed(name, ":fn")),
                Id(core::IdKind::kMemoryRef, Suffixed(name, ":mem")),
-               sem::ByteRangeKind::kKnown, offset, size,
+               sem::ByteRangeKind::kKnown,
+               offset,
+               size,
                sem::EpistemicState::kMust};
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact EvidenceScenarioBuilder::MakeCapacityFact(
-    std::string_view name, std::uint64_t size) const {
+facts::AnalysisFact
+EvidenceScenarioBuilder::MakeCapacityFact(std::string_view name,
+                                          std::uint64_t size) const {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kDirectWrite;
   row.cells = {Id(core::IdKind::kFunctionVariant, Suffixed(name, ":fn")),
                Id(core::IdKind::kMemoryRef, Suffixed(name, ":mem")),
-               sem::ByteRangeKind::kKnown, std::int64_t{0}, size,
+               sem::ByteRangeKind::kKnown,
+               std::int64_t{0},
+               size,
                sem::EpistemicState::kMust};
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact EvidenceScenarioBuilder::MakeUnknownFact(
-    std::string_view name, std::string_view reason) const {
+facts::AnalysisFact
+EvidenceScenarioBuilder::MakeUnknownFact(std::string_view name,
+                                         std::string_view reason) const {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kUnknownEffect;
   row.cells = {Id(core::IdKind::kFunctionVariant, Suffixed(name, ":fn")),
@@ -134,8 +140,8 @@ facts::AnalysisFact EvidenceScenarioBuilder::MakeUnknownFact(
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact EvidenceScenarioBuilder::MakeCheckFact(
-    std::string_view name) const {
+facts::AnalysisFact
+EvidenceScenarioBuilder::MakeCheckFact(std::string_view name) const {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kSoundnessCoverage;
   row.cells = {std::string(name), std::string("dominating_check"),
@@ -144,13 +150,14 @@ facts::AnalysisFact EvidenceScenarioBuilder::MakeCheckFact(
 }
 
 StatusOr<facts::AnalysisFact> EvidenceScenarioBuilder::MakeCompletionFact(
-    const ev::QueryCompletionDescriptor& descriptor) const {
+    const ev::QueryCompletionDescriptor &descriptor) const {
   return ev::MakeQueryCompletionFact(descriptor);
 }
 
-facts::RunFactBinding EvidenceScenarioBuilder::MakeBinding(
-    core::StableId run_id, core::StableId fact_id,
-    std::string_view witness_id) const {
+facts::RunFactBinding
+EvidenceScenarioBuilder::MakeBinding(core::StableId run_id,
+                                     core::StableId fact_id,
+                                     std::string_view witness_id) const {
   facts::RunFactBinding binding;
   binding.run_id = run_id;
   binding.fact_id = fact_id;
@@ -163,9 +170,10 @@ facts::RunFactBinding EvidenceScenarioBuilder::MakeBinding(
   return binding;
 }
 
-facts::FactWitness EvidenceScenarioBuilder::MakeWitness(
-    core::StableId run_id, core::StableId fact_id,
-    std::string_view witness_id) const {
+facts::FactWitness
+EvidenceScenarioBuilder::MakeWitness(core::StableId run_id,
+                                     core::StableId fact_id,
+                                     std::string_view witness_id) const {
   facts::FactWitness witness;
   witness.run_id = run_id;
   witness.output_fact_id = fact_id;
@@ -221,9 +229,9 @@ constexpr std::string_view kProjectRoot = "/checkout/radio-stack";
 constexpr std::string_view kRunName = "demo-run";
 constexpr std::string_view kSnapshotFingerprint = "veritas-evidence-demo.v1";
 
-// The demo's CPG labels. A case-local entity ID is `E_<label>` and an edge ID is
-// `ED_<from>_<to>`: the labels are EIR-T Identifiers, so the projection from the
-// typed flow slice stays readable in diagnostics and goldens.
+// The demo's CPG labels. A case-local entity ID is `E_<label>` and an edge ID
+// is `ED_<from>_<to>`: the labels are EIR-T Identifiers, so the projection from
+// the typed flow slice stays readable in diagnostics and goldens.
 constexpr std::string_view kDecodeLabel = "decode";
 constexpr std::string_view kMemcpyLabel = "memcpy";
 constexpr std::string_view kSrcBufLabel = "srcbuf";
@@ -259,7 +267,8 @@ constexpr std::string_view kDependencyTypeLayoutId = "DEP_type_layout";
 constexpr std::string_view kDependencyConfigurationId = "DEP_configuration";
 constexpr std::string_view kDependencySpecificationId = "DEP_specification";
 constexpr std::string_view kOmissionLevelProjectionId = "OM_level_projection";
-constexpr std::string_view kOmissionTruncatedId = "OM_truncated_dominating_check";
+constexpr std::string_view kOmissionTruncatedId =
+    "OM_truncated_dominating_check";
 constexpr std::string_view kOmissionVendorId = "OM_vendor_expansion";
 constexpr std::string_view kOmissionSummaryId = "OM_summary_expansion";
 
@@ -297,22 +306,21 @@ std::string EdgeLocalId(std::string_view from, std::string_view to) {
 
 fp::ProducerKind ProtoProducerKind(facts::ProducerKind kind) {
   switch (kind) {
-    case facts::ProducerKind::kWpaSouffle:
-      return fp::PRODUCER_WPA_SOUFFLE;
-    case facts::ProducerKind::kWpaCppConformance:
-      return fp::PRODUCER_WPA_CPP_CONFORMANCE;
-    case facts::ProducerKind::kWpaCppEmergency:
-      return fp::PRODUCER_WPA_CPP_EMERGENCY;
-    case facts::ProducerKind::kExternal:
-      return fp::PRODUCER_EXTERNAL;
+  case facts::ProducerKind::kWpaSouffle:
+    return fp::PRODUCER_WPA_SOUFFLE;
+  case facts::ProducerKind::kWpaCppConformance:
+    return fp::PRODUCER_WPA_CPP_CONFORMANCE;
+  case facts::ProducerKind::kWpaCppEmergency:
+    return fp::PRODUCER_WPA_CPP_EMERGENCY;
+  case facts::ProducerKind::kExternal:
+    return fp::PRODUCER_EXTERNAL;
   }
   return fp::PRODUCER_UNSPECIFIED;
 }
 
 // Test support aborts on a broken fixture: the scenario is fixed, so a fixture
 // invariant violation is a programming error, not a runtime condition.
-template <typename T>
-T ValueOrAbort(veritas::StatusOr<T> value) {
+template <typename T> T ValueOrAbort(veritas::StatusOr<T> value) {
   if (!value.ok()) {
     std::abort();
   }
@@ -335,8 +343,7 @@ ev::Expression Reference(std::string local_id) {
   return expression;
 }
 
-ev::Expression Call(std::string callee,
-                    std::vector<ev::Expression> arguments) {
+ev::Expression Call(std::string callee, std::vector<ev::Expression> arguments) {
   ev::Expression expression;
   expression.kind = ev::Expression::Kind::kCall;
   expression.text = std::move(callee);
@@ -372,14 +379,13 @@ ev::Expression CapacityOf(std::string_view local_id) {
 
 ev::Expression RangePredicate(std::string_view value_id, std::int64_t min,
                               std::int64_t max) {
-  return Call("range", {Reference(std::string(value_id)), Integer(min),
-                        Integer(max)});
+  return Call("range",
+              {Reference(std::string(value_id)), Integer(min), Integer(max)});
 }
 
 ev::Expression CapacityPredicate(std::string_view memory_id,
                                  std::int64_t bytes) {
-  return Call("capacity",
-              {Reference(std::string(memory_id)), Integer(bytes)});
+  return Call("capacity", {Reference(std::string(memory_id)), Integer(bytes)});
 }
 
 ev::Expression AliasPredicate(std::string_view left, std::string_view right) {
@@ -502,11 +508,12 @@ ev::Constraint MakeConstraint(std::string id, ev::Expression expression,
   return constraint;
 }
 
-ev::Provenance MakeProvenanceRecord(
-    std::string id, std::string_view producer, std::string_view rule,
-    std::string_view source_anchor, core::StableId run_id,
-    std::vector<std::string> input_fact_ids,
-    std::string_view version = "0.1") {
+ev::Provenance MakeProvenanceRecord(std::string id, std::string_view producer,
+                                    std::string_view rule,
+                                    std::string_view source_anchor,
+                                    core::StableId run_id,
+                                    std::vector<std::string> input_fact_ids,
+                                    std::string_view version = "0.1") {
   ev::Provenance record;
   record.id = std::move(id);
   record.producer = std::string(producer);
@@ -519,9 +526,10 @@ ev::Provenance MakeProvenanceRecord(
   return record;
 }
 
-ev::ProofObligation MakeProofObligation(
-    std::string id, ev::Expression predicate,
-    std::vector<std::string> verifier_kinds, ev::Expression budget) {
+ev::ProofObligation MakeProofObligation(std::string id,
+                                        ev::Expression predicate,
+                                        std::vector<std::string> verifier_kinds,
+                                        ev::Expression budget) {
   ev::ProofObligation obligation;
   obligation.id = std::move(id);
   obligation.goal_kind = ev::ProofGoalKind::kProve;
@@ -532,9 +540,10 @@ ev::ProofObligation MakeProofObligation(
   return obligation;
 }
 
-ev::SummaryReference MakeSummaryReference(
-    std::string id, std::string function_id, core::StableId summary_id,
-    std::vector<std::string> components) {
+ev::SummaryReference MakeSummaryReference(std::string id,
+                                          std::string function_id,
+                                          core::StableId summary_id,
+                                          std::vector<std::string> components) {
   ev::SummaryReference summary;
   summary.id = std::move(id);
   summary.function_id = std::move(function_id);
@@ -552,9 +561,8 @@ ev::Dependency MakeDependency(std::string id, ev::DependencyKind kind,
   return dependency;
 }
 
-ev::Omission MakeOmission(std::string id, std::string kind,
-                          std::string subject, std::string reason,
-                          bool expandable) {
+ev::Omission MakeOmission(std::string id, std::string kind, std::string subject,
+                          std::string reason, bool expandable) {
   ev::Omission omission;
   omission.id = std::move(id);
   omission.kind = std::move(kind);
@@ -588,7 +596,7 @@ build::ProgramContext MakeProgramContext() {
 
 // The case-level projection of the M10B program context. The checkout path is
 // deliberately dropped: it is never part of a case's identity.
-ev::ProgramBinding BindProgram(const build::ProgramContext& context,
+ev::ProgramBinding BindProgram(const build::ProgramContext &context,
                                core::StableId run_id) {
   ev::ProgramBinding binding;
   binding.repository_id = context.repository_id;
@@ -621,20 +629,20 @@ ev::EvidenceQueryBudget DemoBudget() {
 
 std::optional<ev::EntityKind> EntityKindFor(cpg::NodeKind kind) {
   switch (kind) {
-    case cpg::NodeKind::kFunction:
-      return ev::EntityKind::kFunction;
-    case cpg::NodeKind::kCallSite:
-      return ev::EntityKind::kCallSite;
-    case cpg::NodeKind::kParameter:
-      return ev::EntityKind::kValue;
-    case cpg::NodeKind::kGlobal:
-    case cpg::NodeKind::kMemoryObject:
-      return ev::EntityKind::kMemoryObject;
-    case cpg::NodeKind::kBasicBlockSummary:
-      return ev::EntityKind::kBasicBlock;
-    case cpg::NodeKind::kSummary:
-    case cpg::NodeKind::kUnknown:
-      return std::nullopt;
+  case cpg::NodeKind::kFunction:
+    return ev::EntityKind::kFunction;
+  case cpg::NodeKind::kCallSite:
+    return ev::EntityKind::kCallSite;
+  case cpg::NodeKind::kParameter:
+    return ev::EntityKind::kValue;
+  case cpg::NodeKind::kGlobal:
+  case cpg::NodeKind::kMemoryObject:
+    return ev::EntityKind::kMemoryObject;
+  case cpg::NodeKind::kBasicBlockSummary:
+    return ev::EntityKind::kBasicBlock;
+  case cpg::NodeKind::kSummary:
+  case cpg::NodeKind::kUnknown:
+    return std::nullopt;
   }
   return std::nullopt;
 }
@@ -642,29 +650,29 @@ std::optional<ev::EntityKind> EntityKindFor(cpg::NodeKind kind) {
 // The demo's relation subset. A relation the case cannot represent is reported
 // as absent rather than silently dropped (the factory aborts, since the
 // scenario is fixed and only supported relations appear in it).
-std::optional<ev::RelationKind> RelationKindFor(const cpg::CpgEdge& edge) {
+std::optional<ev::RelationKind> RelationKindFor(const cpg::CpgEdge &edge) {
   switch (edge.kind) {
-    case cpg::EdgeKind::kCalls:
-      return ev::RelationKind::kCalls;
-    case cpg::EdgeKind::kReads:
-      return ev::RelationKind::kReads;
-    case cpg::EdgeKind::kWrites:
-      return ev::RelationKind::kWrites;
-    case cpg::EdgeKind::kFlowsTo:
-      return ev::RelationKind::kFlowsTo;
-    case cpg::EdgeKind::kDominatesSummary:
-      return ev::RelationKind::kDominates;
-    case cpg::EdgeKind::kAliases:
-      if (edge.alias_state == cpg::AliasState::kMayAlias) {
-        return ev::RelationKind::kMayAlias;
-      }
-      return std::nullopt;
-    case cpg::EdgeKind::kContains:
-    case cpg::EdgeKind::kDeclares:
-    case cpg::EdgeKind::kMayCall:
-    case cpg::EdgeKind::kSummarizedBy:
-    case cpg::EdgeKind::kUnknownAt:
-      return std::nullopt;
+  case cpg::EdgeKind::kCalls:
+    return ev::RelationKind::kCalls;
+  case cpg::EdgeKind::kReads:
+    return ev::RelationKind::kReads;
+  case cpg::EdgeKind::kWrites:
+    return ev::RelationKind::kWrites;
+  case cpg::EdgeKind::kFlowsTo:
+    return ev::RelationKind::kFlowsTo;
+  case cpg::EdgeKind::kDominatesSummary:
+    return ev::RelationKind::kDominates;
+  case cpg::EdgeKind::kAliases:
+    if (edge.alias_state == cpg::AliasState::kMayAlias) {
+      return ev::RelationKind::kMayAlias;
+    }
+    return std::nullopt;
+  case cpg::EdgeKind::kContains:
+  case cpg::EdgeKind::kDeclares:
+  case cpg::EdgeKind::kMayCall:
+  case cpg::EdgeKind::kSummarizedBy:
+  case cpg::EdgeKind::kUnknownAt:
+    return std::nullopt;
   }
   return std::nullopt;
 }
@@ -677,18 +685,18 @@ ev::EpistemicState EdgeEpistemic(ev::RelationKind kind) {
 
 std::string_view ProvenanceForRelation(ev::RelationKind kind) {
   switch (kind) {
-    case ev::RelationKind::kCalls:
-      return kProvenanceCallId;
-    case ev::RelationKind::kFlowsTo:
-      return kProvenanceFlowId;
-    case ev::RelationKind::kReads:
-    case ev::RelationKind::kWrites:
-      return kProvenanceMemoryId;
-    case ev::RelationKind::kMayAlias:
-      return kProvenanceAliasId;
-    case ev::RelationKind::kDominates:
-    case ev::RelationKind::kUnspecified:
-      return kProvenanceCallId;
+  case ev::RelationKind::kCalls:
+    return kProvenanceCallId;
+  case ev::RelationKind::kFlowsTo:
+    return kProvenanceFlowId;
+  case ev::RelationKind::kReads:
+  case ev::RelationKind::kWrites:
+    return kProvenanceMemoryId;
+  case ev::RelationKind::kMayAlias:
+    return kProvenanceAliasId;
+  case ev::RelationKind::kDominates:
+  case ev::RelationKind::kUnspecified:
+    return kProvenanceCallId;
   }
   return kProvenanceCallId;
 }
@@ -704,14 +712,14 @@ struct CaseGraph {
 // slice it does not declare. A non-empty `summary_id` attaches the summary
 // reference — and with it expandability — to the call edges that reach the
 // withheld `summarized_function`.
-CaseGraph ProjectGraph(const evidence::EvidenceBuildInput& input,
-                       const std::set<std::string>& selected_labels,
+CaseGraph ProjectGraph(const evidence::EvidenceBuildInput &input,
+                       const std::set<std::string> &selected_labels,
                        std::string_view summary_id,
                        std::string_view summarized_function) {
-  const evidence::FlowSlice& slice = input.flow_slice;
+  const evidence::FlowSlice &slice = input.flow_slice;
   CaseGraph graph;
   std::map<core::StableId, std::string> labels;
-  for (const cpg::CpgNode& node : slice.nodes) {
+  for (const cpg::CpgNode &node : slice.nodes) {
     if (!selected_labels.empty() && selected_labels.count(node.label) == 0) {
       continue;
     }
@@ -724,7 +732,7 @@ CaseGraph ProjectGraph(const evidence::EvidenceBuildInput& input,
         MakeEntity(EntityLocalId(node.label), *kind, node.node_id));
   }
 
-  for (const cpg::CpgEdge& edge : slice.edges) {
+  for (const cpg::CpgEdge &edge : slice.edges) {
     const auto from = labels.find(edge.source_node_id);
     const auto to = labels.find(edge.target_node_id);
     if (from == labels.end() || to == labels.end()) {
@@ -760,7 +768,7 @@ struct QueryFixture {
   ev::QueryCompletionDescriptor descriptor;
 };
 
-const facts::AnalysisFact& SingleFactOrAbort(const ev::EvidenceFactSet& set) {
+const facts::AnalysisFact &SingleFactOrAbort(const ev::EvidenceFactSet &set) {
   if (set.facts.size() != 1) {
     std::abort();
   }
@@ -771,8 +779,9 @@ const facts::AnalysisFact& SingleFactOrAbort(const ev::EvidenceFactSet& set) {
 // selected witness that certify it. The descriptor, the certificate, and the
 // metadata are written together from the same values, so the certificate
 // re-derives rather than being patched into agreement.
-QueryFixture MakeQueryFixture(const EvidenceScenarioBuilder& builder,
-                              std::string_view query_kind, core::StableId run_id,
+QueryFixture MakeQueryFixture(const EvidenceScenarioBuilder &builder,
+                              std::string_view query_kind,
+                              core::StableId run_id,
                               std::vector<core::StableId> scope_refs,
                               ev::QueryCompleteness completeness,
                               std::vector<ev::TruncationReason> reasons,
@@ -796,10 +805,10 @@ QueryFixture MakeQueryFixture(const EvidenceScenarioBuilder& builder,
 
   fixture.completion_fact =
       ValueOrAbort(ev::MakeQueryCompletionFact(fixture.descriptor));
-  fixture.binding = builder.MakeBinding(
-      run_id, fixture.completion_fact.fact_id, ev::kQueryCompletionWitnessId);
-  fixture.witness = builder.MakeWitness(
-      run_id, fixture.completion_fact.fact_id, ev::kQueryCompletionWitnessId);
+  fixture.binding = builder.MakeBinding(run_id, fixture.completion_fact.fact_id,
+                                        ev::kQueryCompletionWitnessId);
+  fixture.witness = builder.MakeWitness(run_id, fixture.completion_fact.fact_id,
+                                        ev::kQueryCompletionWitnessId);
 
   fixture.set.metadata.completeness = completeness;
   fixture.set.metadata.truncation_reasons =
@@ -812,7 +821,7 @@ QueryFixture MakeQueryFixture(const EvidenceScenarioBuilder& builder,
 
 // A fixture whose certificate, binding, selected witness, and metadata do not
 // re-derive together is a broken fixture, not a runtime condition.
-void SealQueryFixture(const QueryFixture& fixture) {
+void SealQueryFixture(const QueryFixture &fixture) {
   if (!ev::ValidateQueryCompletion(fixture.completion_fact, fixture.binding,
                                    fixture.witness, fixture.set.metadata,
                                    fixture.descriptor)
@@ -821,20 +830,16 @@ void SealQueryFixture(const QueryFixture& fixture) {
   }
 }
 
-QueryFixture MakeFactQueryFixture(const EvidenceScenarioBuilder& builder,
-                                  std::string_view query_kind,
-                                  core::StableId run_id,
-                                  std::vector<core::StableId> scope_refs,
-                                  std::vector<facts::AnalysisFact> facts,
-                                  ev::QueryCompleteness completeness,
-                                  std::vector<ev::TruncationReason> reasons,
-                                  std::size_t examined_items) {
-  QueryFixture fixture =
-      MakeQueryFixture(builder, query_kind, run_id, std::move(scope_refs),
-                       completeness, std::move(reasons), examined_items,
-                       ev::ReturnedMemberDigest(facts));
+QueryFixture MakeFactQueryFixture(
+    const EvidenceScenarioBuilder &builder, std::string_view query_kind,
+    core::StableId run_id, std::vector<core::StableId> scope_refs,
+    std::vector<facts::AnalysisFact> facts, ev::QueryCompleteness completeness,
+    std::vector<ev::TruncationReason> reasons, std::size_t examined_items) {
+  QueryFixture fixture = MakeQueryFixture(
+      builder, query_kind, run_id, std::move(scope_refs), completeness,
+      std::move(reasons), examined_items, ev::ReturnedMemberDigest(facts));
   std::sort(facts.begin(), facts.end(),
-            [](const facts::AnalysisFact& a, const facts::AnalysisFact& b) {
+            [](const facts::AnalysisFact &a, const facts::AnalysisFact &b) {
               return a.fact_id < b.fact_id;
             });
   fixture.set.facts = std::move(facts);
@@ -844,10 +849,10 @@ QueryFixture MakeFactQueryFixture(const EvidenceScenarioBuilder& builder,
 
 // The value-flow query is the one result that is not an EvidenceFactSet: its
 // returned members are the slice's nodes and edges, so its digest covers those.
-QueryFixture MakeFlowQueryFixture(const EvidenceScenarioBuilder& builder,
+QueryFixture MakeFlowQueryFixture(const EvidenceScenarioBuilder &builder,
                                   core::StableId run_id,
                                   std::vector<core::StableId> scope_refs,
-                                  const ev::FlowSlice& slice) {
+                                  const ev::FlowSlice &slice) {
   QueryFixture fixture = MakeQueryFixture(
       builder, "value_flow", run_id, std::move(scope_refs),
       ev::QueryCompleteness::kComplete, {},
@@ -856,8 +861,8 @@ QueryFixture MakeFlowQueryFixture(const EvidenceScenarioBuilder& builder,
   return fixture;
 }
 
-void FillProtoBinding(fp::RunFactBinding* out,
-                      const facts::RunFactBinding& binding) {
+void FillProtoBinding(fp::RunFactBinding *out,
+                      const facts::RunFactBinding &binding) {
   out->set_analysis_run_id(core::ToString(binding.run_id));
   out->set_fact_id(core::ToString(binding.fact_id));
   if (binding.confidence.has_value()) {
@@ -871,7 +876,7 @@ void FillProtoBinding(fp::RunFactBinding* out,
   out->set_is_current(binding.is_current);
 }
 
-void FillProtoWitness(fp::FactWitness* out, const facts::FactWitness& witness) {
+void FillProtoWitness(fp::FactWitness *out, const facts::FactWitness &witness) {
   out->set_analysis_run_id(core::ToString(witness.run_id));
   out->set_output_fact_id(core::ToString(witness.output_fact_id));
   out->set_witness_id(witness.witness_id);
@@ -909,12 +914,13 @@ struct DemoProgram {
   cpg::CpgNode vendor_validate;
 };
 
-DemoProgram MakeDemoProgram(const EvidenceScenarioBuilder& builder) {
+DemoProgram MakeDemoProgram(const EvidenceScenarioBuilder &builder) {
   DemoProgram program;
   program.run_id = builder.Id(core::IdKind::kAnalysisRun, kRunName);
   program.context = MakeProgramContext();
   program.decode = builder.MakeNode(kDecodeLabel, cpg::NodeKind::kFunction);
-  program.memcpy_site = builder.MakeNode(kMemcpyLabel, cpg::NodeKind::kCallSite);
+  program.memcpy_site =
+      builder.MakeNode(kMemcpyLabel, cpg::NodeKind::kCallSite);
   program.srcbuf = builder.MakeNode(kSrcBufLabel, cpg::NodeKind::kMemoryObject);
   program.dstbuf = builder.MakeNode(kDstBufLabel, cpg::NodeKind::kMemoryObject);
   program.copy_length =
@@ -932,8 +938,8 @@ DemoProgram MakeDemoProgram(const EvidenceScenarioBuilder& builder) {
 // sink's caller reads and writes, and the may-alias premise between them. Only
 // relations the case can represent appear here; a relation the model cannot
 // carry is never silently dropped.
-std::vector<cpg::CpgEdge> MakeDemoEdges(
-    const EvidenceScenarioBuilder& builder, const DemoProgram& program) {
+std::vector<cpg::CpgEdge> MakeDemoEdges(const EvidenceScenarioBuilder &builder,
+                                        const DemoProgram &program) {
   std::vector<cpg::CpgEdge> edges;
   edges.push_back(builder.MakeEdge("calls:decode:memcpy", cpg::EdgeKind::kCalls,
                                    program.decode.node_id,
@@ -941,15 +947,15 @@ std::vector<cpg::CpgEdge> MakeDemoEdges(
   edges.push_back(builder.MakeEdge(
       "calls:decode:vendor_validate", cpg::EdgeKind::kCalls,
       program.decode.node_id, program.vendor_validate.node_id));
-  edges.push_back(builder.MakeEdge(
-      "flows:srcbuf:copy_length", cpg::EdgeKind::kFlowsTo,
-      program.srcbuf.node_id, program.copy_length.node_id));
+  edges.push_back(
+      builder.MakeEdge("flows:srcbuf:copy_length", cpg::EdgeKind::kFlowsTo,
+                       program.srcbuf.node_id, program.copy_length.node_id));
   edges.push_back(builder.MakeEdge(
       "flows:copy_length:memcpy", cpg::EdgeKind::kFlowsTo,
       program.copy_length.node_id, program.memcpy_site.node_id));
-  edges.push_back(builder.MakeEdge("writes:decode:dstbuf", cpg::EdgeKind::kWrites,
-                                   program.decode.node_id,
-                                   program.dstbuf.node_id));
+  edges.push_back(
+      builder.MakeEdge("writes:decode:dstbuf", cpg::EdgeKind::kWrites,
+                       program.decode.node_id, program.dstbuf.node_id));
   edges.push_back(builder.MakeEdge("reads:decode:srcbuf", cpg::EdgeKind::kReads,
                                    program.decode.node_id,
                                    program.srcbuf.node_id));
@@ -965,27 +971,31 @@ std::vector<cpg::CpgEdge> MakeDemoEdges(
 // copied length, the destination object's capacity, the may-alias premise, and
 // the function-scoped unknowns. Each cell type mirrors the corresponding
 // builder helper so the rows stay schema-valid.
-facts::AnalysisFact MakeValueRangeFact(const DemoProgram& program) {
+facts::AnalysisFact MakeValueRangeFact(const DemoProgram &program) {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kDirectRead;
-  row.cells = {program.decode.node_id, program.copy_length_memory,
-               sem::ByteRangeKind::kKnown, std::int64_t{kCopyLengthMin},
+  row.cells = {program.decode.node_id,
+               program.copy_length_memory,
+               sem::ByteRangeKind::kKnown,
+               std::int64_t{kCopyLengthMin},
                static_cast<std::uint64_t>(kCopyLengthMax),
                sem::EpistemicState::kMust};
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact MakeObjectCapacityFact(const DemoProgram& program) {
+facts::AnalysisFact MakeObjectCapacityFact(const DemoProgram &program) {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kDirectWrite;
-  row.cells = {program.decode.node_id, program.dstbuf.node_id,
-               sem::ByteRangeKind::kKnown, std::int64_t{0},
+  row.cells = {program.decode.node_id,
+               program.dstbuf.node_id,
+               sem::ByteRangeKind::kKnown,
+               std::int64_t{0},
                static_cast<std::uint64_t>(kDstBufCapacity),
                sem::EpistemicState::kMust};
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact MakeMayAliasFact(const DemoProgram& program) {
+facts::AnalysisFact MakeMayAliasFact(const DemoProgram &program) {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kAlias;
   row.cells = {program.srcbuf.node_id, program.dstbuf.node_id,
@@ -993,7 +1003,7 @@ facts::AnalysisFact MakeMayAliasFact(const DemoProgram& program) {
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact MakeFunctionUnknownFact(const DemoProgram& program,
+facts::AnalysisFact MakeFunctionUnknownFact(const DemoProgram &program,
                                             std::string_view reason) {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kUnknownEffect;
@@ -1009,7 +1019,7 @@ struct DemoInput {
   core::StableId check_completion_fact_id;
 };
 
-DemoInput MakeDemoInput(const EvidenceScenarioBuilder& builder,
+DemoInput MakeDemoInput(const EvidenceScenarioBuilder &builder,
                         bool truncated_dominating_checks,
                         ev::TruncationReason dominating_checks_reason,
                         std::vector<core::StableId> dominating_check_scope,
@@ -1017,7 +1027,7 @@ DemoInput MakeDemoInput(const EvidenceScenarioBuilder& builder,
   const DemoProgram program = MakeDemoProgram(builder);
 
   DemoInput demo;
-  evidence::EvidenceBuildInput& input = demo.input;
+  evidence::EvidenceBuildInput &input = demo.input;
 
   input.claim_seed.finding_id =
       builder.Id(core::IdKind::kFact, "finding:overflow_001");
@@ -1035,25 +1045,24 @@ DemoInput MakeDemoInput(const EvidenceScenarioBuilder& builder,
   const facts::AnalysisFact vendor_unknown =
       MakeFunctionUnknownFact(program, kVendorUnknownReason);
 
-  ev::FlowSlice& slice = input.flow_slice;
-  slice.nodes = {program.decode,   program.memcpy_site, program.srcbuf,
-                 program.dstbuf,   program.copy_length, program.entry,
+  ev::FlowSlice &slice = input.flow_slice;
+  slice.nodes = {program.decode,         program.memcpy_site, program.srcbuf,
+                 program.dstbuf,         program.copy_length, program.entry,
                  program.vendor_validate};
   slice.edges = MakeDemoEdges(builder, program);
   slice.supporting_facts = {range_fact, alias_fact};
   slice.unknowns = {check_unknown, vendor_unknown};
-  for (const auto& fact : slice.supporting_facts) {
+  for (const auto &fact : slice.supporting_facts) {
     slice.provenance_refs.push_back(fact.fact_id);
   }
-  for (const auto& fact : slice.unknowns) {
+  for (const auto &fact : slice.unknowns) {
     slice.provenance_refs.push_back(fact.fact_id);
   }
   std::sort(slice.provenance_refs.begin(), slice.provenance_refs.end());
 
-  QueryFixture flow_fixture =
-      MakeFlowQueryFixture(builder, program.run_id,
-                           {program.srcbuf.node_id, program.memcpy_site.node_id},
-                           slice);
+  QueryFixture flow_fixture = MakeFlowQueryFixture(
+      builder, program.run_id,
+      {program.srcbuf.node_id, program.memcpy_site.node_id}, slice);
   slice.metadata = flow_fixture.set.metadata;
 
   QueryFixture range_fixture = MakeFactQueryFixture(
@@ -1074,17 +1083,17 @@ DemoInput MakeDemoInput(const EvidenceScenarioBuilder& builder,
   // that records the reason instead of a negative fact.
   const ev::QueryCompleteness check_completeness =
       truncated_dominating_checks ? ev::QueryCompleteness::kTruncated
-                                 : ev::QueryCompleteness::kComplete;
+                                  : ev::QueryCompleteness::kComplete;
   const std::vector<ev::TruncationReason> check_reasons =
       truncated_dominating_checks
           ? std::vector<ev::TruncationReason>{dominating_checks_reason}
           : std::vector<ev::TruncationReason>{};
-  // The dominating-check query is scoped to the sink unless the caller overrides
-  // it, which is what the M10B producer records. A caller that overrides it
-  // supplies an ordered scope list whose *leading* member is an enclosing
-  // entity, so the `dominates_bounds_check(scope, sink)` the builder emits names
-  // two distinct handles rather than the sink twice — the convention the
-  // hand-authored DEM-001 fixture uses.
+  // The dominating-check query is scoped to the sink unless the caller
+  // overrides it, which is what the M10B producer records. A caller that
+  // overrides it supplies an ordered scope list whose *leading* member is an
+  // enclosing entity, so the `dominates_bounds_check(scope, sink)` the builder
+  // emits names two distinct handles rather than the sink twice — the
+  // convention the hand-authored DEM-001 fixture uses.
   if (dominating_check_scope.empty()) {
     dominating_check_scope.push_back(input.claim_seed.sink_ref);
   }
@@ -1115,10 +1124,10 @@ DemoInput MakeDemoInput(const EvidenceScenarioBuilder& builder,
   fixtures.push_back(std::move(unknown_fixture));
   fixtures.push_back(std::move(check_fixture));
   std::sort(fixtures.begin(), fixtures.end(),
-            [](const QueryFixture& a, const QueryFixture& b) {
+            [](const QueryFixture &a, const QueryFixture &b) {
               return a.completion_fact.fact_id < b.completion_fact.fact_id;
             });
-  for (const QueryFixture& fixture : fixtures) {
+  for (const QueryFixture &fixture : fixtures) {
     input.query_completion_facts.push_back(fixture.completion_fact);
     input.query_completion_bindings.push_back(fixture.binding);
   }
@@ -1126,9 +1135,9 @@ DemoInput MakeDemoInput(const EvidenceScenarioBuilder& builder,
   // The handoff's provenance closure is rooted at the value-flow certificate,
   // as production roots it, and reports the truncated check at the handoff
   // level rather than hiding it.
-  auto& provenance = input.provenance;
+  auto &provenance = input.provenance;
   provenance.set_run_id(core::ToString(program.run_id));
-  for (const QueryFixture& fixture : fixtures) {
+  for (const QueryFixture &fixture : fixtures) {
     if (fixture.descriptor.query_kind == "value_flow") {
       provenance.set_fact_id(core::ToString(fixture.completion_fact.fact_id));
       auto proto_fact = facts::ToProtoFact(fixture.completion_fact);
@@ -1147,7 +1156,7 @@ DemoInput MakeDemoInput(const EvidenceScenarioBuilder& builder,
   return demo;
 }
 
-}  // namespace
+} // namespace
 
 evidence::QueryResultMetadata EvidenceScenarioBuilder::MakeMetadata(
     std::string_view run_name, std::string_view provenance_name,
@@ -1165,20 +1174,20 @@ evidence::QueryResultMetadata EvidenceScenarioBuilder::MakeMetadata(
 
 // --- M10C semantic-case factories -------------------------------------------
 
-EvidenceScenarioBuilder& EvidenceScenarioBuilder::WithTruncatedDominatingChecks(
+EvidenceScenarioBuilder &EvidenceScenarioBuilder::WithTruncatedDominatingChecks(
     evidence::TruncationReason reason) {
   truncated_dominating_checks_ = true;
   dominating_checks_reason_ = reason;
   return *this;
 }
 
-EvidenceScenarioBuilder& EvidenceScenarioBuilder::WithDominatingCheckScope(
+EvidenceScenarioBuilder &EvidenceScenarioBuilder::WithDominatingCheckScope(
     std::vector<core::StableId> refs) {
   dominating_check_scope_ = std::move(refs);
   return *this;
 }
 
-EvidenceScenarioBuilder& EvidenceScenarioBuilder::WithDominatingCheckFound() {
+EvidenceScenarioBuilder &EvidenceScenarioBuilder::WithDominatingCheckFound() {
   dominating_check_found_ = true;
   return *this;
 }
@@ -1186,9 +1195,9 @@ EvidenceScenarioBuilder& EvidenceScenarioBuilder::WithDominatingCheckFound() {
 evidence::EvidenceBuildRequest EvidenceScenarioBuilder::BuildRequestFor(
     evidence::EvidenceLevel level, bool truncated_dominating_checks,
     evidence::TruncationReason reason) const {
-  DemoInput demo = MakeDemoInput(*this, truncated_dominating_checks, reason,
-                                 dominating_check_scope_,
-                                 dominating_check_found_);
+  DemoInput demo =
+      MakeDemoInput(*this, truncated_dominating_checks, reason,
+                    dominating_check_scope_, dominating_check_found_);
   evidence::EvidenceBuildRequest request;
   request.context = MakeProgramContext();
   request.input = std::move(demo.input);
@@ -1208,8 +1217,8 @@ evidence::EvidenceBuildRequest EvidenceScenarioBuilder::BuildRequestFor(
   return request;
 }
 
-evidence::EvidenceBuildRequest EvidenceScenarioBuilder::BuildRequest(
-    evidence::EvidenceLevel level) const {
+evidence::EvidenceBuildRequest
+EvidenceScenarioBuilder::BuildRequest(evidence::EvidenceLevel level) const {
   return BuildRequestFor(level, truncated_dominating_checks_,
                          dominating_checks_reason_);
 }
@@ -1218,21 +1227,21 @@ evidence::EvidenceBuildRequest EvidenceScenarioBuilder::BuildRequest(
 // L1 case uses: the claim and its subject, the primary supporting fact, the
 // primary path, one expandable omission for the causal slice L0 withholds, and
 // the initial verification state. L0 carries no proof obligation.
-evidence::EvidenceCase EvidenceScenarioBuilder::MakeValidMinimalEvidenceCase()
-    const {
+evidence::EvidenceCase
+EvidenceScenarioBuilder::MakeValidMinimalEvidenceCase() const {
   const core::StableId run_id = Id(core::IdKind::kAnalysisRun, kRunName);
-  DemoInput demo = MakeDemoInput(*this, /*truncated_dominating_checks=*/false,
-                                 evidence::TruncationReason::kUnspecified,
-                                 dominating_check_scope_,
-                                 dominating_check_found_);
+  DemoInput demo =
+      MakeDemoInput(*this, /*truncated_dominating_checks=*/false,
+                    evidence::TruncationReason::kUnspecified,
+                    dominating_check_scope_, dominating_check_found_);
 
   // Only the claim's own subject and the primary path survive the L0
   // projection; the rest of the causal slice stays an expandable omission.
-  const CaseGraph graph = ProjectGraph(
-      demo.input,
-      {std::string(kCopyLengthLabel), std::string(kMemcpyLabel),
-       std::string(kDstBufLabel)},
-      "", "");
+  const CaseGraph graph =
+      ProjectGraph(demo.input,
+                   {std::string(kCopyLengthLabel), std::string(kMemcpyLabel),
+                    std::string(kDstBufLabel)},
+                   "", "");
 
   evidence::EvidenceCase value;
   value.schema_version = std::string(evidence::kEvidenceSchemaVersion);
@@ -1242,9 +1251,8 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeValidMinimalEvidenceCase()
   value.primary_claim.id = std::string(kClaimId);
   value.primary_claim.kind = evidence::ClaimKind::kBufferOverflow;
   value.primary_claim.subject = EntityLocalId(kDstBufLabel);
-  value.primary_claim.predicate =
-      OverflowPredicate(EntityLocalId(kCopyLengthLabel),
-                        EntityLocalId(kDstBufLabel));
+  value.primary_claim.predicate = OverflowPredicate(
+      EntityLocalId(kCopyLengthLabel), EntityLocalId(kDstBufLabel));
   value.primary_claim.severity = evidence::Severity::kHigh;
   value.primary_claim.description =
       "the copied length may exceed the destination buffer capacity";
@@ -1264,14 +1272,14 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeValidMinimalEvidenceCase()
                            run_id, {}),
   };
 
-  const facts::AnalysisFact& range_fact = SingleFactOrAbort(demo.input.ranges);
-  value.facts.push_back(MakeEirFact(
-      std::string(kFactRangeId), range_fact.fact_id,
-      RangePredicate(EntityLocalId(kCopyLengthLabel), kCopyLengthMin,
-                     kCopyLengthMax),
-      evidence::EpistemicState::kMust, evidence::Confidence::kExact,
-      std::string(kRangeProducer), std::string(kProvenanceRangeId),
-      /*derived=*/false));
+  const facts::AnalysisFact &range_fact = SingleFactOrAbort(demo.input.ranges);
+  value.facts.push_back(
+      MakeEirFact(std::string(kFactRangeId), range_fact.fact_id,
+                  RangePredicate(EntityLocalId(kCopyLengthLabel),
+                                 kCopyLengthMin, kCopyLengthMax),
+                  evidence::EpistemicState::kMust, evidence::Confidence::kExact,
+                  std::string(kRangeProducer), std::string(kProvenanceRangeId),
+                  /*derived=*/false));
 
   value.omissions.push_back(MakeOmission(
       std::string(kOmissionLevelProjectionId), "level_projection",
@@ -1284,15 +1292,16 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeValidMinimalEvidenceCase()
 // The fully populated DEM-001 case. It is always projected from the truncated
 // dominating-check handoff, so the missing check stays visible as an unknown
 // plus an expandable omission and is never turned into a negative fact.
-evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const {
+evidence::EvidenceCase
+EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const {
   const core::StableId run_id = Id(core::IdKind::kAnalysisRun, kRunName);
   const evidence::TruncationReason reason =
       dominating_checks_reason_ == evidence::TruncationReason::kUnspecified
           ? evidence::TruncationReason::kMaxPaths
           : dominating_checks_reason_;
-  DemoInput demo = MakeDemoInput(*this, /*truncated_dominating_checks=*/true,
-                                 reason, dominating_check_scope_,
-                                 dominating_check_found_);
+  DemoInput demo =
+      MakeDemoInput(*this, /*truncated_dominating_checks=*/true, reason,
+                    dominating_check_scope_, dominating_check_found_);
 
   const core::StableId summary_id =
       Id(core::IdKind::kFunctionSummary, kVendorValidateLabel);
@@ -1307,9 +1316,8 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
   value.primary_claim.id = std::string(kClaimId);
   value.primary_claim.kind = evidence::ClaimKind::kBufferOverflow;
   value.primary_claim.subject = EntityLocalId(kDstBufLabel);
-  value.primary_claim.predicate =
-      OverflowPredicate(EntityLocalId(kCopyLengthLabel),
-                        EntityLocalId(kDstBufLabel));
+  value.primary_claim.predicate = OverflowPredicate(
+      EntityLocalId(kCopyLengthLabel), EntityLocalId(kDstBufLabel));
   value.primary_claim.severity = evidence::Severity::kHigh;
   value.primary_claim.description =
       "the copied length is not bounded by the destination capacity at the "
@@ -1317,13 +1325,13 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
 
   value.entities = graph.entities;
   value.edges = graph.edges;
-  value.paths.push_back(MakeEirPath(
-      std::string(kPathValueFlowId), evidence::PathKind::kValueFlow,
-      {EntityLocalId(kSrcBufLabel), EntityLocalId(kCopyLengthLabel),
-       EntityLocalId(kMemcpyLabel)},
-      {AliasPredicate(EntityLocalId(kSrcBufLabel),
-                      EntityLocalId(kDstBufLabel))},
-      evidence::Feasibility::kSat, std::string(kProvenanceFlowId)));
+  value.paths.push_back(
+      MakeEirPath(std::string(kPathValueFlowId), evidence::PathKind::kValueFlow,
+                  {EntityLocalId(kSrcBufLabel), EntityLocalId(kCopyLengthLabel),
+                   EntityLocalId(kMemcpyLabel)},
+                  {AliasPredicate(EntityLocalId(kSrcBufLabel),
+                                  EntityLocalId(kDstBufLabel))},
+                  evidence::Feasibility::kSat, std::string(kProvenanceFlowId)));
 
   value.provenance = {
       MakeProvenanceRecord(std::string(kProvenanceRangeId), kRangeProducer,
@@ -1331,10 +1339,10 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
       MakeProvenanceRecord(std::string(kProvenanceCapacityId),
                            kCapacityProducer, "capacity.object.v1",
                            "anchor:dstbuf", run_id, {}),
-      MakeProvenanceRecord(std::string(kProvenanceAliasId), kAliasProducer,
-                           "alias.may.v1", "anchor:dstbuf", run_id,
-                           {std::string(kFactRangeId),
-                            std::string(kFactCapacityId)}),
+      MakeProvenanceRecord(
+          std::string(kProvenanceAliasId), kAliasProducer, "alias.may.v1",
+          "anchor:dstbuf", run_id,
+          {std::string(kFactRangeId), std::string(kFactCapacityId)}),
       MakeProvenanceRecord(std::string(kProvenanceFlowId), kFlowProducer,
                            "value_flow.interprocedural.v1", "anchor:memcpy",
                            run_id, {}),
@@ -1351,18 +1359,17 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
                            "anchor:protocol", run_id, {}),
   };
 
-  const facts::AnalysisFact& range_fact = SingleFactOrAbort(demo.input.ranges);
-  const facts::AnalysisFact& capacity_fact =
+  const facts::AnalysisFact &range_fact = SingleFactOrAbort(demo.input.ranges);
+  const facts::AnalysisFact &capacity_fact =
       SingleFactOrAbort(demo.input.capacities);
-  const facts::AnalysisFact& alias_fact =
-      SingleFactOrAbort(demo.input.aliases);
-  value.facts.push_back(MakeEirFact(
-      std::string(kFactRangeId), range_fact.fact_id,
-      RangePredicate(EntityLocalId(kCopyLengthLabel), kCopyLengthMin,
-                     kCopyLengthMax),
-      evidence::EpistemicState::kMust, evidence::Confidence::kExact,
-      std::string(kRangeProducer), std::string(kProvenanceRangeId),
-      /*derived=*/false));
+  const facts::AnalysisFact &alias_fact = SingleFactOrAbort(demo.input.aliases);
+  value.facts.push_back(
+      MakeEirFact(std::string(kFactRangeId), range_fact.fact_id,
+                  RangePredicate(EntityLocalId(kCopyLengthLabel),
+                                 kCopyLengthMin, kCopyLengthMax),
+                  evidence::EpistemicState::kMust, evidence::Confidence::kExact,
+                  std::string(kRangeProducer), std::string(kProvenanceRangeId),
+                  /*derived=*/false));
   value.facts.push_back(MakeEirFact(
       std::string(kFactCapacityId), capacity_fact.fact_id,
       CapacityPredicate(EntityLocalId(kDstBufLabel), kDstBufCapacity),
@@ -1383,10 +1390,9 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
 
   value.hypotheses.push_back(MakeHypothesis(
       std::string(kHypothesisId),
-      Call("postcondition",
-           {Reference(EntityLocalId(kVendorValidateLabel)),
-            WithinCapacity(EntityLocalId(kCopyLengthLabel),
-                           EntityLocalId(kDstBufLabel))}),
+      Call("postcondition", {Reference(EntityLocalId(kVendorValidateLabel)),
+                             WithinCapacity(EntityLocalId(kCopyLengthLabel),
+                                            EntityLocalId(kDstBufLabel))}),
       "review.agent.hypothesis.v1",
       "the vendor validator clamps the length before the sink",
       evidence::Confidence::kLow));
@@ -1407,12 +1413,12 @@ evidence::EvidenceCase EvidenceScenarioBuilder::MakeOverflowEvidenceCase() const
       std::string(kVendorUnknownReason), {std::string(kFactCapacityId)},
       "infer_contract(E_vendor_validate)"));
 
-  value.constraints.push_back(MakeConstraint(
-      std::string(kConstraintId),
-      WithinCapacity(EntityLocalId(kCopyLengthLabel),
-                     EntityLocalId(kDstBufLabel)),
-      "path", evidence::EpistemicState::kMust,
-      std::string(kProvenanceSpecificationId)));
+  value.constraints.push_back(
+      MakeConstraint(std::string(kConstraintId),
+                     WithinCapacity(EntityLocalId(kCopyLengthLabel),
+                                    EntityLocalId(kDstBufLabel)),
+                     "path", evidence::EpistemicState::kMust,
+                     std::string(kProvenanceSpecificationId)));
 
   value.proof_obligations.push_back(MakeProofObligation(
       std::string(kObligationId),
@@ -1471,4 +1477,4 @@ evidence::EvidenceCase MakeOverflowEvidenceCase() {
   return EvidenceScenarioBuilder().MakeOverflowEvidenceCase();
 }
 
-}  // namespace veritas::testing
+} // namespace veritas::testing

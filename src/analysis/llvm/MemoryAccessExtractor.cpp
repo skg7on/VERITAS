@@ -22,29 +22,29 @@ namespace veritas::analysis::llvm {
 
 std::vector<MemoryAccessExtractor::MemoryAccess>
 MemoryAccessExtractor::ExtractMemoryAccesses(
-    const ::llvm::Function* func) const {
+    const ::llvm::Function *func) const {
   std::vector<MemoryAccess> accesses;
   if (!func || func->isDeclaration()) {
     return accesses;
   }
 
-  for (const auto& bb : *func) {
-    for (const auto& inst : bb) {
-      if (const auto* load_inst = ::llvm::dyn_cast<::llvm::LoadInst>(&inst)) {
+  for (const auto &bb : *func) {
+    for (const auto &inst : bb) {
+      if (const auto *load_inst = ::llvm::dyn_cast<::llvm::LoadInst>(&inst)) {
         accesses.push_back({AccessKind::kRead,
                             GetLocationName(load_inst->getPointerOperand()),
                             &inst});
-      } else if (const auto* store_inst =
+      } else if (const auto *store_inst =
                      ::llvm::dyn_cast<::llvm::StoreInst>(&inst)) {
         accesses.push_back({AccessKind::kWrite,
                             GetLocationName(store_inst->getPointerOperand()),
                             &inst});
-      } else if (const auto* rmw_inst =
+      } else if (const auto *rmw_inst =
                      ::llvm::dyn_cast<::llvm::AtomicRMWInst>(&inst)) {
         accesses.push_back({AccessKind::kReadWrite,
                             GetLocationName(rmw_inst->getPointerOperand()),
                             &inst});
-      } else if (const auto* cmpxchg_inst =
+      } else if (const auto *cmpxchg_inst =
                      ::llvm::dyn_cast<::llvm::AtomicCmpXchgInst>(&inst)) {
         accesses.push_back({AccessKind::kReadWrite,
                             GetLocationName(cmpxchg_inst->getPointerOperand()),
@@ -60,8 +60,8 @@ MemoryAccessExtractor::ExtractMemoryAccesses(
   return accesses;
 }
 
-std::string MemoryAccessExtractor::GetLocationName(
-    const ::llvm::Value* ptr) const {
+std::string
+MemoryAccessExtractor::GetLocationName(const ::llvm::Value *ptr) const {
   if (!ptr) {
     return "<unknown>";
   }
@@ -82,4 +82,4 @@ std::string MemoryAccessExtractor::GetLocationName(
   return "<unnamed>";
 }
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm

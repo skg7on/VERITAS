@@ -26,9 +26,9 @@ namespace {
 
 namespace sem = analysis::semantic;
 
-bool HasAlias(const sem::NormalizedAnalysisFacts& facts, sem::AliasKind kind,
+bool HasAlias(const sem::NormalizedAnalysisFacts &facts, sem::AliasKind kind,
               sem::EpistemicState epistemic) {
-  for (const auto& alias : facts.aliases) {
+  for (const auto &alias : facts.aliases) {
     if (alias.kind == kind && alias.epistemic == epistemic) {
       return true;
     }
@@ -36,9 +36,9 @@ bool HasAlias(const sem::NormalizedAnalysisFacts& facts, sem::AliasKind kind,
   return false;
 }
 
-bool HasScopedBudgetUnknown(const sem::NormalizedAnalysisFacts& facts,
+bool HasScopedBudgetUnknown(const sem::NormalizedAnalysisFacts &facts,
                             std::string_view reason) {
-  for (const auto& unknown : facts.unknowns) {
+  for (const auto &unknown : facts.unknowns) {
     if (unknown.scope == "analysis_truncated" && unknown.reason == reason &&
         unknown.epistemic == sem::EpistemicState::kUnknown) {
       return true;
@@ -47,9 +47,9 @@ bool HasScopedBudgetUnknown(const sem::NormalizedAnalysisFacts& facts,
   return false;
 }
 
-bool HasAliasObjectKind(const sem::NormalizedAnalysisFacts& facts,
+bool HasAliasObjectKind(const sem::NormalizedAnalysisFacts &facts,
                         sem::AbstractObjectKind kind) {
-  for (const auto& alias : facts.aliases) {
+  for (const auto &alias : facts.aliases) {
     if (alias.left.object.kind == kind || alias.right.object.kind == kind) {
       return true;
     }
@@ -57,9 +57,9 @@ bool HasAliasObjectKind(const sem::NormalizedAnalysisFacts& facts,
   return false;
 }
 
-std::string AliasObservations(const sem::NormalizedAnalysisFacts& facts) {
+std::string AliasObservations(const sem::NormalizedAnalysisFacts &facts) {
   std::string text;
-  for (const auto& alias : facts.aliases) {
+  for (const auto &alias : facts.aliases) {
     if (!text.empty()) {
       text += ", ";
     }
@@ -97,5 +97,5 @@ TEST(SemanticMemorySvfTest, FactBudgetCreatesScopedExplicitUnknown) {
   EXPECT_TRUE(HasScopedBudgetUnknown(snapshot->mapping.facts, "fact_limit"));
 }
 
-}  // namespace
-}  // namespace veritas::testing
+} // namespace
+} // namespace veritas::testing

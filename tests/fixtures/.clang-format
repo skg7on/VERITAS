@@ -1,0 +1,8 @@
+---
+# Fixture sources are analysis *inputs*, not maintained code. Their bytes feed
+# identity digests, source line numbers, structural-index offsets, and the
+# reviewed golden artefacts under tests/golden/. Reformatting them would change
+# analysis output and silently invalidate those goldens, so clang-format (and
+# the pre-commit hook) must leave this subtree byte-for-byte untouched.
+DisableFormat: true
+...

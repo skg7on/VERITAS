@@ -78,9 +78,9 @@ v2::FunctionSummary V2Summary(std::string_view name) {
   return summary;
 }
 
-void AddCall(v2::FunctionSummary* summary, std::string_view from,
+void AddCall(v2::FunctionSummary *summary, std::string_view from,
              std::string_view to) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(
       core::ToString(CallSiteId(std::string(from) + "->" + std::string(to))));
   call->set_callee_symbol(std::string(to));
@@ -90,12 +90,12 @@ void AddCall(v2::FunctionSummary* summary, std::string_view from,
   call->set_provenance_ref("test:call");
 }
 
-void AddWrite(v2::FunctionSummary* summary, std::string_view memory) {
-  auto* effect = summary->add_memory_effects();
+void AddWrite(v2::FunctionSummary *summary, std::string_view memory) {
+  auto *effect = summary->add_memory_effects();
   effect->set_kind(v1::EFFECT_KIND_WRITE);
   effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   effect->set_provenance_ref("test:write");
-  auto* location = effect->mutable_location();
+  auto *location = effect->mutable_location();
   location->set_memory_location_id(core::ToString(MemoryId(memory)));
 }
 
@@ -112,43 +112,49 @@ std::vector<summary::SummaryArtifact> ChainProgram() {
 std::filesystem::path TempDbPath() {
   std::string tmpl =
       (std::filesystem::temp_directory_path() / "veritas-wpa-XXXXXX").string();
-  char* made = ::mkdtemp(tmpl.data());
+  char *made = ::mkdtemp(tmpl.data());
   return std::filesystem::path(made);
 }
 
 // Records the SCC order in which Execute is called; returns an empty raw
 // evaluation (the canonicalizer produces no facts, which is a valid result).
 class RecordingExecutor : public WpaExecutor {
- public:
-  explicit RecordingExecutor(std::vector<core::StableId>& order)
+public:
+  explicit RecordingExecutor(std::vector<core::StableId> &order)
       : order_(order) {}
 
   facts::EngineIdentity identity() const override {
     return facts::EngineIdentity::kSouffle;
   }
+
   std::string_view toolchain_identity() const override {
     return "test-toolchain";
   }
-  StatusOr<facts::RawWpaEvaluation> Execute(
-      const WpaExecutionEnvelope& envelope, const WpaExecutionLimits&) const override {
+
+  StatusOr<facts::RawWpaEvaluation>
+  Execute(const WpaExecutionEnvelope &envelope,
+          const WpaExecutionLimits &) const override {
     order_.push_back(envelope.logical.scc_id);
     return facts::RawWpaEvaluation{};
   }
 
- private:
-  std::vector<core::StableId>& order_;
+private:
+  std::vector<core::StableId> &order_;
 };
 
 class FailingExecutor : public WpaExecutor {
- public:
+public:
   facts::EngineIdentity identity() const override {
     return facts::EngineIdentity::kSouffle;
   }
+
   std::string_view toolchain_identity() const override {
     return "test-toolchain";
   }
-  StatusOr<facts::RawWpaEvaluation> Execute(
-      const WpaExecutionEnvelope&, const WpaExecutionLimits&) const override {
+
+  StatusOr<facts::RawWpaEvaluation>
+  Execute(const WpaExecutionEnvelope &,
+          const WpaExecutionLimits &) const override {
     return Status::Internal("injected failure");
   }
 };
@@ -158,7 +164,7 @@ class FailingExecutor : public WpaExecutor {
 // derives Reachable(caller, callee) from a DirectCall root; MemoryEffects
 // derives MayWrite(function, memory) from a DirectWrite root.
 class FactEmittingExecutor : public WpaExecutor {
- public:
+public:
   struct Observation {
     core::StableId scc_id;
     WpaComponentKind component;
@@ -168,16 +174,17 @@ class FactEmittingExecutor : public WpaExecutor {
   facts::EngineIdentity identity() const override {
     return facts::EngineIdentity::kSouffle;
   }
+
   std::string_view toolchain_identity() const override {
     return "test-toolchain";
   }
 
-  StatusOr<facts::RawWpaEvaluation> Execute(
-      const WpaExecutionEnvelope& envelope, const WpaExecutionLimits&) const override {
-    const auto& logical = envelope.logical;
-    observations_.push_back(
-        Observation{logical.scc_id, logical.component, {}});
-    for (const auto& root : logical.successor_roots) {
+  StatusOr<facts::RawWpaEvaluation>
+  Execute(const WpaExecutionEnvelope &envelope,
+          const WpaExecutionLimits &) const override {
+    const auto &logical = envelope.logical;
+    observations_.push_back(Observation{logical.scc_id, logical.component, {}});
+    for (const auto &root : logical.successor_roots) {
       observations_.back().successor_roots.push_back(root.fact);
     }
 
@@ -186,11 +193,11 @@ class FactEmittingExecutor : public WpaExecutor {
     const facts::RelationId input_relation =
         reach ? facts::RelationId::kDirectCall
               : facts::RelationId::kDirectWrite;
-    for (const auto& root : logical.local_roots) {
+    for (const auto &root : logical.local_roots) {
       if (root.fact.row.relation != input_relation) {
         continue;
       }
-      const auto& in = root.fact.row;
+      const auto &in = root.fact.row;
       facts::SemanticRow result;
       std::string rule;
       if (reach) {
@@ -212,14 +219,14 @@ class FactEmittingExecutor : public WpaExecutor {
                              .rule_id = rule,
                              .input = facts::SemanticKey{in},
                              .input_ordinal = 0});
-      break;  // one derived fact per component
+      break; // one derived fact per component
     }
     return raw;
   }
 
-  const std::vector<Observation>& observations() const { return observations_; }
+  const std::vector<Observation> &observations() const { return observations_; }
 
- private:
+private:
   mutable std::vector<Observation> observations_;
 };
 
@@ -309,20 +316,20 @@ TEST(WpaOrchestratorTest, RepeatedRunSchedulesNoPredecessors) {
                            "vcs_revision, source_tree_hash) VALUES(?, ?, ?, ?)",
                            {"repo:test", "git", "r", "tree"})
                   .ok());
-  ASSERT_TRUE(repo->metadata_store()
-                  .Execute("INSERT INTO revisions(revision_id, repository_id, "
-                           "vcs_revision) VALUES(?, ?, ?)",
-                           {core::ToString(request.run.revision_id), "repo:test",
-                            "r"})
-                  .ok());
+  ASSERT_TRUE(
+      repo->metadata_store()
+          .Execute("INSERT INTO revisions(revision_id, repository_id, "
+                   "vcs_revision) VALUES(?, ?, ?)",
+                   {core::ToString(request.run.revision_id), "repo:test", "r"})
+          .ok());
   ASSERT_TRUE(repo->metadata_store()
                   .Execute("INSERT INTO build_variants(build_variant_id, "
                            "target_triple, compiler_id, compiler_version, "
                            "compile_options_hash, macro_set_hash, "
                            "include_closure_hash, type_layout_hash) VALUES("
                            "?, ?, ?, ?, ?, ?, ?, ?)",
-                           {core::ToString(request.run.build_variant_id), "arm64",
-                            "clang", "24", "a", "b", "c", "d"})
+                           {core::ToString(request.run.build_variant_id),
+                            "arm64", "clang", "24", "a", "b", "c", "d"})
                   .ok());
 
   auto first = orchestrator.Run(request);
@@ -377,8 +384,8 @@ TEST(WpaOrchestratorTest, TwoComponentsPreserveReachabilitySupport) {
   auto scc_a = scc->SccForFunction(FunctionId("a"));
   ASSERT_TRUE(scc_a.ok());
 
-  const FactEmittingExecutor::Observation* a_reach = nullptr;
-  for (const auto& obs : executor.observations()) {
+  const FactEmittingExecutor::Observation *a_reach = nullptr;
+  for (const auto &obs : executor.observations()) {
     if (obs.scc_id == *scc_a &&
         obs.component == WpaComponentKind::kReachability) {
       a_reach = &obs;
@@ -389,8 +396,8 @@ TEST(WpaOrchestratorTest, TwoComponentsPreserveReachabilitySupport) {
   // Successor support is re-projected into the support relation by the
   // materializer (kSupportReachableCall mirrors kReachableCall's columns).
   bool saw_reachable_bc = false;
-  for (const auto& root : a_reach->successor_roots) {
-    const auto& row = root.row;
+  for (const auto &root : a_reach->successor_roots) {
+    const auto &row = root.row;
     if (row.relation == facts::RelationId::kSupportReachableCall &&
         std::get<core::StableId>(row.cells[0]) == FunctionId("b") &&
         std::get<core::StableId>(row.cells[1]) == FunctionId("c")) {
@@ -403,5 +410,5 @@ TEST(WpaOrchestratorTest, TwoComponentsPreserveReachabilitySupport) {
   std::filesystem::remove_all(db);
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

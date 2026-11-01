@@ -29,6 +29,9 @@ trap 'rm -rf "$temp_dir"' EXIT
 format_failed=0
 while IFS= read -r -d '' path; do
   case "$path" in
+    # Vendored upstream code keeps its own style (and its own license
+    # headers); reformatting it would diverge from the pinned revision.
+    third_party/*) continue ;;
     *.c | *.cc | *.cpp | *.cxx | *.h | *.hh | *.hpp | *.hxx | *.inc | *.ipp | *.tpp) ;;
     *) continue ;;
   esac

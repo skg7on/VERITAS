@@ -59,8 +59,8 @@ struct WpaComponentKey {
   core::StableId scc_id;
   WpaComponentKind component = WpaComponentKind::kReachability;
 
-  auto operator<=>(const WpaComponentKey&) const = default;
-  bool operator==(const WpaComponentKey&) const = default;
+  auto operator<=>(const WpaComponentKey &) const = default;
+  bool operator==(const WpaComponentKey &) const = default;
 };
 
 // The completion of one component: its key, the immutable object-store key of
@@ -97,28 +97,29 @@ struct ResultCacheDescriptor {
 // Builds the descriptor for a component from its run manifest and key. The
 // logical input hash is known before execution, so the descriptor (and its key)
 // can be formed ahead of a run.
-ResultCacheDescriptor MakeResultCacheDescriptor(
-    const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
-    std::string_view logical_input_hash);
+ResultCacheDescriptor
+MakeResultCacheDescriptor(const facts::AnalysisRunManifest &run,
+                          const WpaComponentKey &key,
+                          std::string_view logical_input_hash);
 
 class WpaRunRepository {
- public:
+public:
   // Opens the metadata database and the component-result object store.
-  static StatusOr<WpaRunRepository> Open(const std::filesystem::path& db_path);
+  static StatusOr<WpaRunRepository> Open(const std::filesystem::path &db_path);
 
-  WpaRunRepository(WpaRunRepository&&) noexcept;
-  WpaRunRepository& operator=(WpaRunRepository&&) noexcept;
+  WpaRunRepository(WpaRunRepository &&) noexcept;
+  WpaRunRepository &operator=(WpaRunRepository &&) noexcept;
 
   // Records a run as in progress. Idempotent for the same run_id.
-  Status BeginRun(const facts::AnalysisRunManifest& run);
+  Status BeginRun(const facts::AnalysisRunManifest &run);
 
   // Loads a reusable result from the cache, revalidating the metadata row, the
   // stored object, the deserialized SCC/component/logical-input identity, every
   // fact identity, and the recomputed fixpoint/external hashes against the
   // expected descriptor. Any mismatch is a hard cache-integrity error. Returns
   // nullopt when no entry matches.
-  StatusOr<std::optional<WpaComponentResult>> LoadReusableComponent(
-      const ResultCacheDescriptor& descriptor);
+  StatusOr<std::optional<WpaComponentResult>>
+  LoadReusableComponent(const ResultCacheDescriptor &descriptor);
 
   // Stores a successful component result: the immutable object, and the cache
   // and run-state rows that reference it. The object write is immediate and
@@ -127,9 +128,10 @@ class WpaRunRepository {
   // component per (SCC, kind) pair. The returned completion owns the payload; a
   // caller that has no further use for its own copy should pass it by move
   // rather than paying for a second copy of every fact and witness in the run.
-  StatusOr<WpaComponentCompletion> StoreSuccessfulComponent(
-      const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
-      WpaComponentResult result);
+  StatusOr<WpaComponentCompletion>
+  StoreSuccessfulComponent(const facts::AnalysisRunManifest &run,
+                           const WpaComponentKey &key,
+                           WpaComponentResult result);
 
   // Commits every queued cache and run-state row in one transaction.
   // `StoreSuccessfulComponent` calls this once a batch is full, and
@@ -161,34 +163,34 @@ class WpaRunRepository {
   static constexpr std::size_t kComponentCacheBatchSize = 256;
 
   // Records a failed component with diagnostics; publishes no result.
-  Status RecordComponentFailure(const facts::AnalysisRunManifest& run,
-                                const WpaComponentKey& key,
+  Status RecordComponentFailure(const facts::AnalysisRunManifest &run,
+                                const WpaComponentKey &key,
                                 std::string diagnostics);
 
-  Status CompleteRun(const facts::AnalysisRunManifest& run);
+  Status CompleteRun(const facts::AnalysisRunManifest &run);
 
-  Status MarkIncomplete(const facts::AnalysisRunManifest& run);
+  Status MarkIncomplete(const facts::AnalysisRunManifest &run);
 
   // The shared metadata connection, for the incremental scheduler's own
   // repositories to key off the same database.
-  summarydb::MetadataStore& metadata_store() { return metadata_store_; }
+  summarydb::MetadataStore &metadata_store() { return metadata_store_; }
 
   // Test/query accessors.
   StatusOr<WpaRunStatus> RunStatus(core::StableId run_id);
-  StatusOr<std::optional<std::string>> ResultObjectKey(
-      core::StableId run_id, const WpaComponentKey& key);
+  StatusOr<std::optional<std::string>>
+  ResultObjectKey(core::StableId run_id, const WpaComponentKey &key);
 
- private:
+private:
   WpaRunRepository(summarydb::MetadataStore store,
                    std::unique_ptr<summarydb::ObjectStore> results);
 
   // Queues one stored component's cache row and run-state row for the next
   // commit. Neither can be rejected: both rows are built here, with the column
   // count its statement declares.
-  void QueueComponentRows(const facts::AnalysisRunManifest& run,
-                          const WpaComponentKey& key,
-                          const std::string& cache_key,
-                          const WpaComponentResult& result);
+  void QueueComponentRows(const facts::AnalysisRunManifest &run,
+                          const WpaComponentKey &key,
+                          const std::string &cache_key,
+                          const WpaComponentResult &result);
 
   summarydb::MetadataStore metadata_store_;
   std::unique_ptr<summarydb::ObjectStore> component_results_;
@@ -201,10 +203,10 @@ class WpaRunRepository {
   std::vector<std::vector<std::string>> pending_cache_rows_;
   std::vector<std::vector<std::string>> pending_state_rows_;
 
-  WpaRunRepository(const WpaRunRepository&) = delete;
-  WpaRunRepository& operator=(const WpaRunRepository&) = delete;
+  WpaRunRepository(const WpaRunRepository &) = delete;
+  WpaRunRepository &operator=(const WpaRunRepository &) = delete;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_WPA_RUN_REPOSITORY_H_
+#endif // VERITAS_WPA_WPA_RUN_REPOSITORY_H_

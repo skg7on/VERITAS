@@ -14,12 +14,13 @@
 
 // ProjectFixture.h — helpers for materializing on-disk project fixtures.
 //
-// Fixtures live under `tests/fixtures/projects/`. Because `compile_commands.json`
-// references its `directory` by absolute path, tests copy a fixture into a
-// unique temporary directory and substitute the `@PROJECT_ROOT@` placeholder
-// with the canonical temporary path. The returned path is always canonical so
-// that comparisons against `veritas::build::ResolveProjectInput` (which
-// canonicalizes internally) are stable.
+// Fixtures live under `tests/fixtures/projects/`. Because
+// `compile_commands.json` references its `directory` by absolute path, tests
+// copy a fixture into a unique temporary directory and substitute the
+// `@PROJECT_ROOT@` placeholder with the canonical temporary path. The returned
+// path is always canonical so that comparisons against
+// `veritas::build::ResolveProjectInput` (which canonicalizes internally) are
+// stable.
 
 #ifndef VERITAS_TESTS_SUPPORT_PROJECTFIXTURE_H_
 #define VERITAS_TESTS_SUPPORT_PROJECTFIXTURE_H_
@@ -39,6 +40,6 @@ std::filesystem::path TestSourceRoot();
 // path, and return that canonical destination path.
 std::filesystem::path FixtureProject(std::string_view name);
 
-}  // namespace veritas::testing
+} // namespace veritas::testing
 
-#endif  // VERITAS_TESTS_SUPPORT_PROJECTFIXTURE_H_
+#endif // VERITAS_TESTS_SUPPORT_PROJECTFIXTURE_H_

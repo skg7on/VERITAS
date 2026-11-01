@@ -29,19 +29,25 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
 namespace veritas::review {
 namespace fs = std::filesystem;
+
 namespace {
 class Fd {
 public:
   explicit Fd(int fd = -1) : fd_(fd) {}
+
   ~Fd() {
     if (fd_ >= 0)
       close(fd_);
   }
+
   Fd(const Fd &) = delete;
   Fd &operator=(const Fd &) = delete;
+
   Fd(Fd &&other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
+
   Fd &operator=(Fd &&other) noexcept {
     if (this != &other) {
       if (fd_ >= 0)
@@ -51,33 +57,40 @@ public:
     }
     return *this;
   }
+
   int get() const { return fd_; }
 
 private:
   int fd_;
 };
+
 template <class Map, class Key>
 const typename Map::mapped_type &Lookup(const Map &map, const Key &key) {
   auto it = map.find(key);
   assert(it != map.end());
   return it->second;
 }
+
 Status Changed() {
   return Status::FailedPrecondition(
       "retryable: selected inputs changed during snapshot capture");
 }
+
 Status Unsafe() {
   return Status::InvalidArgument("unsafe or unsupported symlink/input path");
 }
+
 Status Io() {
   return Status::FailedPrecondition("unreadable snapshot input or output");
 }
+
 struct Stamp {
   uint64_t device = 0, inode = 0, size = 0;
   int64_t mtime = 0, ctime = 0;
   uint32_t mode = 0;
   bool operator==(const Stamp &) const = default;
 };
+
 Stamp StampOf(const struct stat &s) {
 #ifdef __APPLE__
   const auto mt = s.st_mtimespec, ct = s.st_ctimespec;
@@ -91,11 +104,13 @@ Stamp StampOf(const struct stat &s) {
           ct.tv_sec * 1000000000LL + ct.tv_nsec,
           uint32_t(s.st_mode)};
 }
+
 struct FileState {
   std::optional<std::string> bytes;
   Stamp stamp;
   std::string issue;
 };
+
 // Every component is opened relative to a pinned directory descriptor. Checking
 // canonical strings alone would permit a symlink substitution between checks.
 StatusOr<Fd> OpenRelative(int root, const std::string &path, int final_flags) {
@@ -119,6 +134,7 @@ StatusOr<Fd> OpenRelative(int root, const std::string &path, int final_flags) {
   }
   return dir;
 }
+
 StatusOr<FileState> ReadFile(int root, const std::string &path,
                              uint64_t limit) {
   auto fd = OpenRelative(root, path, O_RDONLY);
@@ -159,6 +175,7 @@ StatusOr<FileState> ReadFile(int root, const std::string &path,
     return Changed();
   return FileState{std::move(bytes), StampOf(after), {}};
 }
+
 Status Walk(int root, const std::string &path, std::set<std::string> &files,
             uint64_t max_files, unsigned depth = 0) {
   if (depth > 128)
@@ -211,6 +228,7 @@ Status Walk(int root, const std::string &path, std::set<std::string> &files,
   }
   return Status::Ok();
 }
+
 StatusOr<std::string> Git(const fs::path &root,
                           std::vector<std::string> arguments,
                           uint64_t max_bytes = 64 * 1024 * 1024) {
@@ -283,6 +301,7 @@ StatusOr<std::string> Git(const fs::path &root,
     return Status::FailedPrecondition("Git snapshot input unavailable");
   return out;
 }
+
 std::vector<std::string> SplitNul(const std::string &value) {
   std::vector<std::string> out;
   size_t start = 0;
@@ -295,6 +314,7 @@ std::vector<std::string> SplitNul(const std::string &value) {
   }
   return out;
 }
+
 StatusOr<std::string> PinBase(const SnapshotRequest &r, const fs::path &root) {
   if (r.base_ref.empty() || r.base_ref.front() == '-' ||
       r.base_ref.find('\0') != std::string::npos ||
@@ -314,6 +334,7 @@ StatusOr<std::string> PinBase(const SnapshotRequest &r, const fs::path &root) {
     return Io();
   return value;
 }
+
 StatusOr<std::string> RelativeInput(const fs::path &root, const fs::path &cwd,
                                     const std::string &text) {
   fs::path path(text);
@@ -344,6 +365,7 @@ Json PathIdentity(const fs::path &root, const fs::path &cwd,
                         {"path", relative.generic_string()}};
   return Json::Object{{"root", "EXTERNAL"}, {"path", path.generic_string()}};
 }
+
 Json::Array CommandIdentity(const std::vector<std::string> &command,
                             const fs::path &root, const fs::path &cwd,
                             const std::string &source) {
@@ -423,6 +445,7 @@ Json::Array CommandIdentity(const std::vector<std::string> &command,
   }
   return result;
 }
+
 Json::Array Strings(const std::vector<std::string> &values) {
   Json::Array result;
   for (const auto &v : values)
@@ -430,6 +453,7 @@ Json::Array Strings(const std::vector<std::string> &values) {
   return result;
 }
 } // namespace
+
 struct SnapshotData {
   SnapshotRequest request;
   fs::path root;
@@ -444,6 +468,7 @@ struct SnapshotData {
   std::vector<std::string> excluded, unavailable;
   std::set<std::string> artifact_members;
 };
+
 StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
   if (request.max_files == 0 || request.max_bytes == 0)
     return Status::InvalidArgument("positive snapshot limits required");
@@ -710,8 +735,8 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
     auto it = scope_input.translation_unit_digests.find(command.file);
     return it == scope_input.translation_unit_digests.end() ||
            std::find(d->scope.member_tu_digests.begin(),
-                     d->scope.member_tu_digests.end(), it->second) ==
-               d->scope.member_tu_digests.end();
+                     d->scope.member_tu_digests.end(),
+                     it->second) == d->scope.member_tu_digests.end();
   });
   auto scope_id = MakeArtifactId<ProgramScopeTag>(ToJson(d->scope));
   if (!scope_id.ok())
@@ -842,15 +867,19 @@ StatusOr<ReviewSnapshot> CaptureReviewSnapshot(const SnapshotRequest &request) {
                                    d->unavailable.end());
   return ReviewSnapshot(std::move(d));
 }
+
 const std::vector<CapturedCompileCommand> &
 ReviewSnapshot::compiler_commands() const {
   return data_->compiler_commands;
 }
+
 std::vector<std::string> ReviewSnapshot::captured_paths() const {
   std::vector<std::string> paths;
-  for (const auto &[path, digest] : data_->files) paths.push_back(path);
+  for (const auto &[path, digest] : data_->files)
+    paths.push_back(path);
   return paths;
 }
+
 StatusOr<std::string>
 ReviewSnapshot::CompilerPath(std::string_view directory,
                              std::string_view text) const {
@@ -868,19 +897,25 @@ ReviewSnapshot::CompilerPath(std::string_view directory,
     return std::string(".");
   return RelativeInput(data_->root, cwd, std::string(text));
 }
+
 const ReviewBinding &ReviewSnapshot::binding() const { return data_->binding; }
+
 const ProgramScope &ReviewSnapshot::program_scope() const {
   return data_->scope;
 }
+
 const Coverage &ReviewSnapshot::compiler_coverage() const {
   return data_->compiler;
 }
+
 const std::vector<std::string> &ReviewSnapshot::excluded() const {
   return data_->excluded;
 }
+
 const std::vector<std::string> &ReviewSnapshot::unavailable() const {
   return data_->unavailable;
 }
+
 StatusOr<std::string> ReviewSnapshot::Read(std::string_view path) const {
   auto p = NormalizeReviewPath(path);
   if (!p.ok())
@@ -890,6 +925,7 @@ StatusOr<std::string> ReviewSnapshot::Read(std::string_view path) const {
     return Status::NotFound("input not captured");
   return *Lookup(data_->blobs, it->second);
 }
+
 StatusOr<std::string> ReviewSnapshot::ReadBase(std::string_view path) const {
   auto p = NormalizeReviewPath(path);
   if (!p.ok())
@@ -899,6 +935,7 @@ StatusOr<std::string> ReviewSnapshot::ReadBase(std::string_view path) const {
     return Status::NotFound("base input not captured");
   return *Lookup(data_->blobs, it->second);
 }
+
 StatusOr<ContextArtifact> ReviewSnapshot::Context(std::string_view path,
                                                   std::string_view kind,
                                                   uint64_t start,
@@ -948,6 +985,7 @@ StatusOr<ContextArtifact> ReviewSnapshot::Context(std::string_view path,
                          "operator-selected captured input",
                          {}};
 }
+
 StatusOr<bool> ReviewSnapshot::LiveTreeAdvanced() const {
   Fd root(open(data_->root.c_str(),
                O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
@@ -975,6 +1013,7 @@ StatusOr<bool> ReviewSnapshot::LiveTreeAdvanced() const {
          *index != data_->index_bytes || *base != data_->base_oid ||
          *untracked != data_->untracked_bytes;
 }
+
 Status ReviewSnapshot::Materialize(const fs::path &destination) const {
   if (!destination.is_absolute() || destination.filename().empty())
     return Unsafe();

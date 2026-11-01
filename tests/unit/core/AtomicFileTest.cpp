@@ -27,7 +27,7 @@
 namespace veritas::core {
 namespace {
 
-std::string ReadFile(const std::filesystem::path& path) {
+std::string ReadFile(const std::filesystem::path &path) {
   std::ifstream input(path, std::ios::binary);
   return {std::istreambuf_iterator<char>(input),
           std::istreambuf_iterator<char>()};
@@ -81,12 +81,12 @@ TEST(AtomicFileTest, AppliesTheCallersUmaskToANewDestination) {
   ::umask(previous_umask);
 
   EXPECT_TRUE(status.ok()) << status.message();
-  struct stat metadata {};
+  struct stat metadata{};
   ASSERT_EQ(::stat(destination.c_str(), &metadata), 0);
   EXPECT_EQ(metadata.st_mode & 0777, 0640);
 
   fs::remove_all(area, ignored);
 }
 
-}  // namespace
-}  // namespace veritas::core
+} // namespace
+} // namespace veritas::core

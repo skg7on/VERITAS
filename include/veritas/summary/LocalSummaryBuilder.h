@@ -47,10 +47,10 @@ struct FunctionLocalFacts {
 // equivalent input produces byte-identical summaries (creation_epoch_ms is
 // pinned to zero and repeated facts are sorted), keeping FunctionSummaryID
 // deterministic.
-StatusOr<v1::FunctionSummary> BuildLocalSummary(
-    const FunctionLocalFacts& facts,
-    const build::ProgramContext& context);
+StatusOr<v1::FunctionSummary>
+BuildLocalSummary(const FunctionLocalFacts &facts,
+                  const build::ProgramContext &context);
 
-}  // namespace veritas::summary
+} // namespace veritas::summary
 
-#endif  // VERITAS_SUMMARY_LOCAL_SUMMARY_BUILDER_H_
+#endif // VERITAS_SUMMARY_LOCAL_SUMMARY_BUILDER_H_

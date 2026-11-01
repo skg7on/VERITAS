@@ -36,8 +36,8 @@ struct Version {
 Version GetVersion();
 
 // Renders "VERITAS <major>.<minor>.<patch> (<git-revision>)".
-std::string FormatVersion(const Version& version);
+std::string FormatVersion(const Version &version);
 
-}  // namespace veritas
+} // namespace veritas
 
-#endif  // VERITAS_CORE_VERSION_H_
+#endif // VERITAS_CORE_VERSION_H_

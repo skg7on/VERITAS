@@ -52,16 +52,16 @@ struct ProjectAstIndex {
   std::vector<ExtractedFunctionDecl> declarations;
   std::size_t processed_translation_units = 0;
 
-  const ExtractedFunctionDecl* FindByMangledName(
-      std::string_view mangled_name) const;
+  const ExtractedFunctionDecl *
+  FindByMangledName(std::string_view mangled_name) const;
 };
 
 class ProjectAstExtractor {
- public:
-  veritas::StatusOr<ProjectAstIndex> ExtractProject(
-      const build::AnalysisManifest& manifest);
+public:
+  veritas::StatusOr<ProjectAstIndex>
+  ExtractProject(const build::AnalysisManifest &manifest);
 };
 
-}  // namespace veritas::frontend::clang
+} // namespace veritas::frontend::clang
 
-#endif  // VERITAS_FRONTEND_CLANG_PROJECTASTEXTRACTOR_H_
+#endif // VERITAS_FRONTEND_CLANG_PROJECTASTEXTRACTOR_H_

@@ -41,5 +41,5 @@ TEST(AnalysisConfigTest, ProfileIsAssignable) {
   EXPECT_EQ(config.scale_profile, ScaleProfile::kScaled);
 }
 
-}  // namespace
-}  // namespace veritas::analysis
+} // namespace
+} // namespace veritas::analysis

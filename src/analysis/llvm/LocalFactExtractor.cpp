@@ -185,20 +185,20 @@ Status ExtractMemoryEffectsV2(const ::llvm::Function &function,
       if (const auto *load = ::llvm::dyn_cast<::llvm::LoadInst>(&inst)) {
         kind = v1::EFFECT_KIND_READ;
         pointer = load->getPointerOperand();
-        access_size =
-            layout.getTypeStoreSize(load->getType()).getFixedValue();
-      } else if (const auto *store = ::llvm::dyn_cast<::llvm::StoreInst>(&inst)) {
+        access_size = layout.getTypeStoreSize(load->getType()).getFixedValue();
+      } else if (const auto *store =
+                     ::llvm::dyn_cast<::llvm::StoreInst>(&inst)) {
         kind = v1::EFFECT_KIND_WRITE;
         pointer = store->getPointerOperand();
         access_size =
             layout.getTypeStoreSize(store->getValueOperand()->getType())
                 .getFixedValue();
-      } else if (const auto *rmw = ::llvm::dyn_cast<::llvm::AtomicRMWInst>(&inst)) {
+      } else if (const auto *rmw =
+                     ::llvm::dyn_cast<::llvm::AtomicRMWInst>(&inst)) {
         kind = v1::EFFECT_KIND_UNKNOWN;
         pointer = rmw->getPointerOperand();
-        access_size =
-            layout.getTypeStoreSize(rmw->getValOperand()->getType())
-                .getFixedValue();
+        access_size = layout.getTypeStoreSize(rmw->getValOperand()->getType())
+                          .getFixedValue();
       } else if (const auto *cmpxchg =
                      ::llvm::dyn_cast<::llvm::AtomicCmpXchgInst>(&inst)) {
         kind = v1::EFFECT_KIND_UNKNOWN;
@@ -286,7 +286,7 @@ Status ExtractParameterFlowsV2(const ::llvm::Function &function,
         continue;
       const auto *callee = call->getCalledFunction();
       if (!callee)
-        continue;  // indirect target; no single formal to bind
+        continue; // indirect target; no single formal to bind
       auto call_site = values.CallSiteIdFor(*call);
       if (!call_site.ok())
         return call_site.status();
@@ -295,7 +295,7 @@ Status ExtractParameterFlowsV2(const ::llvm::Function &function,
         const auto *actual = call->getArgOperand(i);
         if (!::llvm::isa<::llvm::Instruction>(actual) &&
             !::llvm::isa<::llvm::Argument>(actual)) {
-          continue;  // constants and special values carry no intra-arg flow
+          continue; // constants and special values carry no intra-arg flow
         }
         auto actual_id = values.IdFor(*actual);
         if (!actual_id.ok())

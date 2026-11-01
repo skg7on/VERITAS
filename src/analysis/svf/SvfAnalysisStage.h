@@ -21,24 +21,25 @@
 
 namespace veritas::analysis::pipeline {
 class ProgramIr;
-}  // namespace veritas::analysis::pipeline
+} // namespace veritas::analysis::pipeline
 
 namespace veritas::core {
 class RunMetrics;
-}  // namespace veritas::core
+} // namespace veritas::core
 
 namespace veritas::analysis::svf {
 
-// SvfAnalysisStage is the required SVF pointer analysis stage in the M5 pipeline.
+// SvfAnalysisStage is the required SVF pointer analysis stage in the M5
+// pipeline.
 //
-// It runs SVF directly on the live ProgramIr, maps results to VERITAS Summary IR,
-// and returns either kComplete or kCompleteWithUnknowns based on mapping success
-// and budget limits.
+// It runs SVF directly on the live ProgramIr, maps results to VERITAS Summary
+// IR, and returns either kComplete or kCompleteWithUnknowns based on mapping
+// success and budget limits.
 //
 // This is the only implementation of the required SVF stage. There is no
 // disabled mode or optional path.
 class SvfAnalysisStage {
- public:
+public:
   virtual ~SvfAnalysisStage() = default;
 
   // Analyze runs the required SVF stage on program_ir.
@@ -55,13 +56,12 @@ class SvfAnalysisStage {
   // `metrics` is an optional non-owning recorder for the session's own steps;
   // null (the default) makes them no-ops. Its trailing default is what an
   // existing caller that has no recorder relies on.
-  virtual StatusOr<SvfMappingResult> Analyze(
-      pipeline::ProgramIr& program_ir,
-      const AnalyzerRunContext& run_context,
-      const SvfConfig& config,
-      core::RunMetrics* metrics = nullptr);
+  virtual StatusOr<SvfMappingResult>
+  Analyze(pipeline::ProgramIr &program_ir,
+          const AnalyzerRunContext &run_context, const SvfConfig &config,
+          core::RunMetrics *metrics = nullptr);
 };
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf
 
-#endif  // VERITAS_ANALYSIS_SVF_SVFANALYSISSTAGE_H_
+#endif // VERITAS_ANALYSIS_SVF_SVFANALYSISSTAGE_H_

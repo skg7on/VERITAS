@@ -55,18 +55,19 @@ struct WorkItem {
 // lowest-priority item first, breaking ties by the deduplication key so the
 // drain order is stable across runs.
 class WorklistScheduler {
- public:
+public:
   void Enqueue(WorkItem item);
 
   std::optional<WorkItem> PopNext();
 
   bool Empty() const { return by_key_.empty(); }
+
   std::size_t PendingCount() const { return by_key_.size(); }
 
- private:
+private:
   std::map<std::string, WorkItem> by_key_;
 };
 
-}  // namespace veritas::runtime
+} // namespace veritas::runtime
 
-#endif  // VERITAS_RUNTIME_WORKLIST_SCHEDULER_H_
+#endif // VERITAS_RUNTIME_WORKLIST_SCHEDULER_H_

@@ -21,9 +21,7 @@
 
 namespace veritas::analysis::svf {
 
-enum class PointerAnalysisKind {
-  kAndersenWaveDiff
-};
+enum class PointerAnalysisKind { kAndersenWaveDiff };
 
 struct SvfConfig {
   PointerAnalysisKind pointer_analysis;
@@ -41,6 +39,6 @@ struct SvfConfig {
   std::string CanonicalAnalyzerConfig() const;
 };
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf
 
-#endif  // VERITAS_ANALYSIS_SVF_SVFCONFIG_H_
+#endif // VERITAS_ANALYSIS_SVF_SVFCONFIG_H_

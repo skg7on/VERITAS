@@ -196,16 +196,16 @@ struct CliResult {
 // the only evidence a rejected invocation leaves, and the tests that assert on
 // rejection need it. Each call therefore returns one text stream and one exit
 // code, read from the process rather than from a pipe's status.
-CliResult RunVeritasQuery(const std::vector<std::string>& arguments) {
+CliResult RunVeritasQuery(const std::vector<std::string> &arguments) {
   std::string command = ShellQuote(VERITAS_QUERY_BINARY);
-  for (const auto& argument : arguments) {
+  for (const auto &argument : arguments) {
     command.push_back(' ');
     command.append(ShellQuote(argument));
   }
   command.append(" 2>&1");
 
   CliResult result;
-  FILE* pipe = ::popen(command.c_str(), "r");
+  FILE *pipe = ::popen(command.c_str(), "r");
   if (pipe == nullptr) {
     return result;
   }
@@ -218,20 +218,20 @@ CliResult RunVeritasQuery(const std::vector<std::string>& arguments) {
   return result;
 }
 
-std::vector<std::string> EvidenceArguments(const std::filesystem::path& db_dir,
+std::vector<std::string> EvidenceArguments(const std::filesystem::path &db_dir,
                                            std::string_view format,
                                            std::string_view level) {
-  return {"evidence",         "overflow",     "--sink", "memcpy",
-          "--db",             db_dir.string(), "--format", std::string(format),
-          "--level",          std::string(level)};
+  return {"evidence", "overflow",        "--sink",   "memcpy",
+          "--db",     db_dir.string(),   "--format", std::string(format),
+          "--level",  std::string(level)};
 }
 
-CliResult RunEvidence(const std::filesystem::path& db_dir,
+CliResult RunEvidence(const std::filesystem::path &db_dir,
                       std::string_view format, std::string_view level) {
   return RunVeritasQuery(EvidenceArguments(db_dir, format, level));
 }
 
-std::string ReadFile(const std::filesystem::path& path) {
+std::string ReadFile(const std::filesystem::path &path) {
   std::ifstream file(path, std::ios::binary);
   std::ostringstream contents;
   contents << file.rdbuf();
@@ -304,10 +304,10 @@ StatusOr<ev::EvidenceCase> ParseOrFail(std::string_view text,
   ev::EirParseError error;
   auto parsed = ev::ParseEirText(text, &error);
   if (!parsed.ok()) {
-    return Status::InvalidArgument(std::string(what) + " does not parse: " +
-                                   error.message + " (line " +
-                                   std::to_string(error.line) + ", column " +
-                                   std::to_string(error.column) + ")");
+    return Status::InvalidArgument(
+        std::string(what) + " does not parse: " + error.message + " (line " +
+        std::to_string(error.line) + ", column " +
+        std::to_string(error.column) + ")");
   }
   return parsed;
 }
@@ -414,53 +414,53 @@ std::string ToHex(std::uint64_t value) {
 std::string Bool(bool value) { return value ? "1" : "0"; }
 
 // The kind of a stable identity, e.g. "valref" for "valref:sha256:<digest>".
-std::string IdentityKind(const core::StableId& id) {
+std::string IdentityKind(const core::StableId &id) {
   const std::string text = core::ToString(id);
   const std::size_t colon = text.find(':');
   return colon == std::string::npos ? text : text.substr(0, colon);
 }
 
-std::string IdentityKind(const std::optional<core::StableId>& id) {
+std::string IdentityKind(const std::optional<core::StableId> &id) {
   return id.has_value() ? IdentityKind(*id) : std::string("none");
 }
 
 // The canonical text of an optional identity, or the empty string when the
 // member is absent. `EvidenceCase::evidence_id` is optional, and an unset one
 // renders as empty rather than as the text of a default-constructed id.
-std::string IdText(const std::optional<core::StableId>& id) {
+std::string IdText(const std::optional<core::StableId> &id) {
   return id.has_value() ? core::ToString(*id) : std::string();
 }
 
 std::string ExpressionKindName(ev::Expression::Kind kind) {
   switch (kind) {
-    case ev::Expression::Kind::kUnspecified:
-      return "unspecified";
-    case ev::Expression::Kind::kBool:
-      return "bool";
-    case ev::Expression::Kind::kInteger:
-      return "integer";
-    case ev::Expression::Kind::kString:
-      return "string";
-    case ev::Expression::Kind::kSymbol:
-      return "symbol";
-    case ev::Expression::Kind::kReference:
-      return "reference";
-    case ev::Expression::Kind::kCall:
-      return "call";
-    case ev::Expression::Kind::kNot:
-      return "not";
-    case ev::Expression::Kind::kCompare:
-      return "compare";
-    case ev::Expression::Kind::kAnd:
-      return "and";
-    case ev::Expression::Kind::kOr:
-      return "or";
-    case ev::Expression::Kind::kImplies:
-      return "implies";
-    case ev::Expression::Kind::kForAll:
-      return "forall";
-    case ev::Expression::Kind::kExists:
-      return "exists";
+  case ev::Expression::Kind::kUnspecified:
+    return "unspecified";
+  case ev::Expression::Kind::kBool:
+    return "bool";
+  case ev::Expression::Kind::kInteger:
+    return "integer";
+  case ev::Expression::Kind::kString:
+    return "string";
+  case ev::Expression::Kind::kSymbol:
+    return "symbol";
+  case ev::Expression::Kind::kReference:
+    return "reference";
+  case ev::Expression::Kind::kCall:
+    return "call";
+  case ev::Expression::Kind::kNot:
+    return "not";
+  case ev::Expression::Kind::kCompare:
+    return "compare";
+  case ev::Expression::Kind::kAnd:
+    return "and";
+  case ev::Expression::Kind::kOr:
+    return "or";
+  case ev::Expression::Kind::kImplies:
+    return "implies";
+  case ev::Expression::Kind::kForAll:
+    return "forall";
+  case ev::Expression::Kind::kExists:
+    return "exists";
   }
   return "unknown";
 }
@@ -468,10 +468,9 @@ std::string ExpressionKindName(ev::Expression::Kind kind) {
 // Renders an expression structurally and appends every case-local handle it
 // names, in operand order. A reference contributes its handle to `refs` and
 // nothing to the text, so the handle never reaches a label.
-std::string RenderExpression(const ev::Expression& expression,
-                             std::vector<std::string>* refs) {
-  const bool is_reference =
-      expression.kind == ev::Expression::Kind::kReference;
+std::string RenderExpression(const ev::Expression &expression,
+                             std::vector<std::string> *refs) {
+  const bool is_reference = expression.kind == ev::Expression::Kind::kReference;
   std::string out = ExpressionKindName(expression.kind);
   out.push_back('(');
   if (!is_reference) {
@@ -481,7 +480,7 @@ std::string RenderExpression(const ev::Expression& expression,
   out.append(std::to_string(expression.integer));
   out.push_back(',');
   out.append(Bool(expression.boolean));
-  for (const ev::Expression& operand : expression.operands) {
+  for (const ev::Expression &operand : expression.operands) {
     out.push_back(';');
     out.append(RenderExpression(operand, refs));
   }
@@ -492,23 +491,24 @@ std::string RenderExpression(const ev::Expression& expression,
   return out;
 }
 
-void AddReference(std::vector<std::string>* refs, const std::string& handle) {
+void AddReference(std::vector<std::string> *refs, const std::string &handle) {
   if (!handle.empty()) {
     refs->push_back(handle);
   }
 }
 
-std::string RenderBinding(const ev::ProgramBinding& program) {
+std::string RenderBinding(const ev::ProgramBinding &program) {
   // `target_triple` is deliberately absent: it names the host that ran the
   // analysis, not the case. The four identity strings are kept, because after
   // masking they still say which binding was pinned; `analysis_run_id` is
   // reduced to its kind for the same reason.
-  return "repository=" + program.repository_id + ";revision=" +
-         program.revision_id + ";build_variant=" + program.build_variant_id +
+  return "repository=" + program.repository_id +
+         ";revision=" + program.revision_id +
+         ";build_variant=" + program.build_variant_id +
          ";configuration=" + program.analysis_configuration_id +
-         ";type_layout=" + program.type_layout_id + ";analysis_run=" +
-         IdentityKind(program.analysis_run_id) + ";analyzers=" +
-         std::to_string(program.analyzer_versions.size());
+         ";type_layout=" + program.type_layout_id +
+         ";analysis_run=" + IdentityKind(program.analysis_run_id) +
+         ";analyzers=" + std::to_string(program.analyzer_versions.size());
 }
 
 struct Item {
@@ -524,44 +524,48 @@ struct CaseGraph {
 
 // Every case-local handle the case declares, longest first so that substituting
 // a handle cannot partially overwrite a longer one.
-std::vector<std::string> LocalHandles(const ev::EvidenceCase& value) {
+std::vector<std::string> LocalHandles(const ev::EvidenceCase &value) {
   std::vector<std::string> handles;
   handles.push_back(value.primary_claim.id);
-  for (const ev::Entity& entity : value.entities) handles.push_back(entity.id);
-  for (const ev::Edge& edge : value.edges) handles.push_back(edge.id);
-  for (const ev::Path& path : value.paths) handles.push_back(path.id);
-  for (const ev::Fact& fact : value.facts) handles.push_back(fact.id);
-  for (const ev::Assumption& assumption : value.assumptions) {
+  for (const ev::Entity &entity : value.entities)
+    handles.push_back(entity.id);
+  for (const ev::Edge &edge : value.edges)
+    handles.push_back(edge.id);
+  for (const ev::Path &path : value.paths)
+    handles.push_back(path.id);
+  for (const ev::Fact &fact : value.facts)
+    handles.push_back(fact.id);
+  for (const ev::Assumption &assumption : value.assumptions) {
     handles.push_back(assumption.id);
   }
-  for (const ev::Hypothesis& hypothesis : value.hypotheses) {
+  for (const ev::Hypothesis &hypothesis : value.hypotheses) {
     handles.push_back(hypothesis.id);
   }
-  for (const ev::Unknown& unknown : value.unknowns) {
+  for (const ev::Unknown &unknown : value.unknowns) {
     handles.push_back(unknown.id);
   }
-  for (const ev::Constraint& constraint : value.constraints) {
+  for (const ev::Constraint &constraint : value.constraints) {
     handles.push_back(constraint.id);
   }
-  for (const ev::Provenance& record : value.provenance) {
+  for (const ev::Provenance &record : value.provenance) {
     handles.push_back(record.id);
   }
-  for (const ev::ProofObligation& obligation : value.proof_obligations) {
+  for (const ev::ProofObligation &obligation : value.proof_obligations) {
     handles.push_back(obligation.id);
   }
-  for (const ev::SummaryReference& summary : value.summaries) {
+  for (const ev::SummaryReference &summary : value.summaries) {
     handles.push_back(summary.id);
   }
-  for (const ev::Dependency& dependency : value.dependencies) {
+  for (const ev::Dependency &dependency : value.dependencies) {
     handles.push_back(dependency.id);
   }
-  for (const ev::Omission& omission : value.omissions) {
+  for (const ev::Omission &omission : value.omissions) {
     handles.push_back(omission.id);
   }
   handles.erase(std::remove(handles.begin(), handles.end(), std::string()),
                 handles.end());
   std::sort(handles.begin(), handles.end(),
-            [](const std::string& left, const std::string& right) {
+            [](const std::string &left, const std::string &right) {
               return left.size() != right.size() ? left.size() > right.size()
                                                  : left < right;
             });
@@ -599,8 +603,8 @@ std::string MaskDigests(std::string_view text) {
 }
 
 std::string NormalizeLabel(std::string label,
-                           const std::vector<std::string>& handles) {
-  for (const std::string& handle : handles) {
+                           const std::vector<std::string> &handles) {
+  for (const std::string &handle : handles) {
     std::string::size_type position = 0;
     while ((position = label.find(handle, position)) != std::string::npos) {
       label.replace(position, handle.size(), "@H");
@@ -610,21 +614,20 @@ std::string NormalizeLabel(std::string label,
   return MaskDigests(label);
 }
 
-CaseGraph BuildGraph(const ev::EvidenceCase& value) {
+CaseGraph BuildGraph(const ev::EvidenceCase &value) {
   const std::vector<std::string> handles = LocalHandles(value);
   CaseGraph graph;
 
-  const auto add = [&graph, &handles](std::string category,
-                                      const std::string& handle,
-                                      std::string label,
-                                      std::vector<std::string> refs) {
-    if (!handle.empty()) {
-      graph.by_handle.emplace(handle, graph.items.size());
-    }
-    graph.items.push_back(Item{std::move(category),
-                               NormalizeLabel(std::move(label), handles),
-                               std::move(refs)});
-  };
+  const auto add =
+      [&graph, &handles](std::string category, const std::string &handle,
+                         std::string label, std::vector<std::string> refs) {
+        if (!handle.empty()) {
+          graph.by_handle.emplace(handle, graph.items.size());
+        }
+        graph.items.push_back(Item{std::move(category),
+                                   NormalizeLabel(std::move(label), handles),
+                                   std::move(refs)});
+      };
 
   add("case", std::string(),
       "level=" + std::string(ev::ToString(value.level)) +
@@ -633,12 +636,11 @@ CaseGraph BuildGraph(const ev::EvidenceCase& value) {
           RenderBinding(value.program),
       {});
 
-  for (const ev::Entity& entity : value.entities) {
-    std::string label =
-        "kind=" + std::string(ev::ToString(entity.kind)) +
-        ";stable=" + IdentityKind(entity.stable_id);
+  for (const ev::Entity &entity : value.entities) {
+    std::string label = "kind=" + std::string(ev::ToString(entity.kind)) +
+                        ";stable=" + IdentityKind(entity.stable_id);
     std::vector<std::string> refs;
-    for (const auto& entry : entity.properties) {
+    for (const auto &entry : entity.properties) {
       label += ";property[" + entry.first +
                "]=" + RenderExpression(entry.second, &refs);
     }
@@ -646,7 +648,7 @@ CaseGraph BuildGraph(const ev::EvidenceCase& value) {
   }
 
   {
-    const ev::Claim& claim = value.primary_claim;
+    const ev::Claim &claim = value.primary_claim;
     std::vector<std::string> refs;
     const std::string predicate = RenderExpression(claim.predicate, &refs);
     AddReference(&refs, claim.subject);
@@ -657,7 +659,7 @@ CaseGraph BuildGraph(const ev::EvidenceCase& value) {
         std::move(refs));
   }
 
-  for (const ev::Fact& fact : value.facts) {
+  for (const ev::Fact &fact : value.facts) {
     std::vector<std::string> refs;
     const std::string predicate = RenderExpression(fact.predicate, &refs);
     AddReference(&refs, fact.provenance_id);
@@ -670,7 +672,7 @@ CaseGraph BuildGraph(const ev::EvidenceCase& value) {
         std::move(refs));
   }
 
-  for (const ev::Assumption& assumption : value.assumptions) {
+  for (const ev::Assumption &assumption : value.assumptions) {
     std::vector<std::string> refs;
     const std::string predicate = RenderExpression(assumption.predicate, &refs);
     add("assumption", assumption.id,
@@ -679,32 +681,30 @@ CaseGraph BuildGraph(const ev::EvidenceCase& value) {
         std::move(refs));
   }
 
-  for (const ev::Hypothesis& hypothesis : value.hypotheses) {
+  for (const ev::Hypothesis &hypothesis : value.hypotheses) {
     std::vector<std::string> refs;
     const std::string predicate = RenderExpression(hypothesis.predicate, &refs);
     add("hypothesis", hypothesis.id,
         "producer=" + hypothesis.producer + ";reason=" + hypothesis.reason +
-            ";confidence=" +
-            std::string(ev::ToString(hypothesis.confidence)) +
+            ";confidence=" + std::string(ev::ToString(hypothesis.confidence)) +
             ";predicate=" + predicate,
         std::move(refs));
   }
 
-  for (const ev::Unknown& unknown : value.unknowns) {
+  for (const ev::Unknown &unknown : value.unknowns) {
     std::vector<std::string> refs;
     const std::string property = RenderExpression(unknown.property, &refs);
-    for (const std::string& blocking : unknown.blocking_ids) {
+    for (const std::string &blocking : unknown.blocking_ids) {
       AddReference(&refs, blocking);
     }
     add("unknown", unknown.id,
         "reason_code=" + std::string(ev::ToString(unknown.reason_code)) +
-            ";reason=" + unknown.reason +
-            ";resolution=" + unknown.suggested_resolution +
-            ";property=" + property,
+            ";reason=" + unknown.reason + ";resolution=" +
+            unknown.suggested_resolution + ";property=" + property,
         std::move(refs));
   }
 
-  for (const ev::Edge& edge : value.edges) {
+  for (const ev::Edge &edge : value.edges) {
     std::vector<std::string> refs{edge.from, edge.to};
     AddReference(&refs, edge.provenance_id);
     AddReference(&refs, edge.summarized_by);
@@ -715,20 +715,20 @@ CaseGraph BuildGraph(const ev::EvidenceCase& value) {
         std::move(refs));
   }
 
-  for (const ev::Path& path : value.paths) {
+  for (const ev::Path &path : value.paths) {
     std::vector<std::string> refs(path.entity_ids.begin(),
                                   path.entity_ids.end());
-    std::string label = "kind=" + std::string(ev::ToString(path.kind)) +
-                        ";feasibility=" +
-                        std::string(ev::ToString(path.feasibility));
-    for (const ev::Expression& condition : path.conditions) {
+    std::string label =
+        "kind=" + std::string(ev::ToString(path.kind)) +
+        ";feasibility=" + std::string(ev::ToString(path.feasibility));
+    for (const ev::Expression &condition : path.conditions) {
       label += ";condition=" + RenderExpression(condition, &refs);
     }
     AddReference(&refs, path.provenance_id);
     add("path", path.id, std::move(label), std::move(refs));
   }
 
-  for (const ev::Constraint& constraint : value.constraints) {
+  for (const ev::Constraint &constraint : value.constraints) {
     std::vector<std::string> refs;
     const std::string expression =
         RenderExpression(constraint.expression, &refs);
@@ -740,19 +740,18 @@ CaseGraph BuildGraph(const ev::EvidenceCase& value) {
         std::move(refs));
   }
 
-  for (const ev::Provenance& record : value.provenance) {
+  for (const ev::Provenance &record : value.provenance) {
     std::vector<std::string> refs(record.input_fact_ids.begin(),
                                   record.input_fact_ids.end());
     AddReference(&refs, record.source_anchor_id);
     add("provenance", record.id,
-        "producer=" + record.producer + ";rule=" + record.rule +
-            ";version=" + record.version +
-            ";configuration=" + record.configuration +
+        "producer=" + record.producer + ";rule=" + record.rule + ";version=" +
+            record.version + ";configuration=" + record.configuration +
             ";analysis_run=" + IdentityKind(record.analysis_run_id),
         std::move(refs));
   }
 
-  for (const ev::ProofObligation& obligation : value.proof_obligations) {
+  for (const ev::ProofObligation &obligation : value.proof_obligations) {
     std::vector<std::string> refs;
     const std::string predicate = RenderExpression(obligation.predicate, &refs);
     const std::string budget = RenderExpression(obligation.budget, &refs);
@@ -761,32 +760,31 @@ CaseGraph BuildGraph(const ev::EvidenceCase& value) {
         "goal=" + std::string(ev::ToString(obligation.goal_kind)) +
         ";status=" + std::string(ev::ToString(obligation.status)) +
         ";producer=" + obligation.verification_producer + ";verifiers=";
-    for (const std::string& verifier : obligation.verifier_kinds) {
+    for (const std::string &verifier : obligation.verifier_kinds) {
       label += verifier + ",";
     }
     label += ";predicate=" + predicate + ";budget=" + budget;
     add("obligation", obligation.id, std::move(label), std::move(refs));
   }
 
-  for (const ev::SummaryReference& summary : value.summaries) {
+  for (const ev::SummaryReference &summary : value.summaries) {
     std::vector<std::string> refs;
     AddReference(&refs, summary.function_id);
-    for (const std::string& component : summary.components) {
+    for (const std::string &component : summary.components) {
       AddReference(&refs, component);
     }
-    add("summary", summary.id,
-        "summary_id=" + IdentityKind(summary.summary_id),
+    add("summary", summary.id, "summary_id=" + IdentityKind(summary.summary_id),
         std::move(refs));
   }
 
-  for (const ev::Dependency& dependency : value.dependencies) {
+  for (const ev::Dependency &dependency : value.dependencies) {
     add("dependency", dependency.id,
         "kind=" + std::string(ev::ToString(dependency.kind)) +
             ";stable=" + IdentityKind(dependency.stable_id),
         {});
   }
 
-  for (const ev::Omission& omission : value.omissions) {
+  for (const ev::Omission &omission : value.omissions) {
     std::vector<std::string> refs;
     AddReference(&refs, omission.subject);
     add("omission", omission.id,
@@ -801,9 +799,9 @@ CaseGraph BuildGraph(const ev::EvidenceCase& value) {
 // True when every reference in the graph resolved to a declared member. An
 // unresolved one would leak a host-derived handle into the comparison, so the
 // caller asserts this rather than trusting it.
-bool ReferencesResolve(const CaseGraph& graph) {
-  for (const Item& item : graph.items) {
-    for (const std::string& reference : item.refs) {
+bool ReferencesResolve(const CaseGraph &graph) {
+  for (const Item &item : graph.items) {
+    for (const std::string &reference : item.refs) {
       if (graph.by_handle.find(reference) == graph.by_handle.end()) {
         return false;
       }
@@ -812,7 +810,7 @@ bool ReferencesResolve(const CaseGraph& graph) {
   return true;
 }
 
-std::vector<std::string> StableSignature(const ev::EvidenceCase& value) {
+std::vector<std::string> StableSignature(const ev::EvidenceCase &value) {
   const CaseGraph graph = BuildGraph(value);
   const std::size_t count = graph.items.size();
 
@@ -825,7 +823,7 @@ std::vector<std::string> StableSignature(const ev::EvidenceCase& value) {
   // this fact" would stop being part of the case's meaning.
   std::vector<std::vector<std::size_t>> incoming(count);
   for (std::size_t i = 0; i < count; ++i) {
-    for (const std::string& reference : graph.items[i].refs) {
+    for (const std::string &reference : graph.items[i].refs) {
       const auto target = graph.by_handle.find(reference);
       if (target != graph.by_handle.end()) {
         incoming[target->second].push_back(i);
@@ -843,7 +841,7 @@ std::vector<std::string> StableSignature(const ev::EvidenceCase& value) {
   std::vector<std::uint64_t> next(count);
   for (std::size_t round = 0; round <= count; ++round) {
     for (std::size_t i = 0; i < count; ++i) {
-      const Item& item = graph.items[i];
+      const Item &item = graph.items[i];
       std::string material = item.category;
       material.push_back('|');
       material.append(ToHex(colour[i]));
@@ -887,9 +885,9 @@ std::vector<std::string> StableSignature(const ev::EvidenceCase& value) {
   return signature;
 }
 
-std::string SignatureText(const std::vector<std::string>& signature) {
+std::string SignatureText(const std::vector<std::string> &signature) {
   std::string out;
-  for (const std::string& line : signature) {
+  for (const std::string &line : signature) {
     out.append(line);
     out.push_back('\n');
   }
@@ -900,7 +898,7 @@ std::string SignatureText(const std::vector<std::string>& signature) {
 // hash, and the label carries no identity — `IdentityKind` keeps only the id's
 // kind prefix and `MaskDigests` masks everything after it — so the label is
 // what a comparison across toolchains can rest on.
-std::string SignatureLabel(const std::string& line) {
+std::string SignatureLabel(const std::string &line) {
   const std::size_t last = line.rfind("::");
   return last == std::string::npos ? line : line.substr(0, last);
 }
@@ -925,7 +923,7 @@ std::string SignatureLabel(const std::string& line) {
 // carries the same label, so those are exactly the axes the host is allowed to
 // move. The cost is real and is accepted deliberately — a check that cannot be
 // satisfied by a correct toolchain is worth less than a weaker one that is.
-bool IsIrDerivedMember(const std::string& label) {
+bool IsIrDerivedMember(const std::string &label) {
   if (label.rfind("entity::kind=value;stable=valref", 0) == 0) {
     return true;
   }
@@ -950,9 +948,9 @@ bool IsNativeProvenanceMember(const std::string &label) {
          label.starts_with("omission::kind=provenance_frontier;");
 }
 
-HostStableProjection SplitHostStable(const ev::EvidenceCase& value) {
+HostStableProjection SplitHostStable(const ev::EvidenceCase &value) {
   HostStableProjection projection;
-  for (const std::string& line : StableSignature(value)) {
+  for (const std::string &line : StableSignature(value)) {
     const std::string label = SignatureLabel(line);
     if (IsNativeProvenanceMember(label)) {
       continue;
@@ -965,9 +963,9 @@ HostStableProjection SplitHostStable(const ev::EvidenceCase& value) {
   return projection;
 }
 
-std::string JoinLines(const std::multiset<std::string>& values) {
+std::string JoinLines(const std::multiset<std::string> &values) {
   std::string out;
-  for (const std::string& value : values) {
+  for (const std::string &value : values) {
     out.append(value);
     out.push_back('\n');
   }
@@ -1094,9 +1092,9 @@ NativeProjection ExpectedNativeProjection(const ev::EvidenceBuildInput &input,
 // host-determined members must be present and free of a member kind the golden
 // does not carry. Their counts are deliberately not compared — see
 // `IsIrDerivedMember` for what that gives up.
-void ExpectHostStableMatch(const ev::EvidenceCase& live,
-                           const ev::EvidenceCase& golden,
-                           const std::string& name) {
+void ExpectHostStableMatch(const ev::EvidenceCase &live,
+                           const ev::EvidenceCase &golden,
+                           const std::string &name) {
   const HostStableProjection tool = SplitHostStable(live);
   const HostStableProjection frozen = SplitHostStable(golden);
 
@@ -1104,13 +1102,12 @@ void ExpectHostStableMatch(const ev::EvidenceCase& live,
       << name
       << " no longer matches the CLI on the members the query contract "
          "determines\n--- tool projection ---\n"
-      << JoinLines(tool.contract)
-      << "--- golden projection ---\n"
+      << JoinLines(tool.contract) << "--- golden projection ---\n"
       << JoinLines(frozen.contract);
 
   EXPECT_FALSE(tool.ir_derived.empty())
       << name << " produced no host-determined member at all";
-  for (const std::string& label : tool.ir_derived) {
+  for (const std::string &label : tool.ir_derived) {
     EXPECT_GT(frozen.ir_derived.count(label), 0u)
         << name
         << " produced a host-determined member kind the golden does not "
@@ -1126,32 +1123,44 @@ void ExpectHostStableMatch(const ev::EvidenceCase& live,
 // Every case-local handle the case declares, as a set, for the DEM-002
 // projection check. Same-build comparison, so the handles may be compared
 // directly.
-std::set<std::string> HandleSet(const ev::EvidenceCase& value) {
+std::set<std::string> HandleSet(const ev::EvidenceCase &value) {
   std::set<std::string> handles;
   handles.insert(value.primary_claim.id);
-  for (const ev::Entity& entity : value.entities) handles.insert(entity.id);
-  for (const ev::Edge& edge : value.edges) handles.insert(edge.id);
-  for (const ev::Path& path : value.paths) handles.insert(path.id);
-  for (const ev::Fact& fact : value.facts) handles.insert(fact.id);
-  for (const ev::Assumption& a : value.assumptions) handles.insert(a.id);
-  for (const ev::Hypothesis& h : value.hypotheses) handles.insert(h.id);
-  for (const ev::Unknown& u : value.unknowns) handles.insert(u.id);
-  for (const ev::Constraint& c : value.constraints) handles.insert(c.id);
-  for (const ev::Provenance& p : value.provenance) handles.insert(p.id);
-  for (const ev::ProofObligation& o : value.proof_obligations) {
+  for (const ev::Entity &entity : value.entities)
+    handles.insert(entity.id);
+  for (const ev::Edge &edge : value.edges)
+    handles.insert(edge.id);
+  for (const ev::Path &path : value.paths)
+    handles.insert(path.id);
+  for (const ev::Fact &fact : value.facts)
+    handles.insert(fact.id);
+  for (const ev::Assumption &a : value.assumptions)
+    handles.insert(a.id);
+  for (const ev::Hypothesis &h : value.hypotheses)
+    handles.insert(h.id);
+  for (const ev::Unknown &u : value.unknowns)
+    handles.insert(u.id);
+  for (const ev::Constraint &c : value.constraints)
+    handles.insert(c.id);
+  for (const ev::Provenance &p : value.provenance)
+    handles.insert(p.id);
+  for (const ev::ProofObligation &o : value.proof_obligations) {
     handles.insert(o.id);
   }
-  for (const ev::SummaryReference& s : value.summaries) handles.insert(s.id);
-  for (const ev::Dependency& d : value.dependencies) handles.insert(d.id);
-  for (const ev::Omission& o : value.omissions) handles.insert(o.id);
+  for (const ev::SummaryReference &s : value.summaries)
+    handles.insert(s.id);
+  for (const ev::Dependency &d : value.dependencies)
+    handles.insert(d.id);
+  for (const ev::Omission &o : value.omissions)
+    handles.insert(o.id);
   handles.erase(std::string());
   return handles;
 }
 
-std::set<std::string> Difference(const std::set<std::string>& left,
-                                 const std::set<std::string>& right) {
+std::set<std::string> Difference(const std::set<std::string> &left,
+                                 const std::set<std::string> &right) {
   std::set<std::string> out;
-  for (const std::string& value : left) {
+  for (const std::string &value : left) {
     if (right.count(value) == 0) {
       out.insert(value);
     }
@@ -1159,9 +1168,9 @@ std::set<std::string> Difference(const std::set<std::string>& left,
   return out;
 }
 
-std::string JoinSet(const std::set<std::string>& values) {
+std::string JoinSet(const std::set<std::string> &values) {
   std::string out;
-  for (const std::string& value : values) {
+  for (const std::string &value : values) {
     if (!out.empty()) {
       out.append(", ");
     }
@@ -1175,8 +1184,8 @@ constexpr std::string_view kWithheldSuffix =
     " is withheld at l0; a higher level can recover it";
 
 // The member an L0 level-projection omission names.
-StatusOr<std::string> WithheldMember(const ev::Omission& omission) {
-  const std::string& reason = omission.reason;
+StatusOr<std::string> WithheldMember(const ev::Omission &omission) {
+  const std::string &reason = omission.reason;
   if (reason.compare(0, kWithheldPrefix.size(), kWithheldPrefix) != 0 ||
       reason.size() < kWithheldPrefix.size() + kWithheldSuffix.size() ||
       reason.compare(reason.size() - kWithheldSuffix.size(),
@@ -1184,12 +1193,12 @@ StatusOr<std::string> WithheldMember(const ev::Omission& omission) {
     return Status::InvalidArgument("unexpected level-projection reason: " +
                                    reason);
   }
-  return reason.substr(kWithheldPrefix.size(),
-                       reason.size() - kWithheldPrefix.size() -
-                           kWithheldSuffix.size());
+  return reason.substr(kWithheldPrefix.size(), reason.size() -
+                                                   kWithheldPrefix.size() -
+                                                   kWithheldSuffix.size());
 }
 
-}  // namespace
+} // namespace
 
 // ---------------------------------------------------------------------------
 // DEM-002 — EmitsValidatedL0L1L2
@@ -1205,7 +1214,7 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
   ASSERT_TRUE(store.ok()) << store.status().message();
 
   std::map<ev::EvidenceLevel, ev::EvidenceCase> cases;
-  for (const auto& [level, text] :
+  for (const auto &[level, text] :
        std::vector<std::pair<ev::EvidenceLevel, std::string>>{
            {ev::EvidenceLevel::kL0, "l0"},
            {ev::EvidenceLevel::kL1, "l1"},
@@ -1224,23 +1233,22 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
     EXPECT_TRUE(ev::RequireValidEvidenceCase(*parsed).ok()) << text;
     // The write/parse/write fixpoint (`REP-001`) holds at every level, so the
     // CLI's own text is the canonical layout.
-    auto rewritten =
-        ev::WriteEirText(*parsed, ev::EirTextStyle::kCanonical);
+    auto rewritten = ev::WriteEirText(*parsed, ev::EirTextStyle::kCanonical);
     ASSERT_TRUE(rewritten.ok()) << rewritten.status().message();
     EXPECT_EQ(*rewritten, cli.stdout_text) << text;
 
     cases.emplace(level, std::move(*parsed));
   }
 
-  const ev::EvidenceCase& l0 = cases.at(ev::EvidenceLevel::kL0);
-  const ev::EvidenceCase& l1 = cases.at(ev::EvidenceLevel::kL1);
-  const ev::EvidenceCase& l2 = cases.at(ev::EvidenceLevel::kL2);
+  const ev::EvidenceCase &l0 = cases.at(ev::EvidenceLevel::kL0);
+  const ev::EvidenceCase &l1 = cases.at(ev::EvidenceLevel::kL1);
+  const ev::EvidenceCase &l2 = cases.at(ev::EvidenceLevel::kL2);
 
   // The program binding is one binding: the same repository, revision, build
   // variant, target, configuration, type layout, and run at every level. Only
   // `target_triple` is excluded from the golden projection, never from this
   // one — it is the same string here by construction.
-  for (const ev::EvidenceCase* other : {&l1, &l2}) {
+  for (const ev::EvidenceCase *other : {&l1, &l2}) {
     EXPECT_EQ(l0.program.repository_id, other->program.repository_id);
     EXPECT_EQ(l0.program.revision_id, other->program.revision_id);
     EXPECT_EQ(l0.program.build_variant_id, other->program.build_variant_id);
@@ -1255,7 +1263,7 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
   // its retained unknown. Original uncertainty is distinct from projection.
   EXPECT_GT(l0.omissions.size(), 0u);
   std::set<std::string> named;
-  for (const ev::Omission& omission : l0.omissions) {
+  for (const ev::Omission &omission : l0.omissions) {
     if (omission.kind == "provenance_premise") {
       EXPECT_TRUE(omission.expandable);
       continue;
@@ -1291,7 +1299,7 @@ TEST(VeritasQueryEirTest, DEM002EmitsValidatedL0L1L2) {
   const std::set<std::string> l0_handles = HandleSet(l0);
   const std::set<std::string> l1_handles = HandleSet(l1);
   std::set<std::string> dropped;
-  for (const std::string& handle : l1_handles) {
+  for (const std::string &handle : l1_handles) {
     if (l0_handles.count(handle) == 0) {
       dropped.insert(handle);
     }
@@ -1425,7 +1433,7 @@ TEST(VeritasQueryEirTest, DEM003TextJsonAndProtoAgree) {
   // The text is the reference: it is the only representation with a reader.
   auto parsed = ParseOrFail(text.stdout_text, "the eir-t output");
   ASSERT_TRUE(parsed.ok()) << parsed.status().message();
-  const ev::EvidenceCase& from_text = *parsed;
+  const ev::EvidenceCase &from_text = *parsed;
   ASSERT_TRUE(from_text.evidence_id.has_value());
 
   // 1. The JSON document is exactly the JSON of the case the text parses into.
@@ -1463,8 +1471,7 @@ TEST(VeritasQueryEirTest, DEM003TextJsonAndProtoAgree) {
   //    reproduce it.
   auto recomputed = ev::ComputeEvidenceId(from_text);
   ASSERT_TRUE(recomputed.ok()) << recomputed.status().message();
-  EXPECT_EQ(core::ToString(*recomputed),
-            IdText(from_text.evidence_id));
+  EXPECT_EQ(core::ToString(*recomputed), IdText(from_text.evidence_id));
 
   // 5. Non-vacuity: the comparison inspects a real document. A case mutated in
   //    one member must not serialize to the same canonical bytes, or step 3
@@ -1486,8 +1493,7 @@ TEST(VeritasQueryEirTest, DEM003TextJsonAndProtoAgree) {
   //    assertion is worth.
   auto mutated_id = ev::ComputeEvidenceId(mutated);
   if (mutated_id.ok()) {
-    EXPECT_NE(core::ToString(*mutated_id),
-              IdText(from_text.evidence_id));
+    EXPECT_NE(core::ToString(*mutated_id), IdText(from_text.evidence_id));
   }
 }
 
@@ -1525,7 +1531,8 @@ TEST(VeritasQueryEirTest, DEM004ProtobufOutputIsRequiredAndFailureAtomic) {
     std::ofstream file(blocker);
     file << "not a directory\n";
   }
-  std::vector<std::string> unwritable = EvidenceArguments(*store, "protobuf", "l1");
+  std::vector<std::string> unwritable =
+      EvidenceArguments(*store, "protobuf", "l1");
   unwritable.push_back("--output");
   unwritable.push_back((blocker / "out.pb").string());
   const CliResult blocked = RunVeritasQuery(unwritable);
@@ -1555,7 +1562,7 @@ TEST(VeritasQueryEirTest, DEM004ProtobufOutputIsRequiredAndFailureAtomic) {
   EXPECT_TRUE(std::filesystem::is_directory(occupied))
       << "the destination was replaced by a file despite the failure";
   EXPECT_EQ(ReadFile(occupied / "marker.txt"), "still here\n");
-  for (const auto& entry : std::filesystem::directory_iterator(area)) {
+  for (const auto &entry : std::filesystem::directory_iterator(area)) {
     EXPECT_EQ(entry.path().filename().string().find(".tmp."), std::string::npos)
         << "a failed write left its temporary behind: " << entry.path();
   }
@@ -1567,7 +1574,8 @@ TEST(VeritasQueryEirTest, DEM004ProtobufOutputIsRequiredAndFailureAtomic) {
     std::ofstream prior(destination, std::ios::binary | std::ios::trunc);
     prior << "PRIOR CONTENTS\n";
   }
-  std::vector<std::string> succeed = EvidenceArguments(*store, "protobuf", "l1");
+  std::vector<std::string> succeed =
+      EvidenceArguments(*store, "protobuf", "l1");
   succeed.push_back("--output");
   succeed.push_back(destination.string());
   const CliResult written = RunVeritasQuery(succeed);
@@ -1589,7 +1597,7 @@ TEST(VeritasQueryEirTest, DEM004ProtobufOutputIsRequiredAndFailureAtomic) {
   EXPECT_EQ(*text_bytes, *proto_bytes);
 
   // No temporary survived the successful write either.
-  for (const auto& entry : std::filesystem::directory_iterator(area)) {
+  for (const auto &entry : std::filesystem::directory_iterator(area)) {
     EXPECT_EQ(entry.path().filename().string().find(".tmp."), std::string::npos)
         << "the temporary was not renamed away: " << entry.path();
   }
@@ -1619,9 +1627,10 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   const CliResult safe = RunEvidence(*safe_store, "eir-t", "l1");
   ASSERT_EQ(safe.exit_code, 0) << safe.stdout_text;
   const std::vector<std::string> truncated_arguments = {
-      "evidence", "overflow", "--sink", "memcpy", "--db",
-      unsafe_store->string(), "--format", "eir-t", "--level", "l1",
-      "--max-nodes", "1"};
+      "evidence", "overflow",    "--sink",
+      "memcpy",   "--db",        unsafe_store->string(),
+      "--format", "eir-t",       "--level",
+      "l1",       "--max-nodes", "1"};
   const CliResult truncated = RunVeritasQuery(truncated_arguments);
   ASSERT_EQ(truncated.exit_code, 0) << truncated.stdout_text;
 
@@ -1630,20 +1639,21 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   // document whose stored identity is not its recomputed content address is
   // part of that contract — so a parse is also a self-consistency proof.
   //
-  // `json_name` is the full-fidelity JSON document beside the `.eir` golden, and
-  // it is READ here rather than merely checked in. The check is byte equality
-  // against `ToEvidenceJson` of the case this golden's own text parses into, so
-  // it is a SAME-BUILD comparison of two frozen artefacts of one host and byte
-  // equality is the right instrument. It is also host-independent as a test:
-  // both sides are functions of the checked-in bytes, not of the running
+  // `json_name` is the full-fidelity JSON document beside the `.eir` golden,
+  // and it is READ here rather than merely checked in. The check is byte
+  // equality against `ToEvidenceJson` of the case this golden's own text parses
+  // into, so it is a SAME-BUILD comparison of two frozen artefacts of one host
+  // and byte equality is the right instrument. It is also host-independent as a
+  // test: both sides are functions of the checked-in bytes, not of the running
   // toolchain. An empty `json_name` means the golden has no JSON companion.
   struct Golden {
     std::string name;
-    const std::string* cli_text;
+    const std::string *cli_text;
     std::string json_name;
     std::string fixture;
     bool truncated = false;
   };
+
   const std::vector<Golden> goldens = {
       {"overflow_unsafe.l1.eir", &unsafe.stdout_text,
        "overflow_unsafe.l1.eir.json", "evidence_overflow_unsafe"},
@@ -1652,7 +1662,7 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
        "evidence_overflow_unsafe", true},
   };
   std::map<std::string, ev::EvidenceCase> cases;
-  for (const Golden& golden : goldens) {
+  for (const Golden &golden : goldens) {
     const std::filesystem::path path = GoldenPath(golden.name);
     ASSERT_TRUE(std::filesystem::exists(path))
         << "missing golden; regenerate with the CLI: " << path;
@@ -1671,8 +1681,7 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
       auto expected_json = ev::ToEvidenceJson(cases.at(golden.name));
       ASSERT_TRUE(expected_json.ok()) << expected_json.status().message();
       EXPECT_EQ(ReadFile(json_path), *expected_json)
-          << golden.json_name
-          << " is not the JSON of " << golden.name
+          << golden.json_name << " is not the JSON of " << golden.name
           << ": the two checked-in goldens have drifted apart";
       auto golden_id = JsonEvidenceId(ReadFile(json_path));
       auto expected_id = JsonEvidenceId(*expected_json);
@@ -1737,9 +1746,9 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
     ExpectHostStableMatch(*from_cli, cases.at(golden.name), golden.name);
   }
 
-  const ev::EvidenceCase& unsafe_case = cases.at("overflow_unsafe.l1.eir");
-  const ev::EvidenceCase& safe_case = cases.at("overflow_safe.l1.eir");
-  const ev::EvidenceCase& truncated_case =
+  const ev::EvidenceCase &unsafe_case = cases.at("overflow_unsafe.l1.eir");
+  const ev::EvidenceCase &safe_case = cases.at("overflow_safe.l1.eir");
+  const ev::EvidenceCase &truncated_case =
       cases.at("overflow_truncated.l1.eir");
 
   // Byte-distinct: the failure mode this case names.
@@ -1748,7 +1757,8 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   EXPECT_NE(safe.stdout_text, truncated.stdout_text);
 
   // SEMANTICALLY distinct, by the same instrument used against the goldens.
-  const std::string unsafe_signature = SignatureText(StableSignature(unsafe_case));
+  const std::string unsafe_signature =
+      SignatureText(StableSignature(unsafe_case));
   const std::string safe_signature = SignatureText(StableSignature(safe_case));
   const std::string truncated_signature =
       SignatureText(StableSignature(truncated_case));
@@ -1787,10 +1797,10 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
     // what they point at.
     ev::EvidenceCase repointed = unsafe_case;
     ASSERT_EQ(repointed.paths.size(), 1u);
-    std::vector<std::string>& chain = repointed.paths.front().entity_ids;
+    std::vector<std::string> &chain = repointed.paths.front().entity_ids;
     ASSERT_GE(chain.size(), 2u);
     std::string outsider;
-    for (const ev::Entity& entity : repointed.entities) {
+    for (const ev::Entity &entity : repointed.entities) {
       if (entity.kind == ev::EntityKind::kMemoryObject) {
         outsider = entity.id;
         break;
@@ -1833,7 +1843,7 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
     std::size_t moved = rerouted.facts.size();
     std::string destination;
     for (std::size_t i = 0; i < rerouted.facts.size(); ++i) {
-      for (const ev::Provenance& record : rerouted.provenance) {
+      for (const ev::Provenance &record : rerouted.provenance) {
         if (record.id != rerouted.facts[i].provenance_id) {
           moved = i;
           destination = record.id;
@@ -1856,11 +1866,14 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
   //
   // Both fixtures retain their actual authority: POSSIBLE_DEFECT, with
   // unsupported/open checks. Their independent native flow facts differ.
-  EXPECT_EQ(unsafe_case.verification_state, ev::VerificationState::kPossibleDefect);
-  EXPECT_EQ(safe_case.verification_state, ev::VerificationState::kPossibleDefect);
+  EXPECT_EQ(unsafe_case.verification_state,
+            ev::VerificationState::kPossibleDefect);
+  EXPECT_EQ(safe_case.verification_state,
+            ev::VerificationState::kPossibleDefect);
   EXPECT_EQ(unsafe_case.verification_state, safe_case.verification_state);
   EXPECT_EQ(unsafe_case.primary_claim.kind, safe_case.primary_claim.kind);
-  EXPECT_EQ(unsafe_case.primary_claim.severity, safe_case.primary_claim.severity);
+  EXPECT_EQ(unsafe_case.primary_claim.severity,
+            safe_case.primary_claim.severity);
   EXPECT_EQ(unsafe_case.paths.size(), 1u);
   EXPECT_EQ(safe_case.paths.size(), 1u);
   // Exact memcpy extent selection gives the same length chain in these two
@@ -1885,17 +1898,17 @@ TEST(VeritasQueryEirTest, DEM005UnsafeSafeAndTruncatedGoldensRemainDistinct) {
                                &ev::Omission::kind),
             0);
   EXPECT_EQ(truncated_case.unknowns.size(), unsafe_case.unknowns.size() + 1);
-  EXPECT_TRUE(std::ranges::any_of(truncated_case.omissions, [](const auto& omission) {
-    return omission.kind == "truncated_query" &&
-           omission.reason.find("value_flow") != std::string::npos &&
-           omission.reason.find("max_nodes") != std::string::npos;
-  }));
-  EXPECT_EQ(truncated_case.primary_claim.kind,
-            unsafe_case.primary_claim.kind);
+  EXPECT_TRUE(
+      std::ranges::any_of(truncated_case.omissions, [](const auto &omission) {
+        return omission.kind == "truncated_query" &&
+               omission.reason.find("value_flow") != std::string::npos &&
+               omission.reason.find("max_nodes") != std::string::npos;
+      }));
+  EXPECT_EQ(truncated_case.primary_claim.kind, unsafe_case.primary_claim.kind);
   EXPECT_EQ(truncated_case.verification_state, unsafe_case.verification_state);
 
-  const auto has_negative_absence = [](const ev::EvidenceCase& value) {
-    for (const ev::Fact& fact : value.facts) {
+  const auto has_negative_absence = [](const ev::EvidenceCase &value) {
+    for (const ev::Fact &fact : value.facts) {
       if (fact.predicate.kind == ev::Expression::Kind::kCall &&
           fact.predicate.text == "dominates_bounds_check" &&
           fact.epistemic == ev::EpistemicState::kMustNot) {
@@ -1979,7 +1992,8 @@ TEST(VeritasQueryEirTest, DEM006RepeatedRunsAndCheckoutRootsAreDeterministic) {
 
   // The binary format separately: it has its own writer and its own atomic
   // replacement path.
-  std::vector<std::string> left_proto = EvidenceArguments(*first, "protobuf", "l1");
+  std::vector<std::string> left_proto =
+      EvidenceArguments(*first, "protobuf", "l1");
   left_proto.push_back("--output");
   left_proto.push_back((area / "left.pb").string());
   ASSERT_EQ(RunVeritasQuery(left_proto).exit_code, 0);
@@ -2010,4 +2024,4 @@ TEST(VeritasQueryEirTest, DEM006RepeatedRunsAndCheckoutRootsAreDeterministic) {
   std::filesystem::remove_all(area, ignored);
 }
 
-}  // namespace veritas::testing
+} // namespace veritas::testing

@@ -24,9 +24,11 @@
 #include <string_view>
 #include <variant>
 #include <vector>
+
 namespace veritas::review {
 
 struct Json;
+
 struct JsonObject : std::map<std::string, Json, std::less<>> {
   using map::map;
   const Json *get(std::string_view key) const;
@@ -35,37 +37,56 @@ struct JsonObject : std::map<std::string, Json, std::less<>> {
   const JsonObject *getObject(std::string_view key) const;
   const std::vector<Json> *getArray(std::string_view key) const;
 };
+
 struct Json {
   using Object = JsonObject;
   using Array = std::vector<Json>;
+
   enum Kind { Null, Boolean, Number, String, List, Map };
+
   std::variant<std::nullptr_t, bool, int64_t, uint64_t, std::string, Array,
                Object>
       data;
+
   Json() : data(nullptr) {}
+
   Json(std::nullptr_t) : data(nullptr) {}
+
   Json(bool b) : data(b) {}
+
   template <std::signed_integral T>
     requires(!std::same_as<T, bool>)
   Json(T n) : data(int64_t(n)) {}
+
   template <std::unsigned_integral T>
     requires(!std::same_as<T, bool>)
   Json(T n) : data(uint64_t(n)) {}
+
   Json(double) = delete;
+
   Json(const char *s) : data(std::string(s)) {}
+
   Json(std::string s) : data(std::move(s)) {}
+
   Json(std::string_view s) : data(std::string(s)) {}
+
   Json(Array a) : data(std::move(a)) {}
+
   Json(Object o) : data(std::move(o)) {}
+
   Kind kind() const;
   std::optional<bool> getAsBoolean() const;
   std::optional<int64_t> getAsInteger() const;
   std::optional<uint64_t> getAsUINT64() const;
   std::optional<std::string> getAsString() const;
+
   const Object *getAsObject() const { return std::get_if<Object>(&data); }
+
   const Array *getAsArray() const { return std::get_if<Array>(&data); }
+
   bool operator==(const Json &) const = default;
 };
+
 inline constexpr std::string_view kProtocol = "veritas.review.backend.v2";
 #define VERITAS_REVIEW_TAG(Name, Kind)                                         \
   struct Name##Tag {                                                           \
@@ -81,20 +102,25 @@ VERITAS_REVIEW_TAG(Verification, "verification")
 VERITAS_REVIEW_TAG(ReviewReport, "review-report")
 VERITAS_REVIEW_TAG(StructuralIndex, "structural-index")
 #undef VERITAS_REVIEW_TAG
+
 // Separate from core::StableId; only the matching tagged parser can create one.
 template <class Tag> class ArtifactId {
 public:
   const std::string &value() const { return value_; }
+
   bool operator==(const ArtifactId &) const = default;
 
 private:
   explicit ArtifactId(std::string value) : value_(std::move(value)) {}
+
   std::string value_;
   template <class T>
   friend StatusOr<ArtifactId<T>> ParseArtifactId(std::string_view);
 };
+
 bool IsDigest(std::string_view);
 std::string HashBytes(std::string_view);
+
 template <class Tag>
 StatusOr<ArtifactId<Tag>> ParseArtifactId(std::string_view value) {
   const std::string prefix = std::string(Tag::kind) + ":sha256:";
@@ -102,6 +128,7 @@ StatusOr<ArtifactId<Tag>> ParseArtifactId(std::string_view value) {
     return Status::InvalidArgument("wrong artifact kind or malformed ID");
   return ArtifactId<Tag>(std::string(value));
 }
+
 using SnapshotId = ArtifactId<SnapshotTag>;
 using ProgramScopeId = ArtifactId<ProgramScopeTag>;
 using ContextId = ArtifactId<ContextTag>;
@@ -116,6 +143,7 @@ using StructuralIndexId = ArtifactId<StructuralIndexTag>;
 StatusOr<Json> ParseStrictJson(std::string_view);
 StatusOr<std::string> CanonicalJson(const Json &);
 Status ValidateWireType(const Json &, std::string_view schema_name);
+
 template <class Tag>
 StatusOr<ArtifactId<Tag>> MakeArtifactId(const Json &semantic) {
   auto bytes = CanonicalJson(semantic);
@@ -126,14 +154,17 @@ StatusOr<ArtifactId<Tag>> MakeArtifactId(const Json &semantic) {
   return ParseArtifactId<Tag>(std::string(Tag::kind) +
                               ":sha256:" + HashBytes(domain + *bytes));
 }
+
 struct NativeBinding {
   std::string analysis_run_id, projection_id, fact_snapshot_id;
   bool operator==(const NativeBinding &) const = default;
 };
+
 struct ProviderVersion {
   std::string name, version, config_digest;
   auto operator<=>(const ProviderVersion &) const = default;
 };
+
 struct ReviewBinding {
   std::optional<SnapshotId> snapshot_id;
   std::string repository_id, base_revision_id, working_tree_digest;
@@ -143,25 +174,30 @@ struct ReviewBinding {
   std::vector<ProviderVersion> provider_versions;
   bool operator==(const ReviewBinding &) const = default;
 };
+
 struct ProgramScope {
   std::vector<std::string> member_tu_digests, dependency_artifact_digests;
   std::string target_digest;
   std::string membership_source = "OUTPUT_HINT", coverage = "OPEN";
   std::vector<std::string> assumptions, frontier;
 };
+
 struct EntityRef {
   StructuralIndexId index_id;
   uint32_t ordinal;
   bool operator==(const EntityRef &) const = default;
 };
+
 struct Region {
   uint64_t start, end;
 };
+
 struct EntityBinding {
   EntityRef entity_ref;
   uint64_t start, end;
   std::string kind;
 };
+
 struct ContextArtifact {
   ContextId context_id;
   ReviewBinding binding;
@@ -172,11 +208,13 @@ struct ContextArtifact {
   std::string selection_reason;
   std::vector<EntityBinding> entity_bindings;
 };
+
 struct AnchorRef {
   ContextId context_id;
   uint64_t start, end;
   std::optional<EntityRef> entity_ref;
 };
+
 struct CandidateProposal {
   ReviewBinding binding;
   std::string origin, claim_kind;
@@ -185,22 +223,26 @@ struct CandidateProposal {
   std::string question;
   std::vector<std::string> assumptions;
 };
+
 struct Coverage {
   bool supported = false, scope_closed = false;
   std::string traversal = "INCOMPLETE";
   std::vector<std::string> frontier_refs, reasons;
   uint64_t examined = 0;
 };
+
 struct Usage {
   uint64_t wall_ms = 0, cpu_ms = 0, peak_rss_bytes = 0, output_bytes = 0,
            examined = 0;
 };
+
 struct BackendEnvelope {
   std::string request_id, operation;
   std::optional<bool> ok;
   std::optional<ReviewBinding> binding;
   Json document;
 };
+
 // Unknown/version-mismatched requests and inconsistent success/failure branches
 // are InvalidArgument. expected_* pin the transport correlation when supplied.
 StatusOr<BackendEnvelope> DecodeV2(std::string_view,

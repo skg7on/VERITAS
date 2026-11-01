@@ -45,9 +45,7 @@ struct ScriptedRecorder {
   explicit ScriptedRecorder(RunMetricsOptions opts = {}) {
     metrics = std::make_unique<RunMetrics>(
         opts,
-        [this] {
-          return std::chrono::steady_clock::time_point{} + wall_tick;
-        },
+        [this] { return std::chrono::steady_clock::time_point{} + wall_tick; },
         [this] { return cpu_tick; });
   }
 };
@@ -56,7 +54,7 @@ struct ScriptedRecorder {
 // footprint both in bytes. This is the same SeriesBuffer::Append the sampler
 // thread calls, driven directly so the join is testable without a thread and
 // without a clock.
-void AppendSample(RunMetrics& metrics, std::chrono::milliseconds t,
+void AppendSample(RunMetrics &metrics, std::chrono::milliseconds t,
                   std::uint64_t rss, std::uint64_t footprint) {
   metrics.series().Append(MemorySample{t, rss, footprint});
 }
@@ -70,7 +68,7 @@ TEST(RunMetricsTest, RecordsCountAndWallTimeForOneSpan) {
 
   const RunMetricsStats stats = r.metrics->TakeStats();
   ASSERT_EQ(stats.root.children.size(), 1u);
-  const SpanStats& a = stats.root.children.front();
+  const SpanStats &a = stats.root.children.front();
   EXPECT_EQ(a.name, "a");
   EXPECT_EQ(a.count, 1u);
   EXPECT_EQ(a.wall_inclusive, milliseconds(7));
@@ -91,7 +89,7 @@ TEST(RunMetricsTest, SubtractsChildrenFromParentSelfTime) {
   r.metrics->EndSpan(parent);
 
   const RunMetricsStats stats = r.metrics->TakeStats();
-  const SpanStats& p = stats.root.children.front();
+  const SpanStats &p = stats.root.children.front();
   EXPECT_EQ(p.name, "p");
   EXPECT_EQ(p.wall_inclusive, milliseconds(10));
   // Self time subtracts the children from the parent's inclusive time. The
@@ -117,14 +115,14 @@ TEST(RunMetricsTest, MeasuresCpuOnlyOnBearingSpans) {
   r.wall_tick = milliseconds(100);
   const std::size_t plain = r.metrics->BeginSpan("q");
   r.wall_tick = milliseconds(110);
-  r.cpu_tick = nanoseconds(9000);  // must be ignored for a plain span
+  r.cpu_tick = nanoseconds(9000); // must be ignored for a plain span
   r.metrics->EndSpan(plain);
 
   const RunMetricsStats stats = r.metrics->TakeStats();
-  const SpanStats& b = stats.root.children.at(0);
+  const SpanStats &b = stats.root.children.at(0);
   EXPECT_TRUE(b.cpu_measured);
   EXPECT_EQ(b.cpu_inclusive, nanoseconds(1500));
-  const SpanStats& q = stats.root.children.at(1);
+  const SpanStats &q = stats.root.children.at(1);
   EXPECT_FALSE(q.cpu_measured);
   EXPECT_EQ(q.cpu_inclusive, nanoseconds(0));
 }
@@ -141,7 +139,7 @@ TEST(RunMetricsTest, AggregatesRepeatedSpansByName) {
 
   const RunMetricsStats stats = r.metrics->TakeStats();
   ASSERT_EQ(stats.root.children.size(), 1u);
-  const SpanStats& x = stats.root.children.front();
+  const SpanStats &x = stats.root.children.front();
   EXPECT_EQ(x.count, 2u);
   EXPECT_EQ(x.wall_inclusive, milliseconds(5));
   EXPECT_EQ(x.min, milliseconds(2));
@@ -154,14 +152,13 @@ TEST(RunMetricsTest, NearestRankPercentilesOverTenSamples) {
   ScriptedRecorder r(options);
   for (int i = 1; i <= 10; ++i) {
     r.wall_tick = milliseconds(0);
-    const std::size_t token =
-        r.metrics->BeginSpan("d", SpanMode::kDistributed);
+    const std::size_t token = r.metrics->BeginSpan("d", SpanMode::kDistributed);
     r.wall_tick = milliseconds(i);
     r.metrics->EndSpan(token);
   }
 
   const RunMetricsStats stats = r.metrics->TakeStats();
-  const SpanStats& d = stats.root.children.front();
+  const SpanStats &d = stats.root.children.front();
   ASSERT_TRUE(d.distribution.has_value());
   // nearest-rank: p_k = samples[ceil(k/100 * n) - 1], n = 10
   EXPECT_EQ(d.distribution->p50, milliseconds(5));
@@ -175,22 +172,20 @@ TEST(RunMetricsTest, TopNOrdersByDurationThenLabel) {
   RunMetricsOptions options;
   options.top_n = 2;
   ScriptedRecorder r(options);
-  const std::pair<const char*, int> cases[] = {
-      {"b", 5}, {"a", 5}, {"c", 9}};
-  for (const auto& [label, ms] : cases) {
+  const std::pair<const char *, int> cases[] = {{"b", 5}, {"a", 5}, {"c", 9}};
+  for (const auto &[label, ms] : cases) {
     r.wall_tick = milliseconds(0);
-    const std::size_t token =
-        r.metrics->BeginSpan("t", SpanMode::kDistributed);
+    const std::size_t token = r.metrics->BeginSpan("t", SpanMode::kDistributed);
     r.metrics->SetLabel(token, label);
     r.wall_tick = milliseconds(ms);
     r.metrics->EndSpan(token);
   }
 
   const RunMetricsStats stats = r.metrics->TakeStats();
-  const SpanStats& t = stats.root.children.front();
+  const SpanStats &t = stats.root.children.front();
   ASSERT_EQ(t.top_n.size(), 2u);
-  EXPECT_EQ(t.top_n.at(0).label, "c");   // 9 ms
-  EXPECT_EQ(t.top_n.at(1).label, "a");   // 5 ms, tie broken by label ascending
+  EXPECT_EQ(t.top_n.at(0).label, "c"); // 9 ms
+  EXPECT_EQ(t.top_n.at(1).label, "a"); // 5 ms, tie broken by label ascending
 }
 
 TEST(RunMetricsTest, CapsSamplesAndFlagsTruncation) {
@@ -199,14 +194,13 @@ TEST(RunMetricsTest, CapsSamplesAndFlagsTruncation) {
   ScriptedRecorder r(options);
   for (int i = 0; i < 5; ++i) {
     r.wall_tick = milliseconds(0);
-    const std::size_t token =
-        r.metrics->BeginSpan("d", SpanMode::kDistributed);
+    const std::size_t token = r.metrics->BeginSpan("d", SpanMode::kDistributed);
     r.wall_tick = milliseconds(i + 1);
     r.metrics->EndSpan(token);
   }
 
   const RunMetricsStats stats = r.metrics->TakeStats();
-  const SpanStats& d = stats.root.children.front();
+  const SpanStats &d = stats.root.children.front();
   ASSERT_TRUE(d.distribution.has_value());
   // The first cap samples are kept; the rest are dropped and flagged.
   EXPECT_TRUE(d.distribution->samples_truncated);
@@ -244,14 +238,13 @@ TEST(RunMetricsTest, DoesNotDiagnoseASpanThatStaysUnderTheSampleCap) {
   ScriptedRecorder r(options);
   for (int i = 0; i < 5; ++i) {
     r.wall_tick = milliseconds(0);
-    const std::size_t token =
-        r.metrics->BeginSpan("d", SpanMode::kDistributed);
+    const std::size_t token = r.metrics->BeginSpan("d", SpanMode::kDistributed);
     r.wall_tick = milliseconds(i + 1);
     r.metrics->EndSpan(token);
   }
 
   const RunMetricsStats stats = r.metrics->TakeStats();
-  const SpanStats& d = stats.root.children.front();
+  const SpanStats &d = stats.root.children.front();
   ASSERT_TRUE(d.distribution.has_value());
   EXPECT_FALSE(d.distribution->samples_truncated);
   EXPECT_TRUE(stats.complete);
@@ -291,7 +284,7 @@ TEST(RunMetricsTest, ClampsNegativeDurationsAndRecordsDiagnostic) {
   ScriptedRecorder r;
   r.wall_tick = milliseconds(10);
   const std::size_t token = r.metrics->BeginSpan("backwards");
-  r.wall_tick = milliseconds(4);  // a misbehaving injected clock
+  r.wall_tick = milliseconds(4); // a misbehaving injected clock
   r.metrics->EndSpan(token);
 
   const RunMetricsStats stats = r.metrics->TakeStats();
@@ -306,7 +299,7 @@ TEST(RunMetricsTest, NullRecorderIsInert) {
   // What is observable is that a live recorder nearby is left untouched.
   ScriptedRecorder r;
   {
-    RunMetrics* null_metrics = nullptr;
+    RunMetrics *null_metrics = nullptr;
     PhaseSpan span(null_metrics, "never");
     span.SetLabel("x");
     span.AddCounter("c", 1, "count");
@@ -328,15 +321,15 @@ TEST(RunMetricsTest, JoinsSeriesToBearingSpanInterval) {
   AppendSample(*r.metrics, milliseconds(0), 100, 90);
   AppendSample(*r.metrics, milliseconds(5), 300, 250);
   AppendSample(*r.metrics, milliseconds(10), 200, 180);
-  AppendSample(*r.metrics, milliseconds(20), 999, 999);  // outside the window
+  AppendSample(*r.metrics, milliseconds(20), 999, 999); // outside the window
 
   const RunMetricsStats stats = r.metrics->TakeStats();
-  const SpanStats& p = stats.root.children.front();
+  const SpanStats &p = stats.root.children.front();
   ASSERT_TRUE(p.memory.has_value());
   EXPECT_EQ(p.memory->rss_start, 100u);
   EXPECT_EQ(p.memory->rss_end, 200u);
   EXPECT_EQ(p.memory->rss_delta, 100);
-  EXPECT_EQ(p.memory->peak_within, 300u);  // 999 is outside and must not count
+  EXPECT_EQ(p.memory->peak_within, 300u); // 999 is outside and must not count
   EXPECT_EQ(p.memory->footprint_peak, 250u);
 }
 
@@ -354,10 +347,10 @@ TEST(RunMetricsTest, BothSpanBoundariesAreInclusive) {
   AppendSample(*r.metrics, milliseconds(11), 999, 999);
 
   const RunMetricsStats stats = r.metrics->TakeStats();
-  const SpanStats& p = stats.root.children.front();
+  const SpanStats &p = stats.root.children.front();
   ASSERT_TRUE(p.memory.has_value());
-  EXPECT_EQ(p.memory->rss_start, 100u);  // t == t_start is inside
-  EXPECT_EQ(p.memory->rss_end, 500u);    // t == t_end is inside
+  EXPECT_EQ(p.memory->rss_start, 100u); // t == t_start is inside
+  EXPECT_EQ(p.memory->rss_end, 500u);   // t == t_end is inside
   EXPECT_EQ(p.memory->peak_within, 500u);
 }
 
@@ -375,7 +368,7 @@ TEST(RunMetricsTest, PlainSpansGetNoMemoryButTheParentWindowStillCoversThem) {
   AppendSample(*r.metrics, milliseconds(10), 700, 70);
 
   const RunMetricsStats stats = r.metrics->TakeStats();
-  const SpanStats& p = stats.root.children.front();
+  const SpanStats &p = stats.root.children.front();
   ASSERT_TRUE(p.memory.has_value());
   ASSERT_EQ(p.children.size(), 1u);
   // A kPlain span records no memory block at all...
@@ -418,8 +411,8 @@ TEST(RunMetricsTest, BearingSpanWhoseWindowHoldsNoSampleHasNoMemoryBlock) {
 
   const RunMetricsStats stats = r.metrics->TakeStats();
   ASSERT_EQ(stats.root.children.size(), 2u);
-  const SpanStats& early_span = stats.root.children.at(0);
-  const SpanStats& late_span = stats.root.children.at(1);
+  const SpanStats &early_span = stats.root.children.at(0);
+  const SpanStats &late_span = stats.root.children.at(1);
   ASSERT_EQ(early_span.name, "early");
   ASSERT_EQ(late_span.name, "late");
   EXPECT_FALSE(early_span.memory.has_value());
@@ -485,7 +478,8 @@ TEST(RunMetricsTest, MeasuresThePeakEvenWhenTheSeriesIsNotEmitted) {
   EXPECT_EQ(stats.peak_at, milliseconds(7));
 }
 
-TEST(RunMetricsTest, SeriesBufferThinningDoublesDecimationKeepingFirstAndNewest) {
+TEST(RunMetricsTest,
+     SeriesBufferThinningDoublesDecimationKeepingFirstAndNewest) {
   SeriesBuffer buffer(4);
   for (int i = 0; i < 4; ++i) {
     buffer.Append(MemorySample{milliseconds(i * 10), 100u + i, 10u});
@@ -498,8 +492,8 @@ TEST(RunMetricsTest, SeriesBufferThinningDoublesDecimationKeepingFirstAndNewest)
 
   EXPECT_EQ(buffer.decimation(), 2u);
   ASSERT_LE(buffer.samples().size(), 4u);
-  EXPECT_EQ(buffer.samples().front().t, milliseconds(0));  // the first survives
-  EXPECT_EQ(buffer.samples().back().t, milliseconds(40));  // the newest survives
+  EXPECT_EQ(buffer.samples().front().t, milliseconds(0)); // the first survives
+  EXPECT_EQ(buffer.samples().back().t, milliseconds(40)); // the newest survives
 }
 
 TEST(RunMetricsTest, SeriesDecimationSaturatesRatherThanWrapping) {
@@ -548,5 +542,5 @@ TEST(RunMetricsTest, PeakIsTheMaximumOfTheWholeSeries) {
   EXPECT_EQ(stats.series.size(), 3u);
 }
 
-}  // namespace
-}  // namespace veritas::core
+} // namespace
+} // namespace veritas::core

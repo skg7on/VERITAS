@@ -38,6 +38,6 @@ namespace veritas::build {
 // untouched. On other platforms the returned adjuster is a no-op.
 clang::tooling::ArgumentsAdjuster MakeSystemIncludeAdjuster();
 
-}  // namespace veritas::build
+} // namespace veritas::build
 
-#endif  // VERITAS_BUILD_TOOLCHAIN_H_
+#endif // VERITAS_BUILD_TOOLCHAIN_H_

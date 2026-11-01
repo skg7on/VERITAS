@@ -73,8 +73,8 @@ namespace fs = std::filesystem;
 // rowid under another name. Dumping it would make the comparison rowid-ordered
 // by construction. The columns that remain are a total order.
 struct TableDump {
-  const char* table;
-  const char* sql;
+  const char *table;
+  const char *sql;
 };
 
 constexpr TableDump kPublishedTableDumps[] = {
@@ -84,7 +84,8 @@ constexpr TableDump kPublishedTableDumps[] = {
     {"run_fact_bindings",
      "SELECT fact_id, confidence, producer_kind, analyzer_run_id, scope_kind, "
      "scope_id, selected_witness_id, is_current FROM run_fact_bindings "
-     "ORDER BY fact_id, is_current, producer_kind, analyzer_run_id, scope_kind, "
+     "ORDER BY fact_id, is_current, producer_kind, analyzer_run_id, "
+     "scope_kind, "
      "scope_id, selected_witness_id, confidence"},
     {"provenance_nodes",
      "SELECT output_fact_id, witness_id, selected, producer_kind, producer_id, "
@@ -94,16 +95,17 @@ constexpr TableDump kPublishedTableDumps[] = {
     {"provenance_edges",
      "SELECT output_fact_id, witness_id, input_kind, input_id, input_ordinal "
      "FROM provenance_edges "
-     "ORDER BY output_fact_id, witness_id, input_ordinal, input_kind, input_id"},
+     "ORDER BY output_fact_id, witness_id, input_ordinal, input_kind, "
+     "input_id"},
 };
 
 // One row's fields joined, and rows terminated, by separator bytes, so a value
 // that happens to contain a separator character cannot forge a field boundary
 // and make two different tables dump alike.
-std::string CanonicalDump(const std::vector<std::vector<std::string>>& rows) {
+std::string CanonicalDump(const std::vector<std::vector<std::string>> &rows) {
   std::string text;
-  for (const std::vector<std::string>& row : rows) {
-    for (const std::string& field : row) {
+  for (const std::vector<std::string> &row : rows) {
+    for (const std::string &field : row) {
       text.append(field);
       text.push_back('\x1f');
     }
@@ -113,7 +115,7 @@ std::string CanonicalDump(const std::vector<std::vector<std::string>>& rows) {
 }
 
 std::string DigestOf(std::string_view text) {
-  const auto* bytes = reinterpret_cast<const std::byte*>(text.data());
+  const auto *bytes = reinterpret_cast<const std::byte *>(text.data());
   return core::DigestToHex(
       core::ComputeSHA256(std::span<const std::byte>(bytes, text.size())));
 }
@@ -127,15 +129,17 @@ struct TableFingerprint {
 // Opens the store under `output_root` and fingerprints each published table.
 // Propagates a failed open or query rather than returning an empty digest: an
 // unreadable store must not compare equal to a readable one.
-StatusOr<std::vector<TableFingerprint>> FingerprintPublishedTables(
-    const fs::path& output_root) {
+StatusOr<std::vector<TableFingerprint>>
+FingerprintPublishedTables(const fs::path &output_root) {
   auto store = summarydb::MetadataStore::Open(output_root / "metadata.db");
-  if (!store.ok()) return store.status();
+  if (!store.ok())
+    return store.status();
 
   std::vector<TableFingerprint> fingerprints;
-  for (const TableDump& dump : kPublishedTableDumps) {
+  for (const TableDump &dump : kPublishedTableDumps) {
     auto rows = store->Query(dump.sql, {});
-    if (!rows.ok()) return rows.status();
+    if (!rows.ok())
+      return rows.status();
     TableFingerprint fingerprint;
     fingerprint.table = dump.table;
     fingerprint.rows = rows->size();
@@ -149,10 +153,10 @@ StatusOr<std::vector<TableFingerprint>> FingerprintPublishedTables(
 // the component-result cache is keyed on the output root, so a root left behind
 // by an earlier run would turn the per-component execute span into a cache hit
 // and the two runs under comparison would not be the same shape of run.
-fs::path UniqueOutputRoot(const std::string& label) {
+fs::path UniqueOutputRoot(const std::string &label) {
   std::string output_template =
       (fs::temp_directory_path() / ("veritas-" + label + "-XXXXXX")).string();
-  char* created = ::mkdtemp(output_template.data());
+  char *created = ::mkdtemp(output_template.data());
   if (created == nullptr) {
     ADD_FAILURE() << "cannot create an output root under "
                   << fs::temp_directory_path();
@@ -245,8 +249,8 @@ TEST(PhaseObservabilityIdentityTest,
   ASSERT_EQ(fingerprints_b->size(), 4u);
 
   for (std::size_t i = 0; i < fingerprints_a->size(); ++i) {
-    const TableFingerprint& a = (*fingerprints_a)[i];
-    const TableFingerprint& b = (*fingerprints_b)[i];
+    const TableFingerprint &a = (*fingerprints_a)[i];
+    const TableFingerprint &b = (*fingerprints_b)[i];
     ASSERT_EQ(a.table, b.table);
     // A non-empty row count, so a digest comparison cannot pass by comparing
     // two empty tables: `DigestOf("")` is a digest, and it is the same one
@@ -268,9 +272,8 @@ TEST(PhaseObservabilityIdentityTest,
   for (std::size_t i = 0; i < fingerprints_a->size(); ++i) {
     for (std::size_t j = i + 1; j < fingerprints_a->size(); ++j) {
       EXPECT_NE((*fingerprints_a)[i].digest, (*fingerprints_a)[j].digest)
-          << (*fingerprints_a)[i].table << " and "
-          << (*fingerprints_a)[j].table << " dumped alike ("
-          << (*fingerprints_a)[i].rows << " and "
+          << (*fingerprints_a)[i].table << " and " << (*fingerprints_a)[j].table
+          << " dumped alike (" << (*fingerprints_a)[i].rows << " and "
           << (*fingerprints_a)[j].rows << " rows)";
     }
   }
@@ -292,9 +295,9 @@ TEST(PhaseObservabilityIdentityTest, RecordsTheExpectedSpanTree) {
   // reason that has nothing to do with the instrumentation it exists to prove.
   std::string output_template =
       (fs::temp_directory_path() / "veritas-metrics-spans-XXXXXX").string();
-  char* created = ::mkdtemp(output_template.data());
-  ASSERT_NE(created, nullptr) << "cannot create an output root under "
-                              << fs::temp_directory_path();
+  char *created = ::mkdtemp(output_template.data());
+  ASSERT_NE(created, nullptr)
+      << "cannot create an output root under " << fs::temp_directory_path();
   const fs::path output = created;
   const ProjectAnalysisRequest request{.project_root = project,
                                        .output_root = output};
@@ -309,48 +312,47 @@ TEST(PhaseObservabilityIdentityTest, RecordsTheExpectedSpanTree) {
   const core::RunMetricsStats stats = metrics.TakeStats();
 
   std::map<std::string, std::uint64_t> counts;
-  std::function<void(const core::SpanStats&)> walk =
-      [&](const core::SpanStats& node) {
+  std::function<void(const core::SpanStats &)> walk =
+      [&](const core::SpanStats &node) {
         counts[node.name] += node.count;
-        for (const core::SpanStats& child : node.children) walk(child);
+        for (const core::SpanStats &child : node.children)
+          walk(child);
       };
   walk(stats.root);
 
   // A span that never opens shows up here as an absent key, not as a zero.
-  for (const char* name : {"m1.ingest", "m4.local_analysis", "m5.svf",
-                           "m5.model_bundle_load", "m5.merge_svf_facts",
-                           "m6.cpg_projection", "m2m3.publish_summaries",
-                           "wpa.orchestrate", "wpa.graph_build",
-                           "facts.batch_assemble", "facts.store_open",
-                           "facts.publish", "facts.publish.validate"}) {
+  for (const char *name :
+       {"m1.ingest", "m4.local_analysis", "m5.svf", "m5.model_bundle_load",
+        "m5.merge_svf_facts", "m6.cpg_projection", "m2m3.publish_summaries",
+        "wpa.orchestrate", "wpa.graph_build", "facts.batch_assemble",
+        "facts.store_open", "facts.publish", "facts.publish.validate"}) {
     EXPECT_GT(counts[name], 0u) << name << " never opened";
   }
   // The SVF session runs its own five numbered steps.
-  for (const char* name : {"m5.svf.module_set", "m5.svf.svfi",
-                           "m5.svf.andersen", "m5.svf.svfg",
-                           "m5.svf.map_facts"}) {
+  for (const char *name :
+       {"m5.svf.module_set", "m5.svf.svfi", "m5.svf.andersen", "m5.svf.svfg",
+        "m5.svf.map_facts"}) {
     EXPECT_GT(counts[name], 0u) << name << " never opened";
   }
   // The per-component spans are distributed.
-  for (const char* name : {"wpa.component.materialize",
-                           "wpa.component.cache_lookup",
-                           "wpa.component.execute",
-                           "wpa.component.canonicalize"}) {
+  for (const char *name :
+       {"wpa.component.materialize", "wpa.component.cache_lookup",
+        "wpa.component.execute", "wpa.component.canonicalize"}) {
     EXPECT_GT(counts[name], 0u) << name << " never opened";
   }
 
   std::map<std::string, std::uint64_t> counters;
-  for (const core::Counter& counter : stats.counters) {
+  for (const core::Counter &counter : stats.counters) {
     counters[counter.name] = counter.value;
   }
-  for (const char* name : {"svf.svfg_nodes", "wpa.components.expected",
-                           "wpa.components.reused", "wpa.components.executed",
-                           "facts.rooted_input", "facts.canonical"}) {
+  for (const char *name :
+       {"svf.svfg_nodes", "wpa.components.expected", "wpa.components.reused",
+        "wpa.components.executed", "facts.rooted_input", "facts.canonical"}) {
     EXPECT_EQ(counters.count(name), 1u) << name << " missing";
   }
   EXPECT_GT(counters["wpa.components.expected"], 0u);
   EXPECT_GT(counters["svf.svfg_nodes"], 0u);
 }
 
-}  // namespace
-}  // namespace veritas::analysis
+} // namespace
+} // namespace veritas::analysis

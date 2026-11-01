@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <functional>
 #include <set>
+
 namespace veritas::review {
 StatusOr<std::string> NormalizeReviewPath(std::string_view text) {
   if (text.empty() || text.find('\0') != std::string_view::npos ||
@@ -35,8 +36,10 @@ StatusOr<std::string> NormalizeReviewPath(std::string_view text) {
     return Status::InvalidArgument("select a file or subdirectory");
   return normalized;
 }
+
 namespace {
 using Targets = std::map<std::string, const Json::Object *>;
+
 StatusOr<Targets> TargetsOf(const Json &manifest) {
   auto status = ValidateWireType(manifest, "ProgramManifest");
   if (!status.ok())
@@ -54,11 +57,13 @@ StatusOr<Targets> TargetsOf(const Json &manifest) {
   }
   return targets;
 }
+
 void SortSet(std::vector<std::string> &values) {
   std::sort(values.begin(), values.end());
   values.erase(std::unique(values.begin(), values.end()), values.end());
 }
 } // namespace
+
 StatusOr<std::vector<std::string>>
 DeclaredProgramPaths(const Json &manifest, std::string_view target_key) {
   auto targets = TargetsOf(manifest);
@@ -82,6 +87,7 @@ DeclaredProgramPaths(const Json &manifest, std::string_view target_key) {
   SortSet(paths);
   return paths;
 }
+
 StatusOr<ProgramScope> ResolveProgramScope(const ProgramScopeInput &input) {
   ProgramScope out;
   if (!input.manifest) {

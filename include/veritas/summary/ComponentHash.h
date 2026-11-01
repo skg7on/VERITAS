@@ -33,28 +33,26 @@ struct ComponentDigestInfo {
   int64_t payload_offset;
   int64_t payload_length;
 
-  bool operator==(const ComponentDigestInfo&) const = default;
+  bool operator==(const ComponentDigestInfo &) const = default;
 };
 
 // Compute component digests for all components in a FunctionSummary.
 // Semantic hashes cover the semantic content only; evidence hashes include
 // provenance and display fields.
-std::vector<ComponentDigestInfo> ComputeComponentDigests(
-    const v1::FunctionSummary& summary);
+std::vector<ComponentDigestInfo>
+ComputeComponentDigests(const v1::FunctionSummary &summary);
 
 // Compute digest for a single component kind.
-ComponentDigestInfo ComputeComponentDigest(
-    v1::ComponentKind kind,
-    const v1::FunctionSummary& summary);
+ComponentDigestInfo ComputeComponentDigest(v1::ComponentKind kind,
+                                           const v1::FunctionSummary &summary);
 
 // V2 overloads preserve the same semantic/evidence split for summary.v2.
-std::vector<ComponentDigestInfo> ComputeComponentDigests(
-    const v2::FunctionSummary& summary);
+std::vector<ComponentDigestInfo>
+ComputeComponentDigests(const v2::FunctionSummary &summary);
 
-ComponentDigestInfo ComputeComponentDigest(
-    v1::ComponentKind kind,
-    const v2::FunctionSummary& summary);
+ComponentDigestInfo ComputeComponentDigest(v1::ComponentKind kind,
+                                           const v2::FunctionSummary &summary);
 
-}  // namespace veritas::summary
+} // namespace veritas::summary
 
-#endif  // VERITAS_SUMMARY_COMPONENT_HASH_H_
+#endif // VERITAS_SUMMARY_COMPONENT_HASH_H_

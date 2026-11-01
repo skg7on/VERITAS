@@ -20,22 +20,22 @@
 
 namespace veritas::analysis::llvm {
 
-std::vector<std::string> CallGraphExtractor::ExtractCalls(
-    const ::llvm::Function* func) const {
+std::vector<std::string>
+CallGraphExtractor::ExtractCalls(const ::llvm::Function *func) const {
   std::vector<std::string> callees;
   if (!func || func->isDeclaration()) {
     return callees;
   }
 
-  for (const auto& bb : *func) {
-    for (const auto& inst : bb) {
-      if (const auto* call_inst = ::llvm::dyn_cast<::llvm::CallInst>(&inst)) {
-        if (auto* callee = call_inst->getCalledFunction()) {
+  for (const auto &bb : *func) {
+    for (const auto &inst : bb) {
+      if (const auto *call_inst = ::llvm::dyn_cast<::llvm::CallInst>(&inst)) {
+        if (auto *callee = call_inst->getCalledFunction()) {
           callees.push_back(GetFunctionSymbolId(callee));
         }
-      } else if (const auto* invoke_inst =
+      } else if (const auto *invoke_inst =
                      ::llvm::dyn_cast<::llvm::InvokeInst>(&inst)) {
-        if (auto* callee = invoke_inst->getCalledFunction()) {
+        if (auto *callee = invoke_inst->getCalledFunction()) {
           callees.push_back(GetFunctionSymbolId(callee));
         }
       }
@@ -46,13 +46,13 @@ std::vector<std::string> CallGraphExtractor::ExtractCalls(
 }
 
 std::vector<CallGraphExtractor::CallEdge>
-CallGraphExtractor::ExtractCallGraph(const ::llvm::Module* module) const {
+CallGraphExtractor::ExtractCallGraph(const ::llvm::Module *module) const {
   std::vector<CallEdge> edges;
   if (!module) {
     return edges;
   }
 
-  for (const auto& func : *module) {
+  for (const auto &func : *module) {
     if (func.isDeclaration()) {
       continue;
     }
@@ -60,7 +60,7 @@ CallGraphExtractor::ExtractCallGraph(const ::llvm::Module* module) const {
     std::string caller_id = GetFunctionSymbolId(&func);
     auto callees = ExtractCalls(&func);
 
-    for (const auto& callee_id : callees) {
+    for (const auto &callee_id : callees) {
       edges.push_back({caller_id, callee_id});
     }
   }
@@ -68,8 +68,8 @@ CallGraphExtractor::ExtractCallGraph(const ::llvm::Module* module) const {
   return edges;
 }
 
-std::string CallGraphExtractor::GetFunctionSymbolId(
-    const ::llvm::Function* func) const {
+std::string
+CallGraphExtractor::GetFunctionSymbolId(const ::llvm::Function *func) const {
   if (!func) {
     return "";
   }
@@ -83,4 +83,4 @@ std::string CallGraphExtractor::GetFunctionSymbolId(
   return symbol_id;
 }
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm

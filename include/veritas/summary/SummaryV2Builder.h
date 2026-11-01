@@ -36,9 +36,9 @@ namespace semantic = veritas::analysis::semantic;
 // structs instead of proto messages; every component V2 does not refine reuses
 // the immutable v1:: message type.
 struct CallFactV2 {
-  core::StableId call_site_id;                      // must be kCallSite
+  core::StableId call_site_id; // must be kCallSite
   std::string callee_symbol;
-  std::string resolved_callee_function_variant_id;  // canonical string form
+  std::string resolved_callee_function_variant_id; // canonical string form
   semantic::DispatchKind dispatch;
   semantic::EpistemicState epistemic;
   std::string provenance_ref;
@@ -52,24 +52,24 @@ struct MemoryEffectFactV2 {
 };
 
 struct ValueFlowFactV2 {
-  core::StableId source_value_id;       // must be kValueRef
-  core::StableId destination_value_id;  // must be kValueRef
+  core::StableId source_value_id;      // must be kValueRef
+  core::StableId destination_value_id; // must be kValueRef
   semantic::EpistemicState epistemic;
   std::string provenance_ref;
 };
 
 struct ParameterFlowFactV2 {
-  core::StableId call_site_id;  // must be kCallSite
-  core::StableId actual_id;     // must be kValueRef (caller)
-  core::StableId formal_id;     // must be kValueRef (callee formal)
+  core::StableId call_site_id; // must be kCallSite
+  core::StableId actual_id;    // must be kValueRef (caller)
+  core::StableId formal_id;    // must be kValueRef (callee formal)
   semantic::EpistemicState epistemic;
   std::string provenance_ref;
 };
 
 struct ReturnFlowFactV2 {
-  core::StableId call_site_id;  // must be kCallSite
-  core::StableId return_id;     // must be kValueRef (callee return)
-  core::StableId result_id;     // must be kValueRef (caller result)
+  core::StableId call_site_id; // must be kCallSite
+  core::StableId return_id;    // must be kValueRef (callee return)
+  core::StableId result_id;    // must be kValueRef (caller result)
   semantic::EpistemicState epistemic;
   std::string provenance_ref;
 };
@@ -117,10 +117,10 @@ struct FunctionLocalFactsV2 {
 // sorted by deterministic serialized bytes so equivalent input produces
 // byte-identical summaries; and component digests are computed with the same
 // semantic/evidence split as V1. creation_epoch_ms is pinned to zero.
-StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
-    const FunctionLocalFactsV2& facts,
-    const build::ProgramContext& context);
+StatusOr<v2::FunctionSummary>
+BuildLocalSummaryV2(const FunctionLocalFactsV2 &facts,
+                    const build::ProgramContext &context);
 
-}  // namespace veritas::summary
+} // namespace veritas::summary
 
-#endif  // VERITAS_SUMMARY_SUMMARY_V2_BUILDER_H_
+#endif // VERITAS_SUMMARY_SUMMARY_V2_BUILDER_H_

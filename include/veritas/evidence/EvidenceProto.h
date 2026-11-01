@@ -96,8 +96,8 @@ namespace veritas::evidence {
 // engaged `evidence_id` disagrees with the identity recomputed from its
 // canonical bytes. A case with no `evidence_id` converts with an empty
 // `evidence_id` field.
-StatusOr<veritas::evidence::v1::EvidenceCase> ToEvidenceProto(
-    const EvidenceCase& value);
+StatusOr<veritas::evidence::v1::EvidenceCase>
+ToEvidenceProto(const EvidenceCase &value);
 
 // Converts `value` back into the semantic model, rejecting anything the model
 // cannot represent: a zero-valued enum in a required position, a stable-ID
@@ -105,8 +105,8 @@ StatusOr<veritas::evidence::v1::EvidenceCase> ToEvidenceProto(
 // identity recomputed from the decoded case's canonical bytes.
 //
 // The returned case is validated and carries its recomputed `evidence_id`.
-StatusOr<EvidenceCase> FromEvidenceProto(
-    const veritas::evidence::v1::EvidenceCase& value);
+StatusOr<EvidenceCase>
+FromEvidenceProto(const veritas::evidence::v1::EvidenceCase &value);
 
 // The serialized form of `value`: `ToEvidenceProto` followed by
 // `SerializeToString`. Wire bytes are a representation, not an identity, and
@@ -114,7 +114,7 @@ StatusOr<EvidenceCase> FromEvidenceProto(
 //
 // Fails with the same statuses as `ToEvidenceProto`, and with `Internal` if the
 // message cannot be serialized.
-StatusOr<std::string> EncodeEvidenceProto(const EvidenceCase& value);
+StatusOr<std::string> EncodeEvidenceProto(const EvidenceCase &value);
 
 // Parses `bytes` as an `EvidenceCase` message and converts it with
 // `FromEvidenceProto`.
@@ -124,6 +124,6 @@ StatusOr<std::string> EncodeEvidenceProto(const EvidenceCase& value);
 // failure no case is returned.
 StatusOr<EvidenceCase> DecodeEvidenceProto(std::string_view bytes);
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EVIDENCE_PROTO_H_
+#endif // VERITAS_EVIDENCE_EVIDENCE_PROTO_H_

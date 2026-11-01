@@ -40,35 +40,36 @@ namespace {
 
 using namespace veritas::analysis::semantic;
 
-constexpr const char* kDataLayout =
+constexpr const char *kDataLayout =
     "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64"
     "-f32:32:32-f64:64:64";
 
-OriginMap OriginMapFor(const ::llvm::Module& module) {
+OriginMap OriginMapFor(const ::llvm::Module &module) {
   OriginMap origin_map;
-  for (const auto& function : module) {
+  for (const auto &function : module) {
     if (function.isDeclaration())
       continue;
     const std::string name = function.getName().str();
-    const auto id = core::MakeStableId(
-        core::IdKind::kFunctionVariant,
-        std::as_bytes(std::span(name.data(), name.size())));
-    origin_map.RecordOrigin(const_cast<::llvm::Function*>(&function),
+    const auto id =
+        core::MakeStableId(core::IdKind::kFunctionVariant,
+                           std::as_bytes(std::span(name.data(), name.size())));
+    origin_map.RecordOrigin(const_cast<::llvm::Function *>(&function),
                             core::ToString(id));
   }
   return origin_map;
 }
 
 // Returns the `index`-th GEP in `function_name`, in instruction order.
-const ::llvm::Value* FindGep(const ::llvm::Module& module,
-                             const char* function_name, std::size_t index) {
-  const ::llvm::Function* function = module.getFunction(function_name);
+const ::llvm::Value *FindGep(const ::llvm::Module &module,
+                             const char *function_name, std::size_t index) {
+  const ::llvm::Function *function = module.getFunction(function_name);
   if (!function)
     return nullptr;
   std::size_t seen = 0;
-  for (const auto& block : *function) {
-    for (const auto& inst : block) {
-      if (const auto* gep = ::llvm::dyn_cast<::llvm::GetElementPtrInst>(&inst)) {
+  for (const auto &block : *function) {
+    for (const auto &inst : block) {
+      if (const auto *gep =
+              ::llvm::dyn_cast<::llvm::GetElementPtrInst>(&inst)) {
         if (seen++ == index)
           return gep;
       }
@@ -87,22 +88,19 @@ struct MemoryFixture {
   std::unique_ptr<OriginMap> origin_map;
   std::unique_ptr<StableValueMapper> mapper;
   AbstractMemoryBuilder builder;
-  const ::llvm::Value* pointer;
+  const ::llvm::Value *pointer;
 
   MemoryFixture(std::unique_ptr<::llvm::LLVMContext> ctx,
                 std::unique_ptr<::llvm::Module> mod,
                 std::unique_ptr<::llvm::DataLayout> dl,
-                std::unique_ptr<OriginMap> origins, const ::llvm::Value* ptr)
-      : context(std::move(ctx)),
-        module(std::move(mod)),
-        layout(std::move(dl)),
+                std::unique_ptr<OriginMap> origins, const ::llvm::Value *ptr)
+      : context(std::move(ctx)), module(std::move(mod)), layout(std::move(dl)),
         origin_map(std::move(origins)),
         mapper(std::make_unique<StableValueMapper>(*module, *origin_map)),
-        builder(*layout, *mapper, *origin_map),
-        pointer(ptr) {}
+        builder(*layout, *mapper, *origin_map), pointer(ptr) {}
 };
 
-MemoryFixture BuildFixture(const char* ir, const char* function_name,
+MemoryFixture BuildFixture(const char *ir, const char *function_name,
                            std::size_t gep_index = 0) {
   auto context = std::make_unique<::llvm::LLVMContext>();
   ::llvm::SMDiagnostic error;
@@ -112,11 +110,11 @@ MemoryFixture BuildFixture(const char* ir, const char* function_name,
     std::abort();
   }
   module->setDataLayout(kDataLayout);
-  const ::llvm::Value* gep = FindGep(*module, function_name, gep_index);
+  const ::llvm::Value *gep = FindGep(*module, function_name, gep_index);
   auto layout = std::make_unique<::llvm::DataLayout>(module->getDataLayout());
   auto origins = std::make_unique<OriginMap>(OriginMapFor(*module));
-  return MemoryFixture(std::move(context), std::move(module),
-                       std::move(layout), std::move(origins), gep);
+  return MemoryFixture(std::move(context), std::move(module), std::move(layout),
+                       std::move(origins), gep);
 }
 
 MemoryFixture FieldStoreFixture() {
@@ -129,7 +127,8 @@ MemoryFixture FieldStoreFixture() {
       store i32 0, ptr %gep
       ret void
     }
-  )", "store_field");
+  )",
+                      "store_field");
 }
 
 MemoryFixture NonHomogeneousFixture() {
@@ -141,7 +140,8 @@ MemoryFixture NonHomogeneousFixture() {
       store i64 0, ptr %gep
       ret void
     }
-  )", "store_wide");
+  )",
+                      "store_wide");
 }
 
 MemoryFixture ArrayFieldFixture() {
@@ -155,7 +155,8 @@ MemoryFixture ArrayFieldFixture() {
       store float 0.0, ptr %gep
       ret void
     }
-  )", "array_field");
+  )",
+                      "array_field");
 }
 
 MemoryFixture VariableIndexFixture() {
@@ -165,7 +166,8 @@ MemoryFixture VariableIndexFixture() {
       store i32 0, ptr %gep
       ret void
     }
-  )", "indexed");
+  )",
+                      "indexed");
 }
 
 MemoryFixture TwoFieldFixture(std::size_t gep_index) {
@@ -180,7 +182,8 @@ MemoryFixture TwoFieldFixture(std::size_t gep_index) {
       store i32 0, ptr %b
       ret void
     }
-  )", "store_both", gep_index);
+  )",
+                      "store_both", gep_index);
 }
 
 // The local extraction path supplies a load/store access size, while the SVF
@@ -231,8 +234,7 @@ TEST(AbstractMemoryBuilderTest, PreservesFieldAndByteRange) {
   ASSERT_EQ(location->access_path.size(), 2u);
   EXPECT_EQ(location->access_path[0].kind,
             AccessPathSegment::Kind::kArrayIndex);
-  EXPECT_EQ(location->access_path[1].kind,
-            AccessPathSegment::Kind::kField);
+  EXPECT_EQ(location->access_path[1].kind, AccessPathSegment::Kind::kField);
   EXPECT_EQ(location->access_path[1].first, 1);
   EXPECT_EQ(location->byte_range.offset, 4);
   EXPECT_EQ(location->byte_range.size, 4u);
@@ -243,8 +245,7 @@ TEST(AbstractMemoryBuilderTest, NonHomogeneousStructFieldOffset) {
   auto location = access.builder.LocationFor(*access.pointer, 8);
   ASSERT_TRUE(location.ok());
   ASSERT_EQ(location->access_path.size(), 2u);
-  EXPECT_EQ(location->access_path[1].kind,
-            AccessPathSegment::Kind::kField);
+  EXPECT_EQ(location->access_path[1].kind, AccessPathSegment::Kind::kField);
   EXPECT_EQ(location->access_path[1].first, 1);
   EXPECT_EQ(location->byte_range.offset, 8);
   EXPECT_EQ(location->byte_range.size, 8u);
@@ -257,8 +258,7 @@ TEST(AbstractMemoryBuilderTest, ArrayFieldIndexUsesElementStride) {
   ASSERT_EQ(location->access_path.size(), 3u);
   EXPECT_EQ(location->access_path[0].kind,
             AccessPathSegment::Kind::kArrayIndex);
-  EXPECT_EQ(location->access_path[1].kind,
-            AccessPathSegment::Kind::kField);
+  EXPECT_EQ(location->access_path[1].kind, AccessPathSegment::Kind::kField);
   EXPECT_EQ(location->access_path[1].first, 1);
   EXPECT_EQ(location->access_path[2].kind,
             AccessPathSegment::Kind::kArrayIndex);
@@ -276,5 +276,5 @@ TEST(AbstractMemoryBuilderTest, RepresentsUnknownSuffixExplicitly) {
             AccessPathSegment::Kind::kUnknown);
 }
 
-}  // namespace
-}  // namespace veritas::analysis::llvm
+} // namespace
+} // namespace veritas::analysis::llvm

@@ -37,6 +37,7 @@ public:
   Predecessors(core::StableId scc_id) const;
   StatusOr<std::span<const core::StableId>>
   Successors(core::StableId scc_id) const;
+
   std::span<const core::StableId> ReverseTopologicalOrder() const {
     return reverse_topological_order_;
   }

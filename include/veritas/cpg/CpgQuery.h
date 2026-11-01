@@ -44,8 +44,7 @@ struct CpgPath {
 
 // TraversalResult carries the completed paths, the exact reasons the traversal
 // was truncated (empty means complete), and the explored node/path counts.
-template <typename T>
-struct TraversalResult {
+template <typename T> struct TraversalResult {
   std::vector<T> items;
   std::vector<TruncationReason> truncation_reasons;
   std::size_t explored_nodes = 0;
@@ -55,41 +54,44 @@ struct TraversalResult {
 // CpgQuery is bound to one immutable ProjectionID. Adjacency queries return
 // direct neighbors; traversal queries run a budgeted BFS and report truncation.
 class CpgQuery {
- public:
-  static StatusOr<CpgQuery> OpenProjection(const CpgRepository& repository,
+public:
+  static StatusOr<CpgQuery> OpenProjection(const CpgRepository &repository,
                                            core::StableId projection_id);
-  static StatusOr<CpgQuery> OpenCurrent(const CpgRepository& repository,
+  static StatusOr<CpgQuery> OpenCurrent(const CpgRepository &repository,
                                         core::StableId revision_id,
                                         core::StableId build_variant_id);
 
   core::StableId projection_id() const { return projection_id_; }
 
-  StatusOr<std::vector<CpgNode>> GetCallees(
-      core::StableId function_variant_id) const;
-  StatusOr<std::vector<CpgNode>> GetCallers(
-      core::StableId function_variant_id) const;
-  StatusOr<std::vector<CpgNode>> GetWriters(
-      core::StableId memory_object_id) const;
+  StatusOr<std::vector<CpgNode>>
+  GetCallees(core::StableId function_variant_id) const;
+  StatusOr<std::vector<CpgNode>>
+  GetCallers(core::StableId function_variant_id) const;
+  StatusOr<std::vector<CpgNode>>
+  GetWriters(core::StableId memory_object_id) const;
 
-  StatusOr<TraversalResult<CpgPath>> GetValueFlow(
-      core::StableId src, core::StableId dst, QueryBudget budget) const;
-  StatusOr<TraversalResult<CpgPath>> GetCallPaths(
-      core::StableId src, core::StableId dst, QueryBudget budget) const;
+  StatusOr<TraversalResult<CpgPath>> GetValueFlow(core::StableId src,
+                                                  core::StableId dst,
+                                                  QueryBudget budget) const;
+  StatusOr<TraversalResult<CpgPath>> GetCallPaths(core::StableId src,
+                                                  core::StableId dst,
+                                                  QueryBudget budget) const;
 
- private:
+private:
   CpgQuery(core::StableId projection_id, std::vector<CpgNode> nodes,
            std::vector<CpgEdge> edges);
 
-  const CpgNode* FindNode(core::StableId node_id) const;
-  StatusOr<TraversalResult<CpgPath>> Traverse(
-      core::StableId src, core::StableId dst, QueryBudget budget,
-      bool call_edges) const;
+  const CpgNode *FindNode(core::StableId node_id) const;
+  StatusOr<TraversalResult<CpgPath>> Traverse(core::StableId src,
+                                              core::StableId dst,
+                                              QueryBudget budget,
+                                              bool call_edges) const;
 
   core::StableId projection_id_;
   std::vector<CpgNode> nodes_;
   std::vector<CpgEdge> edges_;
 };
 
-}  // namespace veritas::cpg
+} // namespace veritas::cpg
 
-#endif  // VERITAS_CPG_CPGQUERY_H_
+#endif // VERITAS_CPG_CPGQUERY_H_

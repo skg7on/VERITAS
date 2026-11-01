@@ -57,8 +57,8 @@ struct QueryCompletionDescriptor {
 // witness-independent fact ID through M9 MakeFact. Returns InvalidArgument when
 // the descriptor is not a canonical completion certificate (for example, an
 // unspecified completeness or a budget with a non-positive limit).
-StatusOr<facts::AnalysisFact> MakeQueryCompletionFact(
-    const QueryCompletionDescriptor& descriptor);
+StatusOr<facts::AnalysisFact>
+MakeQueryCompletionFact(const QueryCompletionDescriptor &descriptor);
 
 // Validates a completion fact, its run binding, and its selected witness
 // against the result metadata and the canonical payload it certifies. Rejects a
@@ -67,12 +67,12 @@ StatusOr<facts::AnalysisFact> MakeQueryCompletionFact(
 // mismatch, or metadata that disagrees with the descriptor's completeness,
 // reason order, or examined count. The witness is never synthesized here: a
 // missing witness is the caller's responsibility to supply.
-Status ValidateQueryCompletion(const facts::AnalysisFact& completion_fact,
-                               const facts::RunFactBinding& binding,
-                               const facts::FactWitness& witness,
-                               const QueryResultMetadata& metadata,
-                               const QueryCompletionDescriptor& descriptor);
+Status ValidateQueryCompletion(const facts::AnalysisFact &completion_fact,
+                               const facts::RunFactBinding &binding,
+                               const facts::FactWitness &witness,
+                               const QueryResultMetadata &metadata,
+                               const QueryCompletionDescriptor &descriptor);
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_QUERY_COMPLETION_H_
+#endif // VERITAS_EVIDENCE_QUERY_COMPLETION_H_

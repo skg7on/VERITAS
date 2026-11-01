@@ -42,15 +42,15 @@ std::unique_ptr<pipeline::ProgramIr> BuildFunctionPointerProgramIr() {
   auto program_ir = std::make_unique<pipeline::ProgramIr>();
   auto module = std::make_unique<::llvm::Module>("function_pointer",
                                                  program_ir->GetContext());
-  auto* i32ty = ::llvm::Type::getInt32Ty(program_ir->GetContext());
-  auto* fnty = ::llvm::FunctionType::get(i32ty, {i32ty}, false);
-  auto* ptrty = ::llvm::PointerType::get(program_ir->GetContext(), 0);
+  auto *i32ty = ::llvm::Type::getInt32Ty(program_ir->GetContext());
+  auto *fnty = ::llvm::FunctionType::get(i32ty, {i32ty}, false);
+  auto *ptrty = ::llvm::PointerType::get(program_ir->GetContext(), 0);
 
-  auto* target = ::llvm::Function::Create(
+  auto *target = ::llvm::Function::Create(
       fnty, ::llvm::Function::ExternalLinkage, "target", module.get());
   {
-    auto* entry = ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry",
-                                             target);
+    auto *entry =
+        ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry", target);
     ::llvm::IRBuilder<> builder(entry);
     builder.CreateRet(target->getArg(0));
   }
@@ -60,17 +60,17 @@ std::unique_ptr<pipeline::ProgramIr> BuildFunctionPointerProgramIr() {
                              ::llvm::GlobalValue::ExternalLinkage, target,
                              "fp");
 
-  auto* caller = ::llvm::Function::Create(
-      ::llvm::FunctionType::get(i32ty, {}, false), ::llvm::Function::ExternalLinkage,
-      "invoke-callback", module.get());
+  auto *caller = ::llvm::Function::Create(
+      ::llvm::FunctionType::get(i32ty, {}, false),
+      ::llvm::Function::ExternalLinkage, "invoke-callback", module.get());
   {
-    auto* entry = ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry",
-                                             caller);
+    auto *entry =
+        ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry", caller);
     ::llvm::IRBuilder<> builder(entry);
-    auto* fp = module->getGlobalVariable("fp");
-    auto* cb = builder.CreateLoad(ptrty, fp, "cb");
-    auto* arg = ::llvm::ConstantInt::get(i32ty, 42);
-    auto* result = builder.CreateCall(fnty, cb, {arg}, "call");
+    auto *fp = module->getGlobalVariable("fp");
+    auto *cb = builder.CreateLoad(ptrty, fp, "cb");
+    auto *arg = ::llvm::ConstantInt::get(i32ty, 42);
+    auto *result = builder.CreateCall(fnty, cb, {arg}, "call");
     builder.CreateRet(result);
   }
 
@@ -78,7 +78,7 @@ std::unique_ptr<pipeline::ProgramIr> BuildFunctionPointerProgramIr() {
   return program_ir;
 }
 
-veritas::StatusOr<SvfMappingResult> AnalyzeFixture(const std::string&) {
+veritas::StatusOr<SvfMappingResult> AnalyzeFixture(const std::string &) {
   auto program_ir = BuildFunctionPointerProgramIr();
 
   AnalyzerRunContext run_context{
@@ -89,20 +89,22 @@ veritas::StatusOr<SvfMappingResult> AnalyzeFixture(const std::string&) {
 
   SvfMappingResult result;
   auto status = RunWithSvfSession(
-      *program_ir, SvfConfig::Default(), [&](const SvfSessionView& view) {
+      *program_ir, SvfConfig::Default(), [&](const SvfSessionView &view) {
         return MapSvfFacts(*program_ir, view, run_context, SvfConfig::Default(),
                            &result);
       });
-  if (!status.ok()) return status;
+  if (!status.ok())
+    return status;
   return result;
 }
 
-std::vector<semantic::NormalizedCallTarget> CallsAt(
-    const semantic::NormalizedAnalysisFacts& facts,
-    const std::string& diagnostic_symbol) {
+std::vector<semantic::NormalizedCallTarget>
+CallsAt(const semantic::NormalizedAnalysisFacts &facts,
+        const std::string &diagnostic_symbol) {
   std::vector<semantic::NormalizedCallTarget> out;
-  for (const auto& call : facts.calls) {
-    if (call.diagnostic_symbol == diagnostic_symbol) out.push_back(call);
+  for (const auto &call : facts.calls) {
+    if (call.diagnostic_symbol == diagnostic_symbol)
+      out.push_back(call);
   }
   return out;
 }
@@ -112,12 +114,12 @@ TEST(SvfIndirectCallTest, EmitsStableMayTargetForFunctionPointer) {
   ASSERT_TRUE(result.ok());
   auto targets = CallsAt(result->facts, "invoke-callback");
   ASSERT_FALSE(targets.empty());
-  EXPECT_TRUE(std::ranges::all_of(targets, [](const auto& target) {
+  EXPECT_TRUE(std::ranges::all_of(targets, [](const auto &target) {
     return target.callee.has_value() &&
            target.dispatch == semantic::DispatchKind::kIndirect &&
            target.epistemic == semantic::EpistemicState::kMay;
   }));
 }
 
-}  // namespace
-}  // namespace veritas::analysis::svf
+} // namespace
+} // namespace veritas::analysis::svf

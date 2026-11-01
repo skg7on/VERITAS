@@ -71,68 +71,68 @@ enum class MemberKind {
 
 std::string_view MemberKindName(MemberKind kind) {
   switch (kind) {
-    case MemberKind::kClaim:
-      return "claim";
-    case MemberKind::kEntity:
-      return "entity";
-    case MemberKind::kEdge:
-      return "edge";
-    case MemberKind::kPath:
-      return "path";
-    case MemberKind::kFact:
-      return "fact";
-    case MemberKind::kAssumption:
-      return "assumption";
-    case MemberKind::kHypothesis:
-      return "hypothesis";
-    case MemberKind::kUnknown:
-      return "unknown";
-    case MemberKind::kConstraint:
-      return "constraint";
-    case MemberKind::kProvenance:
-      return "provenance";
-    case MemberKind::kProofObligation:
-      return "proof obligation";
-    case MemberKind::kSummary:
-      return "summary reference";
-    case MemberKind::kDependency:
-      return "dependency";
-    case MemberKind::kOmission:
-      return "omission";
+  case MemberKind::kClaim:
+    return "claim";
+  case MemberKind::kEntity:
+    return "entity";
+  case MemberKind::kEdge:
+    return "edge";
+  case MemberKind::kPath:
+    return "path";
+  case MemberKind::kFact:
+    return "fact";
+  case MemberKind::kAssumption:
+    return "assumption";
+  case MemberKind::kHypothesis:
+    return "hypothesis";
+  case MemberKind::kUnknown:
+    return "unknown";
+  case MemberKind::kConstraint:
+    return "constraint";
+  case MemberKind::kProvenance:
+    return "provenance";
+  case MemberKind::kProofObligation:
+    return "proof obligation";
+  case MemberKind::kSummary:
+    return "summary reference";
+  case MemberKind::kDependency:
+    return "dependency";
+  case MemberKind::kOmission:
+    return "omission";
   }
   return "member";
 }
 
 std::string_view ExpressionKindName(Expression::Kind kind) {
   switch (kind) {
-    case Expression::Kind::kUnspecified:
-      return "unspecified";
-    case Expression::Kind::kBool:
-      return "bool";
-    case Expression::Kind::kInteger:
-      return "integer";
-    case Expression::Kind::kString:
-      return "string";
-    case Expression::Kind::kSymbol:
-      return "symbol";
-    case Expression::Kind::kReference:
-      return "reference";
-    case Expression::Kind::kCall:
-      return "call";
-    case Expression::Kind::kNot:
-      return "not";
-    case Expression::Kind::kCompare:
-      return "compare";
-    case Expression::Kind::kAnd:
-      return "and";
-    case Expression::Kind::kOr:
-      return "or";
-    case Expression::Kind::kImplies:
-      return "implies";
-    case Expression::Kind::kForAll:
-      return "forall";
-    case Expression::Kind::kExists:
-      return "exists";
+  case Expression::Kind::kUnspecified:
+    return "unspecified";
+  case Expression::Kind::kBool:
+    return "bool";
+  case Expression::Kind::kInteger:
+    return "integer";
+  case Expression::Kind::kString:
+    return "string";
+  case Expression::Kind::kSymbol:
+    return "symbol";
+  case Expression::Kind::kReference:
+    return "reference";
+  case Expression::Kind::kCall:
+    return "call";
+  case Expression::Kind::kNot:
+    return "not";
+  case Expression::Kind::kCompare:
+    return "compare";
+  case Expression::Kind::kAnd:
+    return "and";
+  case Expression::Kind::kOr:
+    return "or";
+  case Expression::Kind::kImplies:
+    return "implies";
+  case Expression::Kind::kForAll:
+    return "forall";
+  case Expression::Kind::kExists:
+    return "exists";
   }
   return "expression";
 }
@@ -142,28 +142,29 @@ std::string_view ExpressionKindName(Expression::Kind kind) {
 // untyped `Expression` admits without a full type system.
 bool IsFormulaKind(Expression::Kind kind) {
   switch (kind) {
-    case Expression::Kind::kBool:
-    case Expression::Kind::kNot:
-    case Expression::Kind::kCompare:
-    case Expression::Kind::kAnd:
-    case Expression::Kind::kOr:
-    case Expression::Kind::kImplies:
-    case Expression::Kind::kForAll:
-    case Expression::Kind::kExists:
-      return true;
-    case Expression::Kind::kUnspecified:
-    case Expression::Kind::kInteger:
-    case Expression::Kind::kString:
-    case Expression::Kind::kSymbol:
-    case Expression::Kind::kReference:
-    case Expression::Kind::kCall:
-      return false;
+  case Expression::Kind::kBool:
+  case Expression::Kind::kNot:
+  case Expression::Kind::kCompare:
+  case Expression::Kind::kAnd:
+  case Expression::Kind::kOr:
+  case Expression::Kind::kImplies:
+  case Expression::Kind::kForAll:
+  case Expression::Kind::kExists:
+    return true;
+  case Expression::Kind::kUnspecified:
+  case Expression::Kind::kInteger:
+  case Expression::Kind::kString:
+  case Expression::Kind::kSymbol:
+  case Expression::Kind::kReference:
+  case Expression::Kind::kCall:
+    return false;
   }
   return false;
 }
 
 bool IsLiteralKind(Expression::Kind kind) {
-  return kind == Expression::Kind::kInteger || kind == Expression::Kind::kString;
+  return kind == Expression::Kind::kInteger ||
+         kind == Expression::Kind::kString;
 }
 
 bool IsComparisonOperator(std::string_view text) {
@@ -186,7 +187,7 @@ bool IsVerifiedState(VerificationState state) {
 
 // A stable ID is usable only if it is canonical: a non-empty digest whose
 // serialized form re-parses.
-bool IsCanonicalStableId(const core::StableId& id) {
+bool IsCanonicalStableId(const core::StableId &id) {
   if (id.digest_hex.empty()) {
     return false;
   }
@@ -196,14 +197,14 @@ bool IsCanonicalStableId(const core::StableId& id) {
 // The relation a path segment must carry, given the path's kind.
 std::optional<RelationKind> RelationForPathKind(PathKind kind) {
   switch (kind) {
-    case PathKind::kUnspecified:
-      return std::nullopt;
-    case PathKind::kCall:
-      return RelationKind::kCalls;
-    case PathKind::kValueFlow:
-      return RelationKind::kFlowsTo;
-    case PathKind::kControl:
-      return RelationKind::kDominates;
+  case PathKind::kUnspecified:
+    return std::nullopt;
+  case PathKind::kCall:
+    return RelationKind::kCalls;
+  case PathKind::kValueFlow:
+    return RelationKind::kFlowsTo;
+  case PathKind::kControl:
+    return RelationKind::kDominates;
   }
   return std::nullopt;
 }
@@ -228,8 +229,8 @@ std::string Joined(std::string_view left, std::string_view right) {
 // kept both in declaration order (for duplicate reporting) and by name (for
 // resolution); both map to `const` views of the case.
 class CaseValidator {
- public:
-  explicit CaseValidator(const EvidenceCase& value) : value_(value) {}
+public:
+  explicit CaseValidator(const EvidenceCase &value) : value_(value) {}
 
   EvidenceValidationReport Run() {
     IndexMembers();
@@ -249,7 +250,7 @@ class CaseValidator {
     return std::move(report_);
   }
 
- private:
+private:
   void Add(EvidenceValidationCode code, std::string member_id,
            std::string message) {
     EvidenceValidationIssue issue;
@@ -261,7 +262,7 @@ class CaseValidator {
 
   // --- Indexing ------------------------------------------------------------
 
-  void Declare(const std::string& id, MemberKind kind) {
+  void Declare(const std::string &id, MemberKind kind) {
     if (id.empty()) {
       return;
     }
@@ -271,44 +272,44 @@ class CaseValidator {
 
   void IndexMembers() {
     Declare(value_.primary_claim.id, MemberKind::kClaim);
-    for (const Entity& entity : value_.entities) {
+    for (const Entity &entity : value_.entities) {
       Declare(entity.id, MemberKind::kEntity);
     }
-    for (const Edge& edge : value_.edges) {
+    for (const Edge &edge : value_.edges) {
       Declare(edge.id, MemberKind::kEdge);
     }
-    for (const Path& path : value_.paths) {
+    for (const Path &path : value_.paths) {
       Declare(path.id, MemberKind::kPath);
     }
-    for (const Fact& fact : value_.facts) {
+    for (const Fact &fact : value_.facts) {
       Declare(fact.id, MemberKind::kFact);
     }
-    for (const Assumption& assumption : value_.assumptions) {
+    for (const Assumption &assumption : value_.assumptions) {
       Declare(assumption.id, MemberKind::kAssumption);
     }
-    for (const Hypothesis& hypothesis : value_.hypotheses) {
+    for (const Hypothesis &hypothesis : value_.hypotheses) {
       Declare(hypothesis.id, MemberKind::kHypothesis);
     }
-    for (const Unknown& unknown : value_.unknowns) {
+    for (const Unknown &unknown : value_.unknowns) {
       Declare(unknown.id, MemberKind::kUnknown);
     }
-    for (const Constraint& constraint : value_.constraints) {
+    for (const Constraint &constraint : value_.constraints) {
       Declare(constraint.id, MemberKind::kConstraint);
     }
-    for (const Provenance& record : value_.provenance) {
+    for (const Provenance &record : value_.provenance) {
       Declare(record.id, MemberKind::kProvenance);
       provenance_[record.id] = &record;
     }
-    for (const ProofObligation& obligation : value_.proof_obligations) {
+    for (const ProofObligation &obligation : value_.proof_obligations) {
       Declare(obligation.id, MemberKind::kProofObligation);
     }
-    for (const SummaryReference& summary : value_.summaries) {
+    for (const SummaryReference &summary : value_.summaries) {
       Declare(summary.id, MemberKind::kSummary);
     }
-    for (const Dependency& dependency : value_.dependencies) {
+    for (const Dependency &dependency : value_.dependencies) {
       Declare(dependency.id, MemberKind::kDependency);
     }
-    for (const Omission& omission : value_.omissions) {
+    for (const Omission &omission : value_.omissions) {
       Declare(omission.id, MemberKind::kOmission);
     }
   }
@@ -329,7 +330,7 @@ class CaseValidator {
   }
 
   void CheckProgramBinding() {
-    const std::pair<std::string_view, const std::string*> fields[] = {
+    const std::pair<std::string_view, const std::string *> fields[] = {
         {"repository_id", &value_.program.repository_id},
         {"revision_id", &value_.program.revision_id},
         {"build_variant_id", &value_.program.build_variant_id},
@@ -338,7 +339,7 @@ class CaseValidator {
          &value_.program.analysis_configuration_id},
         {"type_layout_id", &value_.program.type_layout_id},
     };
-    for (const auto& field : fields) {
+    for (const auto &field : fields) {
       if (field.second->empty()) {
         Add(EvidenceValidationCode::kMissingProgramContext, "program",
             Joined("program.", field.first) + " is empty");
@@ -362,7 +363,7 @@ class CaseValidator {
 
   void CheckDuplicateLocalIds() {
     std::map<std::string, MemberKind> seen;
-    for (const auto& declaration : declarations_) {
+    for (const auto &declaration : declarations_) {
       const auto inserted = seen.emplace(declaration.first, declaration.second);
       if (inserted.second) {
         continue;
@@ -371,9 +372,7 @@ class CaseValidator {
           Joined("local identifier ", Quoted(declaration.first)) +
               Joined(" is declared more than once (first as a ",
                      MemberKindName(inserted.first->second)) +
-              Joined(", then as a ",
-                     MemberKindName(declaration.second)) +
-              ")");
+              Joined(", then as a ", MemberKindName(declaration.second)) + ")");
     }
   }
 
@@ -390,62 +389,57 @@ class CaseValidator {
       Add(EvidenceValidationCode::kMissingEpistemic, "",
           "the case declares no verification state");
     }
-    for (const Entity& entity : value_.entities) {
+    for (const Entity &entity : value_.entities) {
       if (entity.kind == EntityKind::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, entity.id,
-            Joined("entity ", Quoted(entity.id)) +
-                " declares no entity kind");
+            Joined("entity ", Quoted(entity.id)) + " declares no entity kind");
       }
     }
-    for (const Edge& edge : value_.edges) {
+    for (const Edge &edge : value_.edges) {
       if (edge.kind == RelationKind::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, edge.id,
-            Joined("edge ", Quoted(edge.id)) +
-                " declares no relation kind");
+            Joined("edge ", Quoted(edge.id)) + " declares no relation kind");
       }
       if (edge.epistemic == EpistemicState::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, edge.id,
-            Joined("edge ", Quoted(edge.id)) +
-                " declares no epistemic state");
+            Joined("edge ", Quoted(edge.id)) + " declares no epistemic state");
       }
     }
-    for (const Path& path : value_.paths) {
+    for (const Path &path : value_.paths) {
       if (path.kind == PathKind::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, path.id,
             Joined("path ", Quoted(path.id)) + " declares no path kind");
       }
       if (path.feasibility == Feasibility::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, path.id,
-            Joined("path ", Quoted(path.id)) +
-                " declares no feasibility");
+            Joined("path ", Quoted(path.id)) + " declares no feasibility");
       }
     }
-    for (const Fact& fact : value_.facts) {
+    for (const Fact &fact : value_.facts) {
       if (fact.epistemic == EpistemicState::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, fact.id,
-            Joined("fact ", Quoted(fact.id)) +
-                " declares no epistemic state");
+            Joined("fact ", Quoted(fact.id)) + " declares no epistemic state");
       }
       if (fact.confidence == Confidence::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, fact.id,
             Joined("fact ", Quoted(fact.id)) + " declares no confidence");
       }
     }
-    for (const Unknown& unknown : value_.unknowns) {
+    for (const Unknown &unknown : value_.unknowns) {
       if (unknown.reason_code == UnknownReasonCode::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, unknown.id,
             Joined("unknown ", Quoted(unknown.id)) +
                 " declares no reason code");
       }
     }
-    for (const Constraint& constraint : value_.constraints) {
+    for (const Constraint &constraint : value_.constraints) {
       if (constraint.epistemic == EpistemicState::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, constraint.id,
             Joined("constraint ", Quoted(constraint.id)) +
                 " declares no epistemic state");
       }
     }
-    for (const ProofObligation& obligation : value_.proof_obligations) {
+    for (const ProofObligation &obligation : value_.proof_obligations) {
       if (obligation.goal_kind == ProofGoalKind::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, obligation.id,
             Joined("proof obligation ", Quoted(obligation.id)) +
@@ -457,7 +451,7 @@ class CaseValidator {
                 " declares no status");
       }
     }
-    for (const Dependency& dependency : value_.dependencies) {
+    for (const Dependency &dependency : value_.dependencies) {
       if (dependency.kind == DependencyKind::kUnspecified) {
         Add(EvidenceValidationCode::kMissingEpistemic, dependency.id,
             Joined("dependency ", Quoted(dependency.id)) +
@@ -470,7 +464,7 @@ class CaseValidator {
     // A derived fact without resolvable provenance has hidden its derivation.
     // A non-derived fact may carry provenance, and when it does the reference
     // pass resolves it.
-    for (const Fact& fact : value_.facts) {
+    for (const Fact &fact : value_.facts) {
       if (!fact.derived) {
         continue;
       }
@@ -482,16 +476,16 @@ class CaseValidator {
       }
       if (provenance_.find(fact.provenance_id) == provenance_.end()) {
         Add(EvidenceValidationCode::kMissingProvenance, fact.id,
-            Joined("derived fact ", Quoted(fact.id)) +
-                " names provenance " + Quoted(fact.provenance_id) +
+            Joined("derived fact ", Quoted(fact.id)) + " names provenance " +
+                Quoted(fact.provenance_id) +
                 ", which the case does not declare");
       }
     }
 
     // Every provenance record belongs to the one run the case is bound to, and
     // says which run that is.
-    const Provenance* query_provenance = nullptr;
-    for (const Provenance& record : value_.provenance) {
+    const Provenance *query_provenance = nullptr;
+    for (const Provenance &record : value_.provenance) {
       if (!record.analysis_run_id.has_value()) {
         Add(EvidenceValidationCode::kMissingProvenance, record.id,
             Joined("provenance ", Quoted(record.id)) +
@@ -510,7 +504,7 @@ class CaseValidator {
 
     // An interrupted query is a withheld result: the case must be able to name
     // the completion provenance that certifies it, in the case's own run.
-    for (const Unknown& unknown : value_.unknowns) {
+    for (const Unknown &unknown : value_.unknowns) {
       if (!IsInterruptedQuery(unknown.reason_code)) {
         continue;
       }
@@ -535,7 +529,7 @@ class CaseValidator {
   }
 
   void CheckStableIds() {
-    for (const Entity& entity : value_.entities) {
+    for (const Entity &entity : value_.entities) {
       if (entity.stable_id.has_value() &&
           !IsCanonicalStableId(*entity.stable_id)) {
         Add(EvidenceValidationCode::kInvalidStableId, entity.id,
@@ -543,14 +537,14 @@ class CaseValidator {
                 " carries a non-canonical stable ID");
       }
     }
-    for (const Fact& fact : value_.facts) {
+    for (const Fact &fact : value_.facts) {
       if (fact.stable_id.has_value() && !IsCanonicalStableId(*fact.stable_id)) {
         Add(EvidenceValidationCode::kInvalidStableId, fact.id,
             Joined("fact ", Quoted(fact.id)) +
                 " carries a non-canonical stable ID");
       }
     }
-    for (const SummaryReference& summary : value_.summaries) {
+    for (const SummaryReference &summary : value_.summaries) {
       if (!IsCanonicalStableId(summary.summary_id)) {
         Add(EvidenceValidationCode::kInvalidStableId, summary.id,
             Joined("summary reference ", Quoted(summary.id)) +
@@ -563,7 +557,7 @@ class CaseValidator {
                 " does not identify a function summary");
       }
     }
-    for (const Dependency& dependency : value_.dependencies) {
+    for (const Dependency &dependency : value_.dependencies) {
       if (!IsCanonicalStableId(dependency.stable_id)) {
         Add(EvidenceValidationCode::kInvalidStableId, dependency.id,
             Joined("dependency ", Quoted(dependency.id)) +
@@ -614,46 +608,46 @@ class CaseValidator {
 
   void CheckProofAuthority() {
     std::size_t conclusive_results = 0;
-    for (const ProofObligation& obligation : value_.proof_obligations) {
+    for (const ProofObligation &obligation : value_.proof_obligations) {
       const bool carries_result = !obligation.result_id.empty() ||
                                   !obligation.verification_producer.empty();
       switch (obligation.status) {
-        case ProofStatus::kUnspecified:
-          // Reported as a missing state.
-          break;
-        case ProofStatus::kPending:
-          if (carries_result) {
-            Add(EvidenceValidationCode::kVerificationProducer, obligation.id,
-                Joined("pending obligation ", Quoted(obligation.id)) +
-                    " carries a result that no verifier produced");
-          }
-          break;
-        case ProofStatus::kUnknown:
-          // An undecided result records no outcome; whether it names a
-          // producer is the verifier's business.
-          break;
-        case ProofStatus::kProved:
-        case ProofStatus::kRefuted:
-          if (obligation.result_id.empty() ||
-              obligation.verification_producer.empty()) {
-            Add(EvidenceValidationCode::kVerificationProducer, obligation.id,
-                Joined("obligation ", Quoted(obligation.id)) +
-                    " carries a decided result without both a result ID and a "
-                    "verification producer");
-          } else {
-            ++conclusive_results;
-          }
-          break;
-        case ProofStatus::kTimeout:
-        case ProofStatus::kUnsupported:
-          if (obligation.result_id.empty() ||
-              obligation.verification_producer.empty()) {
-            Add(EvidenceValidationCode::kVerificationProducer, obligation.id,
-                Joined("obligation ", Quoted(obligation.id)) +
-                    " carries a decided result without both a result ID and a "
-                    "verification producer");
-          }
-          break;
+      case ProofStatus::kUnspecified:
+        // Reported as a missing state.
+        break;
+      case ProofStatus::kPending:
+        if (carries_result) {
+          Add(EvidenceValidationCode::kVerificationProducer, obligation.id,
+              Joined("pending obligation ", Quoted(obligation.id)) +
+                  " carries a result that no verifier produced");
+        }
+        break;
+      case ProofStatus::kUnknown:
+        // An undecided result records no outcome; whether it names a
+        // producer is the verifier's business.
+        break;
+      case ProofStatus::kProved:
+      case ProofStatus::kRefuted:
+        if (obligation.result_id.empty() ||
+            obligation.verification_producer.empty()) {
+          Add(EvidenceValidationCode::kVerificationProducer, obligation.id,
+              Joined("obligation ", Quoted(obligation.id)) +
+                  " carries a decided result without both a result ID and a "
+                  "verification producer");
+        } else {
+          ++conclusive_results;
+        }
+        break;
+      case ProofStatus::kTimeout:
+      case ProofStatus::kUnsupported:
+        if (obligation.result_id.empty() ||
+            obligation.verification_producer.empty()) {
+          Add(EvidenceValidationCode::kVerificationProducer, obligation.id,
+              Joined("obligation ", Quoted(obligation.id)) +
+                  " carries a decided result without both a result ID and a "
+                  "verification producer");
+        }
+        break;
       }
     }
     if (value_.verification_state == VerificationState::kVerifiedSafe) {
@@ -678,7 +672,7 @@ class CaseValidator {
     }
   }
 
-  void ResolveEntity(const std::string& id, const std::string& owner,
+  void ResolveEntity(const std::string &id, const std::string &owner,
                      std::string_view what) {
     if (id.empty()) {
       Add(EvidenceValidationCode::kDanglingReference, owner,
@@ -694,12 +688,11 @@ class CaseValidator {
     if (member->second != MemberKind::kEntity) {
       Add(EvidenceValidationCode::kDanglingReference, owner,
           Joined(what, " ") + Quoted(id) + " names a " +
-              std::string(MemberKindName(member->second)) +
-              ", not an entity");
+              std::string(MemberKindName(member->second)) + ", not an entity");
     }
   }
 
-  void ResolveProvenance(const std::string& id, const std::string& owner,
+  void ResolveProvenance(const std::string &id, const std::string &owner,
                          std::string_view what) {
     if (id.empty()) {
       return;
@@ -719,7 +712,7 @@ class CaseValidator {
     }
   }
 
-  void ResolveMember(const std::string& id, const std::string& owner,
+  void ResolveMember(const std::string &id, const std::string &owner,
                      std::string_view what) {
     if (members_.find(id) == members_.end()) {
       Add(EvidenceValidationCode::kDanglingReference, owner,
@@ -731,7 +724,7 @@ class CaseValidator {
   // reference names the identifier a member is declared under, and an entity
   // is addressable only under the handle it is declared with (`E_copy_length`),
   // never under the bare analysis label that handle wraps (`copy_length`).
-  void ResolveReference(const std::string& text, const std::string& owner) {
+  void ResolveReference(const std::string &text, const std::string &owner) {
     if (text.empty()) {
       Add(EvidenceValidationCode::kDanglingReference, owner,
           "an expression reference is empty");
@@ -744,12 +737,12 @@ class CaseValidator {
         Joined("reference ", Quoted(text)) + " is declared by no member");
   }
 
-  void ResolveExpression(const Expression& expression,
-                         const std::string& owner) {
+  void ResolveExpression(const Expression &expression,
+                         const std::string &owner) {
     if (expression.kind == Expression::Kind::kReference) {
       ResolveReference(expression.text, owner);
     }
-    for (const Expression& operand : expression.operands) {
+    for (const Expression &operand : expression.operands) {
       ResolveExpression(operand, owner);
     }
   }
@@ -760,12 +753,12 @@ class CaseValidator {
                   "the primary claim's subject");
     ResolveExpression(value_.primary_claim.predicate, value_.primary_claim.id);
 
-    for (const Entity& entity : value_.entities) {
-      for (const auto& property : entity.properties) {
+    for (const Entity &entity : value_.entities) {
+      for (const auto &property : entity.properties) {
         ResolveExpression(property.second, entity.id);
       }
     }
-    for (const Edge& edge : value_.edges) {
+    for (const Edge &edge : value_.edges) {
       ResolveEntity(edge.from, edge.id, "the edge's source");
       ResolveEntity(edge.to, edge.id, "the edge's target");
       ResolveProvenance(edge.provenance_id, edge.id, "the edge");
@@ -777,66 +770,64 @@ class CaseValidator {
                       "the edge's summary reference");
       }
     }
-    for (const Path& path : value_.paths) {
-      for (const std::string& entity_id : path.entity_ids) {
+    for (const Path &path : value_.paths) {
+      for (const std::string &entity_id : path.entity_ids) {
         ResolveEntity(entity_id, path.id, "a path segment");
       }
-      for (const Expression& condition : path.conditions) {
+      for (const Expression &condition : path.conditions) {
         ResolveExpression(condition, path.id);
       }
       ResolveProvenance(path.provenance_id, path.id, "the path");
     }
-    for (const Fact& fact : value_.facts) {
+    for (const Fact &fact : value_.facts) {
       ResolveExpression(fact.predicate, fact.id);
       ResolveProvenance(fact.provenance_id, fact.id, "the fact");
     }
-    for (const Assumption& assumption : value_.assumptions) {
+    for (const Assumption &assumption : value_.assumptions) {
       ResolveExpression(assumption.predicate, assumption.id);
     }
-    for (const Hypothesis& hypothesis : value_.hypotheses) {
+    for (const Hypothesis &hypothesis : value_.hypotheses) {
       ResolveExpression(hypothesis.predicate, hypothesis.id);
     }
-    for (const Unknown& unknown : value_.unknowns) {
+    for (const Unknown &unknown : value_.unknowns) {
       ResolveExpression(unknown.property, unknown.id);
-      for (const std::string& blocked : unknown.blocking_ids) {
+      for (const std::string &blocked : unknown.blocking_ids) {
         ResolveMember(blocked, unknown.id, "the blocked fact");
       }
     }
-    for (const Constraint& constraint : value_.constraints) {
+    for (const Constraint &constraint : value_.constraints) {
       ResolveExpression(constraint.expression, constraint.id);
       ResolveProvenance(constraint.provenance_id, constraint.id,
                         "the constraint");
     }
-    for (const Provenance& record : value_.provenance) {
-      for (const std::string& input : record.input_fact_ids) {
+    for (const Provenance &record : value_.provenance) {
+      for (const std::string &input : record.input_fact_ids) {
         ResolveMember(input, record.id, "the provenance input");
       }
     }
-    for (const ProofObligation& obligation : value_.proof_obligations) {
+    for (const ProofObligation &obligation : value_.proof_obligations) {
       ResolveExpression(obligation.predicate, obligation.id);
       ResolveExpression(obligation.budget, obligation.id);
     }
-    for (const SummaryReference& summary : value_.summaries) {
-      ResolveEntity(summary.function_id, summary.id,
-                    "the summarized function");
+    for (const SummaryReference &summary : value_.summaries) {
+      ResolveEntity(summary.function_id, summary.id, "the summarized function");
     }
-    for (const Omission& omission : value_.omissions) {
+    for (const Omission &omission : value_.omissions) {
       ResolveMember(omission.subject, omission.id, "the omission's subject");
     }
   }
 
   // --- Expression typing ---------------------------------------------------
 
-  void CheckOperand(const Expression& expression, std::size_t index,
-                    const std::string& owner, std::string_view position,
+  void CheckOperand(const Expression &expression, std::size_t index,
+                    const std::string &owner, std::string_view position,
                     bool require_formula) {
-    const Expression& operand = expression.operands[index];
+    const Expression &operand = expression.operands[index];
     if (require_formula) {
       if (IsLiteralKind(operand.kind)) {
         Add(EvidenceValidationCode::kExpressionType, owner,
-            Joined(position, ": a ") +
-                Joined(ExpressionKindName(operand.kind),
-                       " literal is not a predicate"));
+            Joined(position, ": a ") + Joined(ExpressionKindName(operand.kind),
+                                              " literal is not a predicate"));
       }
       return;
     }
@@ -848,20 +839,21 @@ class CaseValidator {
     }
   }
 
-  void CheckArity(const Expression& expression, const std::string& owner,
+  void CheckArity(const Expression &expression, const std::string &owner,
                   std::string_view position, std::size_t expected) {
     if (expression.operands.size() != expected) {
       Add(EvidenceValidationCode::kExpressionType, owner,
           Joined(position, ": a ") +
-              Joined(ExpressionKindName(expression.kind), " expression takes ") +
+              Joined(ExpressionKindName(expression.kind),
+                     " expression takes ") +
               std::to_string(expected) + " operand(s) but carries " +
               std::to_string(expression.operands.size()));
     }
   }
 
-  void CheckExpression(const Expression& expression,
-                       const std::string& owner, std::string_view position,
-                       bool optional, std::size_t depth) {
+  void CheckExpression(const Expression &expression, const std::string &owner,
+                       std::string_view position, bool optional,
+                       std::size_t depth) {
     if (depth > kMaxExpressionDepth) {
       Add(EvidenceValidationCode::kExpressionType, owner,
           Joined(position, ": nests deeper than validation walks"));
@@ -877,13 +869,15 @@ class CaseValidator {
         expression.kind == Expression::Kind::kExists;
     if (expression.kind != Expression::Kind::kBool && expression.boolean) {
       Add(EvidenceValidationCode::kExpressionType, owner,
-          Joined(position, ": carries a boolean payload that is inactive for ") +
+          Joined(position,
+                 ": carries a boolean payload that is inactive for ") +
               std::string(ExpressionKindName(expression.kind)));
     }
     if (expression.kind != Expression::Kind::kInteger &&
         expression.integer != 0) {
       Add(EvidenceValidationCode::kExpressionType, owner,
-          Joined(position, ": carries an integer payload that is inactive for ") +
+          Joined(position,
+                 ": carries an integer payload that is inactive for ") +
               std::string(ExpressionKindName(expression.kind)));
     }
     if (!text_is_active && !expression.text.empty()) {
@@ -905,92 +899,92 @@ class CaseValidator {
     }
     const std::size_t arity = expression.operands.size();
     switch (expression.kind) {
-      case Expression::Kind::kUnspecified:
-        break;
-      case Expression::Kind::kBool:
-      case Expression::Kind::kInteger:
-      case Expression::Kind::kString:
-      case Expression::Kind::kSymbol:
-      case Expression::Kind::kReference:
-        if (arity != 0) {
+    case Expression::Kind::kUnspecified:
+      break;
+    case Expression::Kind::kBool:
+    case Expression::Kind::kInteger:
+    case Expression::Kind::kString:
+    case Expression::Kind::kSymbol:
+    case Expression::Kind::kReference:
+      if (arity != 0) {
+        Add(EvidenceValidationCode::kExpressionType, owner,
+            Joined(position, ": a ") +
+                Joined(ExpressionKindName(expression.kind),
+                       " expression takes no operands but carries ") +
+                std::to_string(arity));
+      }
+      break;
+    case Expression::Kind::kCall:
+      if (expression.text.empty()) {
+        Add(EvidenceValidationCode::kExpressionType, owner,
+            Joined(position, ": a call names no callee"));
+      }
+      break;
+    case Expression::Kind::kNot:
+      CheckArity(expression, owner, position, 1);
+      if (arity == 1) {
+        CheckOperand(expression, 0, owner, position, /*require_formula=*/true);
+      }
+      break;
+    case Expression::Kind::kCompare:
+      if (!IsComparisonOperator(expression.text)) {
+        Add(EvidenceValidationCode::kExpressionType, owner,
+            Joined(position, ": ") + Quoted(expression.text) +
+                " is not a comparison operator");
+      }
+      CheckArity(expression, owner, position, 2);
+      if (arity == 2) {
+        CheckOperand(expression, 0, owner, position, /*require_formula=*/false);
+        CheckOperand(expression, 1, owner, position, /*require_formula=*/false);
+      }
+      break;
+    case Expression::Kind::kAnd:
+    case Expression::Kind::kOr:
+      if (arity < 2) {
+        Add(EvidenceValidationCode::kExpressionType, owner,
+            Joined(position, ": a ") +
+                Joined(ExpressionKindName(expression.kind),
+                       " expression takes two or more operands but carries ") +
+                std::to_string(arity));
+      }
+      for (std::size_t index = 0; index < arity; ++index) {
+        CheckOperand(expression, index, owner, position,
+                     /*require_formula=*/true);
+        // The connective is n-ary flat by construction: the grammar builds
+        // `a and b and c` as one node with three operands, and parentheses
+        // around a conjunction group nothing, so a parser that lowers them
+        // cannot produce this shape. Rejecting only direct same-kind nesting
+        // therefore cannot over-reject a legal EIR-T — a connective inside
+        // `not` or inside the other connective stays legal — while leaving
+        // `and` associative by accident would give the same formula two
+        // canonical encodings, and so two identities.
+        if (expression.operands[index].kind == expression.kind) {
           Add(EvidenceValidationCode::kExpressionType, owner,
-              Joined(position, ": a ") +
-                  Joined(ExpressionKindName(expression.kind),
-                         " expression takes no operands but carries ") +
-                  std::to_string(arity));
+              Joined(position, ": operand ") + std::to_string(index + 1) +
+                  " is a directly nested " +
+                  std::string(ExpressionKindName(expression.kind)) + "; a " +
+                  std::string(ExpressionKindName(expression.kind)) +
+                  " expression must be flattened into one operand list");
         }
-        break;
-      case Expression::Kind::kCall:
-        if (expression.text.empty()) {
-          Add(EvidenceValidationCode::kExpressionType, owner,
-              Joined(position, ": a call names no callee"));
-        }
-        break;
-      case Expression::Kind::kNot:
-        CheckArity(expression, owner, position, 1);
-        if (arity == 1) {
-          CheckOperand(expression, 0, owner, position, /*require_formula=*/true);
-        }
-        break;
-      case Expression::Kind::kCompare:
-        if (!IsComparisonOperator(expression.text)) {
-          Add(EvidenceValidationCode::kExpressionType, owner,
-              Joined(position, ": ") + Quoted(expression.text) +
-                  " is not a comparison operator");
-        }
-        CheckArity(expression, owner, position, 2);
-        if (arity == 2) {
-          CheckOperand(expression, 0, owner, position, /*require_formula=*/false);
-          CheckOperand(expression, 1, owner, position, /*require_formula=*/false);
-        }
-        break;
-      case Expression::Kind::kAnd:
-      case Expression::Kind::kOr:
-        if (arity < 2) {
-          Add(EvidenceValidationCode::kExpressionType, owner,
-              Joined(position, ": a ") +
-                  Joined(ExpressionKindName(expression.kind),
-                         " expression takes two or more operands but carries ") +
-                  std::to_string(arity));
-        }
-        for (std::size_t index = 0; index < arity; ++index) {
-          CheckOperand(expression, index, owner, position,
-                       /*require_formula=*/true);
-          // The connective is n-ary flat by construction: the grammar builds
-          // `a and b and c` as one node with three operands, and parentheses
-          // around a conjunction group nothing, so a parser that lowers them
-          // cannot produce this shape. Rejecting only direct same-kind nesting
-          // therefore cannot over-reject a legal EIR-T — a connective inside
-          // `not` or inside the other connective stays legal — while leaving
-          // `and` associative by accident would give the same formula two
-          // canonical encodings, and so two identities.
-          if (expression.operands[index].kind == expression.kind) {
-            Add(EvidenceValidationCode::kExpressionType, owner,
-                Joined(position, ": operand ") + std::to_string(index + 1) +
-                    " is a directly nested " +
-                    std::string(ExpressionKindName(expression.kind)) +
-                    "; a " + std::string(ExpressionKindName(expression.kind)) +
-                    " expression must be flattened into one operand list");
-          }
-        }
-        break;
-      case Expression::Kind::kImplies:
-        CheckArity(expression, owner, position, 2);
-        for (std::size_t index = 0; index < arity; ++index) {
-          CheckOperand(expression, index, owner, position,
-                       /*require_formula=*/true);
-        }
-        break;
-      case Expression::Kind::kForAll:
-      case Expression::Kind::kExists:
-        if (expression.text.empty()) {
-          Add(EvidenceValidationCode::kExpressionType, owner,
-              Joined(position, ": a quantified expression binds no variable"));
-        }
-        CheckArity(expression, owner, position, 2);
-        break;
+      }
+      break;
+    case Expression::Kind::kImplies:
+      CheckArity(expression, owner, position, 2);
+      for (std::size_t index = 0; index < arity; ++index) {
+        CheckOperand(expression, index, owner, position,
+                     /*require_formula=*/true);
+      }
+      break;
+    case Expression::Kind::kForAll:
+    case Expression::Kind::kExists:
+      if (expression.text.empty()) {
+        Add(EvidenceValidationCode::kExpressionType, owner,
+            Joined(position, ": a quantified expression binds no variable"));
+      }
+      CheckArity(expression, owner, position, 2);
+      break;
     }
-    for (const Expression& operand : expression.operands) {
+    for (const Expression &operand : expression.operands) {
       CheckExpression(operand, owner, position, /*optional=*/false, depth + 1);
     }
   }
@@ -998,42 +992,42 @@ class CaseValidator {
   void CheckExpressions() {
     CheckExpression(value_.primary_claim.predicate, value_.primary_claim.id,
                     "the primary claim's predicate", /*optional=*/true, 0);
-    for (const Entity& entity : value_.entities) {
-      for (const auto& property : entity.properties) {
+    for (const Entity &entity : value_.entities) {
+      for (const auto &property : entity.properties) {
         CheckExpression(property.second, entity.id,
                         Joined("entity property ", Quoted(property.first)),
                         /*optional=*/false, 0);
       }
     }
-    for (const Path& path : value_.paths) {
-      for (const Expression& condition : path.conditions) {
+    for (const Path &path : value_.paths) {
+      for (const Expression &condition : path.conditions) {
         CheckExpression(condition, path.id, "a path condition",
                         /*optional=*/false, 0);
       }
     }
-    for (const Fact& fact : value_.facts) {
+    for (const Fact &fact : value_.facts) {
       CheckExpression(fact.predicate, fact.id, "the fact's predicate",
                       /*optional=*/false, 0);
     }
-    for (const Assumption& assumption : value_.assumptions) {
+    for (const Assumption &assumption : value_.assumptions) {
       CheckExpression(assumption.predicate, assumption.id,
                       "the assumption's predicate", /*optional=*/false, 0);
     }
-    for (const Hypothesis& hypothesis : value_.hypotheses) {
+    for (const Hypothesis &hypothesis : value_.hypotheses) {
       CheckExpression(hypothesis.predicate, hypothesis.id,
                       "the hypothesis's predicate", /*optional=*/false, 0);
     }
-    for (const Unknown& unknown : value_.unknowns) {
+    for (const Unknown &unknown : value_.unknowns) {
       CheckExpression(unknown.property, unknown.id, "the unknown's property",
                       /*optional=*/false, 0);
     }
-    for (const Constraint& constraint : value_.constraints) {
+    for (const Constraint &constraint : value_.constraints) {
       CheckExpression(constraint.expression, constraint.id,
                       "the constraint's expression", /*optional=*/false, 0);
     }
-    for (const ProofObligation& obligation : value_.proof_obligations) {
-      CheckExpression(obligation.predicate, obligation.id,
-                      "the proof goal", /*optional=*/false, 0);
+    for (const ProofObligation &obligation : value_.proof_obligations) {
+      CheckExpression(obligation.predicate, obligation.id, "the proof goal",
+                      /*optional=*/false, 0);
       // The grammar's budget is optional: an absent one is `kUnspecified`.
       CheckExpression(obligation.budget, obligation.id, "the proof budget",
                       /*optional=*/true, 0);
@@ -1042,11 +1036,10 @@ class CaseValidator {
 
   // --- Path connectivity ---------------------------------------------------
 
-  bool HasSegment(const Path& path, const std::string& from,
-                  const std::string& to) const {
-    const std::optional<RelationKind> required =
-        RelationForPathKind(path.kind);
-    for (const Edge& edge : value_.edges) {
+  bool HasSegment(const Path &path, const std::string &from,
+                  const std::string &to) const {
+    const std::optional<RelationKind> required = RelationForPathKind(path.kind);
+    for (const Edge &edge : value_.edges) {
       if (edge.from != from || edge.to != to) {
         continue;
       }
@@ -1058,17 +1051,16 @@ class CaseValidator {
   }
 
   void CheckPaths() {
-    for (const Path& path : value_.paths) {
+    for (const Path &path : value_.paths) {
       if (path.entity_ids.size() < 2) {
         Add(EvidenceValidationCode::kPathDisconnected, path.id,
             Joined("path ", Quoted(path.id)) +
                 " carries fewer than two segments");
         continue;
       }
-      for (std::size_t index = 0; index + 1 < path.entity_ids.size();
-           ++index) {
-        const std::string& from = path.entity_ids[index];
-        const std::string& to = path.entity_ids[index + 1];
+      for (std::size_t index = 0; index + 1 < path.entity_ids.size(); ++index) {
+        const std::string &from = path.entity_ids[index];
+        const std::string &to = path.entity_ids[index + 1];
         if (HasSegment(path, from, to)) {
           continue;
         }
@@ -1083,7 +1075,7 @@ class CaseValidator {
 
   void CheckHypothesisIsolation() {
     std::set<std::string> hypothesis_ids;
-    for (const Hypothesis& hypothesis : value_.hypotheses) {
+    for (const Hypothesis &hypothesis : value_.hypotheses) {
       if (!hypothesis.id.empty()) {
         hypothesis_ids.insert(hypothesis.id);
       }
@@ -1093,8 +1085,8 @@ class CaseValidator {
     }
     // A hypothesis never becomes an input to an authoritative derivation and
     // never blocks the resolution of an open question.
-    for (const Provenance& record : value_.provenance) {
-      for (const std::string& input : record.input_fact_ids) {
+    for (const Provenance &record : value_.provenance) {
+      for (const std::string &input : record.input_fact_ids) {
         if (hypothesis_ids.count(input) == 0) {
           continue;
         }
@@ -1103,26 +1095,25 @@ class CaseValidator {
                 " derives from hypothesis " + Quoted(input));
       }
     }
-    for (const Unknown& unknown : value_.unknowns) {
-      for (const std::string& blocked : unknown.blocking_ids) {
+    for (const Unknown &unknown : value_.unknowns) {
+      for (const std::string &blocked : unknown.blocking_ids) {
         if (hypothesis_ids.count(blocked) == 0) {
           continue;
         }
         Add(EvidenceValidationCode::kHypothesisAuthority, unknown.id,
-            Joined("unknown ", Quoted(unknown.id)) +
-                " treats hypothesis " + Quoted(blocked) +
-                " as blocking evidence");
+            Joined("unknown ", Quoted(unknown.id)) + " treats hypothesis " +
+                Quoted(blocked) + " as blocking evidence");
       }
     }
   }
 
   // --- Omission visibility -------------------------------------------------
 
-  const Omission* OmissionDeclaring(const std::string& local_id) const {
+  const Omission *OmissionDeclaring(const std::string &local_id) const {
     if (local_id.empty()) {
       return nullptr;
     }
-    for (const Omission& omission : value_.omissions) {
+    for (const Omission &omission : value_.omissions) {
       if (omission.subject == local_id) {
         return &omission;
       }
@@ -1133,7 +1124,7 @@ class CaseValidator {
   void CheckOmissionVisibility() {
     // A withheld expansion is declared, never implied by absence: an edge that
     // says it can be expanded must name a summary the case declares withheld.
-    for (const Edge& edge : value_.edges) {
+    for (const Edge &edge : value_.edges) {
       if (!edge.expandable) {
         continue;
       }
@@ -1161,15 +1152,15 @@ class CaseValidator {
       }
       if (OmissionDeclaring(edge.summarized_by) == nullptr) {
         Add(EvidenceValidationCode::kHiddenOmission, edge.id,
-            Joined("expandable edge ", Quoted(edge.id)) +
-                " leaves summary " + Quoted(edge.summarized_by) +
+            Joined("expandable edge ", Quoted(edge.id)) + " leaves summary " +
+                Quoted(edge.summarized_by) +
                 " withheld with no omission declaring it");
       }
     }
 
     // A withheld summary is recoverable at a higher level; declaring it
     // non-expandable loses the audit trail.
-    for (const Omission& omission : value_.omissions) {
+    for (const Omission &omission : value_.omissions) {
       const auto member = members_.find(omission.subject);
       if (member == members_.end() || member->second != MemberKind::kSummary) {
         continue;
@@ -1183,11 +1174,11 @@ class CaseValidator {
 
     // An interrupted query is a withheld result: the case must declare it as
     // an expandable omission, not leave it as an open question alone.
-    for (const Unknown& unknown : value_.unknowns) {
+    for (const Unknown &unknown : value_.unknowns) {
       if (!IsInterruptedQuery(unknown.reason_code)) {
         continue;
       }
-      const Omission* declaring = OmissionDeclaring(unknown.id);
+      const Omission *declaring = OmissionDeclaring(unknown.id);
       if (declaring == nullptr) {
         Add(EvidenceValidationCode::kHiddenOmission, unknown.id,
             Joined("interrupted query ", Quoted(unknown.id)) +
@@ -1203,60 +1194,60 @@ class CaseValidator {
     }
   }
 
-  const EvidenceCase& value_;
+  const EvidenceCase &value_;
   EvidenceValidationReport report_;
   std::vector<std::pair<std::string, MemberKind>> declarations_;
   std::map<std::string, MemberKind> members_;
-  std::map<std::string, const Provenance*> provenance_;
+  std::map<std::string, const Provenance *> provenance_;
 };
 
-}  // namespace
+} // namespace
 
 std::string_view ToString(EvidenceValidationCode code) {
   switch (code) {
-    case EvidenceValidationCode::kSchemaVersion:
-      return "schema_version";
-    case EvidenceValidationCode::kMissingProgramContext:
-      return "missing_program_context";
-    case EvidenceValidationCode::kPrimaryClaimCount:
-      return "primary_claim_count";
-    case EvidenceValidationCode::kDuplicateLocalId:
-      return "duplicate_local_id";
-    case EvidenceValidationCode::kDanglingReference:
-      return "dangling_reference";
-    case EvidenceValidationCode::kMissingEpistemic:
-      return "missing_epistemic";
-    case EvidenceValidationCode::kMissingProvenance:
-      return "missing_provenance";
-    case EvidenceValidationCode::kExpressionType:
-      return "expression_type";
-    case EvidenceValidationCode::kPathDisconnected:
-      return "path_disconnected";
-    case EvidenceValidationCode::kInvalidStableId:
-      return "invalid_stable_id";
-    case EvidenceValidationCode::kMixedProgramContext:
-      return "mixed_program_context";
-    case EvidenceValidationCode::kHypothesisAuthority:
-      return "hypothesis_authority";
-    case EvidenceValidationCode::kVerificationProducer:
-      return "verification_producer";
-    case EvidenceValidationCode::kHiddenOmission:
-      return "hidden_omission";
+  case EvidenceValidationCode::kSchemaVersion:
+    return "schema_version";
+  case EvidenceValidationCode::kMissingProgramContext:
+    return "missing_program_context";
+  case EvidenceValidationCode::kPrimaryClaimCount:
+    return "primary_claim_count";
+  case EvidenceValidationCode::kDuplicateLocalId:
+    return "duplicate_local_id";
+  case EvidenceValidationCode::kDanglingReference:
+    return "dangling_reference";
+  case EvidenceValidationCode::kMissingEpistemic:
+    return "missing_epistemic";
+  case EvidenceValidationCode::kMissingProvenance:
+    return "missing_provenance";
+  case EvidenceValidationCode::kExpressionType:
+    return "expression_type";
+  case EvidenceValidationCode::kPathDisconnected:
+    return "path_disconnected";
+  case EvidenceValidationCode::kInvalidStableId:
+    return "invalid_stable_id";
+  case EvidenceValidationCode::kMixedProgramContext:
+    return "mixed_program_context";
+  case EvidenceValidationCode::kHypothesisAuthority:
+    return "hypothesis_authority";
+  case EvidenceValidationCode::kVerificationProducer:
+    return "verification_producer";
+  case EvidenceValidationCode::kHiddenOmission:
+    return "hidden_omission";
   }
   return {};
 }
 
-EvidenceValidationReport ValidateEvidenceCase(const EvidenceCase& value) {
+EvidenceValidationReport ValidateEvidenceCase(const EvidenceCase &value) {
   CaseValidator validator(value);
   return validator.Run();
 }
 
-Status RequireValidEvidenceCase(const EvidenceCase& value) {
+Status RequireValidEvidenceCase(const EvidenceCase &value) {
   const EvidenceValidationReport report = ValidateEvidenceCase(value);
   if (report.ok()) {
     return Status::Ok();
   }
-  const EvidenceValidationIssue& issue = report.issues.front();
+  const EvidenceValidationIssue &issue = report.issues.front();
   std::string message = "invalid evidence case: ";
   message += ToString(issue.code);
   message += " (";
@@ -1266,4 +1257,4 @@ Status RequireValidEvidenceCase(const EvidenceCase& value) {
   return Status::InvalidArgument(std::move(message));
 }
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence

@@ -88,7 +88,7 @@ EvidenceBuildRequest TruncatedRequest(EvidenceLevel level) {
   return scenario.BuildRequest(level);
 }
 
-EvidenceCase BuildOrFail(const EvidenceBuildRequest& request) {
+EvidenceCase BuildOrFail(const EvidenceBuildRequest &request) {
   auto built = EvidenceCaseBuilder().Build(request);
   if (!built.ok()) {
     ADD_FAILURE() << "the build failed: " << built.status().message();
@@ -98,7 +98,7 @@ EvidenceCase BuildOrFail(const EvidenceBuildRequest& request) {
 }
 
 // A build that is expected to be refused.
-Status BuildStatus(const EvidenceBuildRequest& request) {
+Status BuildStatus(const EvidenceBuildRequest &request) {
   auto built = EvidenceCaseBuilder().Build(request);
   if (built.ok()) {
     return Status::Ok();
@@ -108,10 +108,10 @@ Status BuildStatus(const EvidenceBuildRequest& request) {
 
 // --- Member finders ---------------------------------------------------------
 
-std::vector<const Fact*> FindFacts(const EvidenceCase& value,
-                                   std::string_view predicate) {
-  std::vector<const Fact*> found;
-  for (const Fact& fact : value.facts) {
+std::vector<const Fact *> FindFacts(const EvidenceCase &value,
+                                    std::string_view predicate) {
+  std::vector<const Fact *> found;
+  for (const Fact &fact : value.facts) {
     if (fact.predicate.text == predicate) {
       found.push_back(&fact);
     }
@@ -119,9 +119,9 @@ std::vector<const Fact*> FindFacts(const EvidenceCase& value,
   return found;
 }
 
-const Fact* FindFactWith(const EvidenceCase& value, std::string_view predicate,
+const Fact *FindFactWith(const EvidenceCase &value, std::string_view predicate,
                          EpistemicState epistemic) {
-  for (const Fact& fact : value.facts) {
+  for (const Fact &fact : value.facts) {
     if (fact.predicate.text == predicate && fact.epistemic == epistemic) {
       return &fact;
     }
@@ -129,10 +129,10 @@ const Fact* FindFactWith(const EvidenceCase& value, std::string_view predicate,
   return nullptr;
 }
 
-std::vector<const Omission*> FindOmissions(const EvidenceCase& value,
-                                           std::string_view kind) {
-  std::vector<const Omission*> found;
-  for (const Omission& omission : value.omissions) {
+std::vector<const Omission *> FindOmissions(const EvidenceCase &value,
+                                            std::string_view kind) {
+  std::vector<const Omission *> found;
+  for (const Omission &omission : value.omissions) {
     if (omission.kind == kind) {
       found.push_back(&omission);
     }
@@ -284,7 +284,7 @@ TEST(EvidenceCaseBuilderTest, RejectsPartialTamperedAndMixedRunCoverage) {
 
 TEST(EvidenceCaseBuilderTest, RejectsSameRunCompletionsFromDifferentSnapshots) {
   auto request = CoveredRequest(EvidenceLevel::kL1);
-  auto& input = request.input;
+  auto &input = request.input;
   const auto old_id = input.ranges.metadata.query_provenance_id;
   auto completion = std::ranges::find(input.query_completion_facts, old_id,
                                       &facts::AnalysisFact::fact_id);
@@ -294,9 +294,11 @@ TEST(EvidenceCaseBuilderTest, RejectsSameRunCompletionsFromDifferentSnapshots) {
   completion->fact_id = *new_id;
   input.ranges.metadata.query_provenance_id = *new_id;
   std::ranges::find(input.query_coverage, old_id,
-                    &QueryCoverage::completion_fact_id)->completion_fact_id = *new_id;
+                    &QueryCoverage::completion_fact_id)
+      ->completion_fact_id = *new_id;
   std::ranges::find(input.query_completion_bindings, old_id,
-                    &facts::RunFactBinding::fact_id)->fact_id = *new_id;
+                    &facts::RunFactBinding::fact_id)
+      ->fact_id = *new_id;
   input.handoff_digest = ComputeEvidenceHandoffDigest(input);
   const auto status = BuildStatus(request);
   EXPECT_FALSE(status.ok());
@@ -416,9 +418,9 @@ TEST(EvidenceCaseBuilderTest, CoverageTruthTableAndCodecsPreserveEveryMarker) {
   }
 }
 
-const Provenance* FindProvenance(const EvidenceCase& value,
+const Provenance *FindProvenance(const EvidenceCase &value,
                                  std::string_view rule) {
-  for (const Provenance& record : value.provenance) {
+  for (const Provenance &record : value.provenance) {
     if (record.rule == rule) {
       return &record;
     }
@@ -429,9 +431,9 @@ const Provenance* FindProvenance(const EvidenceCase& value,
 // The record declared under a given case-local handle. Distinct from the
 // rule-based finder above, which is what the L49 test wants; here the handles
 // are the point, so this one matches `id`.
-const Provenance* FindProvenanceById(const EvidenceCase& value,
+const Provenance *FindProvenanceById(const EvidenceCase &value,
                                      std::string_view id) {
-  for (const Provenance& record : value.provenance) {
+  for (const Provenance &record : value.provenance) {
     if (record.id == id) {
       return &record;
     }
@@ -439,76 +441,101 @@ const Provenance* FindProvenanceById(const EvidenceCase& value,
   return nullptr;
 }
 
-std::set<std::string> IdsOf(const std::vector<Entity>& members) {
+std::set<std::string> IdsOf(const std::vector<Entity> &members) {
   std::set<std::string> ids;
-  for (const Entity& member : members) ids.insert(member.id);
+  for (const Entity &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Edge>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Edge> &members) {
   std::set<std::string> ids;
-  for (const Edge& member : members) ids.insert(member.id);
+  for (const Edge &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Path>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Path> &members) {
   std::set<std::string> ids;
-  for (const Path& member : members) ids.insert(member.id);
+  for (const Path &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Fact>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Fact> &members) {
   std::set<std::string> ids;
-  for (const Fact& member : members) ids.insert(member.id);
+  for (const Fact &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Assumption>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Assumption> &members) {
   std::set<std::string> ids;
-  for (const Assumption& member : members) ids.insert(member.id);
+  for (const Assumption &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Hypothesis>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Hypothesis> &members) {
   std::set<std::string> ids;
-  for (const Hypothesis& member : members) ids.insert(member.id);
+  for (const Hypothesis &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Unknown>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Unknown> &members) {
   std::set<std::string> ids;
-  for (const Unknown& member : members) ids.insert(member.id);
+  for (const Unknown &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Constraint>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Constraint> &members) {
   std::set<std::string> ids;
-  for (const Constraint& member : members) ids.insert(member.id);
+  for (const Constraint &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Provenance>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Provenance> &members) {
   std::set<std::string> ids;
-  for (const Provenance& member : members) ids.insert(member.id);
+  for (const Provenance &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<ProofObligation>& members) {
+
+std::set<std::string> IdsOf(const std::vector<ProofObligation> &members) {
   std::set<std::string> ids;
-  for (const ProofObligation& member : members) ids.insert(member.id);
+  for (const ProofObligation &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<SummaryReference>& members) {
+
+std::set<std::string> IdsOf(const std::vector<SummaryReference> &members) {
   std::set<std::string> ids;
-  for (const SummaryReference& member : members) ids.insert(member.id);
+  for (const SummaryReference &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Dependency>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Dependency> &members) {
   std::set<std::string> ids;
-  for (const Dependency& member : members) ids.insert(member.id);
+  for (const Dependency &member : members)
+    ids.insert(member.id);
   return ids;
 }
-std::set<std::string> IdsOf(const std::vector<Omission>& members) {
+
+std::set<std::string> IdsOf(const std::vector<Omission> &members) {
   std::set<std::string> ids;
-  for (const Omission& member : members) ids.insert(member.id);
+  for (const Omission &member : members)
+    ids.insert(member.id);
   return ids;
 }
 
 // Every case-local identifier the case declares, across all member families.
-std::set<std::string> AllMemberIds(const EvidenceCase& value) {
+std::set<std::string> AllMemberIds(const EvidenceCase &value) {
   std::set<std::string> ids;
-  auto merge = [&ids](const std::set<std::string>& other) {
+  auto merge = [&ids](const std::set<std::string> &other) {
     ids.insert(other.begin(), other.end());
   };
   merge(IdsOf(value.entities));
@@ -527,8 +554,8 @@ std::set<std::string> AllMemberIds(const EvidenceCase& value) {
   return ids;
 }
 
-std::set<std::string> Difference(const std::set<std::string>& left,
-                                 const std::set<std::string>& right) {
+std::set<std::string> Difference(const std::set<std::string> &left,
+                                 const std::set<std::string> &right) {
   std::set<std::string> out;
   std::set_difference(left.begin(), left.end(), right.begin(), right.end(),
                       std::inserter(out, out.begin()));
@@ -547,7 +574,7 @@ TEST(EvidenceCaseBuilderTest, BindsTheCaseToTheProgramIdentityItWasGiven) {
   const EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
   auto built = EvidenceCaseBuilder().Build(request);
   ASSERT_TRUE(built.ok()) << built.status().message();
-  const EvidenceCase& value = built.value();
+  const EvidenceCase &value = built.value();
 
   EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
 
@@ -569,7 +596,7 @@ TEST(EvidenceCaseBuilderTest, BindsTheCaseToTheProgramIdentityItWasGiven) {
   const core::StableId run = *value.program.analysis_run_id;
   EXPECT_EQ(run, request.input.flow_slice.metadata.analysis_run_id);
   EXPECT_FALSE(value.provenance.empty());
-  for (const Provenance& record : value.provenance) {
+  for (const Provenance &record : value.provenance) {
     ASSERT_TRUE(record.analysis_run_id.has_value())
         << "provenance '" << record.id << "' carries no run";
     EXPECT_EQ(*record.analysis_run_id, run)
@@ -652,7 +679,7 @@ TEST(EvidenceCaseBuilderTest, Bld002SafeDominatingCheckStaysCounterevidence) {
   EXPECT_EQ(FindProvenance(value, kClosedWorldAbsenceRuleId), nullptr);
 
   // The check is recorded, with the epistemic state the analysis stated.
-  const std::vector<const Fact*> counterevidence =
+  const std::vector<const Fact *> counterevidence =
       FindFacts(value, kAbsencePredicate);
   ASSERT_EQ(counterevidence.size(), 1u);
   EXPECT_EQ(counterevidence.front()->epistemic, EpistemicState::kMust);
@@ -661,7 +688,7 @@ TEST(EvidenceCaseBuilderTest, Bld002SafeDominatingCheckStaysCounterevidence) {
 
   // Presence alone decides nothing about the case.
   EXPECT_EQ(value.verification_state, VerificationState::kPossibleDefect);
-  for (const ProofObligation& obligation : value.proof_obligations) {
+  for (const ProofObligation &obligation : value.proof_obligations) {
     EXPECT_EQ(obligation.status, ProofStatus::kPending);
     EXPECT_TRUE(obligation.result_id.empty());
   }
@@ -674,7 +701,8 @@ TEST(EvidenceCaseBuilderTest, Bld002SafeDominatingCheckStaysCounterevidence) {
 // a universal check over the claim.
 TEST(EvidenceCaseBuilderTest, Bld003SiblingCheckScopeNeverBecomesUniversal) {
   EvidenceScenarioBuilder scenario;
-  const EvidenceBuildRequest baseline = scenario.BuildRequest(EvidenceLevel::kL1);
+  const EvidenceBuildRequest baseline =
+      scenario.BuildRequest(EvidenceLevel::kL1);
   // Issue the dominating-check query coherently, but scope it to the claim's
   // subject rather than the sink.
   scenario.WithDominatingCheckScope({baseline.input.claim_seed.subject_ref});
@@ -686,7 +714,7 @@ TEST(EvidenceCaseBuilderTest, Bld003SiblingCheckScopeNeverBecomesUniversal) {
   EXPECT_EQ(FindFactWith(value, kAbsencePredicate, EpistemicState::kMustNot),
             nullptr);
   ASSERT_EQ(FindOmissions(value, "dominating_check").size(), 1u);
-  const Omission* omission = FindOmissions(value, "dominating_check").front();
+  const Omission *omission = FindOmissions(value, "dominating_check").front();
   EXPECT_TRUE(omission->expandable);
   EXPECT_NE(omission->reason.find("scoped to another member"),
             std::string::npos);
@@ -697,24 +725,26 @@ TEST(EvidenceCaseBuilderTest, Bld003SiblingCheckScopeNeverBecomesUniversal) {
 // universal subject of the claim.
 TEST(EvidenceCaseBuilderTest, Bld003MixedPathsNeverBecomeAUniversalCheck) {
   EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
-  const cpg::CpgNode* entry = nullptr;
-  const cpg::CpgNode* vendor = nullptr;
-  for (const cpg::CpgNode& node : request.input.flow_slice.nodes) {
-    if (node.label == "entry") entry = &node;
-    if (node.label == "vendor_validate") vendor = &node;
+  const cpg::CpgNode *entry = nullptr;
+  const cpg::CpgNode *vendor = nullptr;
+  for (const cpg::CpgNode &node : request.input.flow_slice.nodes) {
+    if (node.label == "entry")
+      entry = &node;
+    if (node.label == "vendor_validate")
+      vendor = &node;
   }
   ASSERT_NE(entry, nullptr);
   ASSERT_NE(vendor, nullptr);
   // A second, independent chain: the entry function calls the vendor validator.
-  request.input.flow_slice.edges.push_back(
-      EvidenceScenarioBuilder().MakeEdge("flows:entry:vendor_validate",
-                                         cpg::EdgeKind::kFlowsTo,
-                                         entry->node_id, vendor->node_id));
+  request.input.flow_slice.edges.push_back(EvidenceScenarioBuilder().MakeEdge(
+      "flows:entry:vendor_validate", cpg::EdgeKind::kFlowsTo, entry->node_id,
+      vendor->node_id));
 
   const EvidenceCase value = BuildOrFail(request);
   EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
 
-  const std::vector<const Omission*> mixed = FindOmissions(value, "mixed_paths");
+  const std::vector<const Omission *> mixed =
+      FindOmissions(value, "mixed_paths");
   ASSERT_EQ(mixed.size(), 1u);
   EXPECT_TRUE(mixed.front()->expandable);
   EXPECT_NE(mixed.front()->reason.find("more than one distinct value-flow"),
@@ -729,22 +759,24 @@ TEST(EvidenceCaseBuilderTest, Bld003MixedPathsNeverBecomeAUniversalCheck) {
 // that the sibling branch was withheld instead of silently dropping it.
 TEST(EvidenceCaseBuilderTest, Bld003BranchedFlowDeclaresAnOmission) {
   EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
-  const cpg::CpgNode* source = nullptr;
-  const cpg::CpgNode* vendor = nullptr;
-  for (const cpg::CpgNode& node : request.input.flow_slice.nodes) {
-    if (node.label == "srcbuf") source = &node;
-    if (node.label == "vendor_validate") vendor = &node;
+  const cpg::CpgNode *source = nullptr;
+  const cpg::CpgNode *vendor = nullptr;
+  for (const cpg::CpgNode &node : request.input.flow_slice.nodes) {
+    if (node.label == "srcbuf")
+      source = &node;
+    if (node.label == "vendor_validate")
+      vendor = &node;
   }
   ASSERT_NE(source, nullptr);
   ASSERT_NE(vendor, nullptr);
-  request.input.flow_slice.edges.push_back(
-      EvidenceScenarioBuilder().MakeEdge("flows:srcbuf:vendor_validate",
-                                         cpg::EdgeKind::kFlowsTo,
-                                         source->node_id, vendor->node_id));
+  request.input.flow_slice.edges.push_back(EvidenceScenarioBuilder().MakeEdge(
+      "flows:srcbuf:vendor_validate", cpg::EdgeKind::kFlowsTo, source->node_id,
+      vendor->node_id));
 
   const EvidenceCase value = BuildOrFail(request);
   EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
-  const std::vector<const Omission*> mixed = FindOmissions(value, "mixed_paths");
+  const std::vector<const Omission *> mixed =
+      FindOmissions(value, "mixed_paths");
   ASSERT_EQ(mixed.size(), 1u);
   EXPECT_TRUE(mixed.front()->expandable);
 }
@@ -753,19 +785,19 @@ TEST(EvidenceCaseBuilderTest, Bld003BranchedFlowDeclaresAnOmission) {
 // terminate and refuse that graph rather than following successors forever.
 TEST(EvidenceCaseBuilderTest, Bld003CyclicFlowIsRefused) {
   EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
-  const cpg::CpgNode* copy_length = nullptr;
-  const cpg::CpgNode* sink = nullptr;
-  for (const cpg::CpgNode& node : request.input.flow_slice.nodes) {
-    if (node.label == "copy_length") copy_length = &node;
-    if (node.label == "memcpy") sink = &node;
+  const cpg::CpgNode *copy_length = nullptr;
+  const cpg::CpgNode *sink = nullptr;
+  for (const cpg::CpgNode &node : request.input.flow_slice.nodes) {
+    if (node.label == "copy_length")
+      copy_length = &node;
+    if (node.label == "memcpy")
+      sink = &node;
   }
   ASSERT_NE(copy_length, nullptr);
   ASSERT_NE(sink, nullptr);
-  request.input.flow_slice.edges.push_back(
-      EvidenceScenarioBuilder().MakeEdge("flows:memcpy:copy_length",
-                                         cpg::EdgeKind::kFlowsTo,
-                                         sink->node_id,
-                                         copy_length->node_id));
+  request.input.flow_slice.edges.push_back(EvidenceScenarioBuilder().MakeEdge(
+      "flows:memcpy:copy_length", cpg::EdgeKind::kFlowsTo, sink->node_id,
+      copy_length->node_id));
 
   const Status status = BuildStatus(request);
   EXPECT_FALSE(status.ok());
@@ -783,14 +815,14 @@ TEST(EvidenceCaseBuilderTest, Bld004OpaqueValidationProducesABlockingUnknown) {
   const EvidenceCase value = BuildOrFail(PristineRequest(EvidenceLevel::kL1));
   ASSERT_FALSE(value.unknowns.empty());
 
-  std::vector<const Unknown*> opaque;
-  for (const Unknown& unknown : value.unknowns) {
+  std::vector<const Unknown *> opaque;
+  for (const Unknown &unknown : value.unknowns) {
     if (unknown.reason_code == UnknownReasonCode::kExternalFunction) {
       opaque.push_back(&unknown);
     }
   }
   ASSERT_EQ(opaque.size(), 1u) << "the external validator is not reported";
-  const Unknown& unknown = *opaque.front();
+  const Unknown &unknown = *opaque.front();
 
   EXPECT_NE(unknown.reason_code, UnknownReasonCode::kAnalysisTimeout);
   EXPECT_NE(unknown.reason_code, UnknownReasonCode::kStateExplosion);
@@ -803,7 +835,7 @@ TEST(EvidenceCaseBuilderTest, Bld004OpaqueValidationProducesABlockingUnknown) {
                       value.primary_claim.id),
             unknown.blocking_ids.end());
   const std::set<std::string> declared = AllMemberIds(value);
-  for (const std::string& blocked : unknown.blocking_ids) {
+  for (const std::string &blocked : unknown.blocking_ids) {
     EXPECT_TRUE(blocked == value.primary_claim.id ||
                 declared.count(blocked) != 0)
         << "the unknown blocks '" << blocked << "', which is neither the "
@@ -816,10 +848,11 @@ TEST(EvidenceCaseBuilderTest, Bld004OpaqueValidationProducesABlockingUnknown) {
 // An alias the analysis did not establish as MUST is carried as a *condition*
 // on the path that depends on it. The case records the uncertainty where it
 // belongs instead of strengthening it into a supporting premise.
-TEST(EvidenceCaseBuilderTest, Bld005UncertainAliasPreventsStrengthenedReasoning) {
+TEST(EvidenceCaseBuilderTest,
+     Bld005UncertainAliasPreventsStrengthenedReasoning) {
   const EvidenceCase value = BuildOrFail(PristineRequest(EvidenceLevel::kL1));
 
-  const std::vector<const Fact*> aliases = FindFacts(value, "alias");
+  const std::vector<const Fact *> aliases = FindFacts(value, "alias");
   ASSERT_EQ(aliases.size(), 1u);
   EXPECT_EQ(aliases.front()->epistemic, EpistemicState::kMay);
   EXPECT_EQ(aliases.front()->confidence, Confidence::kMedium);
@@ -830,7 +863,7 @@ TEST(EvidenceCaseBuilderTest, Bld005UncertainAliasPreventsStrengthenedReasoning)
   // requirement, so it cannot be a MUST either.
   ASSERT_EQ(value.paths.size(), 1u);
   ASSERT_FALSE(value.paths.front().conditions.empty());
-  const Expression& condition = value.paths.front().conditions.front();
+  const Expression &condition = value.paths.front().conditions.front();
   EXPECT_EQ(condition.kind, Expression::Kind::kCall);
   EXPECT_EQ(condition.text, "alias");
   ASSERT_EQ(condition.operands.size(), 2u);
@@ -846,7 +879,8 @@ TEST(EvidenceCaseBuilderTest, Bld005UncertainAliasPreventsStrengthenedReasoning)
 // A truncated-empty result is a withheld answer, never negative evidence. The
 // case states the unknown naming the budget that cut the query short, plus the
 // omission that can recover it — and asserts no absence.
-TEST(EvidenceCaseBuilderTest, Bld006TruncatedEmptyCheckIsNeverNegativeEvidence) {
+TEST(EvidenceCaseBuilderTest,
+     Bld006TruncatedEmptyCheckIsNeverNegativeEvidence) {
   const EvidenceCase value = BuildOrFail(TruncatedRequest(EvidenceLevel::kL1));
   EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
 
@@ -854,13 +888,13 @@ TEST(EvidenceCaseBuilderTest, Bld006TruncatedEmptyCheckIsNeverNegativeEvidence) 
             nullptr);
   EXPECT_EQ(FindProvenance(value, kClosedWorldAbsenceRuleId), nullptr);
 
-  const std::vector<const Omission*> truncated =
+  const std::vector<const Omission *> truncated =
       FindOmissions(value, "truncated_query");
   ASSERT_EQ(truncated.size(), 1u);
   EXPECT_TRUE(truncated.front()->expandable);
 
   bool found_unknown = false;
-  for (const Unknown& unknown : value.unknowns) {
+  for (const Unknown &unknown : value.unknowns) {
     if (unknown.id != truncated.front()->subject) {
       continue;
     }
@@ -878,10 +912,10 @@ TEST(EvidenceCaseBuilderTest, Bld006TruncatedEmptyCheckIsNeverNegativeEvidence) 
 // fact: only the fully valid case does.
 
 // The completion certificate the dominating-check result names.
-facts::AnalysisFact* CheckCertificate(EvidenceBuildRequest* request) {
+facts::AnalysisFact *CheckCertificate(EvidenceBuildRequest *request) {
   const core::StableId id =
       request->input.dominating_checks.metadata.query_provenance_id;
-  for (facts::AnalysisFact& fact : request->input.query_completion_facts) {
+  for (facts::AnalysisFact &fact : request->input.query_completion_facts) {
     if (fact.fact_id == id) {
       return &fact;
     }
@@ -890,13 +924,13 @@ facts::AnalysisFact* CheckCertificate(EvidenceBuildRequest* request) {
 }
 
 // Asserts that a request produced an open question rather than an absence.
-void ExpectOpenCheck(const EvidenceCase& value) {
+void ExpectOpenCheck(const EvidenceCase &value) {
   EXPECT_EQ(FindFactWith(value, kAbsencePredicate, EpistemicState::kMustNot),
             nullptr)
       << "an uncertified closed-world query was turned into negative evidence";
   EXPECT_EQ(FindProvenance(value, kClosedWorldAbsenceRuleId), nullptr);
   ASSERT_FALSE(value.unknowns.empty());
-  const std::vector<const Omission*> omissions =
+  const std::vector<const Omission *> omissions =
       FindOmissions(value, "dominating_check");
   ASSERT_FALSE(omissions.empty());
   EXPECT_TRUE(omissions.front()->expandable);
@@ -906,9 +940,9 @@ TEST(EvidenceCaseBuilderTest, Bld007MissingCompletionCertificateStaysOpen) {
   EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
   const core::StableId named =
       request.input.dominating_checks.metadata.query_provenance_id;
-  auto& facts = request.input.query_completion_facts;
+  auto &facts = request.input.query_completion_facts;
   facts.erase(std::remove_if(facts.begin(), facts.end(),
-                             [&named](const facts::AnalysisFact& fact) {
+                             [&named](const facts::AnalysisFact &fact) {
                                return fact.fact_id == named;
                              }),
               facts.end());
@@ -924,7 +958,7 @@ TEST(EvidenceCaseBuilderTest, Bld007MissingCompletionCertificateStaysOpen) {
 // refused before any member is built — never read as an absence.
 TEST(EvidenceCaseBuilderTest, Bld007UnrederivableCertificateIsRefused) {
   EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
-  facts::AnalysisFact* certificate = CheckCertificate(&request);
+  facts::AnalysisFact *certificate = CheckCertificate(&request);
   ASSERT_NE(certificate, nullptr);
   // The budget cell is edited after publication: the row no longer re-derives
   // from its own cells, so the certificate fails its own identity check.
@@ -939,7 +973,8 @@ TEST(EvidenceCaseBuilderTest, Bld007UnrederivableCertificateIsRefused) {
 
 TEST(EvidenceCaseBuilderTest, Bld007MismatchedScopeStaysOpen) {
   EvidenceScenarioBuilder scenario;
-  const EvidenceBuildRequest baseline = scenario.BuildRequest(EvidenceLevel::kL1);
+  const EvidenceBuildRequest baseline =
+      scenario.BuildRequest(EvidenceLevel::kL1);
   scenario.WithDominatingCheckScope({baseline.input.claim_seed.subject_ref});
   EvidenceBuildRequest request = scenario.BuildRequest(EvidenceLevel::kL1);
 
@@ -989,7 +1024,7 @@ TEST(EvidenceCaseBuilderTest, Bld007MissingSelectedWitnessStaysOpen) {
   const core::StableId named =
       request.input.dominating_checks.metadata.query_provenance_id;
 
-  auto* nodes = request.input.provenance.mutable_nodes();
+  auto *nodes = request.input.provenance.mutable_nodes();
   for (int index = nodes->size() - 1; index >= 0; --index) {
     if (nodes->Get(index).output_fact_id() == core::ToString(named)) {
       nodes->DeleteSubrange(index, 1);
@@ -1009,20 +1044,20 @@ TEST(EvidenceCaseBuilderTest, Bld007CompleteEmptyQueryDerivesAnAbsence) {
   const EvidenceCase value = BuildOrFail(request);
   EXPECT_TRUE(RequireValidEvidenceCase(value).ok());
 
-  const Fact* absence =
+  const Fact *absence =
       FindFactWith(value, kAbsencePredicate, EpistemicState::kMustNot);
   ASSERT_NE(absence, nullptr);
   EXPECT_EQ(absence->producer, kClosedWorldProducerId);
   EXPECT_TRUE(absence->derived);
 
-  const Provenance* record = FindProvenance(value, kClosedWorldAbsenceRuleId);
+  const Provenance *record = FindProvenance(value, kClosedWorldAbsenceRuleId);
   ASSERT_NE(record, nullptr);
   EXPECT_EQ(*record->analysis_run_id, *value.program.analysis_run_id);
 
   // The certificate the absence was derived from is a declared fact member, and
   // it carries the M9 identity of the row the builder re-derived.
   ASSERT_EQ(record->input_fact_ids.size(), 1u);
-  const std::vector<const Fact*> certificates =
+  const std::vector<const Fact *> certificates =
       FindFacts(value, "query_completion");
   ASSERT_EQ(certificates.size(), 1u);
   EXPECT_EQ(record->input_fact_ids.front(), certificates.front()->id);
@@ -1060,12 +1095,12 @@ TEST(EvidenceCaseBuilderTest, Bld008L0DeclaresAnOmissionForEveryRemovedMember) {
       Difference(AllMemberIds(l1), AllMemberIds(l0));
   EXPECT_FALSE(removed.empty()) << "the l0 projection withheld nothing";
 
-  const std::vector<const Omission*> projection =
+  const std::vector<const Omission *> projection =
       FindOmissions(l0, "level_projection");
   EXPECT_EQ(projection.size(), removed.size());
 
   std::set<std::string> named;
-  for (const Omission* omission : projection) {
+  for (const Omission *omission : projection) {
     EXPECT_TRUE(omission->expandable);
     // The subject is the surviving claim — the member that carries the
     // statement "this was withheld". A subject naming a *removed* member would
@@ -1074,7 +1109,7 @@ TEST(EvidenceCaseBuilderTest, Bld008L0DeclaresAnOmissionForEveryRemovedMember) {
                 AllMemberIds(l0).count(omission->subject) != 0u)
         << "the omission's subject '" << omission->subject
         << "' is not a member the projected case declares";
-    for (const std::string& member : removed) {
+    for (const std::string &member : removed) {
       if (omission->reason.find(member) != std::string::npos) {
         named.insert(member);
       }
@@ -1092,7 +1127,8 @@ TEST(EvidenceCaseBuilderTest, Bld008L0DeclaresAnOmissionForEveryRemovedMember) {
 
 // L2 retains L1's detail. RDX04 keeps the missing-summary capability and
 // function expansion handles explicit at both levels.
-TEST(EvidenceCaseBuilderTest, Bld009L2RetainsDetailAndMarksUnavailableExpansion) {
+TEST(EvidenceCaseBuilderTest,
+     Bld009L2RetainsDetailAndMarksUnavailableExpansion) {
   const EvidenceCase l1 = BuildOrFail(PristineRequest(EvidenceLevel::kL1));
   const EvidenceCase l2 = BuildOrFail(PristineRequest(EvidenceLevel::kL2));
   EXPECT_TRUE(RequireValidEvidenceCase(l2).ok());
@@ -1107,15 +1143,16 @@ TEST(EvidenceCaseBuilderTest, Bld009L2RetainsDetailAndMarksUnavailableExpansion)
   ASSERT_EQ(l2.provenance.size(), l1.provenance.size());
   EXPECT_EQ(IdsOf(l2.facts), IdsOf(l1.facts));
 
-  const std::vector<const Omission*> expansions =
+  const std::vector<const Omission *> expansions =
       FindOmissions(l2, "summary_expansion");
   std::size_t functions = 0;
-  for (const Entity& entity : l2.entities) {
-    if (entity.kind == EntityKind::kFunction) ++functions;
+  for (const Entity &entity : l2.entities) {
+    if (entity.kind == EntityKind::kFunction)
+      ++functions;
   }
   EXPECT_EQ(expansions.size(), functions)
       << "an unexpanded function is not marked";
-  for (const Omission* omission : expansions) {
+  for (const Omission *omission : expansions) {
     EXPECT_TRUE(omission->expandable);
     EXPECT_NE(AllMemberIds(l2).count(omission->subject), 0u);
   }
@@ -1175,18 +1212,19 @@ TEST(EvidenceCaseBuilderTest, Bld010MixedAnalysisRunIsRejected) {
 // thinner graph would misrepresent the flow the query returned.
 TEST(EvidenceCaseBuilderTest, Bld010UnrepresentableEdgeKindIsRejected) {
   EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
-  const cpg::CpgNode* decode = nullptr;
-  const cpg::CpgNode* srcbuf = nullptr;
-  for (const cpg::CpgNode& node : request.input.flow_slice.nodes) {
-    if (node.label == "decode") decode = &node;
-    if (node.label == "srcbuf") srcbuf = &node;
+  const cpg::CpgNode *decode = nullptr;
+  const cpg::CpgNode *srcbuf = nullptr;
+  for (const cpg::CpgNode &node : request.input.flow_slice.nodes) {
+    if (node.label == "decode")
+      decode = &node;
+    if (node.label == "srcbuf")
+      srcbuf = &node;
   }
   ASSERT_NE(decode, nullptr);
   ASSERT_NE(srcbuf, nullptr);
-  request.input.flow_slice.edges.push_back(
-      EvidenceScenarioBuilder().MakeEdge("contains:decode:srcbuf",
-                                         cpg::EdgeKind::kContains,
-                                         decode->node_id, srcbuf->node_id));
+  request.input.flow_slice.edges.push_back(EvidenceScenarioBuilder().MakeEdge(
+      "contains:decode:srcbuf", cpg::EdgeKind::kContains, decode->node_id,
+      srcbuf->node_id));
 
   const Status status = BuildStatus(request);
   EXPECT_FALSE(status.ok());
@@ -1200,18 +1238,19 @@ TEST(EvidenceCaseBuilderTest, Bld010UnrepresentableEdgeKindIsRejected) {
 // cannot show.
 TEST(EvidenceCaseBuilderTest, Bld010ExpandableSummaryEdgeIsRejected) {
   EvidenceBuildRequest request = PristineRequest(EvidenceLevel::kL1);
-  const cpg::CpgNode* decode = nullptr;
-  const cpg::CpgNode* vendor = nullptr;
-  for (const cpg::CpgNode& node : request.input.flow_slice.nodes) {
-    if (node.label == "decode") decode = &node;
-    if (node.label == "vendor_validate") vendor = &node;
+  const cpg::CpgNode *decode = nullptr;
+  const cpg::CpgNode *vendor = nullptr;
+  for (const cpg::CpgNode &node : request.input.flow_slice.nodes) {
+    if (node.label == "decode")
+      decode = &node;
+    if (node.label == "vendor_validate")
+      vendor = &node;
   }
   ASSERT_NE(decode, nullptr);
   ASSERT_NE(vendor, nullptr);
-  cpg::CpgEdge edge =
-      EvidenceScenarioBuilder().MakeEdge("calls:decode:vendor_validate",
-                                         cpg::EdgeKind::kCalls,
-                                         decode->node_id, vendor->node_id);
+  cpg::CpgEdge edge = EvidenceScenarioBuilder().MakeEdge(
+      "calls:decode:vendor_validate", cpg::EdgeKind::kCalls, decode->node_id,
+      vendor->node_id);
   edge.expandable = true;
   request.input.flow_slice.edges.push_back(std::move(edge));
 
@@ -1237,7 +1276,7 @@ TEST(EvidenceCaseBuilderTest, L49TranslatesTheQueryProducerIntoEirSpelling) {
 
   const EvidenceCase value = BuildOrFail(PristineRequest(EvidenceLevel::kL1));
   bool translated = false;
-  for (const Provenance& record : value.provenance) {
+  for (const Provenance &record : value.provenance) {
     EXPECT_EQ(record.producer.find('-'), std::string::npos)
         << "provenance '" << record.id << "' carries a producer EIR-T cannot "
         << "spell: " << record.producer;
@@ -1252,12 +1291,12 @@ TEST(EvidenceCaseBuilderTest, L49TranslatesTheQueryProducerIntoEirSpelling) {
 
   // The rule the witness carried rides through untranslated: it is the rule,
   // not the producer, and it never contained a hyphen.
-  const Provenance* query =
+  const Provenance *query =
       FindProvenance(value, std::string(kQueryCompletionRuleId));
   ASSERT_NE(query, nullptr);
   EXPECT_EQ(query->producer, kEvidenceQueryProducerId);
   EXPECT_EQ(query->source_anchor_id,
-            std::string());  // the witness's anchor, which is empty
+            std::string()); // the witness's anchor, which is empty
 }
 
 // --- L52: the difference from the hand-authored fixture ----------------------
@@ -1267,11 +1306,12 @@ TEST(EvidenceCaseBuilderTest, L49TranslatesTheQueryProducerIntoEirSpelling) {
 // `operator<=>`, so each comparison below is a *complete* content comparison —
 // every field of every member, not just the handle it is declared under. A
 // family is named here only when its content genuinely differs.
-std::vector<std::string> DifferingFamilies(const EvidenceCase& built,
-                                           const EvidenceCase& fixture) {
+std::vector<std::string> DifferingFamilies(const EvidenceCase &built,
+                                           const EvidenceCase &fixture) {
   std::vector<std::string> differing;
   auto note = [&differing](std::string name, bool same) {
-    if (!same) differing.push_back(std::move(name));
+    if (!same)
+      differing.push_back(std::move(name));
   };
 
   note("program", built.program == fixture.program);
@@ -1306,44 +1346,45 @@ std::vector<std::string> DifferingFamilies(const EvidenceCase& built,
 // reads as the statement the case makes rather than as an operand walk. It is
 // deliberately local to this file: the assertions it feeds are about what these
 // two cases say, and the golden is written in this spelling.
-std::string ExpressionText(const Expression& value) {
+std::string ExpressionText(const Expression &value) {
   auto joined = [&value](std::string_view separator) {
     std::string out;
     for (std::size_t i = 0; i < value.operands.size(); ++i) {
-      if (i != 0) out += separator;
+      if (i != 0)
+        out += separator;
       out += ExpressionText(value.operands[i]);
     }
     return out;
   };
   switch (value.kind) {
-    case Expression::Kind::kBool:
-      return value.boolean ? "true" : "false";
-    case Expression::Kind::kInteger:
-      return std::to_string(value.integer);
-    case Expression::Kind::kString:
-      return "\"" + value.text + "\"";
-    case Expression::Kind::kSymbol:
-      return value.text;
-    case Expression::Kind::kReference:
-      return "@" + value.text;
-    case Expression::Kind::kCall:
-      return value.text + "(" + joined(", ") + ")";
-    case Expression::Kind::kNot:
-      return "!" + joined(", ");
-    case Expression::Kind::kCompare:
-      return joined(" " + value.text + " ");
-    case Expression::Kind::kAnd:
-      return "(" + joined(" and ") + ")";
-    case Expression::Kind::kOr:
-      return "(" + joined(" or ") + ")";
-    case Expression::Kind::kImplies:
-      return "(" + joined(" => ") + ")";
-    case Expression::Kind::kForAll:
-      return "forall " + value.text + ". " + joined(", ");
-    case Expression::Kind::kExists:
-      return "exists " + value.text + ". " + joined(", ");
-    case Expression::Kind::kUnspecified:
-      break;
+  case Expression::Kind::kBool:
+    return value.boolean ? "true" : "false";
+  case Expression::Kind::kInteger:
+    return std::to_string(value.integer);
+  case Expression::Kind::kString:
+    return "\"" + value.text + "\"";
+  case Expression::Kind::kSymbol:
+    return value.text;
+  case Expression::Kind::kReference:
+    return "@" + value.text;
+  case Expression::Kind::kCall:
+    return value.text + "(" + joined(", ") + ")";
+  case Expression::Kind::kNot:
+    return "!" + joined(", ");
+  case Expression::Kind::kCompare:
+    return joined(" " + value.text + " ");
+  case Expression::Kind::kAnd:
+    return "(" + joined(" and ") + ")";
+  case Expression::Kind::kOr:
+    return "(" + joined(" or ") + ")";
+  case Expression::Kind::kImplies:
+    return "(" + joined(" => ") + ")";
+  case Expression::Kind::kForAll:
+    return "forall " + value.text + ". " + joined(", ");
+  case Expression::Kind::kExists:
+    return "exists " + value.text + ". " + joined(", ");
+  case Expression::Kind::kUnspecified:
+    break;
   }
   return "<unspecified>";
 }
@@ -1361,7 +1402,8 @@ std::string ExpressionText(const Expression& value) {
 // the families that differ are enumerated below, each one named and each one
 // accounted for. The producer translation is asserted exactly and separately,
 // because it is the point the two cases exist to differ at.
-TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint) {
+TEST(EvidenceCaseBuilderTest,
+     L52ReproducesTheProgramBindingAndNamesItsOnePoint) {
   const EvidenceCase fixture = testing::MakeOverflowEvidenceCase();
   const EvidenceBuildRequest request = TruncatedRequest(EvidenceLevel::kL1);
   const EvidenceCase built = BuildOrFail(request);
@@ -1378,8 +1420,7 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
             fixture.program.analysis_configuration_id);
   EXPECT_EQ(built.program.type_layout_id, fixture.program.type_layout_id);
   EXPECT_EQ(built.program.analysis_run_id, fixture.program.analysis_run_id);
-  EXPECT_EQ(built.program.analyzer_versions,
-            fixture.program.analyzer_versions);
+  EXPECT_EQ(built.program.analyzer_versions, fixture.program.analyzer_versions);
 
   // --- The one point: the producer translation, named.
   //
@@ -1388,14 +1429,14 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
   // builder carries its EIR spelling. `TranslateProducer` is the relation
   // between them, so the difference is a translation and not a substitution:
   // applying it to the fixture's producer yields the builder's, exactly.
-  const Provenance* fixture_query = nullptr;
-  const Provenance* built_query = nullptr;
-  for (const Provenance& record : fixture.provenance) {
+  const Provenance *fixture_query = nullptr;
+  const Provenance *built_query = nullptr;
+  for (const Provenance &record : fixture.provenance) {
     if (record.rule == std::string(kQueryCompletionRuleId)) {
       fixture_query = &record;
     }
   }
-  for (const Provenance& record : built.provenance) {
+  for (const Provenance &record : built.provenance) {
     if (record.rule == std::string(kQueryCompletionRuleId)) {
       built_query = &record;
     }
@@ -1466,14 +1507,13 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
   //   * dependencies — the fixture carries five, the builder three: the summary
   //     and specification dependencies have no source in the handoff.
   //   * summaries, assumptions, hypotheses — one each in the fixture, none in
-  //     the builder. The handoff carries no summary identity, no assumption, and
-  //     no hypothesis, and the builder invents none of them.
+  //     the builder. The handoff carries no summary identity, no assumption,
+  //     and no hypothesis, and the builder invents none of them.
   EXPECT_EQ(DifferingFamilies(built, fixture),
             (std::vector<std::string>{
-                "assumptions",   "constraints", "dependencies", "edges",
-                "entities",      "facts",       "hypotheses",   "omissions",
-                "paths",         "proof_obligations", "provenance", "summaries",
-                "unknowns"}));
+                "assumptions", "constraints", "dependencies", "edges",
+                "entities", "facts", "hypotheses", "omissions", "paths",
+                "proof_obligations", "provenance", "summaries", "unknowns"}));
 
   // The families that do *not* differ are the load-bearing ones: the claim, the
   // graph's identity space, and the path's spine.
@@ -1521,8 +1561,9 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
   EXPECT_EQ(built.paths.front().provenance_id, "PR_value_flow");
   EXPECT_EQ(fixture.paths.front().provenance_id, "PR_flow");
 
-  const Provenance* fixture_path_record = FindProvenanceById(fixture, "PR_flow");
-  const Provenance* built_path_record =
+  const Provenance *fixture_path_record =
+      FindProvenanceById(fixture, "PR_flow");
+  const Provenance *built_path_record =
       FindProvenanceById(built, "PR_value_flow");
   ASSERT_NE(fixture_path_record, nullptr);
   ASSERT_NE(built_path_record, nullptr);
@@ -1543,7 +1584,7 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
   // new family would be.
   ASSERT_EQ(built.facts.size(), 3u);
   auto fact_text = [&built](std::string_view id) {
-    for (const Fact& fact : built.facts) {
+    for (const Fact &fact : built.facts) {
       if (fact.id == id) {
         return ExpressionText(fact.predicate);
       }
@@ -1557,7 +1598,7 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
 
   // The alias fact is the one the case could weaken: it is the MAY premise the
   // whole path condition rests on, so its state is pinned as content too.
-  for (const Fact& fact : built.facts) {
+  for (const Fact &fact : built.facts) {
     if (fact.id != "F_alias") {
       continue;
     }
@@ -1578,7 +1619,7 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
   // The provenance family is listed as differing, so its count is pinned here
   // too: six records, all attributed to the one witness the handoff carried.
   EXPECT_EQ(built.provenance.size(), 6u);
-  for (const Provenance& record : built.provenance) {
+  for (const Provenance &record : built.provenance) {
     EXPECT_EQ(record.producer, std::string(kEvidenceQueryProducerId))
         << "record '" << record.id << "' is attributed to a producer the "
         << "handoff never carried";
@@ -1589,7 +1630,8 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
   }
 }
 
-// --- The dominating-check absence's two handles -------------------------------
+// --- The dominating-check absence's two handles
+// -------------------------------
 
 // BLD-003 and BLD-007. The dominating-check query is issued over an *ordered*
 // ref list, and the absence the builder derives from a complete-empty result is
@@ -1604,7 +1646,8 @@ TEST(EvidenceCaseBuilderTest, L52ReproducesTheProgramBindingAndNamesItsOnePoint)
 // be the *query's* head, not the claim's source. It happens that a scope of
 // `{source, sink}` makes those coincide here, so the test states the query's
 // head explicitly and leaves the claim's source as the value it was given.
-TEST(EvidenceCaseBuilderTest, Bld007ScopeIsTheQuerysHeadAndTheSinkIsItsSubject) {
+TEST(EvidenceCaseBuilderTest,
+     Bld007ScopeIsTheQuerysHeadAndTheSinkIsItsSubject) {
   EvidenceScenarioBuilder scenario;
   const EvidenceBuildRequest defaults =
       scenario.BuildRequest(EvidenceLevel::kL1);
@@ -1615,7 +1658,7 @@ TEST(EvidenceCaseBuilderTest, Bld007ScopeIsTheQuerysHeadAndTheSinkIsItsSubject) 
 
   // The default scope: the sink alone, as the M10B producer issues it.
   const EvidenceCase sink_scoped = BuildOrFail(defaults);
-  const std::vector<const Fact*> sink_facts =
+  const std::vector<const Fact *> sink_facts =
       FindFacts(sink_scoped, kAbsencePredicate);
   ASSERT_EQ(sink_facts.size(), 1u);
   EXPECT_EQ(ExpressionText(sink_facts.front()->predicate),
@@ -1641,7 +1684,7 @@ TEST(EvidenceCaseBuilderTest, Bld007ScopeIsTheQuerysHeadAndTheSinkIsItsSubject) 
         BuildOrFail(scoped.BuildRequest(EvidenceLevel::kL1));
     EXPECT_TRUE(RequireValidEvidenceCase(enclosing_scoped).ok());
 
-    const std::vector<const Fact*> enclosing_facts =
+    const std::vector<const Fact *> enclosing_facts =
         FindFacts(enclosing_scoped, kAbsencePredicate);
     ASSERT_EQ(enclosing_facts.size(), 1u)
         << (check_found ? "the found-check path emitted no coverage fact"
@@ -1669,8 +1712,9 @@ TEST(EvidenceCaseBuilderTest, Bld007ScopeIsTheQuerysHeadAndTheSinkIsItsSubject) 
 // for `facts` and left `unknowns` on the set-only assertion, so the reviewer
 // could change the truncated branch's unknown property to a different predicate
 // and the whole suite stayed green. The surface that slipped through is exactly
-// the one F3 decided — which handles the `dominates_bounds_check` property names
-// — so the pin below states every member's content, not the family's presence.
+// the one F3 decided — which handles the `dominates_bounds_check` property
+// names — so the pin below states every member's content, not the family's
+// presence.
 //
 // The truncated branch renders both operands as the sink, `(sink, sink)`,
 // without consulting the query's scope at all: it never reads the scope it
@@ -1688,15 +1732,15 @@ TEST(EvidenceCaseBuilderTest, UnknownsFamilyPinsItsPropertyHandles) {
   // order is part of the pin, so a reordering within the family is visible too.
   //
   // Two of these spellings have no spec basis, and the pin is a change-detector
-  // for them rather than a conformance check: `effect_of` appears in no document
-  // in this repository — it is invented by the builder's `AddUnknown` — and the
-  // `U_<subject>_<CODE>` handle scheme is the allocator's, while the
+  // for them rather than a conformance check: `effect_of` appears in no
+  // document in this repository — it is invented by the builder's `AddUnknown`
+  // — and the `U_<subject>_<CODE>` handle scheme is the allocator's, while the
   // hand-authored DEM-001 case spells the analogous member
   // `postcondition(@vendor_validate)`. Renaming either is a free choice rather
   // than a violation: this pin exists so a rename is noticed, not so it is
   // forbidden.
   std::vector<std::string> stated;
-  for (const Unknown& unknown : value.unknowns) {
+  for (const Unknown &unknown : value.unknowns) {
     stated.push_back(unknown.id + " = " + ExpressionText(unknown.property) +
                      " (" + std::string(ToString(unknown.reason_code)) + ")");
   }
@@ -1717,9 +1761,9 @@ TEST(EvidenceCaseBuilderTest, UnknownsFamilyPinsItsPropertyHandles) {
   // The limit of those two assertions, stated so a later reader does not
   // overread them: in this fixture the query's scope *is* the sink, so both
   // operands resolve to the same handle and a change that swaps one for the
-  // other is value-preserving here and stays green. That is not a gap in the pin
-  // — the pin fixes the value, and a change to any other handle reddens it — it
-  // is a limit of the value this pin fixes.
+  // other is value-preserving here and stays green. That is not a gap in the
+  // pin — the pin fixes the value, and a change to any other handle reddens it
+  // — it is a limit of the value this pin fixes.
   //
   // The question it leaves unposed is whether the truncated branch should name
   // an enclosing scope when there is one. This pin does not pose it, and
@@ -1727,8 +1771,8 @@ TEST(EvidenceCaseBuilderTest, UnknownsFamilyPinsItsPropertyHandles) {
   // builder reaches that handoff by combining `WithTruncatedDominatingChecks`
   // with `WithDominatingCheckScope`. Doing so is deliberately left out of this
   // pin, and the behaviour such a case would expose is Task 12's to decide.
-  const Unknown* check_unknown = nullptr;
-  for (const Unknown& unknown : value.unknowns) {
+  const Unknown *check_unknown = nullptr;
+  for (const Unknown &unknown : value.unknowns) {
     if (unknown.reason_code == UnknownReasonCode::kMissingSpecification) {
       check_unknown = &unknown;
     }
@@ -1777,7 +1821,8 @@ TEST(EvidenceCaseBuilderTest, PathFeasibilityIsUnknownAndNoValueIsRejected) {
       << status.message();
 }
 
-// --- The analyzer list --------------------------------------------------------
+// --- The analyzer list
+// --------------------------------------------------------
 
 // F7. `EvidenceBuildRequest::analyzer_versions` may be empty, and the binding
 // says so rather than refusing: M10C reports the analyzers it was told about
@@ -1792,8 +1837,7 @@ TEST(EvidenceCaseBuilderTest, AnEmptyAnalyzerListIsCarriedNotRefused) {
 
   const EvidenceCase value = BuildOrFail(request);
   EXPECT_TRUE(value.program.analyzer_versions.empty());
-  EXPECT_EQ(value.program.analyzer_versions,
-            (std::vector<AnalyzerVersion>{}));
+  EXPECT_EQ(value.program.analyzer_versions, (std::vector<AnalyzerVersion>{}));
   EXPECT_TRUE(RequireValidEvidenceCase(value).ok())
       << "a case bound to a snapshot with no recorded analyzer identity was "
       << "refused";
@@ -1804,8 +1848,8 @@ TEST(EvidenceCaseBuilderTest, AnEmptyAnalyzerListIsCarriedNotRefused) {
 // Reverses every input vector the handoff carries. The builder derives handles
 // from sorted stable-ID sequences, so the insertion order of any input must not
 // reach the output.
-void ReverseAllInputs(EvidenceBuildRequest* request) {
-  EvidenceBuildInput& input = request->input;
+void ReverseAllInputs(EvidenceBuildRequest *request) {
+  EvidenceBuildInput &input = request->input;
   EvidenceScenarioBuilder::Reverse(input.flow_slice.nodes);
   EvidenceScenarioBuilder::Reverse(input.flow_slice.edges);
   EvidenceScenarioBuilder::Reverse(input.flow_slice.supporting_facts);
@@ -1820,11 +1864,11 @@ void ReverseAllInputs(EvidenceBuildRequest* request) {
   EvidenceScenarioBuilder::Reverse(input.query_completion_facts);
   EvidenceScenarioBuilder::Reverse(input.query_completion_bindings);
 
-  auto* nodes = input.provenance.mutable_nodes();
+  auto *nodes = input.provenance.mutable_nodes();
   std::vector<fact::v1::FactWitness> witnesses(nodes->begin(), nodes->end());
   std::reverse(witnesses.begin(), witnesses.end());
   nodes->Clear();
-  for (const fact::v1::FactWitness& witness : witnesses) {
+  for (const fact::v1::FactWitness &witness : witnesses) {
     *nodes->Add() = witness;
   }
 }
@@ -1850,5 +1894,5 @@ TEST(EvidenceCaseBuilderTest, ReversingEveryInputVectorYieldsTheSameIdentity) {
   }
 }
 
-}  // namespace
-}  // namespace veritas::evidence
+} // namespace
+} // namespace veritas::evidence

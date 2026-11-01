@@ -16,14 +16,14 @@
 
 #include <mutex>
 
+#include <Graphs/SVFG.h>
+#include <MSSA/SVFGBuilder.h>
 #include <SVF-LLVM/LLVMModule.h>
 #include <SVF-LLVM/SVFIRBuilder.h>
 #include <SVFIR/SVFIR.h>
-#include <WPA/Andersen.h>
-#include <Graphs/SVFG.h>
-#include <MSSA/SVFGBuilder.h>
 #include <Util/NodeIDAllocator.h>
 #include <Util/Options.h>
+#include <WPA/Andersen.h>
 
 #include "analysis/pipeline/ProgramIr.h"
 #include "veritas/core/RunMetrics.h"
@@ -32,7 +32,7 @@ namespace veritas::analysis::svf {
 namespace {
 
 // Process-wide mutex for SVF session serialization
-std::mutex& ProcessWideSvfMutex() {
+std::mutex &ProcessWideSvfMutex() {
   static std::mutex mutex;
   return mutex;
 }
@@ -58,7 +58,7 @@ struct SvfCleanup final {
     }
     // Restore the global field limit so a field-insensitive session cannot
     // leak into a subsequent session that expects the field-sensitive default.
-    const_cast<::Option<unsigned>&>(SVF::Options::MaxFieldLimit)
+    const_cast<::Option<unsigned> &>(SVF::Options::MaxFieldLimit)
         .setValue(saved_field_limit);
     // NodeIDAllocator is a process-wide singleton whose counters accumulate
     // across sessions. Without resetting it, the next session's symbol count
@@ -72,12 +72,11 @@ struct SvfCleanup final {
 // hook has a stable definition regardless of how the library is built.
 static int g_svf_session_count = 0;
 
-}  // namespace
+} // namespace
 
-Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
-                         const SvfConfig& config,
-                         SvfSessionCallback callback,
-                         core::RunMetrics* metrics) {
+Status RunWithSvfSession(pipeline::ProgramIr &program_ir,
+                         const SvfConfig &config, SvfSessionCallback callback,
+                         core::RunMetrics *metrics) {
   std::scoped_lock lock(ProcessWideSvfMutex());
 
   ++g_svf_session_count;
@@ -93,11 +92,11 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
   // serialized by the session mutex above.
   cleanup.saved_field_limit = SVF::Options::MaxFieldLimit();
   if (!config.field_sensitive) {
-    const_cast<::Option<unsigned>&>(SVF::Options::MaxFieldLimit).setValue(0u);
+    const_cast<::Option<unsigned> &>(SVF::Options::MaxFieldLimit).setValue(0u);
   }
 
   // Step 1: Build SVF module from live LLVM module
-  auto* llvm_module = program_ir.GetModule();
+  auto *llvm_module = program_ir.GetModule();
   if (!llvm_module) {
     return Status::Internal("ProgramIr has no module");
   }
@@ -112,11 +111,11 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
   // Capture the session's module set so downstream mapping uses session-scoped
   // state rather than re-querying the global singleton (which may be stale or
   // released if cleanup runs out of order).
-  SVF::LLVMModuleSet* module_set = SVF::LLVMModuleSet::getLLVMModuleSet();
+  SVF::LLVMModuleSet *module_set = SVF::LLVMModuleSet::getLLVMModuleSet();
 
   // Step 2: Build SVFIR
   SVF::SVFIRBuilder builder;
-  SVF::SVFIR* svf_ir = [&] {
+  SVF::SVFIR *svf_ir = [&] {
     core::PhaseSpan span(metrics, "m5.svf.svfi", core::SpanMode::kBearing);
     return builder.build();
   }();
@@ -126,7 +125,7 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
   cleanup.svf_ir_built = true;
 
   // Step 3: Run Andersen pointer analysis
-  SVF::AndersenWaveDiff* andersen = [&] {
+  SVF::AndersenWaveDiff *andersen = [&] {
     core::PhaseSpan span(metrics, "m5.svf.andersen", core::SpanMode::kBearing);
     return SVF::AndersenWaveDiff::createAndersenWaveDiff(svf_ir);
   }();
@@ -137,7 +136,7 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
 
   // Step 4: Build SVFG
   SVF::SVFGBuilder svfg_builder;
-  SVF::SVFG* svfg = [&] {
+  SVF::SVFG *svfg = [&] {
     core::PhaseSpan span(metrics, "m5.svf.svfg", core::SpanMode::kBearing);
     return svfg_builder.buildFullSVFG(andersen);
   }();
@@ -157,9 +156,9 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
     // ever built. An always-zero counter is indistinguishable from a measured
     // zero, so no edge counter is emitted.
     if (metrics != nullptr) {
-      metrics->AddCounter("svf.svfg_nodes",
-                          static_cast<std::uint64_t>(view.svfg->getSVFGNodeNum()),
-                          "count");
+      metrics->AddCounter(
+          "svf.svfg_nodes",
+          static_cast<std::uint64_t>(view.svfg->getSVFGNodeNum()), "count");
     }
     return callback(view);
   }();
@@ -173,4 +172,4 @@ bool SvfGlobalStateIsCleanForTest() {
   return g_svf_session_count > 0;
 }
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf

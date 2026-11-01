@@ -74,7 +74,7 @@ enum class ByteRangeKind : std::uint8_t { kKnown, kUnknown };
 struct AliasObservation {
   AliasKind kind;
   EpistemicState epistemic;
-  auto operator<=>(const AliasObservation&) const = default;
+  auto operator<=>(const AliasObservation &) const = default;
 };
 
 struct AccessPathSegment {
@@ -82,17 +82,20 @@ struct AccessPathSegment {
   Kind kind;
   std::int64_t first = 0;
   std::int64_t last = 0;
-  auto operator<=>(const AccessPathSegment&) const = default;
+  auto operator<=>(const AccessPathSegment &) const = default;
 };
 
 struct ByteRange {
   std::optional<std::int64_t> offset;
   std::optional<std::uint64_t> size;
+
   static ByteRange Unknown() { return {}; }
+
   static ByteRange Known(std::int64_t offset, std::uint64_t size) {
     return {.offset = offset, .size = size};
   }
-  auto operator<=>(const ByteRange&) const = default;
+
+  auto operator<=>(const ByteRange &) const = default;
 };
 
 struct AbstractObject {
@@ -112,20 +115,20 @@ struct MemoryLocation {
 
 // Maps a byte range to its relation-projection kind. A range is known only
 // when both offset and size are present; anything else projects as unknown.
-ByteRangeKind RelationRangeKind(const ByteRange& range);
+ByteRangeKind RelationRangeKind(const ByteRange &range);
 
 // Validates a byte range: half-known ranges (exactly one of offset/size set)
 // are rejected.
-Status Validate(const ByteRange& range);
+Status Validate(const ByteRange &range);
 
 // Validates an abstract object: its ID must be an abstract object, any owner
 // must be a function variant, and the semantic anchor must be control-free.
-Status Validate(const AbstractObject& object);
+Status Validate(const AbstractObject &object);
 
 // Validates a memory location: its ID must be a memory reference, and the
 // embedded object and byte range must themselves be valid.
-Status Validate(const MemoryLocation& location);
+Status Validate(const MemoryLocation &location);
 
-}  // namespace veritas::analysis::semantic
+} // namespace veritas::analysis::semantic
 
-#endif  // VERITAS_ANALYSIS_SEMANTIC_SEMANTIC_TYPES_H_
+#endif // VERITAS_ANALYSIS_SEMANTIC_SEMANTIC_TYPES_H_

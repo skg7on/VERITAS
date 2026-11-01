@@ -70,14 +70,17 @@ TEST(CpgEndToEndTest, IdenticalInputsProduceCanonicalEquality) {
   EXPECT_EQ(first->cpg_edge_count, second->cpg_edge_count);
 }
 
-bool SourceTreeContains(const fs::path& root, const std::string& pattern) {
-  if (!fs::exists(root)) return false;
-  for (const auto& entry : fs::recursive_directory_iterator(root)) {
-    if (!entry.is_regular_file()) continue;
+bool SourceTreeContains(const fs::path &root, const std::string &pattern) {
+  if (!fs::exists(root))
+    return false;
+  for (const auto &entry : fs::recursive_directory_iterator(root)) {
+    if (!entry.is_regular_file())
+      continue;
     std::ifstream in(entry.path());
     std::stringstream buffer;
     buffer << in.rdbuf();
-    if (buffer.str().find(pattern) != std::string::npos) return true;
+    if (buffer.str().find(pattern) != std::string::npos)
+      return true;
   }
   return false;
 }
@@ -93,5 +96,5 @@ TEST(CpgEndToEndTest, PublicHeadersExposeNoNativeAnalysisTypes) {
   EXPECT_FALSE(SourceTreeContains(include_root, "PhASAR"));
 }
 
-}  // namespace
-}  // namespace veritas::analysis
+} // namespace
+} // namespace veritas::analysis

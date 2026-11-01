@@ -131,18 +131,19 @@ struct EvidenceValidationIssue {
 // only acceptance test; an empty report is a well-formed case.
 struct EvidenceValidationReport {
   std::vector<EvidenceValidationIssue> issues;
+
   bool ok() const { return issues.empty(); }
 };
 
 // Validates `value` and returns every issue found. Never mutates `value` and
 // never fetches or synthesizes anything it does not declare.
-EvidenceValidationReport ValidateEvidenceCase(const EvidenceCase& value);
+EvidenceValidationReport ValidateEvidenceCase(const EvidenceCase &value);
 
 // The single-status form: `Status::Ok()` for a well-formed case, otherwise
 // `Status::InvalidArgument` carrying the first issue's stable code name and
 // member ID. Callers that need every failure use `ValidateEvidenceCase`.
-Status RequireValidEvidenceCase(const EvidenceCase& value);
+Status RequireValidEvidenceCase(const EvidenceCase &value);
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EVIDENCE_VALIDATOR_H_
+#endif // VERITAS_EVIDENCE_EVIDENCE_VALIDATOR_H_

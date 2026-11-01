@@ -66,6 +66,7 @@ public:
   Status AddUnknownCall(UnknownCallEffect effect);
 
   std::span<const core::StableId> Functions() const { return functions_; }
+
   std::span<const CallEdge> Outgoing(core::StableId caller) const;
   std::span<const UnknownCallEffect> UnknownCalls(core::StableId caller) const;
 

@@ -42,11 +42,11 @@ bool HasStructuralCharacter(std::string_view value) {
          value.find('\r') != std::string_view::npos;
 }
 
-StatusOr<std::string> CellText(const facts::ExecutionCellValue& cell) {
+StatusOr<std::string> CellText(const facts::ExecutionCellValue &cell) {
   std::string text;
   Status status = Status::Ok();
   std::visit(
-      [&](const auto& value) {
+      [&](const auto &value) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, std::string>) {
           if (HasStructuralCharacter(value)) {
@@ -90,10 +90,10 @@ std::vector<std::string> SplitRow(std::string_view line) {
   }
 }
 
-}  // namespace
+} // namespace
 
-Status RelationIo::WriteInput(const std::filesystem::path& directory,
-                              const WpaLogicalComponentInput& input) {
+Status RelationIo::WriteInput(const std::filesystem::path &directory,
+                              const WpaLogicalComponentInput &input) {
   std::error_code error;
   std::filesystem::create_directories(directory, error);
   if (error) {
@@ -101,8 +101,8 @@ Status RelationIo::WriteInput(const std::filesystem::path& directory,
   }
 
   std::map<facts::RelationId, std::string> files;
-  for (const auto& row : input.edb) {
-    const auto& schema = facts::RelationsV2().Get(row.relation);
+  for (const auto &row : input.edb) {
+    const auto &schema = facts::RelationsV2().Get(row.relation);
     if (row.cells.size() != schema.columns.size()) {
       return Status::InvalidArgument("execution row does not match its schema");
     }
@@ -125,14 +125,14 @@ Status RelationIo::WriteInput(const std::filesystem::path& directory,
   // relations for the other component are simply not read by the bundle.
   for (std::size_t i = 0; i < facts::kRelationCountV2; ++i) {
     const auto id = static_cast<facts::RelationId>(i);
-    const auto& schema = facts::RelationsV2().Get(id);
+    const auto &schema = facts::RelationsV2().Get(id);
     if (schema.ownership == facts::RelationOwnership::kEdb) {
       files.try_emplace(id);
     }
   }
 
-  for (const auto& [relation, contents] : files) {
-    const auto& schema = facts::RelationsV2().Get(relation);
+  for (const auto &[relation, contents] : files) {
+    const auto &schema = facts::RelationsV2().Get(relation);
     std::ofstream stream(directory / (schema.name + ".facts"),
                          std::ios::binary | std::ios::trunc);
     if (!stream.is_open())
@@ -144,15 +144,15 @@ Status RelationIo::WriteInput(const std::filesystem::path& directory,
   return Status::Ok();
 }
 
-StatusOr<facts::RawWpaEvaluation> RelationIo::ReadOutput(
-    const std::filesystem::path& directory,
-    const WpaLogicalComponentInput& input) {
+StatusOr<facts::RawWpaEvaluation>
+RelationIo::ReadOutput(const std::filesystem::path &directory,
+                       const WpaLogicalComponentInput &input) {
   facts::RawWpaEvaluation raw;
 
   // Results arrive dense. Map every id back before it can become a fact. Each
   // derived relation this component evaluates has its own result file.
-  for (const auto& domain : ComponentDomains(input.component)) {
-    const auto& derived_schema = facts::RelationsV2().Get(domain.derived);
+  for (const auto &domain : ComponentDomains(input.component)) {
+    const auto &derived_schema = facts::RelationsV2().Get(domain.derived);
     std::ifstream results(directory / (derived_schema.name + ".csv"));
     if (!results.is_open()) {
       return Status::Internal("Souffle worker did not produce the result file");
@@ -252,4 +252,4 @@ StatusOr<facts::RawWpaEvaluation> RelationIo::ReadOutput(
   return raw;
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

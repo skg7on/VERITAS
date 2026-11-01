@@ -31,6 +31,7 @@ void Write(const std::filesystem::path &path, std::string_view text) {
   std::ofstream out(path, std::ios::binary);
   out << text;
 }
+
 int Git(const std::filesystem::path &root, std::vector<std::string> args) {
   args.insert(args.begin(), {"/usr/bin/git", "-C", root.string()});
   std::vector<char *> argv;
@@ -59,6 +60,7 @@ public:
       std::abort();
     path_ = result;
   }
+
   ~TempDir() {
     std::error_code ec;
     for (auto it = std::filesystem::recursive_directory_iterator(path_, ec);
@@ -69,15 +71,18 @@ public:
                                      std::filesystem::perms::owner_all, ec);
     std::filesystem::remove_all(path_, ec);
   }
+
   const std::filesystem::path &path() const { return path_; }
 
 private:
   std::filesystem::path path_;
 };
+
 class SnapshotCaptureTest : public ::testing::Test {
 protected:
   TempDir temp_;
   std::filesystem::path root_ = temp_.path() / "project";
+
   void SetUp() override {
     std::filesystem::create_directories(root_);
     ASSERT_EQ(Git(root_, {"init", "-q"}), 0);
@@ -90,6 +95,7 @@ protected:
                           "base"}),
               0);
   }
+
   SnapshotRequest Request() const {
     SnapshotRequest r;
     r.project_root = root_;
@@ -97,6 +103,7 @@ protected:
     return r;
   }
 };
+
 TEST_F(SnapshotCaptureTest, DirtySourceIsCapturedOnce) {
   Write(root_ / "src/a.cc", "before");
   auto snap = CaptureReviewSnapshot(Request());
@@ -123,6 +130,7 @@ TEST_F(SnapshotCaptureTest, DirtySourceIsCapturedOnce) {
   EXPECT_EQ(bytes, "before");
   EXPECT_FALSE(snap->Materialize(worker).ok());
 }
+
 TEST_F(SnapshotCaptureTest, UntrackedRequiresExplicitSelection) {
   Write(root_ / "new.cc", "new");
   auto snap = CaptureReviewSnapshot(Request());
@@ -139,6 +147,7 @@ TEST_F(SnapshotCaptureTest, UntrackedRequiresExplicitSelection) {
   r.selected_untracked = {"src/a.cc"};
   EXPECT_FALSE(CaptureReviewSnapshot(r).ok());
 }
+
 TEST_F(SnapshotCaptureTest, OutputHintsDoNotCloseMembership) {
   Write(
       root_ / "compile_commands.json",
@@ -151,6 +160,7 @@ TEST_F(SnapshotCaptureTest, OutputHintsDoNotCloseMembership) {
   EXPECT_EQ(snap->program_scope().membership_source, "OUTPUT_HINT");
   EXPECT_EQ(snap->program_scope().member_tu_digests.size(), 2u);
 }
+
 TEST_F(SnapshotCaptureTest, SharedLibraryDependencyIsNotDropped) {
   Write(
       root_ / "program.json",
@@ -174,6 +184,7 @@ TEST_F(SnapshotCaptureTest, SharedLibraryDependencyIsNotDropped) {
   ASSERT_TRUE(library.ok());
   EXPECT_EQ(library->program_scope().member_tu_digests.size(), 1u);
 }
+
 TEST_F(SnapshotCaptureTest, MissingDependencyKeepsScopeUnresolved) {
   Write(
       root_ / "program.json",
@@ -186,6 +197,7 @@ TEST_F(SnapshotCaptureTest, MissingDependencyKeepsScopeUnresolved) {
   EXPECT_EQ(snap->program_scope().coverage, "UNRESOLVED");
   EXPECT_FALSE(snap->program_scope().frontier.empty());
 }
+
 TEST_F(SnapshotCaptureTest, TraversalAndSymlinkEscapeAreRejected) {
   auto r = Request();
   r.selected_untracked = {"../outside"};
@@ -204,6 +216,7 @@ TEST_F(SnapshotCaptureTest, TraversalAndSymlinkEscapeAreRejected) {
   r.base_ref = "--upload-pack=bad";
   EXPECT_FALSE(CaptureReviewSnapshot(r).ok());
 }
+
 TEST_F(SnapshotCaptureTest,
        MissingHeaderIsPartialAndGeneratedIncludesArePinned) {
   Write(
@@ -224,6 +237,7 @@ TEST_F(SnapshotCaptureTest,
   EXPECT_NE(changed->binding().build_context_digest,
             snap->binding().build_context_digest);
 }
+
 TEST_F(SnapshotCaptureTest, DeletionsAndBuildConfigurationChangeIdentity) {
   auto a = CaptureReviewSnapshot(Request());
   ASSERT_TRUE(a.ok());
@@ -239,6 +253,7 @@ TEST_F(SnapshotCaptureTest, DeletionsAndBuildConfigurationChangeIdentity) {
   ASSERT_TRUE(c.ok());
   EXPECT_NE(b->binding().snapshot_id, c->binding().snapshot_id);
 }
+
 TEST_F(SnapshotCaptureTest, FileChangingDuringCaptureIsCoherentOrRefused) {
   const std::string before(4 * 1024 * 1024, 'a'), after(4 * 1024 * 1024, 'b');
   Write(root_ / "big.h", before);
@@ -289,6 +304,7 @@ TEST_F(SnapshotCaptureTest, CheckoutPathsAndAuditStampsDoNotChangeIdentity) {
   ASSERT_TRUE(touched.ok());
   EXPECT_EQ(first->binding().snapshot_id, touched->binding().snapshot_id);
 }
+
 TEST_F(SnapshotCaptureTest, CapturedTestAndDocArtifactsHaveTypedContext) {
   Write(root_ / "docs/contract.md", "contract");
   Write(root_ / "generated/header.h", "header");
@@ -303,6 +319,7 @@ TEST_F(SnapshotCaptureTest, CapturedTestAndDocArtifactsHaveTypedContext) {
   EXPECT_FALSE(snap->Context("docs/contract.md", "DOC", 8, 9).ok());
   EXPECT_FALSE(snap->Read("../secret").ok());
 }
+
 TEST_F(SnapshotCaptureTest, InvalidManifestAndBudgetAreRefused) {
   Write(
       root_ / "program.json",
@@ -331,6 +348,7 @@ TEST_F(SnapshotCaptureTest, BaseSymlinksAreNotSourceBlobs) {
   r.selected_tracked = {"old-link"};
   EXPECT_FALSE(CaptureReviewSnapshot(r).ok());
 }
+
 TEST_F(SnapshotCaptureTest,
        MaterializationRejectsExistingAndSymlinkDestinations) {
   auto snap = CaptureReviewSnapshot(Request());
@@ -343,6 +361,7 @@ TEST_F(SnapshotCaptureTest,
   EXPECT_FALSE(snap->Materialize(temp_.path() / "alias" / "worker").ok());
   EXPECT_FALSE(std::filesystem::exists(outside / "worker"));
 }
+
 TEST_F(SnapshotCaptureTest, DependencyArtifactContentPinsProgramScope) {
   Write(root_ / "libshared.so", "shared-before");
   Write(
@@ -385,6 +404,7 @@ TEST_F(SnapshotCaptureTest, SemanticMacroValuesCannotAliasRelocatedPaths) {
   EXPECT_NE(path_macro->binding().build_context_digest,
             literal_macro->binding().build_context_digest);
 }
+
 TEST_F(SnapshotCaptureTest,
        IgnoredGeneratedDirectoryMembershipAdvancesLiveTree) {
   Write(root_ / ".gitignore", "generated/\n");
@@ -400,6 +420,7 @@ TEST_F(SnapshotCaptureTest,
   EXPECT_TRUE(*snap->LiveTreeAdvanced());
   EXPECT_FALSE(snap->Read("generated/b.h").ok());
 }
+
 TEST_F(SnapshotCaptureTest, EverySelectionRouteRejectsBaseSymlinks) {
   std::filesystem::create_symlink("src/a.cc", root_ / "old-link");
   ASSERT_EQ(Git(root_, {"add", "old-link"}), 0);
@@ -421,6 +442,7 @@ TEST_F(SnapshotCaptureTest, EverySelectionRouteRejectsBaseSymlinks) {
   r.program_target_key = "app";
   EXPECT_FALSE(CaptureReviewSnapshot(r).ok());
 }
+
 TEST_F(SnapshotCaptureTest, PartialContextRetainsOmittedRegions) {
   Write(root_ / "src/a.cc", "guard\ncopy\ntail\n");
   auto snap = CaptureReviewSnapshot(Request());

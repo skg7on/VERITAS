@@ -55,7 +55,7 @@ EvidenceQueryBudget Budget(std::size_t depth, std::size_t nodes,
   return budget;
 }
 
-SnapshotDescriptor Descriptor(const EvidenceScenarioBuilder& builder) {
+SnapshotDescriptor Descriptor(const EvidenceScenarioBuilder &builder) {
   SnapshotDescriptor descriptor;
   descriptor.repository = "repo";
   descriptor.revision = "rev";
@@ -74,31 +74,37 @@ facts::AnalysisFact MakeFactOrAbort(facts::SemanticRow row) {
   return std::move(fact).value();
 }
 
-facts::AnalysisFact RangeFact(const EvidenceScenarioBuilder& builder,
+facts::AnalysisFact RangeFact(const EvidenceScenarioBuilder &builder,
                               std::string_view fn_name,
                               core::StableId memory_ref, std::int64_t offset,
                               std::uint64_t size) {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kDirectRead;
-  row.cells = {builder.Id(core::IdKind::kFunctionVariant, fn_name), memory_ref,
-               sem::ByteRangeKind::kKnown, offset, size,
+  row.cells = {builder.Id(core::IdKind::kFunctionVariant, fn_name),
+               memory_ref,
+               sem::ByteRangeKind::kKnown,
+               offset,
+               size,
                sem::EpistemicState::kMust};
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact CapacityFact(const EvidenceScenarioBuilder& builder,
+facts::AnalysisFact CapacityFact(const EvidenceScenarioBuilder &builder,
                                  std::string_view fn_name,
                                  core::StableId memory_ref,
                                  std::uint64_t size) {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kDirectWrite;
-  row.cells = {builder.Id(core::IdKind::kFunctionVariant, fn_name), memory_ref,
-               sem::ByteRangeKind::kKnown, std::int64_t{0}, size,
+  row.cells = {builder.Id(core::IdKind::kFunctionVariant, fn_name),
+               memory_ref,
+               sem::ByteRangeKind::kKnown,
+               std::int64_t{0},
+               size,
                sem::EpistemicState::kMust};
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact AliasFact(const EvidenceScenarioBuilder& builder,
+facts::AnalysisFact AliasFact(const EvidenceScenarioBuilder &builder,
                               core::StableId left, core::StableId right,
                               sem::AliasKind kind,
                               sem::EpistemicState epistemic) {
@@ -108,7 +114,7 @@ facts::AnalysisFact AliasFact(const EvidenceScenarioBuilder& builder,
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact UnknownFact(const EvidenceScenarioBuilder& builder,
+facts::AnalysisFact UnknownFact(const EvidenceScenarioBuilder &builder,
                                 core::StableId function_id,
                                 std::string_view subject,
                                 std::string_view reason) {
@@ -119,7 +125,7 @@ facts::AnalysisFact UnknownFact(const EvidenceScenarioBuilder& builder,
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact GlobalFlowFact(const EvidenceScenarioBuilder& builder,
+facts::AnalysisFact GlobalFlowFact(const EvidenceScenarioBuilder &builder,
                                    core::StableId source, core::StableId sink,
                                    sem::EpistemicState epistemic) {
   facts::SemanticRow row;
@@ -129,7 +135,7 @@ facts::AnalysisFact GlobalFlowFact(const EvidenceScenarioBuilder& builder,
 }
 
 // A check fact whose scope_id is the sink's canonical text.
-facts::AnalysisFact CheckFact(const EvidenceScenarioBuilder& builder,
+facts::AnalysisFact CheckFact(const EvidenceScenarioBuilder &builder,
                               core::StableId callsite) {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kSoundnessCoverage;
@@ -141,7 +147,7 @@ facts::AnalysisFact CheckFact(const EvidenceScenarioBuilder& builder,
 // Named for its role rather than `Claim`: the semantic model's
 // `evidence::Claim` record reaches this translation unit through
 // EvidenceScenario.h, so an unqualified local `Claim` is ambiguous with it.
-ClaimSeed MakeClaimSeed(const EvidenceScenarioBuilder& builder) {
+ClaimSeed MakeClaimSeed(const EvidenceScenarioBuilder &builder) {
   ClaimSeed seed;
   seed.finding_id = builder.Id(core::IdKind::kFact, "finding");
   seed.kind = ClaimKind::kBufferOverflow;
@@ -155,8 +161,8 @@ ClaimSeed MakeClaimSeed(const EvidenceScenarioBuilder& builder) {
 // A CPG with a function containing the sink and a value-flow path
 // srcbuf -> v1 -> v2 -> memcpy. The intermediate kValueRef nodes let flow facts
 // be scoped to the query's discovered path.
-cpg::ThinCpg FlowCpg(const EvidenceScenarioBuilder& builder,
-                     const ClaimSeed& seed) {
+cpg::ThinCpg FlowCpg(const EvidenceScenarioBuilder &builder,
+                     const ClaimSeed &seed) {
   cpg::ThinCpg cpg;
   cpg.AddNode(builder.MakeNode("copy", cpg::NodeKind::kFunction));
   cpg.AddNode(builder.MakeNode("srcbuf", cpg::NodeKind::kGlobal));
@@ -170,15 +176,15 @@ cpg::ThinCpg FlowCpg(const EvidenceScenarioBuilder& builder,
   cpg.AddEdge(builder.MakeEdge(
       "contains", cpg::EdgeKind::kContains,
       builder.Id(core::IdKind::kFunctionVariant, "copy"), seed.sink_ref));
-  cpg.AddEdge(builder.MakeEdge("flow1", cpg::EdgeKind::kFlowsTo, seed.source_ref,
-                               v1));
+  cpg.AddEdge(
+      builder.MakeEdge("flow1", cpg::EdgeKind::kFlowsTo, seed.source_ref, v1));
   cpg.AddEdge(builder.MakeEdge("flow2", cpg::EdgeKind::kFlowsTo, v1, v2));
-  cpg.AddEdge(builder.MakeEdge("flow3", cpg::EdgeKind::kFlowsTo, v2,
-                               seed.sink_ref));
+  cpg.AddEdge(
+      builder.MakeEdge("flow3", cpg::EdgeKind::kFlowsTo, v2, seed.sink_ref));
   return cpg;
 }
 
-}  // namespace
+} // namespace
 
 // HND-001: a complete unsafe claim bundles every required query result, the
 // query-completion facts and run bindings, and a selected witness per result.
@@ -204,7 +210,7 @@ TEST(EvidenceHandoffTest, BundlesEveryRequiredQueryResult) {
 
   auto result = service.BuildEvidenceInput(seed, budget);
   ASSERT_TRUE(result.ok()) << result.status().message();
-  const EvidenceBuildInput& input = result.value();
+  const EvidenceBuildInput &input = result.value();
 
   EXPECT_EQ(input.claim_seed.finding_id, seed.finding_id);
   EXPECT_EQ(input.claim_seed.kind, seed.kind);
@@ -226,10 +232,10 @@ TEST(EvidenceHandoffTest, BundlesEveryRequiredQueryResult) {
   EXPECT_EQ(input.query_completion_bindings.size(), 6u);
   EXPECT_GE(input.provenance.nodes_size(), 6);
 
-  for (const auto& fact : input.query_completion_facts) {
+  for (const auto &fact : input.query_completion_facts) {
     EXPECT_EQ(fact.row.relation, facts::RelationId::kQueryCompletion);
   }
-  for (const auto& binding : input.query_completion_bindings) {
+  for (const auto &binding : input.query_completion_bindings) {
     EXPECT_EQ(binding.run_id, backend.run_id());
   }
 
@@ -238,24 +244,26 @@ TEST(EvidenceHandoffTest, BundlesEveryRequiredQueryResult) {
   EXPECT_TRUE(ValidateQueryResultMetadata(input.ranges.metadata).ok());
   EXPECT_TRUE(ValidateQueryResultMetadata(input.capacities.metadata).ok());
   EXPECT_TRUE(ValidateQueryResultMetadata(input.aliases.metadata).ok());
-  EXPECT_TRUE(ValidateQueryResultMetadata(input.dominating_checks.metadata).ok());
+  EXPECT_TRUE(
+      ValidateQueryResultMetadata(input.dominating_checks.metadata).ok());
   EXPECT_TRUE(ValidateQueryResultMetadata(input.unknowns.metadata).ok());
 
   // Every query provenance reference resolves to a completion fact and a
   // binding in the bundle.
-  for (const auto* metadata : {&input.flow_slice.metadata, &input.ranges.metadata,
-                               &input.capacities.metadata,
-                               &input.aliases.metadata,
-                               &input.dominating_checks.metadata,
-                               &input.unknowns.metadata}) {
+  for (const auto *metadata :
+       {&input.flow_slice.metadata, &input.ranges.metadata,
+        &input.capacities.metadata, &input.aliases.metadata,
+        &input.dominating_checks.metadata, &input.unknowns.metadata}) {
     const auto prov_id = metadata->query_provenance_id;
     bool has_fact = false;
     bool has_binding = false;
-    for (const auto& fact : input.query_completion_facts) {
-      if (fact.fact_id == prov_id) has_fact = true;
+    for (const auto &fact : input.query_completion_facts) {
+      if (fact.fact_id == prov_id)
+        has_fact = true;
     }
-    for (const auto& binding : input.query_completion_bindings) {
-      if (binding.fact_id == prov_id) has_binding = true;
+    for (const auto &binding : input.query_completion_bindings) {
+      if (binding.fact_id == prov_id)
+        has_binding = true;
     }
     EXPECT_TRUE(has_fact);
     EXPECT_TRUE(has_binding);
@@ -301,7 +309,8 @@ TEST(EvidenceHandoffTest, BindingChangeDuringExplanationRefusesWholeHandoff) {
 // HND-003: retain positive/negative evidence using a relation that admits both.
 // GlobalFlow is existential and cannot carry MUST_NOT; the former placeholder
 // depended on MakeFact failing to enforce the registry. Alias admits a real
-// negative, so the handoff must retain both facts and their separate identities.
+// negative, so the handoff must retain both facts and their separate
+// identities.
 TEST(EvidenceHandoffTest, KeepsSupportingAndContradictingFactsSeparate) {
   EvidenceScenarioBuilder builder;
   const ClaimSeed seed = MakeClaimSeed(builder);
@@ -309,16 +318,15 @@ TEST(EvidenceHandoffTest, KeepsSupportingAndContradictingFactsSeparate) {
   const auto v2 = builder.Id(core::IdKind::kValueRef, "v2");
   const auto flow = GlobalFlowFact(builder, v1, v2, sem::EpistemicState::kMay);
   const auto other_memory = builder.Id(core::IdKind::kMemoryRef, "other");
-  const auto supporting = AliasFact(builder, seed.subject_ref, other_memory,
-                                    sem::AliasKind::kMayAlias,
-                                    sem::EpistemicState::kMay);
-  const auto contradicting = AliasFact(builder, seed.subject_ref, other_memory,
-                                       sem::AliasKind::kMayAlias,
-                                       sem::EpistemicState::kMustNot);
-  const auto unrelated =
-      GlobalFlowFact(builder, builder.Id(core::IdKind::kValueRef, "ux"),
-                     builder.Id(core::IdKind::kValueRef, "uy"),
-                     sem::EpistemicState::kMust);
+  const auto supporting =
+      AliasFact(builder, seed.subject_ref, other_memory,
+                sem::AliasKind::kMayAlias, sem::EpistemicState::kMay);
+  const auto contradicting =
+      AliasFact(builder, seed.subject_ref, other_memory,
+                sem::AliasKind::kMayAlias, sem::EpistemicState::kMustNot);
+  const auto unrelated = GlobalFlowFact(
+      builder, builder.Id(core::IdKind::kValueRef, "ux"),
+      builder.Id(core::IdKind::kValueRef, "uy"), sem::EpistemicState::kMust);
   FakeEvidenceBackend backend(Descriptor(builder));
   backend.SetFacts({flow, supporting, contradicting, unrelated});
   cpg::ThinCpg cpg = FlowCpg(builder, seed);
@@ -332,7 +340,7 @@ TEST(EvidenceHandoffTest, KeepsSupportingAndContradictingFactsSeparate) {
   ASSERT_EQ(result->aliases.facts.size(), 2u);
   bool saw_support = false;
   bool saw_contradiction = false;
-  for (const auto& fact : result->aliases.facts) {
+  for (const auto &fact : result->aliases.facts) {
     const auto state = std::get<sem::EpistemicState>(fact.row.cells.back());
     if (fact.fact_id == supporting.fact_id) {
       saw_support = true;
@@ -365,7 +373,7 @@ TEST(EvidenceHandoffTest, CarriesCompleteEmptyCheckEvidence) {
   auto result = service.BuildEvidenceInput(seed, Budget(8, 256, 5, 64, 8));
   ASSERT_TRUE(result.ok()) << result.status().message();
 
-  const EvidenceFactSet& checks = result->dominating_checks;
+  const EvidenceFactSet &checks = result->dominating_checks;
   EXPECT_TRUE(checks.facts.empty());
   EXPECT_EQ(checks.metadata.completeness, QueryCompleteness::kComplete);
   EXPECT_TRUE(checks.metadata.truncation_reasons.empty());
@@ -384,9 +392,9 @@ TEST(EvidenceHandoffTest, CarriesTruncatedEmptyCheckEvidence) {
   // closed-world search for this sink truncates without finding a match.
   std::vector<AnalysisFact> facts;
   for (int i = 0; i < 8; ++i) {
-    facts.push_back(CheckFact(
-        builder,
-        builder.Id(core::IdKind::kCallSite, "elsewhere-" + std::to_string(i))));
+    facts.push_back(
+        CheckFact(builder, builder.Id(core::IdKind::kCallSite,
+                                      "elsewhere-" + std::to_string(i))));
   }
   FakeEvidenceBackend backend(Descriptor(builder));
   backend.SetFacts(facts);
@@ -396,7 +404,7 @@ TEST(EvidenceHandoffTest, CarriesTruncatedEmptyCheckEvidence) {
   auto result = service.BuildEvidenceInput(seed, Budget(8, 256, 5, 2, 8));
   ASSERT_TRUE(result.ok()) << result.status().message();
 
-  const EvidenceFactSet& checks = result->dominating_checks;
+  const EvidenceFactSet &checks = result->dominating_checks;
   EXPECT_TRUE(checks.facts.empty());
   EXPECT_EQ(checks.metadata.completeness, QueryCompleteness::kTruncated);
   ASSERT_EQ(checks.metadata.truncation_reasons.size(), 1u);
@@ -475,10 +483,9 @@ TEST(EvidenceHandoffTest, CompletionValidationRejectsMismatches) {
 
   auto wrong_producer = witness;
   wrong_producer.producer_kind = facts::ProducerKind::kWpaCppConformance;
-  EXPECT_FALSE(
-      ValidateQueryCompletion(fact, binding, wrong_producer, metadata,
-                              descriptor)
-          .ok());
+  EXPECT_FALSE(ValidateQueryCompletion(fact, binding, wrong_producer, metadata,
+                                       descriptor)
+                   .ok());
 
   auto unselected = witness;
   unselected.selected = false;

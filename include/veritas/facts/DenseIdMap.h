@@ -33,11 +33,10 @@
 
 namespace veritas::facts {
 
-template <typename Dense, core::IdKind Kind>
-class DenseIdMap {
- public:
+template <typename Dense, core::IdKind Kind> class DenseIdMap {
+public:
   static StatusOr<DenseIdMap> Build(std::vector<core::StableId> stable_ids) {
-    for (const auto& id : stable_ids) {
+    for (const auto &id : stable_ids) {
       if (id.kind != Kind) {
         return Status::InvalidArgument("stable id kind mismatch");
       }
@@ -54,7 +53,7 @@ class DenseIdMap {
     return map;
   }
 
-  StatusOr<Dense> ToDense(const core::StableId& stable) const {
+  StatusOr<Dense> ToDense(const core::StableId &stable) const {
     const auto it = stable_to_dense_.find(stable);
     if (it == stable_to_dense_.end()) {
       return Status::NotFound("stable id is not in the dense map");
@@ -71,7 +70,7 @@ class DenseIdMap {
 
   std::span<const core::StableId> StableIds() const { return dense_to_stable_; }
 
- private:
+private:
   std::vector<core::StableId> dense_to_stable_;
   std::map<core::StableId, Dense> stable_to_dense_;
 };
@@ -81,6 +80,6 @@ using ValueDenseMap = DenseIdMap<ValueId, core::IdKind::kValueRef>;
 using MemoryDenseMap = DenseIdMap<MemoryId, core::IdKind::kMemoryRef>;
 using CallSiteDenseMap = DenseIdMap<CallSiteId, core::IdKind::kCallSite>;
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_DENSE_ID_MAP_H_
+#endif // VERITAS_FACTS_DENSE_ID_MAP_H_

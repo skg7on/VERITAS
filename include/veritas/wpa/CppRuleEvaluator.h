@@ -35,14 +35,14 @@
 namespace veritas::wpa {
 
 class CppRuleEvaluator {
- public:
+public:
   // Fails with InvalidArgument when a dense cell has no mapping, a row does
   // not match its relation schema, or the input carries a relation this
   // component does not evaluate.
-  StatusOr<facts::RawWpaEvaluation> Evaluate(
-      const WpaLogicalComponentInput& input) const;
+  StatusOr<facts::RawWpaEvaluation>
+  Evaluate(const WpaLogicalComponentInput &input) const;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_CPP_RULE_EVALUATOR_H_
+#endif // VERITAS_WPA_CPP_RULE_EVALUATOR_H_

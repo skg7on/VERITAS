@@ -15,11 +15,13 @@
 #ifndef VERITAS_REVIEW_STRUCTURAL_INDEX_INTERNAL_H_
 #define VERITAS_REVIEW_STRUCTURAL_INDEX_INTERNAL_H_
 #include "veritas/review/StructuralIndex.h"
+
 namespace veritas::review {
 struct GuardRecord {
   uint32_t condition;
   bool dominates;
 };
+
 struct CopyRecord {
   uint32_t callsite;
   bool admitted = false;
@@ -27,6 +29,7 @@ struct CopyRecord {
   std::vector<GuardRecord> guards;
   std::vector<std::string> reasons;
 };
+
 struct StructuralIndexData {
   ReviewSnapshot snapshot;
   StructuralIndexId id;
@@ -38,6 +41,7 @@ struct StructuralIndexData {
   Usage usage;
   StructuralMetrics metrics;
 };
+
 Json CoverageJson(const Coverage &);
 Json UsageJson(const Usage &);
 Json RefJson(const EntityRef &);

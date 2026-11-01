@@ -60,7 +60,7 @@ SemanticRow DirectCallRow() {
 SemanticRow DirectReadRow() {
   SemanticRow row;
   row.relation = RelationId::kDirectRead;
-  row.cells = {Function(6), Memory(7), ByteRangeKind::kKnown,
+  row.cells = {Function(6),     Memory(7),         ByteRangeKind::kKnown,
                std::int64_t{8}, std::uint64_t{16}, EpistemicState::kMust};
   return row;
 }
@@ -68,11 +68,12 @@ SemanticRow DirectReadRow() {
 SemanticRow AliasRow() {
   SemanticRow row;
   row.relation = RelationId::kAlias;
-  row.cells = {Memory(9), Memory(10), AliasKind::kNoAlias, EpistemicState::kMust};
+  row.cells = {Memory(9), Memory(10), AliasKind::kNoAlias,
+               EpistemicState::kMust};
   return row;
 }
 
-}  // namespace
+} // namespace
 
 TEST(FactProtoTest, RoundTripsReachableCall) {
   auto fact = MakeFact(ReachableCallRow());
@@ -87,7 +88,7 @@ TEST(FactProtoTest, RoundTripsReachableCall) {
 }
 
 TEST(FactProtoTest, RoundTripsEnumCells) {
-  for (const auto& row : {DirectCallRow(), DirectReadRow(), AliasRow()}) {
+  for (const auto &row : {DirectCallRow(), DirectReadRow(), AliasRow()}) {
     auto fact = MakeFact(row);
     ASSERT_TRUE(fact.ok());
     auto proto = ToProtoFact(*fact);

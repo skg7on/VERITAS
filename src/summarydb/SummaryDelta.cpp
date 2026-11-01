@@ -20,7 +20,7 @@
 namespace veritas::summarydb {
 
 bool SummaryDelta::HasChanged(summary::v1::ComponentKind kind) const {
-  for (const auto& component : changed_components) {
+  for (const auto &component : changed_components) {
     if (component.component_kind == kind) {
       return true;
     }
@@ -28,9 +28,9 @@ bool SummaryDelta::HasChanged(summary::v1::ComponentKind kind) const {
   return false;
 }
 
-StatusOr<SummaryDelta> DiffSummaries(
-    const summary::v1::FunctionSummary& old_summary,
-    const summary::v1::FunctionSummary& new_summary) {
+StatusOr<SummaryDelta>
+DiffSummaries(const summary::v1::FunctionSummary &old_summary,
+              const summary::v1::FunctionSummary &new_summary) {
   auto old_id_result = summary::ComputeFunctionSummaryId(old_summary);
   if (!old_id_result.ok()) {
     return old_id_result.status();
@@ -75,4 +75,4 @@ StatusOr<SummaryDelta> DiffSummaries(
   return delta;
 }
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb

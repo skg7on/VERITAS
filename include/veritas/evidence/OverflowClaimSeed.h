@@ -137,5 +137,5 @@ inline StatusOr<ClaimSeed> ResolveOverflowClaimSeed(
       selected->callsite_id};
 }
 
-}  // namespace veritas::evidence
-#endif  // VERITAS_EVIDENCE_OVERFLOW_CLAIM_SEED_H_
+} // namespace veritas::evidence
+#endif // VERITAS_EVIDENCE_OVERFLOW_CLAIM_SEED_H_

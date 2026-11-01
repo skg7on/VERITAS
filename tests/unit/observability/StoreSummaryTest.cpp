@@ -34,10 +34,10 @@ namespace {
 namespace fs = std::filesystem;
 
 // A unique temp directory per case, so the cases never share a store.
-fs::path FreshDir(const std::string& tag) {
-  const fs::path dir = fs::temp_directory_path() /
-                       ("veritas-store-summary-" + tag + "-" +
-                        std::to_string(std::rand()));
+fs::path FreshDir(const std::string &tag) {
+  const fs::path dir =
+      fs::temp_directory_path() /
+      ("veritas-store-summary-" + tag + "-" + std::to_string(std::rand()));
   std::error_code error;
   fs::remove_all(dir, error);
   return dir;
@@ -60,14 +60,14 @@ TEST(StoreSummaryTest, CountsEveryPublishedTableIncludingEmptyOnes) {
   // The four published fact tables plus the component-state table the
   // cross-check reads. Ordering is by name, which the next assertion pins.
   ASSERT_EQ(summary->tables.size(), 5u);
-  for (const TableRowCount& table : summary->tables) {
+  for (const TableRowCount &table : summary->tables) {
     EXPECT_EQ(table.rows, 0u) << table.table;
   }
-  EXPECT_TRUE(std::is_sorted(
-      summary->tables.begin(), summary->tables.end(),
-      [](const TableRowCount& left, const TableRowCount& right) {
-        return left.table < right.table;
-      }));
+  EXPECT_TRUE(
+      std::is_sorted(summary->tables.begin(), summary->tables.end(),
+                     [](const TableRowCount &left, const TableRowCount &right) {
+                       return left.table < right.table;
+                     }));
   // An empty store is a success, not a failure. That is already asserted by
   // reaching this line at all: CollectStoreSummary returns non-OK if any count
   // query fails.
@@ -102,11 +102,11 @@ TEST(StoreSummaryTest, CountsInsertedRows) {
 
   auto summary = CollectStoreSummary(output_root);
   ASSERT_TRUE(summary.ok()) << summary.status().message();
-  const auto found = std::find_if(
-      summary->tables.begin(), summary->tables.end(),
-      [](const TableRowCount& table) {
-        return table.table == "provenance_nodes";
-      });
+  const auto found =
+      std::find_if(summary->tables.begin(), summary->tables.end(),
+                   [](const TableRowCount &table) {
+                     return table.table == "provenance_nodes";
+                   });
   ASSERT_NE(found, summary->tables.end());
   EXPECT_EQ(found->rows, 1u);
 }
@@ -155,12 +155,12 @@ TEST(StoreSummaryTest, GroupsStoreBytesByTopLevelEntryWithoutAbsolutePaths) {
   auto summary = CollectStoreSummary(output_root);
   ASSERT_TRUE(summary.ok()) << summary.status().message();
   ASSERT_FALSE(summary->bytes.empty());
-  EXPECT_TRUE(std::is_sorted(
-      summary->bytes.begin(), summary->bytes.end(),
-      [](const NamedBytes& left, const NamedBytes& right) {
-        return left.name < right.name;
-      }));
-  for (const NamedBytes& entry : summary->bytes) {
+  EXPECT_TRUE(
+      std::is_sorted(summary->bytes.begin(), summary->bytes.end(),
+                     [](const NamedBytes &left, const NamedBytes &right) {
+                       return left.name < right.name;
+                     }));
+  for (const NamedBytes &entry : summary->bytes) {
     // Names are relative to the output root; an absolute path here would make
     // two machines' artifacts differ for no semantic reason.
     EXPECT_EQ(entry.name.find(output_root.string()), std::string::npos);
@@ -191,8 +191,7 @@ TEST(StoreSummaryTest, FillsInputInventoryFromTheManifest) {
   const auto project = testing::FixtureProject("multiple_tus");
   auto input = veritas::build::ResolveProjectInput(
       veritas::analysis::ProjectAnalysisRequest{
-          .project_root = project,
-          .output_root = FreshDir("inventory")});
+          .project_root = project, .output_root = FreshDir("inventory")});
   ASSERT_TRUE(input.ok()) << input.status().message();
   auto manifest = veritas::build::LoadProjectManifest(*input);
   ASSERT_TRUE(manifest.ok()) << manifest.status().message();
@@ -204,5 +203,5 @@ TEST(StoreSummaryTest, FillsInputInventoryFromTheManifest) {
   EXPECT_FALSE(inventory.target_triple.empty());
 }
 
-}  // namespace
-}  // namespace veritas::observability
+} // namespace
+} // namespace veritas::observability

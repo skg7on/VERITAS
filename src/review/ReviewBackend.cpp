@@ -16,23 +16,29 @@
 #include "veritas/review/Verification.h"
 #include <algorithm>
 #include <chrono>
+
 namespace veritas::review {
 namespace {
 using O = Json::Object;
 using A = Json::Array;
+
 std::string Text(const O &o, std::string_view k) { return *o.getString(k); }
+
 uint64_t Number(const O &o, std::string_view k) {
   return *o.get(k)->getAsUINT64();
 }
+
 A Strings(const std::vector<std::string> &items) {
   A a;
   for (const auto &s : items)
     a.emplace_back(s);
   return a;
 }
+
 Json Ref(const EntityRef &r) {
   return O{{"index_id", r.index_id.value()}, {"ordinal", r.ordinal}};
 }
+
 Json CoverageJson(const Coverage &c) {
   return O{{"supported", c.supported},
            {"scope_closed", c.scope_closed},
@@ -41,6 +47,7 @@ Json CoverageJson(const Coverage &c) {
            {"reasons", Strings(c.reasons)},
            {"examined", c.examined}};
 }
+
 Json UsageJson(const Usage &u) {
   return O{{"wall_ms", u.wall_ms},
            {"cpu_ms", u.cpu_ms},
@@ -48,6 +55,7 @@ Json UsageJson(const Usage &u) {
            {"output_bytes", u.output_bytes},
            {"examined", u.examined}};
 }
+
 Json ContextJson(const ContextArtifact &c) {
   A omitted, entities;
   for (auto &v : c.omitted_regions)
@@ -69,6 +77,7 @@ Json ContextJson(const ContextArtifact &c) {
            {"selection_reason", c.selection_reason},
            {"entity_bindings", entities}};
 }
+
 Json Capabilities(const BackendConfig &c, bool captured) {
   A a;
   for (auto op :
@@ -99,12 +108,14 @@ Json Capabilities(const BackendConfig &c, bool captured) {
                                   {"examined", c.max_examined}}}});
   return a;
 }
+
 Json Success(std::string_view id, Json result) {
   return O{{"protocol", kProtocol},
            {"request_id", id},
            {"ok", true},
            {"result", std::move(result)}};
 }
+
 Json Failure(std::string_view id, std::string_view code,
              std::string_view message) {
   return O{{"protocol", kProtocol},
@@ -115,6 +126,7 @@ Json Failure(std::string_view id, std::string_view code,
                        {"retryable", false},
                        {"details", A{}}}}};
 }
+
 bool Keys(const O &o, std::initializer_list<std::string_view> keys) {
   if (o.size() != keys.size())
     return false;
@@ -124,6 +136,7 @@ bool Keys(const O &o, std::initializer_list<std::string_view> keys) {
   return true;
 }
 } // namespace
+
 struct ReviewBackend::State {
   ReviewSnapshot snapshot;
   StructuralIndex index;
@@ -131,9 +144,13 @@ struct ReviewBackend::State {
   Coverage coverage;
   std::map<uint32_t, std::string> callsite_contexts;
 };
+
 ReviewBackend::ReviewBackend(BackendConfig c) : config_(std::move(c)) {}
+
 ReviewBackend::~ReviewBackend() = default;
+
 size_t ReviewBackend::published_snapshots() const { return state_ ? 1 : 0; }
+
 StatusOr<std::string> ReviewBackend::Call(std::string_view bytes) {
   if (bytes.size() > config_.max_request_bytes)
     return Status::InvalidArgument("request size limit");
@@ -159,9 +176,11 @@ StatusOr<std::string> ReviewBackend::Call(std::string_view bytes) {
             std::chrono::steady_clock::now() - start)
             .count());
   };
+
   struct Charge {
     uint64_t &total;
     std::chrono::steady_clock::time_point start;
+
     ~Charge() {
       total += static_cast<uint64_t>(
                    std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -170,6 +189,7 @@ StatusOr<std::string> ReviewBackend::Call(std::string_view bytes) {
                1;
     }
   } charge{charged_wall_ms_, start};
+
   if (charged_wall_ms_ >= config_.wall_ms)
     return fail("LIMIT_EXCEEDED", "aggregate backend deadline");
   const uint64_t remaining = config_.wall_ms - charged_wall_ms_;
@@ -500,6 +520,7 @@ StatusOr<std::string> ReviewBackend::Call(std::string_view bytes) {
   }
   return fail("UNSUPPORTED", "operation unavailable");
 }
+
 StatusOr<BackendConfig> DecodeBackendConfig(std::string_view bytes) {
   auto parsed = ParseStrictJson(bytes);
   if (!parsed.ok())

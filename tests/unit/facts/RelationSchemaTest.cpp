@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/RelationSchema.h"
+#include "veritas/facts/AnalysisFact.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -33,19 +33,23 @@ using namespace veritas::facts;
 namespace {
 
 ExecutionRow DirectReadExecutionRow(FunctionId function, MemoryId memory,
-                                    const ByteRange& range,
+                                    const ByteRange &range,
                                     EpistemicState epistemic) {
   ExecutionRow row;
   row.relation = RelationId::kDirectRead;
-  row.cells = {function, memory, RelationRangeKind(range),
-               range.offset.value_or(0), range.size.value_or(0), epistemic};
+  row.cells = {function,
+               memory,
+               RelationRangeKind(range),
+               range.offset.value_or(0),
+               range.size.value_or(0),
+               epistemic};
   return row;
 }
 
-}  // namespace
+} // namespace
 
 TEST(RelationSchemaTest, DirectCallHasTypedV2Columns) {
-  const auto& schema = RelationsV2().Get(RelationId::kDirectCall);
+  const auto &schema = RelationsV2().Get(RelationId::kDirectCall);
   EXPECT_EQ(schema.name, "DirectCall");
   EXPECT_EQ(schema.columns[0].domain, ColumnDomain::kCallSiteId);
   EXPECT_EQ(schema.columns[1].domain, ColumnDomain::kFunctionId);
@@ -58,13 +62,13 @@ TEST(RelationSchemaTest, DirectCallHasTypedV2Columns) {
 // each derived domain needs an EDB relation with the same column shape as the
 // IDB relation it carries results for.
 TEST(RelationSchemaTest, SupportRelationsMirrorTheirIdbShapeAsEdb) {
-  const auto& reachable = RelationsV2().Get(RelationId::kSupportReachableCall);
+  const auto &reachable = RelationsV2().Get(RelationId::kSupportReachableCall);
   EXPECT_EQ(reachable.name, "SupportReachableCall");
   EXPECT_EQ(reachable.ownership, RelationOwnership::kEdb);
   EXPECT_EQ(reachable.columns,
             RelationsV2().Get(RelationId::kReachableCall).columns);
 
-  const auto& may_write = RelationsV2().Get(RelationId::kSupportMayWrite);
+  const auto &may_write = RelationsV2().Get(RelationId::kSupportMayWrite);
   EXPECT_EQ(may_write.name, "SupportMayWrite");
   EXPECT_EQ(may_write.ownership, RelationOwnership::kEdb);
   EXPECT_EQ(may_write.columns,
@@ -96,7 +100,7 @@ TEST(RelationSchemaTest, DirectReadPreservesUnknownRangeTag) {
 TEST(RelationSchemaTest, RejectsNonCanonicalUnknownRangePayload) {
   ExecutionRow row;
   row.relation = RelationId::kDirectRead;
-  row.cells = {FunctionId{1}, MemoryId{2}, ByteRangeKind::kUnknown,
+  row.cells = {FunctionId{1},   MemoryId{2},      ByteRangeKind::kUnknown,
                std::int64_t{4}, std::uint64_t{0}, EpistemicState::kMay};
   EXPECT_FALSE(ValidateExecutionRow(row).ok());
 }
@@ -115,31 +119,50 @@ namespace {
 
 std::string_view DomainText(ColumnDomain domain) {
   switch (domain) {
-    case ColumnDomain::kFunctionId: return "function_id";
-    case ColumnDomain::kValueId: return "value_id";
-    case ColumnDomain::kMemoryId: return "memory_id";
-    case ColumnDomain::kCallSiteId: return "call_site_id";
-    case ColumnDomain::kFactId: return "fact_id";
-    case ColumnDomain::kModelId: return "model_id";
-    case ColumnDomain::kInt64: return "int64";
-    case ColumnDomain::kUint64: return "uint64";
-    case ColumnDomain::kString: return "string";
-    case ColumnDomain::kDispatchKind: return "dispatch_kind";
-    case ColumnDomain::kAliasKind: return "alias_kind";
-    case ColumnDomain::kByteRangeKind: return "byte_range_kind";
-    case ColumnDomain::kEpistemic: return "epistemic";
+  case ColumnDomain::kFunctionId:
+    return "function_id";
+  case ColumnDomain::kValueId:
+    return "value_id";
+  case ColumnDomain::kMemoryId:
+    return "memory_id";
+  case ColumnDomain::kCallSiteId:
+    return "call_site_id";
+  case ColumnDomain::kFactId:
+    return "fact_id";
+  case ColumnDomain::kModelId:
+    return "model_id";
+  case ColumnDomain::kInt64:
+    return "int64";
+  case ColumnDomain::kUint64:
+    return "uint64";
+  case ColumnDomain::kString:
+    return "string";
+  case ColumnDomain::kDispatchKind:
+    return "dispatch_kind";
+  case ColumnDomain::kAliasKind:
+    return "alias_kind";
+  case ColumnDomain::kByteRangeKind:
+    return "byte_range_kind";
+  case ColumnDomain::kEpistemic:
+    return "epistemic";
   }
   return {};
 }
 
 std::string_view EpistemicText(EpistemicState state) {
   switch (state) {
-    case EpistemicState::kMust: return "MUST";
-    case EpistemicState::kMay: return "MAY";
-    case EpistemicState::kMustNot: return "MUST_NOT";
-    case EpistemicState::kInferred: return "INFERRED";
-    case EpistemicState::kAssumed: return "ASSUMED";
-    case EpistemicState::kUnknown: return "UNKNOWN";
+  case EpistemicState::kMust:
+    return "MUST";
+  case EpistemicState::kMay:
+    return "MAY";
+  case EpistemicState::kMustNot:
+    return "MUST_NOT";
+  case EpistemicState::kInferred:
+    return "INFERRED";
+  case EpistemicState::kAssumed:
+    return "ASSUMED";
+  case EpistemicState::kUnknown:
+    return "UNKNOWN";
   }
   return {};
 }
@@ -151,13 +174,14 @@ std::string_view OwnershipText(RelationOwnership ownership) {
 // name <TAB> ownership <TAB> column:domain,... <TAB> epistemic,... ("-" when
 // the relation has no epistemic column).
 std::string ExpectedManifestRow(RelationId id) {
-  const auto& schema = RelationsV2().Get(id);
+  const auto &schema = RelationsV2().Get(id);
   std::string row = schema.name;
   row += '\t';
   row += OwnershipText(schema.ownership);
   row += '\t';
   for (std::size_t i = 0; i < schema.columns.size(); ++i) {
-    if (i != 0) row += ',';
+    if (i != 0)
+      row += ',';
     row += schema.columns[i].name;
     row += ':';
     row += DomainText(schema.columns[i].domain);
@@ -167,14 +191,15 @@ std::string ExpectedManifestRow(RelationId id) {
     row += '-';
   } else {
     for (std::size_t i = 0; i < schema.allowed_epistemic.size(); ++i) {
-      if (i != 0) row += ',';
+      if (i != 0)
+        row += ',';
       row += EpistemicText(schema.allowed_epistemic[i]);
     }
   }
   return row;
 }
 
-}  // namespace
+} // namespace
 
 TEST(RelationSchemaManifestTest, ManifestMatchesCompiledRegistry) {
   const std::filesystem::path manifest_path =
@@ -187,7 +212,8 @@ TEST(RelationSchemaManifestTest, ManifestMatchesCompiledRegistry) {
   std::vector<std::string> rows;
   std::string line;
   while (std::getline(stream, line)) {
-    if (line.empty() || line[0] == '#') continue;
+    if (line.empty() || line[0] == '#')
+      continue;
     if (line.starts_with("relation_schema_version=")) {
       version = line.substr(std::string("relation_schema_version=").size());
       continue;

@@ -19,10 +19,8 @@
 using namespace veritas::analysis::semantic;
 
 TEST(SemanticTypesTest, NoAliasIsNotUnknownAlias) {
-  AliasObservation proven_no_alias{AliasKind::kNoAlias,
-                                   EpistemicState::kMust};
-  AliasObservation unknown{AliasKind::kUnknownAlias,
-                           EpistemicState::kUnknown};
+  AliasObservation proven_no_alias{AliasKind::kNoAlias, EpistemicState::kMust};
+  AliasObservation unknown{AliasKind::kUnknownAlias, EpistemicState::kUnknown};
   EXPECT_NE(proven_no_alias, unknown);
 }
 

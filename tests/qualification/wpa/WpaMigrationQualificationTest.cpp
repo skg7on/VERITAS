@@ -41,28 +41,30 @@ v1::FunctionSummary V1Summary(std::string_view name) {
   return summary;
 }
 
-void AddV1ResolvedCall(v1::FunctionSummary* caller, std::string_view callee) {
-  auto* call = caller->add_calls();
+void AddV1ResolvedCall(v1::FunctionSummary *caller, std::string_view callee) {
+  auto *call = caller->add_calls();
   call->set_callee_symbol(std::string(callee));
-  call->set_resolved_callee_function_variant_id(core::ToString(FunctionId(callee)));
-  call->set_call_site_anchor_id(core::ToString(CallSiteId(std::string(callee))));
+  call->set_resolved_callee_function_variant_id(
+      core::ToString(FunctionId(callee)));
+  call->set_call_site_anchor_id(
+      core::ToString(CallSiteId(std::string(callee))));
   call->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   call->set_provenance_ref("test:call");
 }
 
-void AddV1MemoryWrite(v1::FunctionSummary* function, std::string memory) {
-  auto* effect = function->add_memory_effects();
+void AddV1MemoryWrite(v1::FunctionSummary *function, std::string memory) {
+  auto *effect = function->add_memory_effects();
   effect->set_kind(v1::EFFECT_KIND_WRITE);
   effect->set_location(std::move(memory));
   effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   effect->set_provenance_ref("test:write");
 }
 
-bool ContainsDispatchKind(const WpaLogicalComponentInput& logical,
+bool ContainsDispatchKind(const WpaLogicalComponentInput &logical,
                           sem::DispatchKind kind) {
-  for (const auto& row : logical.edb) {
-    for (const auto& cell : row.cells) {
-      if (const auto* dispatch = std::get_if<sem::DispatchKind>(&cell)) {
+  for (const auto &row : logical.edb) {
+    for (const auto &cell : row.cells) {
+      if (const auto *dispatch = std::get_if<sem::DispatchKind>(&cell)) {
         if (*dispatch == kind)
           return true;
       }
@@ -71,8 +73,8 @@ bool ContainsDispatchKind(const WpaLogicalComponentInput& logical,
   return false;
 }
 
-bool ContainsMemoryRows(const WpaLogicalComponentInput& logical) {
-  for (const auto& row : logical.edb) {
+bool ContainsMemoryRows(const WpaLogicalComponentInput &logical) {
+  for (const auto &row : logical.edb) {
     if (row.relation == facts::RelationId::kDirectWrite ||
         row.relation == facts::RelationId::kDirectRead)
       return true;
@@ -83,7 +85,7 @@ bool ContainsMemoryRows(const WpaLogicalComponentInput& logical) {
 std::filesystem::path TempDbPath() {
   std::string tmpl =
       (std::filesystem::temp_directory_path() / "veritas-wpa-XXXXXX").string();
-  char* made = ::mkdtemp(tmpl.data());
+  char *made = ::mkdtemp(tmpl.data());
   return std::filesystem::path(made);
 }
 
@@ -94,15 +96,14 @@ TEST(WpaMigrationQualificationTest, V1ProjectionIsTaggedAndNeverFabricates) {
 
   // V1 carries no dispatch kind and no abstract-memory identity, so the
   // projection must emit an unknown dispatch and no fabricated memory rows.
-  const std::vector<summary::SummaryArtifact> artifacts = {caller, V1Summary("callee")};
+  const std::vector<summary::SummaryArtifact> artifacts = {caller,
+                                                           V1Summary("callee")};
 
-  auto reach =
-      InputFor(artifacts, WpaComponentKind::kReachability, "caller");
+  auto reach = InputFor(artifacts, WpaComponentKind::kReachability, "caller");
   ASSERT_TRUE(reach.ok()) << reach.status().message();
   EXPECT_TRUE(ContainsDispatchKind(*reach, sem::DispatchKind::kUnknown));
 
-  auto memory =
-      InputFor(artifacts, WpaComponentKind::kMemoryEffects, "caller");
+  auto memory = InputFor(artifacts, WpaComponentKind::kMemoryEffects, "caller");
   ASSERT_TRUE(memory.ok()) << memory.status().message();
   EXPECT_FALSE(ContainsMemoryRows(*memory));
 }
@@ -113,15 +114,12 @@ TEST(WpaMigrationQualificationTest, ReanalysisSupersedesWithoutMutation) {
   ASSERT_TRUE(opened.ok()) << opened.status().message();
   auto repo = std::move(*opened);
 
-  const std::string repository_id =
-      core::ToString(core::MakeStableId(core::IdKind::kRepository,
-                                        std::as_bytes(std::span("repo", 4))));
-  const std::string revision_id =
-      core::ToString(core::MakeStableId(core::IdKind::kRevision,
-                                        std::as_bytes(std::span("rev", 3))));
-  const std::string build_variant_id =
-      core::ToString(core::MakeStableId(core::IdKind::kBuildVariant,
-                                        std::as_bytes(std::span("bv", 2))));
+  const std::string repository_id = core::ToString(core::MakeStableId(
+      core::IdKind::kRepository, std::as_bytes(std::span("repo", 4))));
+  const std::string revision_id = core::ToString(core::MakeStableId(
+      core::IdKind::kRevision, std::as_bytes(std::span("rev", 3))));
+  const std::string build_variant_id = core::ToString(core::MakeStableId(
+      core::IdKind::kBuildVariant, std::as_bytes(std::span("bv", 2))));
 
   ASSERT_TRUE(repo->metadata_store()
                   .Execute("INSERT INTO repositories(repository_id, vcs_kind, "
@@ -134,27 +132,26 @@ TEST(WpaMigrationQualificationTest, ReanalysisSupersedesWithoutMutation) {
                            {revision_id, repository_id, "r"})
                   .ok());
   ASSERT_TRUE(repo->metadata_store()
-                  .Execute(
-                      "INSERT INTO build_variants(build_variant_id, "
-                      "target_triple, compiler_id, compiler_version, "
-                      "compile_options_hash, macro_set_hash, "
-                      "include_closure_hash, type_layout_hash) "
-                      "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                      {build_variant_id, "arm64", "clang", "24", "a", "b", "c",
-                       "d"})
+                  .Execute("INSERT INTO build_variants(build_variant_id, "
+                           "target_triple, compiler_id, compiler_version, "
+                           "compile_options_hash, macro_set_hash, "
+                           "include_closure_hash, type_layout_hash) "
+                           "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                           {build_variant_id, "arm64", "clang", "24", "a", "b",
+                            "c", "d"})
                   .ok());
 
   const std::string function_variant_id = core::ToString(FunctionId("f"));
 
   auto v1_summary = V1Summary("f");
-  auto published_v1 =
-      repo->PublishProjectSummaries(revision_id, build_variant_id, {v1_summary});
+  auto published_v1 = repo->PublishProjectSummaries(
+      revision_id, build_variant_id, {v1_summary});
   ASSERT_TRUE(published_v1.ok()) << published_v1.status().message();
   const auto v1_bytes = v1_summary.SerializeAsString();
 
   auto v2_summary = V2Summary("f");
-  auto published_v2 =
-      repo->PublishProjectSummaries(revision_id, build_variant_id, {v2_summary});
+  auto published_v2 = repo->PublishProjectSummaries(
+      revision_id, build_variant_id, {v2_summary});
   ASSERT_TRUE(published_v2.ok()) << published_v2.status().message();
 
   // The current binding is now native V2.
@@ -170,5 +167,5 @@ TEST(WpaMigrationQualificationTest, ReanalysisSupersedesWithoutMutation) {
   std::filesystem::remove_all(db);
 }
 
-}  // namespace
-}  // namespace veritas::wpa::qualification
+} // namespace
+} // namespace veritas::wpa::qualification

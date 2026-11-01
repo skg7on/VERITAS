@@ -16,26 +16,24 @@
 
 namespace veritas::analysis::svf {
 
-const char* BudgetReasonName(BudgetReason reason) {
+const char *BudgetReasonName(BudgetReason reason) {
   switch (reason) {
-    case BudgetReason::kNone:
-      return "none";
-    case BudgetReason::kTimeLimit:
-      return "time_limit";
-    case BudgetReason::kGraphNodeLimit:
-      return "graph_node_limit";
-    case BudgetReason::kFactLimit:
-      return "fact_limit";
-    case BudgetReason::kAliasPairLimit:
-      return "alias_pair_limit";
+  case BudgetReason::kNone:
+    return "none";
+  case BudgetReason::kTimeLimit:
+    return "time_limit";
+  case BudgetReason::kGraphNodeLimit:
+    return "graph_node_limit";
+  case BudgetReason::kFactLimit:
+    return "fact_limit";
+  case BudgetReason::kAliasPairLimit:
+    return "alias_pair_limit";
   }
   return "unknown";
 }
 
 SvfBudget::SvfBudget(SvfConfig config, Now now)
-    : config_(std::move(config)),
-      now_(std::move(now)),
-      started_(now_()) {}
+    : config_(std::move(config)), now_(std::move(now)), started_(now_()) {}
 
 bool SvfBudget::Checkpoint(std::size_t observed_graph_nodes) {
   // Already over budget
@@ -101,4 +99,4 @@ bool SvfBudget::TryAliasQuery() {
   return true;
 }
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf

@@ -38,7 +38,8 @@
 //   * A legal case that expresses an absence — the grammar's optional proof
 //     budget, and a hypothesis that declares no confidence — round-trips with
 //     that absence intact, and its identity differs from the same case with the
-//     member present. A sentinel-based encoding would silently collapse the two.
+//     member present. A sentinel-based encoding would silently collapse the
+//     two.
 //   * A wire message whose repeated members are in a non-canonical order
 //     decodes into a case with the same canonical bytes and the same
 //     `EvidenceID` as the canonical encoding. Protobuf preserves repeated-field
@@ -84,7 +85,7 @@ EvidenceCase FinalizedOverflowCase() {
 
 // Serializes a wire message, failing the test rather than returning bytes that
 // would make the assertion below vacuous.
-std::string Serialize(const v1::EvidenceCase& value) {
+std::string Serialize(const v1::EvidenceCase &value) {
   std::string bytes;
   const bool serialized = value.SerializeToString(&bytes);
   EXPECT_TRUE(serialized);
@@ -94,8 +95,7 @@ std::string Serialize(const v1::EvidenceCase& value) {
 // Reverses a repeated field in place. `SwapElements` is used rather than a
 // standard algorithm so the mutation is exact for both a repeated message field
 // and a repeated scalar one.
-template <typename Repeated>
-void ReverseRepeated(Repeated* values) {
+template <typename Repeated> void ReverseRepeated(Repeated *values) {
   for (int left = 0, right = values->size() - 1; left < right;
        ++left, --right) {
     values->SwapElements(left, right);
@@ -104,7 +104,7 @@ void ReverseRepeated(Repeated* values) {
 
 // Asserts a decode failed for the right reason: no case, and an invalid
 // argument rather than an internal error.
-void ExpectInvalidArgument(const StatusOr<EvidenceCase>& decoded) {
+void ExpectInvalidArgument(const StatusOr<EvidenceCase> &decoded) {
   ASSERT_FALSE(decoded.ok()) << "the decode should have been refused";
   EXPECT_EQ(decoded.status().code(), StatusCode::kInvalidArgument)
       << decoded.status().message();
@@ -113,8 +113,8 @@ void ExpectInvalidArgument(const StatusOr<EvidenceCase>& decoded) {
 // Canonical bytes are not printable, so a mismatch is reported by the offset
 // where the two encodings first differ — which is what a representation bug
 // looks like.
-::testing::AssertionResult SameCanonicalBytes(const EvidenceCase& left,
-                                              const EvidenceCase& right) {
+::testing::AssertionResult SameCanonicalBytes(const EvidenceCase &left,
+                                              const EvidenceCase &right) {
   const auto left_bytes = CanonicalEvidenceBytes(left);
   if (!left_bytes.ok()) {
     return ::testing::AssertionFailure()
@@ -138,7 +138,7 @@ void ExpectInvalidArgument(const StatusOr<EvidenceCase>& decoded) {
          << left_bytes->size() << ", " << right_bytes->size() << ")";
 }
 
-}  // namespace
+} // namespace
 
 TEST(EvidenceProtoTest, RoundTripPreservesCanonicalIdentity) {
   auto input = MakeOverflowEvidenceCase();
@@ -161,7 +161,7 @@ TEST(EvidenceProtoTest, RoundTripPreservesCanonicalIdentity) {
 TEST(EvidenceProtoTest, RoundTripReproducesEveryFixtureCase) {
   std::vector<EvidenceCase> cases = {MakeValidMinimalEvidenceCase(),
                                      MakeOverflowEvidenceCase()};
-  for (EvidenceCase& value : cases) {
+  for (EvidenceCase &value : cases) {
     ASSERT_TRUE(FinalizeEvidenceIdentity(&value).ok());
     auto bytes = EncodeEvidenceProto(value);
     ASSERT_TRUE(bytes.ok()) << bytes.status().message();
@@ -183,7 +183,7 @@ TEST(EvidenceProtoTest, RoundTripReproducesEveryFixtureCase) {
 TEST(EvidenceProtoTest, RoundTripCarriesEntityPropertiesAndBooleanExpressions) {
   EvidenceCase input = MakeValidMinimalEvidenceCase();
   ASSERT_FALSE(input.entities.empty());
-  Entity& entity = input.entities[0];
+  Entity &entity = input.entities[0];
   ASSERT_TRUE(entity.properties.empty());
 
   Expression flag;
@@ -201,7 +201,7 @@ TEST(EvidenceProtoTest, RoundTripCarriesEntityPropertiesAndBooleanExpressions) {
   auto proto = ToEvidenceProto(input);
   ASSERT_TRUE(proto.ok()) << proto.status().message();
   ASSERT_EQ(proto->entities_size(), input.entities.size());
-  const auto& wire_properties = proto->entities(0).properties();
+  const auto &wire_properties = proto->entities(0).properties();
   ASSERT_EQ(wire_properties.size(), 2);
 
   auto wire_flag = wire_properties.find("concrete");
@@ -223,7 +223,7 @@ TEST(EvidenceProtoTest, RoundTripCarriesEntityPropertiesAndBooleanExpressions) {
   ASSERT_TRUE(decoded.ok()) << decoded.status().message();
 
   ASSERT_EQ(decoded->entities.size(), input.entities.size());
-  const auto& decoded_properties = decoded->entities[0].properties;
+  const auto &decoded_properties = decoded->entities[0].properties;
   ASSERT_EQ(decoded_properties.size(), 2u);
 
   auto decoded_flag = decoded_properties.find("concrete");
@@ -354,8 +354,7 @@ TEST(EvidenceProtoTest, RejectsUnspecifiedEnums) {
   }
   {
     v1::EvidenceCase mutated = *proto;
-    mutated.mutable_dependencies(0)->set_kind(
-        v1::DEPENDENCY_KIND_UNSPECIFIED);
+    mutated.mutable_dependencies(0)->set_kind(v1::DEPENDENCY_KIND_UNSPECIFIED);
     ExpectInvalidArgument(DecodeEvidenceProto(Serialize(mutated)));
   }
   {
@@ -407,12 +406,13 @@ TEST(EvidenceProtoTest, RejectsMalformedBytes) {
   ASSERT_TRUE(bytes.ok()) << bytes.status().message();
   ASSERT_GT(bytes->size(), 16u);
 
-  ExpectInvalidArgument(
-      DecodeEvidenceProto(std::string_view(*bytes).substr(0, bytes->size() / 2)));
+  ExpectInvalidArgument(DecodeEvidenceProto(
+      std::string_view(*bytes).substr(0, bytes->size() / 2)));
   ExpectInvalidArgument(
       DecodeEvidenceProto(std::string_view(*bytes).substr(0, 1)));
   ExpectInvalidArgument(DecodeEvidenceProto(std::string_view()));
-  ExpectInvalidArgument(DecodeEvidenceProto(std::string_view("\xff\xff\xff\xff", 4)));
+  ExpectInvalidArgument(
+      DecodeEvidenceProto(std::string_view("\xff\xff\xff\xff", 4)));
 }
 
 // A case is bound to a schema and a program context; neither may be absent, and

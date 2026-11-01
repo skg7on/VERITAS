@@ -54,7 +54,7 @@ EvidenceQueryBudget Budget(std::size_t depth, std::size_t nodes,
   return budget;
 }
 
-SnapshotDescriptor Descriptor(const EvidenceScenarioBuilder& builder) {
+SnapshotDescriptor Descriptor(const EvidenceScenarioBuilder &builder) {
   SnapshotDescriptor descriptor;
   descriptor.repository = "repo";
   descriptor.revision = "rev";
@@ -75,31 +75,37 @@ facts::AnalysisFact MakeFactOrAbort(facts::SemanticRow row) {
 
 // A DirectRead range fact with a caller-supplied memory reference, so several
 // facts can share one value/object and stress the fact budget.
-facts::AnalysisFact RangeFact(const EvidenceScenarioBuilder& builder,
+facts::AnalysisFact RangeFact(const EvidenceScenarioBuilder &builder,
                               std::string_view fn_name,
                               core::StableId memory_ref, std::int64_t offset,
                               std::uint64_t size) {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kDirectRead;
-  row.cells = {builder.Id(core::IdKind::kFunctionVariant, fn_name), memory_ref,
-               sem::ByteRangeKind::kKnown, offset, size,
+  row.cells = {builder.Id(core::IdKind::kFunctionVariant, fn_name),
+               memory_ref,
+               sem::ByteRangeKind::kKnown,
+               offset,
+               size,
                sem::EpistemicState::kMust};
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact CapacityFact(const EvidenceScenarioBuilder& builder,
+facts::AnalysisFact CapacityFact(const EvidenceScenarioBuilder &builder,
                                  std::string_view fn_name,
                                  core::StableId memory_ref,
                                  std::uint64_t size) {
   facts::SemanticRow row;
   row.relation = facts::RelationId::kDirectWrite;
-  row.cells = {builder.Id(core::IdKind::kFunctionVariant, fn_name), memory_ref,
-               sem::ByteRangeKind::kKnown, std::int64_t{0}, size,
+  row.cells = {builder.Id(core::IdKind::kFunctionVariant, fn_name),
+               memory_ref,
+               sem::ByteRangeKind::kKnown,
+               std::int64_t{0},
+               size,
                sem::EpistemicState::kMust};
   return MakeFactOrAbort(std::move(row));
 }
 
-facts::AnalysisFact AliasFact(const EvidenceScenarioBuilder& builder,
+facts::AnalysisFact AliasFact(const EvidenceScenarioBuilder &builder,
                               core::StableId left, core::StableId right,
                               sem::AliasKind kind,
                               sem::EpistemicState epistemic) {
@@ -116,7 +122,7 @@ struct FlowEdge {
   cpg::CpgEdge edge;
 };
 
-FlowEdge Link(const EvidenceScenarioBuilder& builder, std::string_view from,
+FlowEdge Link(const EvidenceScenarioBuilder &builder, std::string_view from,
               std::string_view to, std::string_view edge_name) {
   FlowEdge link;
   link.from = builder.MakeNode(from, cpg::NodeKind::kParameter);
@@ -128,7 +134,7 @@ FlowEdge Link(const EvidenceScenarioBuilder& builder, std::string_view from,
 
 cpg::ThinCpg BuildCpg(std::vector<FlowEdge> links) {
   cpg::ThinCpg cpg;
-  for (auto& link : links) {
+  for (auto &link : links) {
     cpg.AddNode(link.from);
     cpg.AddNode(link.to);
     cpg.AddEdge(link.edge);
@@ -136,22 +142,22 @@ cpg::ThinCpg BuildCpg(std::vector<FlowEdge> links) {
   return cpg;
 }
 
-std::vector<core::StableId> Sorted(const std::vector<core::StableId>& ids) {
+std::vector<core::StableId> Sorted(const std::vector<core::StableId> &ids) {
   std::vector<core::StableId> out = ids;
   std::sort(out.begin(), out.end());
   return out;
 }
 
-std::vector<core::StableId> NodeIds(const FlowSlice& slice) {
+std::vector<core::StableId> NodeIds(const FlowSlice &slice) {
   std::vector<core::StableId> ids;
   ids.reserve(slice.nodes.size());
-  for (const auto& node : slice.nodes) {
+  for (const auto &node : slice.nodes) {
     ids.push_back(node.node_id);
   }
   return Sorted(ids);
 }
 
-}  // namespace
+} // namespace
 
 // QRY-002: a disconnected graph with an ample budget is complete-empty, never
 // an error and never a truncated result.
@@ -169,7 +175,7 @@ TEST(EvidenceQueryServiceTest, NoPathIsCompleteEmpty) {
 
   auto result = service.GetValueFlow(src, dst, Budget(8, 256, 5, 64, 8));
   ASSERT_TRUE(result.ok()) << result.status().message();
-  const FlowSlice& slice = result.value();
+  const FlowSlice &slice = result.value();
   EXPECT_TRUE(slice.nodes.empty());
   EXPECT_TRUE(slice.edges.empty());
   EXPECT_EQ(slice.metadata.completeness, QueryCompleteness::kComplete);
@@ -196,7 +202,7 @@ TEST(EvidenceQueryServiceTest, DepthBudgetTruncatesEmpty) {
 
   auto result = service.GetValueFlow(src, dst, Budget(1, 256, 5, 64, 8));
   ASSERT_TRUE(result.ok()) << result.status().message();
-  const FlowSlice& slice = result.value();
+  const FlowSlice &slice = result.value();
   EXPECT_TRUE(slice.nodes.empty());
   EXPECT_EQ(slice.metadata.completeness, QueryCompleteness::kTruncated);
   ASSERT_EQ(slice.metadata.truncation_reasons.size(), 1u);
@@ -224,13 +230,13 @@ TEST(EvidenceQueryServiceTest, PathBudgetReturnsCanonicalPrefix) {
 
   auto result = service.GetValueFlow(src, dst, Budget(8, 256, 2, 64, 8));
   ASSERT_TRUE(result.ok()) << result.status().message();
-  const FlowSlice& slice = result.value();
+  const FlowSlice &slice = result.value();
 
   EXPECT_EQ(slice.metadata.completeness, QueryCompleteness::kTruncated);
   ASSERT_EQ(slice.metadata.truncation_reasons.size(), 1u);
   EXPECT_EQ(slice.metadata.truncation_reasons[0], TruncationReason::kMaxPaths);
   EXPECT_EQ(slice.metadata.examined_items, 3u);
-  EXPECT_EQ(slice.nodes.size(), 4u);  // src + two intermediates + dst
+  EXPECT_EQ(slice.nodes.size(), 4u); // src + two intermediates + dst
   EXPECT_EQ(slice.edges.size(), 4u);
 
   // The two returned intermediates are the two smallest of {a, b, c} by
@@ -242,7 +248,7 @@ TEST(EvidenceQueryServiceTest, PathBudgetReturnsCanonicalPrefix) {
   expected.resize(2);
 
   std::vector<core::StableId> intermediates;
-  for (const auto& node : slice.nodes) {
+  for (const auto &node : slice.nodes) {
     if (node.node_id != src && node.node_id != dst) {
       intermediates.push_back(node.node_id);
     }
@@ -270,7 +276,7 @@ TEST(EvidenceQueryServiceTest, NodeBudgetRetainsCanonicalPrefix) {
 
   auto result = service.GetValueFlow(src, dst, Budget(8, 4, 5, 64, 8));
   ASSERT_TRUE(result.ok()) << result.status().message();
-  const FlowSlice& slice = result.value();
+  const FlowSlice &slice = result.value();
 
   EXPECT_EQ(slice.metadata.completeness, QueryCompleteness::kTruncated);
   ASSERT_EQ(slice.metadata.truncation_reasons.size(), 1u);
@@ -316,9 +322,10 @@ TEST(EvidenceQueryServiceTest, RangeAndCapacityFactBudgetsAreVisible) {
   EXPECT_EQ(ranges->facts.size(), 2u);
   EXPECT_EQ(ranges->metadata.completeness, QueryCompleteness::kTruncated);
   ASSERT_EQ(ranges->metadata.truncation_reasons.size(), 1u);
-  EXPECT_EQ(ranges->metadata.truncation_reasons[0], TruncationReason::kMaxFacts);
+  EXPECT_EQ(ranges->metadata.truncation_reasons[0],
+            TruncationReason::kMaxFacts);
   EXPECT_EQ(ranges->metadata.examined_items, 3u);
-  for (const auto& fact : ranges->facts) {
+  for (const auto &fact : ranges->facts) {
     EXPECT_EQ(fact.row.relation, facts::RelationId::kDirectRead);
   }
 
@@ -327,17 +334,17 @@ TEST(EvidenceQueryServiceTest, RangeAndCapacityFactBudgetsAreVisible) {
   EXPECT_EQ(capacities->facts.size(), 2u);
   EXPECT_EQ(capacities->metadata.completeness, QueryCompleteness::kTruncated);
   ASSERT_EQ(capacities->metadata.truncation_reasons.size(), 1u);
-  EXPECT_EQ(capacities->metadata.truncation_reasons[0], TruncationReason::kMaxFacts);
+  EXPECT_EQ(capacities->metadata.truncation_reasons[0],
+            TruncationReason::kMaxFacts);
   EXPECT_EQ(capacities->metadata.examined_items, 3u);
-  for (const auto& fact : capacities->facts) {
+  for (const auto &fact : capacities->facts) {
     EXPECT_EQ(fact.row.relation, facts::RelationId::kDirectWrite);
   }
 
   // Canonical prefix: the returned facts are the two smallest by fact ID.
-  std::vector<AnalysisFact> range_candidates = {
-      facts[0], facts[1], facts[2]};
+  std::vector<AnalysisFact> range_candidates = {facts[0], facts[1], facts[2]};
   std::sort(range_candidates.begin(), range_candidates.end(),
-            [](const AnalysisFact& x, const AnalysisFact& y) {
+            [](const AnalysisFact &x, const AnalysisFact &y) {
               return x.fact_id < y.fact_id;
             });
   EXPECT_EQ(ranges->facts[0].fact_id, range_candidates[0].fact_id);
@@ -369,9 +376,9 @@ TEST(EvidenceQueryServiceTest, PreservesAllAliasStates) {
     ASSERT_EQ(result->facts.size(), 1u);
     EXPECT_EQ(result->facts[0].fact_id, fact.fact_id);
 
-    const auto* alias =
+    const auto *alias =
         std::get_if<sem::AliasKind>(&result->facts[0].row.cells[2]);
-    const auto* state =
+    const auto *state =
         std::get_if<sem::EpistemicState>(&result->facts[0].row.cells[3]);
     ASSERT_NE(alias, nullptr);
     ASSERT_NE(state, nullptr);
@@ -403,8 +410,8 @@ TEST(EvidenceQueryServiceTest, ProvenanceBudgetIsIndependentAndVisible) {
   // A tight provenance budget truncates the explanation but keeps the fact.
   facts::ExplainBudget explain_budget;
   explain_budget.max_depth = 1;
-  auto provenance = service.Explain(backend.run_id(), fact.fact_id,
-                                    explain_budget);
+  auto provenance =
+      service.Explain(backend.run_id(), fact.fact_id, explain_budget);
   ASSERT_TRUE(provenance.ok()) << provenance.status().message();
   EXPECT_TRUE(provenance->truncated());
   EXPECT_EQ(provenance->truncation_reason(), "max_depth");

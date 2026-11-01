@@ -38,8 +38,7 @@ bool IsPositive(v1::EpistemicState epistemic) {
 // name a real target under weaker warrant (a model, or an inference), so they
 // belong in the graph; MUST_NOT and UNKNOWN never assert a target.
 bool IsEdgeAdmissible(v1::EpistemicState epistemic) {
-  return IsPositive(epistemic) ||
-         epistemic == v1::EPISTEMIC_STATE_INFERRED ||
+  return IsPositive(epistemic) || epistemic == v1::EPISTEMIC_STATE_INFERRED ||
          epistemic == v1::EPISTEMIC_STATE_ASSUMED;
 }
 
@@ -68,14 +67,13 @@ NormalizeCalls(const summary::SummaryArtifact &artifact) {
   if (const auto *v1_summary = std::get_if<v1::FunctionSummary>(&artifact)) {
     calls.reserve(static_cast<std::size_t>(v1_summary->calls_size()));
     for (const auto &call : v1_summary->calls()) {
-      calls.push_back(
-          NormalizedCall{.call_site_anchor_id = call.call_site_anchor_id(),
-                         .callee_symbol = call.callee_symbol(),
-                         .resolved_callee =
-                             call.resolved_callee_function_variant_id(),
-                         .provenance_ref = call.provenance_ref(),
-                         .epistemic = call.epistemic(),
-                         .admissible = IsPositive(call.epistemic())});
+      calls.push_back(NormalizedCall{
+          .call_site_anchor_id = call.call_site_anchor_id(),
+          .callee_symbol = call.callee_symbol(),
+          .resolved_callee = call.resolved_callee_function_variant_id(),
+          .provenance_ref = call.provenance_ref(),
+          .epistemic = call.epistemic(),
+          .admissible = IsPositive(call.epistemic())});
     }
     return calls;
   }
@@ -83,14 +81,13 @@ NormalizeCalls(const summary::SummaryArtifact &artifact) {
   const auto &v2_summary = std::get<summary::v2::FunctionSummary>(artifact);
   calls.reserve(static_cast<std::size_t>(v2_summary.calls_size()));
   for (const auto &call : v2_summary.calls()) {
-    calls.push_back(
-        NormalizedCall{.call_site_anchor_id = call.call_site_id(),
-                       .callee_symbol = call.callee_symbol(),
-                       .resolved_callee =
-                           call.resolved_callee_function_variant_id(),
-                       .provenance_ref = call.provenance_ref(),
-                       .epistemic = call.epistemic(),
-                       .admissible = IsEdgeAdmissible(call.epistemic())});
+    calls.push_back(NormalizedCall{
+        .call_site_anchor_id = call.call_site_id(),
+        .callee_symbol = call.callee_symbol(),
+        .resolved_callee = call.resolved_callee_function_variant_id(),
+        .provenance_ref = call.provenance_ref(),
+        .epistemic = call.epistemic(),
+        .admissible = IsEdgeAdmissible(call.epistemic())});
   }
   return calls;
 }
@@ -244,9 +241,9 @@ CallGraph::FromSummaries(std::span<const summary::SummaryArtifact> summaries) {
   ordered.reserve(summaries.size());
   std::set<core::StableId> seen;
   for (const auto &artifact : summaries) {
-    auto function_id =
-        ParseFunctionVariantId(summary::Identity(artifact).function_variant_id(),
-                               "invalid summary identity");
+    auto function_id = ParseFunctionVariantId(
+        summary::Identity(artifact).function_variant_id(),
+        "invalid summary identity");
     if (!function_id.ok())
       return function_id.status();
     if (!seen.insert(*function_id).second) {
@@ -266,8 +263,8 @@ CallGraph::FromSummaries(std::span<const summary::SummaryArtifact> summaries) {
       bool resolved = false;
       core::StableId callee;
       if (call.admissible && !call.resolved_callee.empty()) {
-        auto parsed = ParseFunctionVariantId(call.resolved_callee,
-                                             "invalid resolved callee identity");
+        auto parsed = ParseFunctionVariantId(
+            call.resolved_callee, "invalid resolved callee identity");
         if (!parsed.ok())
           return parsed.status();
         if (HasFunction(graph.Functions(), *parsed)) {

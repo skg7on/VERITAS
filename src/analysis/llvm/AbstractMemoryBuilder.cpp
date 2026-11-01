@@ -38,20 +38,20 @@ namespace {
 namespace semantic = veritas::analysis::semantic;
 
 // Canonical byte encoding, matching the convention in StableValueMapper.
-void AppendTag(std::string* out, char tag) { out->push_back(tag); }
+void AppendTag(std::string *out, char tag) { out->push_back(tag); }
 
-void AppendString(std::string* out, std::string_view value) {
+void AppendString(std::string *out, std::string_view value) {
   out->append(std::to_string(value.size()));
   out->push_back(':');
   out->append(value);
 }
 
-void AppendUInt(std::string* out, std::uint64_t value) {
+void AppendUInt(std::string *out, std::uint64_t value) {
   out->append(std::to_string(value));
   out->push_back(';');
 }
 
-void AppendInt(std::string* out, std::int64_t value) {
+void AppendInt(std::string *out, std::int64_t value) {
   out->append(std::to_string(value));
   out->push_back(';');
 }
@@ -71,16 +71,16 @@ struct GepSummary {
 // type reached so far — a StructType index is a field, an array/vector/scalar
 // index is a sequential (kArrayIndex) step. Any non-constant or unresolvable
 // index appends kUnknown and marks the offset unknown.
-GepSummary SummarizeGep(const ::llvm::GEPOperator& gep,
-                        const ::llvm::DataLayout& layout) {
+GepSummary SummarizeGep(const ::llvm::GEPOperator &gep,
+                        const ::llvm::DataLayout &layout) {
   GepSummary summary;
   bool in_struct = false;
-  ::llvm::StructType* struct_type = nullptr;
-  ::llvm::Type* flat_type = gep.getSourceElementType();
+  ::llvm::StructType *struct_type = nullptr;
+  ::llvm::Type *flat_type = gep.getSourceElementType();
 
-  for (const ::llvm::Use& index_use : gep.indices()) {
-    const ::llvm::Value* index = index_use.get();
-    const auto* constant = ::llvm::dyn_cast<::llvm::ConstantInt>(index);
+  for (const ::llvm::Use &index_use : gep.indices()) {
+    const ::llvm::Value *index = index_use.get();
+    const auto *constant = ::llvm::dyn_cast<::llvm::ConstantInt>(index);
     const bool is_constant = constant != nullptr;
     const std::int64_t value = is_constant ? constant->getSExtValue() : 0;
 
@@ -99,25 +99,25 @@ GepSummary SummarizeGep(const ::llvm::GEPOperator& gep,
       }
       summary.segments.push_back(
           {semantic::AccessPathSegment::Kind::kField, value, value});
-      summary.offset += static_cast<std::int64_t>(
-          layout.getStructLayout(struct_type)
-              ->getElementOffset(field)
-              .getFixedValue());
-      ::llvm::Type* next = struct_type->getElementType(field);
-      if (auto* array = ::llvm::dyn_cast<::llvm::ArrayType>(next)) {
+      summary.offset +=
+          static_cast<std::int64_t>(layout.getStructLayout(struct_type)
+                                        ->getElementOffset(field)
+                                        .getFixedValue());
+      ::llvm::Type *next = struct_type->getElementType(field);
+      if (auto *array = ::llvm::dyn_cast<::llvm::ArrayType>(next)) {
         // An array field flattens to its element type, so a subsequent
         // sequential index strides by the element size (mirrors
         // gep_type_iterator::operator++).
         in_struct = false;
         struct_type = nullptr;
         flat_type = array->getElementType();
-      } else if (auto* vector = ::llvm::dyn_cast<::llvm::VectorType>(next)) {
+      } else if (auto *vector = ::llvm::dyn_cast<::llvm::VectorType>(next)) {
         // A vector field is kept as the vector; the sequential branch steps by
         // the element type.
         in_struct = false;
         struct_type = nullptr;
         flat_type = vector;
-      } else if (auto* st = ::llvm::dyn_cast<::llvm::StructType>(next)) {
+      } else if (auto *st = ::llvm::dyn_cast<::llvm::StructType>(next)) {
         in_struct = true;
         struct_type = st;
         flat_type = nullptr;
@@ -137,24 +137,25 @@ GepSummary SummarizeGep(const ::llvm::GEPOperator& gep,
       }
       summary.segments.push_back(
           {semantic::AccessPathSegment::Kind::kArrayIndex, value, value});
-      ::llvm::Type* step = flat_type;
-      if (auto* vector = ::llvm::dyn_cast<::llvm::VectorType>(step))
+      ::llvm::Type *step = flat_type;
+      if (auto *vector = ::llvm::dyn_cast<::llvm::VectorType>(step))
         step = vector->getElementType();
       if (step) {
-        summary.offset += value * static_cast<std::int64_t>(
-            layout.getTypeAllocSize(step).getFixedValue());
+        summary.offset +=
+            value * static_cast<std::int64_t>(
+                        layout.getTypeAllocSize(step).getFixedValue());
       } else {
         summary.constant_offset = false;
       }
 
-      ::llvm::Type* ty = flat_type;
-      if (auto* array = ::llvm::dyn_cast<::llvm::ArrayType>(ty)) {
+      ::llvm::Type *ty = flat_type;
+      if (auto *array = ::llvm::dyn_cast<::llvm::ArrayType>(ty)) {
         flat_type = array->getElementType();
-      } else if (auto* vector = ::llvm::dyn_cast<::llvm::VectorType>(ty)) {
+      } else if (auto *vector = ::llvm::dyn_cast<::llvm::VectorType>(ty)) {
         // The reference keeps the vector; its next indexed type is the
         // element type (vectors are bit-packed, but this is a rare corner).
         flat_type = vector;
-      } else if (auto* st = ::llvm::dyn_cast<::llvm::StructType>(ty)) {
+      } else if (auto *st = ::llvm::dyn_cast<::llvm::StructType>(ty)) {
         in_struct = true;
         struct_type = st;
         flat_type = nullptr;
@@ -167,7 +168,7 @@ GepSummary SummarizeGep(const ::llvm::GEPOperator& gep,
   return summary;
 }
 
-semantic::AbstractObjectKind KindForBase(const ::llvm::Value& base) {
+semantic::AbstractObjectKind KindForBase(const ::llvm::Value &base) {
   if (::llvm::isa<::llvm::GlobalVariable>(base))
     return semantic::AbstractObjectKind::kGlobal;
   if (::llvm::isa<::llvm::AllocaInst>(base))
@@ -179,19 +180,19 @@ semantic::AbstractObjectKind KindForBase(const ::llvm::Value& base) {
   return semantic::AbstractObjectKind::kUnknown;
 }
 
-const ::llvm::Function* OwnerFunctionOf(const ::llvm::Value& base) {
-  if (const auto* inst = ::llvm::dyn_cast<::llvm::Instruction>(&base))
+const ::llvm::Function *OwnerFunctionOf(const ::llvm::Value &base) {
+  if (const auto *inst = ::llvm::dyn_cast<::llvm::Instruction>(&base))
     return inst->getFunction();
-  if (const auto* arg = ::llvm::dyn_cast<::llvm::Argument>(&base))
+  if (const auto *arg = ::llvm::dyn_cast<::llvm::Argument>(&base))
     return arg->getParent();
   return nullptr;
 }
 
-std::optional<std::uint64_t> AllocationSizeFor(const ::llvm::Value& base,
-                                               const ::llvm::DataLayout& layout) {
-  if (const auto* alloca = ::llvm::dyn_cast<::llvm::AllocaInst>(&base))
+std::optional<std::uint64_t>
+AllocationSizeFor(const ::llvm::Value &base, const ::llvm::DataLayout &layout) {
+  if (const auto *alloca = ::llvm::dyn_cast<::llvm::AllocaInst>(&base))
     return layout.getTypeAllocSize(alloca->getAllocatedType()).getFixedValue();
-  if (const auto* gv = ::llvm::dyn_cast<::llvm::GlobalVariable>(&base))
+  if (const auto *gv = ::llvm::dyn_cast<::llvm::GlobalVariable>(&base))
     return layout.getTypeAllocSize(gv->getValueType()).getFixedValue();
   return std::nullopt;
 }
@@ -200,28 +201,27 @@ std::optional<std::uint64_t> AllocationSizeFor(const ::llvm::Value& base,
 // every use. Recover that original value only when the slot has exactly one
 // direct store, so a later assignment, aliased write, or aggregate update
 // remains explicitly unknown rather than being mistaken for its parameter.
-const ::llvm::Value* RecoverSingleStoreSlotValue(const ::llvm::Value* value) {
-  const auto* load = ::llvm::dyn_cast<::llvm::LoadInst>(value);
+const ::llvm::Value *RecoverSingleStoreSlotValue(const ::llvm::Value *value) {
+  const auto *load = ::llvm::dyn_cast<::llvm::LoadInst>(value);
   if (!load) {
     return value;
   }
-  const auto* slot = ::llvm::dyn_cast<::llvm::AllocaInst>(
+  const auto *slot = ::llvm::dyn_cast<::llvm::AllocaInst>(
       load->getPointerOperand()->stripPointerCasts());
   if (!slot) {
     return value;
   }
 
-  const ::llvm::Value* stored = nullptr;
-  for (const ::llvm::User* user : slot->users()) {
-    if (const auto* slot_load = ::llvm::dyn_cast<::llvm::LoadInst>(user)) {
+  const ::llvm::Value *stored = nullptr;
+  for (const ::llvm::User *user : slot->users()) {
+    if (const auto *slot_load = ::llvm::dyn_cast<::llvm::LoadInst>(user)) {
       if (slot_load->getPointerOperand()->stripPointerCasts() != slot) {
         return value;
       }
       continue;
     }
-    const auto* store = ::llvm::dyn_cast<::llvm::StoreInst>(user);
-    if (!store ||
-        store->getPointerOperand()->stripPointerCasts() != slot) {
+    const auto *store = ::llvm::dyn_cast<::llvm::StoreInst>(user);
+    if (!store || store->getPointerOperand()->stripPointerCasts() != slot) {
       return value;
     }
     if (stored != nullptr) {
@@ -234,45 +234,47 @@ const ::llvm::Value* RecoverSingleStoreSlotValue(const ::llvm::Value* value) {
 
 std::string SemanticAnchorFor(semantic::AbstractObjectKind kind) {
   switch (kind) {
-    case semantic::AbstractObjectKind::kGlobal:
-      return "global";
-    case semantic::AbstractObjectKind::kStack:
-      return "stack";
-    case semantic::AbstractObjectKind::kHeap:
-      return "heap";
-    case semantic::AbstractObjectKind::kArgument:
-      return "argument";
-    case semantic::AbstractObjectKind::kFunction:
-      return "function";
-    case semantic::AbstractObjectKind::kExternal:
-      return "external";
-    case semantic::AbstractObjectKind::kUnknown:
-      return "unknown";
-    case semantic::AbstractObjectKind::kLegacyOpaque:
-      return "legacy-opaque";
+  case semantic::AbstractObjectKind::kGlobal:
+    return "global";
+  case semantic::AbstractObjectKind::kStack:
+    return "stack";
+  case semantic::AbstractObjectKind::kHeap:
+    return "heap";
+  case semantic::AbstractObjectKind::kArgument:
+    return "argument";
+  case semantic::AbstractObjectKind::kFunction:
+    return "function";
+  case semantic::AbstractObjectKind::kExternal:
+    return "external";
+  case semantic::AbstractObjectKind::kUnknown:
+    return "unknown";
+  case semantic::AbstractObjectKind::kLegacyOpaque:
+    return "legacy-opaque";
   }
   return "unknown";
 }
 
-}  // namespace
+} // namespace
 
-AbstractMemoryBuilder::AbstractMemoryBuilder(const ::llvm::DataLayout& layout,
-                                             const StableValueMapper& values,
-                                             const OriginMap& origins)
+AbstractMemoryBuilder::AbstractMemoryBuilder(const ::llvm::DataLayout &layout,
+                                             const StableValueMapper &values,
+                                             const OriginMap &origins)
     : layout_(layout), values_(values), origins_(origins) {}
 
 StatusOr<semantic::MemoryLocation> AbstractMemoryBuilder::LocationFor(
-    const ::llvm::Value& pointer, std::optional<std::uint64_t> access_size) const {
+    const ::llvm::Value &pointer,
+    std::optional<std::uint64_t> access_size) const {
   // 1. Collect the GEP chain (outermost first) and locate the base object.
-  std::vector<const ::llvm::GEPOperator*> geps;
-  const ::llvm::Value* base = &pointer;
+  std::vector<const ::llvm::GEPOperator *> geps;
+  const ::llvm::Value *base = &pointer;
   while (true) {
-    if (const auto* gep = ::llvm::dyn_cast<::llvm::GEPOperator>(base)) {
+    if (const auto *gep = ::llvm::dyn_cast<::llvm::GEPOperator>(base)) {
       geps.push_back(gep);
       base = gep->getPointerOperand();
-    } else if (const auto* bitcast = ::llvm::dyn_cast<::llvm::BitCastOperator>(base)) {
+    } else if (const auto *bitcast =
+                   ::llvm::dyn_cast<::llvm::BitCastOperator>(base)) {
       base = bitcast->getOperand(0);
-    } else if (const auto* addrspace =
+    } else if (const auto *addrspace =
                    ::llvm::dyn_cast<::llvm::AddrSpaceCastOperator>(base)) {
       base = addrspace->getOperand(0);
     } else {
@@ -310,13 +312,12 @@ StatusOr<semantic::MemoryLocation> AbstractMemoryBuilder::LocationFor(
     return base_id.status();
 
   // 3. Resolve the owner function variant (raw text and typed StableId).
-  const ::llvm::Function* owner_function_ptr = OwnerFunctionOf(*base);
+  const ::llvm::Function *owner_function_ptr = OwnerFunctionOf(*base);
   std::string owner_variant_text;
   std::optional<core::StableId> owner_function;
   if (owner_function_ptr) {
-    owner_variant_text =
-        origins_.GetSymbolId(owner_function_ptr).value_or(
-            owner_function_ptr->getName().str());
+    owner_variant_text = origins_.GetSymbolId(owner_function_ptr)
+                             .value_or(owner_function_ptr->getName().str());
     const auto parsed = core::ParseStableId(owner_variant_text);
     if (parsed.ok() && parsed->kind == core::IdKind::kFunctionVariant)
       owner_function = *parsed;
@@ -379,7 +380,7 @@ StatusOr<semantic::MemoryLocation> AbstractMemoryBuilder::LocationFor(
   AppendTag(&location_bytes, 'M');
   AppendString(&location_bytes, core::ToString(object.id));
   AppendUInt(&location_bytes, access_path.size());
-  for (const auto& segment : access_path) {
+  for (const auto &segment : access_path) {
     AppendInt(&location_bytes, static_cast<std::int64_t>(segment.kind));
     AppendInt(&location_bytes, segment.first);
     AppendInt(&location_bytes, segment.last);
@@ -395,4 +396,4 @@ StatusOr<semantic::MemoryLocation> AbstractMemoryBuilder::LocationFor(
   return location;
 }
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm

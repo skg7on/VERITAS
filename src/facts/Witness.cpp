@@ -34,15 +34,15 @@ namespace veritas::facts {
 template <typename T>
 [[maybe_unused]] inline constexpr bool kUnencodedCellKind = false;
 
-void AppendSemanticKey(std::string* out, const SemanticRow& row) {
+void AppendSemanticKey(std::string *out, const SemanticRow &row) {
   // Delegates to the field codec rather than carrying a second encoding: the
   // Souffle functors expose exactly these primitives, so a key built here and
   // a key built by a generated program are the same bytes by construction.
-  const auto& schema = RelationsV2().Get(row.relation);
+  const auto &schema = RelationsV2().Get(row.relation);
   AppendKeyHeader(out, schema.name, row.cells.size());
-  for (const auto& cell : row.cells) {
+  for (const auto &cell : row.cells) {
     std::visit(
-        [out](const auto& value) {
+        [out](const auto &value) {
           using T = std::decay_t<decltype(value)>;
           if constexpr (std::is_same_v<T, core::StableId>) {
             AppendField(out, KeyFieldTag::kId, core::ToString(value));
@@ -71,10 +71,10 @@ void AppendSemanticKey(std::string* out, const SemanticRow& row) {
   }
 }
 
-std::string EncodeSemanticKey(const SemanticRow& row) {
+std::string EncodeSemanticKey(const SemanticRow &row) {
   std::string key;
   AppendSemanticKey(&key, row);
   return key;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts

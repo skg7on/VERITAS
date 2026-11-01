@@ -62,8 +62,8 @@ bool IsRangeRelation(RelationId id) {
   return id == RelationId::kDirectRead || id == RelationId::kDirectWrite;
 }
 
-Status MatchStableId(const SemanticCellValue& cell, core::IdKind kind) {
-  const auto* id = std::get_if<core::StableId>(&cell);
+Status MatchStableId(const SemanticCellValue &cell, core::IdKind kind) {
+  const auto *id = std::get_if<core::StableId>(&cell);
   if (id == nullptr) {
     return Status::InvalidArgument("expected stable id cell");
   }
@@ -73,21 +73,21 @@ Status MatchStableId(const SemanticCellValue& cell, core::IdKind kind) {
   return Status::Ok();
 }
 
-template <typename T>
-Status MatchSemanticType(const SemanticCellValue& cell) {
+template <typename T> Status MatchSemanticType(const SemanticCellValue &cell) {
   return std::holds_alternative<T>(cell)
              ? Status::Ok()
              : Status::InvalidArgument("semantic cell type mismatch");
 }
 
 template <typename T>
-Status MatchExecutionType(const ExecutionCellValue& cell) {
+Status MatchExecutionType(const ExecutionCellValue &cell) {
   return std::holds_alternative<T>(cell)
              ? Status::Ok()
              : Status::InvalidArgument("execution cell type mismatch");
 }
 
-Status ValidateSemanticCell(ColumnDomain domain, const SemanticCellValue& cell) {
+Status ValidateSemanticCell(ColumnDomain domain,
+                            const SemanticCellValue &cell) {
   switch (domain) {
   case ColumnDomain::kFunctionId:
     return MatchStableId(cell, core::IdKind::kFunctionVariant);
@@ -120,7 +120,7 @@ Status ValidateSemanticCell(ColumnDomain domain, const SemanticCellValue& cell) 
 }
 
 Status ValidateExecutionCell(ColumnDomain domain,
-                             const ExecutionCellValue& cell) {
+                             const ExecutionCellValue &cell) {
   switch (domain) {
   case ColumnDomain::kFunctionId:
     return MatchExecutionType<FunctionId>(cell);
@@ -155,17 +155,17 @@ Status ValidateExecutionCell(ColumnDomain domain,
 // DirectRead/DirectWrite carry (range_kind, offset, size) at columns 2..4.
 // UNKNOWN requires canonical zero payload cells; a known zero range is
 // distinguished by its KNOWN tag and never collapses into unknown.
-Status ValidateSemanticRangePayload(const SemanticRow& row) {
+Status ValidateSemanticRangePayload(const SemanticRow &row) {
   if (!IsRangeRelation(row.relation)) {
     return Status::Ok();
   }
-  const auto* range_kind = std::get_if<semantic::ByteRangeKind>(&row.cells[2]);
+  const auto *range_kind = std::get_if<semantic::ByteRangeKind>(&row.cells[2]);
   if (range_kind == nullptr || *range_kind == semantic::ByteRangeKind::kKnown) {
     return range_kind == nullptr ? Status::InvalidArgument("missing range kind")
                                  : Status::Ok();
   }
-  const auto* offset = std::get_if<std::int64_t>(&row.cells[3]);
-  const auto* size = std::get_if<std::uint64_t>(&row.cells[4]);
+  const auto *offset = std::get_if<std::int64_t>(&row.cells[3]);
+  const auto *size = std::get_if<std::uint64_t>(&row.cells[4]);
   if (offset == nullptr || size == nullptr) {
     return Status::InvalidArgument("missing range payload");
   }
@@ -175,17 +175,17 @@ Status ValidateSemanticRangePayload(const SemanticRow& row) {
   return Status::Ok();
 }
 
-Status ValidateExecutionRangePayload(const ExecutionRow& row) {
+Status ValidateExecutionRangePayload(const ExecutionRow &row) {
   if (!IsRangeRelation(row.relation)) {
     return Status::Ok();
   }
-  const auto* range_kind = std::get_if<semantic::ByteRangeKind>(&row.cells[2]);
+  const auto *range_kind = std::get_if<semantic::ByteRangeKind>(&row.cells[2]);
   if (range_kind == nullptr || *range_kind == semantic::ByteRangeKind::kKnown) {
     return range_kind == nullptr ? Status::InvalidArgument("missing range kind")
                                  : Status::Ok();
   }
-  const auto* offset = std::get_if<std::int64_t>(&row.cells[3]);
-  const auto* size = std::get_if<std::uint64_t>(&row.cells[4]);
+  const auto *offset = std::get_if<std::int64_t>(&row.cells[3]);
+  const auto *size = std::get_if<std::uint64_t>(&row.cells[4]);
   if (offset == nullptr || size == nullptr) {
     return Status::InvalidArgument("missing range payload");
   }
@@ -214,7 +214,7 @@ Status ValidateExecutionRangePayload(const ExecutionRow& row) {
 // negative offset, and a string carrying a NUL and a colon.
 
 // The big-endian 8-byte form a length prefix and a number cell both take.
-void EncodeU64(std::uint64_t value, std::byte* out) {
+void EncodeU64(std::uint64_t value, std::byte *out) {
   for (int i = 7; i >= 0; --i) {
     out[7 - i] = static_cast<std::byte>((value >> (i * 8)) & 0xFF);
   }
@@ -234,12 +234,13 @@ template <typename T>
 class PreimageCursor {
 public:
   PreimageCursor() = default;
-  PreimageCursor(std::byte* out, std::size_t size) : out_(out), size_(size) {}
+
+  PreimageCursor(std::byte *out, std::size_t size) : out_(out), size_(size) {}
 
   // The number of bytes written, or, in a measuring pass, that would be.
   std::size_t Position() const { return pos_; }
 
-  void Put(const void* data, std::size_t count) {
+  void Put(const void *data, std::size_t count) {
     if (count == 0) {
       return;
     }
@@ -296,9 +297,9 @@ public:
     EndField(at);
   }
 
-  void Cell(const SemanticCellValue& cell) {
+  void Cell(const SemanticCellValue &cell) {
     std::visit(
-        [this](const auto& value) {
+        [this](const auto &value) {
           using T = std::decay_t<decltype(value)>;
           if constexpr (std::is_same_v<T, core::StableId>) {
             Byte(static_cast<std::uint8_t>(CellTag::kStableId));
@@ -332,34 +333,35 @@ public:
             Byte(static_cast<std::uint8_t>(CellTag::kEpistemic));
             Byte(static_cast<std::uint8_t>(value));
           } else {
-            static_assert(kUnencodedCellKind<T>,
-                          "SemanticCellValue gained an alternative the preimage "
-                          "encoding does not know, so rows differing only in "
-                          "that cell would derive one fact id");
+            static_assert(
+                kUnencodedCellKind<T>,
+                "SemanticCellValue gained an alternative the preimage "
+                "encoding does not know, so rows differing only in "
+                "that cell would derive one fact id");
           }
         },
         cell);
   }
 
 private:
-  std::byte* out_ = nullptr;
+  std::byte *out_ = nullptr;
   std::size_t size_ = 0;
   std::size_t pos_ = 0;
 };
 
 // The preimage of `row` through `cursor`: the single expression of the byte
 // format, used both to measure it and to write it.
-void WritePreimage(PreimageCursor& cursor, const SemanticRow& row) {
+void WritePreimage(PreimageCursor &cursor, const SemanticRow &row) {
   cursor.LenPrefixed("relations.v2");
   cursor.LenPrefixed(PreimageRelationName(row.relation));
-  for (const auto& cell : row.cells) {
+  for (const auto &cell : row.cells) {
     cursor.Cell(cell);
   }
 }
 
 // The exact byte count of `row`'s preimage: a dry run of the writer that will
 // produce it.
-std::size_t PreimageSize(const SemanticRow& row) {
+std::size_t PreimageSize(const SemanticRow &row) {
   PreimageCursor measuring;
   WritePreimage(measuring, row);
   return measuring.Position();
@@ -367,22 +369,23 @@ std::size_t PreimageSize(const SemanticRow& row) {
 
 // Writes the preimage of `row` into `out`, which must hold exactly `size`
 // bytes.
-void WritePreimage(std::byte* out, std::size_t size, const SemanticRow& row) {
+void WritePreimage(std::byte *out, std::size_t size, const SemanticRow &row) {
   PreimageCursor cursor(out, size);
   WritePreimage(cursor, row);
   assert(cursor.Position() == size);
 }
 
 template <typename Cell>
-Status ValidateEpistemicAdmission(const RelationSchema& schema,
-                                 ColumnDomain domain, const Cell& cell) {
+Status ValidateEpistemicAdmission(const RelationSchema &schema,
+                                  ColumnDomain domain, const Cell &cell) {
   if (domain != ColumnDomain::kEpistemic) {
     return Status::Ok();
   }
   // Domain validation precedes this check for both stable and dense rows.
-  const auto* state = std::get_if<semantic::EpistemicState>(&cell);
+  const auto *state = std::get_if<semantic::EpistemicState>(&cell);
   assert(state != nullptr);
-  if (std::find(schema.allowed_epistemic.begin(), schema.allowed_epistemic.end(),
+  if (std::find(schema.allowed_epistemic.begin(),
+                schema.allowed_epistemic.end(),
                 *state) == schema.allowed_epistemic.end()) {
     return Status::InvalidArgument("epistemic state not allowed for relation " +
                                    schema.name);
@@ -390,13 +393,13 @@ Status ValidateEpistemicAdmission(const RelationSchema& schema,
   return Status::Ok();
 }
 
-}  // namespace
+} // namespace
 
-Status ValidateSemanticRow(const SemanticRow& row) {
+Status ValidateSemanticRow(const SemanticRow &row) {
   if (!IsValidRelation(row.relation)) {
     return Status::InvalidArgument("unknown relation id");
   }
-  const RelationSchema& schema = RelationsV2().Get(row.relation);
+  const RelationSchema &schema = RelationsV2().Get(row.relation);
   if (row.cells.size() != schema.columns.size()) {
     return Status::InvalidArgument("semantic cell count mismatch");
   }
@@ -405,8 +408,8 @@ Status ValidateSemanticRow(const SemanticRow& row) {
         !s.ok()) {
       return s;
     }
-    if (Status s = ValidateEpistemicAdmission(
-            schema, schema.columns[i].domain, row.cells[i]);
+    if (Status s = ValidateEpistemicAdmission(schema, schema.columns[i].domain,
+                                              row.cells[i]);
         !s.ok()) {
       return s;
     }
@@ -414,21 +417,22 @@ Status ValidateSemanticRow(const SemanticRow& row) {
   return ValidateSemanticRangePayload(row);
 }
 
-Status ValidateExecutionRow(const ExecutionRow& row) {
+Status ValidateExecutionRow(const ExecutionRow &row) {
   if (!IsValidRelation(row.relation)) {
     return Status::InvalidArgument("unknown relation id");
   }
-  const RelationSchema& schema = RelationsV2().Get(row.relation);
+  const RelationSchema &schema = RelationsV2().Get(row.relation);
   if (row.cells.size() != schema.columns.size()) {
     return Status::InvalidArgument("execution cell count mismatch");
   }
   for (std::size_t i = 0; i < row.cells.size(); ++i) {
-    if (Status s = ValidateExecutionCell(schema.columns[i].domain, row.cells[i]);
+    if (Status s =
+            ValidateExecutionCell(schema.columns[i].domain, row.cells[i]);
         !s.ok()) {
       return s;
     }
-    if (Status s = ValidateEpistemicAdmission(
-            schema, schema.columns[i].domain, row.cells[i]);
+    if (Status s = ValidateEpistemicAdmission(schema, schema.columns[i].domain,
+                                              row.cells[i]);
         !s.ok()) {
       return s;
     }
@@ -436,7 +440,7 @@ Status ValidateExecutionRow(const ExecutionRow& row) {
   return ValidateExecutionRangePayload(row);
 }
 
-StatusOr<core::StableId> DeriveFactId(const SemanticRow& row) {
+StatusOr<core::StableId> DeriveFactId(const SemanticRow &row) {
   if (Status s = ValidateSemanticRow(row); !s.ok()) {
     return s;
   }
@@ -445,9 +449,9 @@ StatusOr<core::StableId> DeriveFactId(const SemanticRow& row) {
   return core::MakeStableId(core::IdKind::kFact, bytes);
 }
 
-StatusOr<core::StableId> FactIdentityMemo::Identify(const SemanticRow& row) {
+StatusOr<core::StableId> FactIdentityMemo::Identify(const SemanticRow &row) {
   key_.resize(PreimageSize(row));
-  WritePreimage(reinterpret_cast<std::byte*>(key_.data()), key_.size(), row);
+  WritePreimage(reinterpret_cast<std::byte *>(key_.data()), key_.size(), row);
   const auto cached = ids_.find(key_);
   if (cached != ids_.end()) {
     return cached->second;
@@ -462,7 +466,7 @@ StatusOr<core::StableId> FactIdentityMemo::Identify(const SemanticRow& row) {
   return derived;
 }
 
-StatusOr<AnalysisFact> MakeFact(const SemanticRow& row) {
+StatusOr<AnalysisFact> MakeFact(const SemanticRow &row) {
   auto fact_id = DeriveFactId(row);
   if (!fact_id.ok()) {
     return fact_id.status();
@@ -473,4 +477,4 @@ StatusOr<AnalysisFact> MakeFact(const SemanticRow& row) {
   return fact;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts

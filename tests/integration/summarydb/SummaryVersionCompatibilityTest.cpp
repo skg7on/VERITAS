@@ -133,7 +133,7 @@ std::unique_ptr<SummaryRepository> OpenRepository() {
   return repo;
 }
 
-}  // namespace
+} // namespace
 
 TEST(SummaryVersionCompatibilityTest, ReadsHistoricalV1AfterPublishingV2) {
   auto repository = OpenRepository();
@@ -177,4 +177,4 @@ TEST(SummaryVersionCompatibilityTest, ReadsV2ArtifactWrittenWithoutMetadata) {
   EXPECT_EQ(v1.status().code(), StatusCode::kFailedPrecondition);
 }
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb

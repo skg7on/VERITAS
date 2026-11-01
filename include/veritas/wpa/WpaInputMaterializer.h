@@ -37,37 +37,37 @@ namespace veritas::wpa {
 // validates only the span's data pointer and size; it cannot detect in-place
 // mutation.
 class WpaSummaryIndex {
- public:
-  static StatusOr<WpaSummaryIndex> Build(
-      std::span<const summary::SummaryArtifact> summaries);
+public:
+  static StatusOr<WpaSummaryIndex>
+  Build(std::span<const summary::SummaryArtifact> summaries);
 
   bool Covers(std::span<const summary::SummaryArtifact> summaries) const;
-  const summary::SummaryArtifact* Lookup(core::StableId function_id) const;
+  const summary::SummaryArtifact *Lookup(core::StableId function_id) const;
   const core::StableId *SummaryId(core::StableId function_id) const;
   bool Contains(core::StableId function_id) const;
 
- private:
-  const summary::SummaryArtifact* source_data_ = nullptr;
+private:
+  const summary::SummaryArtifact *source_data_ = nullptr;
   std::size_t source_size_ = 0;
-  std::map<core::StableId, const summary::SummaryArtifact*> by_function_;
+  std::map<core::StableId, const summary::SummaryArtifact *> by_function_;
   std::map<core::StableId, core::StableId> summary_ids_;
 };
 
 class WpaInputMaterializer {
- public:
+public:
   // Builds the logical component input for one SCC and component.
   //
   // Fails with InvalidArgument on an unparseable identity or an unknown
   // component, NotFound when scc_id is not a component of the supplied
   // summaries, and FailedPrecondition when a successor support fact does not
   // belong to the component's support relation.
-  static StatusOr<WpaLogicalComponentInput> Build(
-      const WpaMaterializationRequest& request);
-  static StatusOr<WpaLogicalComponentInput> Build(
-      const WpaMaterializationRequest& request,
-      const WpaSummaryIndex& summaries);
+  static StatusOr<WpaLogicalComponentInput>
+  Build(const WpaMaterializationRequest &request);
+  static StatusOr<WpaLogicalComponentInput>
+  Build(const WpaMaterializationRequest &request,
+        const WpaSummaryIndex &summaries);
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_WPA_INPUT_MATERIALIZER_H_
+#endif // VERITAS_WPA_WPA_INPUT_MATERIALIZER_H_

@@ -61,8 +61,8 @@ constexpr std::string_view kCountedTables[] = {
 // root actually has: `SummaryRepository::Open(db_path)` puts the RocksDB object
 // store at `<db_path>/objects` and the SQLite metadata store beside it at
 // `<db_path>/metadata.db`, and `db_path` is the output root.
-StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
-    const std::filesystem::path& output_root) {
+StatusOr<std::vector<NamedBytes>>
+MeasureStoreBytes(const std::filesystem::path &output_root) {
   std::map<std::string, std::uint64_t> totals;
   std::error_code error;
   const auto options =
@@ -99,7 +99,8 @@ StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
       return Status::Internal("cannot stat " + it->path().string() + ": " +
                               error.message());
     }
-    if (!is_regular) continue;
+    if (!is_regular)
+      continue;
     const auto relative =
         std::filesystem::relative(it->path(), output_root, error);
     if (error) {
@@ -107,7 +108,8 @@ StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
                               ": " + error.message());
     }
     const auto first = relative.begin();
-    if (first == relative.end()) continue;
+    if (first == relative.end())
+      continue;
     const std::uint64_t size = it->file_size(error);
     if (error) {
       return Status::Internal("cannot size " + it->path().string() + ": " +
@@ -124,28 +126,30 @@ StatusOr<std::vector<NamedBytes>> MeasureStoreBytes(
   // std::map iterates in key order, so the vector is already sorted by name.
   std::vector<NamedBytes> bytes;
   bytes.reserve(totals.size());
-  for (const auto& entry : totals) {
+  for (const auto &entry : totals) {
     bytes.push_back(NamedBytes{entry.first, entry.second});
   }
   return bytes;
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<StoreSummary> CollectStoreSummary(
-    const std::filesystem::path& output_root) {
+StatusOr<StoreSummary>
+CollectStoreSummary(const std::filesystem::path &output_root) {
   std::error_code error;
   if (!std::filesystem::exists(output_root / "metadata.db", error) || error) {
     return Status::NotFound("no metadata.db under " + output_root.string());
   }
 
   auto store = summarydb::MetadataStore::Open(output_root / "metadata.db");
-  if (!store.ok()) return store.status();
+  if (!store.ok())
+    return store.status();
 
   StoreSummary summary;
   for (const std::string_view table : kCountedTables) {
     auto rows = store->Query("SELECT COUNT(*) FROM " + std::string(table), {});
-    if (!rows.ok()) return rows.status();
+    if (!rows.ok())
+      return rows.status();
     if (rows->empty() || rows->front().empty()) {
       return Status::Internal("count query returned no rows for " +
                               std::string(table));
@@ -157,18 +161,19 @@ StatusOr<StoreSummary> CollectStoreSummary(
         TableRowCount{std::string(table), static_cast<std::uint64_t>(count)});
   }
   std::sort(summary.tables.begin(), summary.tables.end(),
-            [](const TableRowCount& left, const TableRowCount& right) {
+            [](const TableRowCount &left, const TableRowCount &right) {
               return left.table < right.table;
             });
 
   auto bytes = MeasureStoreBytes(output_root);
-  if (!bytes.ok()) return bytes.status();
+  if (!bytes.ok())
+    return bytes.status();
   summary.bytes = std::move(*bytes);
   return summary;
 }
 
-void FillInventoryFromManifest(const build::AnalysisManifest& manifest,
-                               RunInputInventory* input) {
+void FillInventoryFromManifest(const build::AnalysisManifest &manifest,
+                               RunInputInventory *input) {
   input->translation_units = manifest.translation_units.size();
   input->compiler_id = manifest.context.compiler_id;
   input->compiler_version = manifest.context.compiler_version;
@@ -177,31 +182,33 @@ void FillInventoryFromManifest(const build::AnalysisManifest& manifest,
   input->include_closure_hash = manifest.context.include_closure_hash;
 }
 
-void FillEnvironment(RunEnvironment* environment) {
-  struct utsname uts {};
+void FillEnvironment(RunEnvironment *environment) {
+  struct utsname uts{};
   if (uname(&uts) == 0) {
     environment->os = uts.sysname;
     environment->arch = uts.machine;
   }
 #if defined(__APPLE__)
-  const auto sysctl_u64 = [](const char* name) -> std::uint64_t {
+  const auto sysctl_u64 = [](const char *name) -> std::uint64_t {
     std::uint64_t value = 0;
     std::size_t size = sizeof(value);
-    if (sysctlbyname(name, &value, &size, nullptr, 0) != 0) return 0;
+    if (sysctlbyname(name, &value, &size, nullptr, 0) != 0)
+      return 0;
     return value;
   };
   char brand[256] = {};
   std::size_t brand_size = sizeof(brand);
-  if (sysctlbyname("machdep.cpu.brand_string", brand, &brand_size, nullptr, 0) ==
-      0) {
+  if (sysctlbyname("machdep.cpu.brand_string", brand, &brand_size, nullptr,
+                   0) == 0) {
     environment->cpu_model = brand;
   }
   environment->cores = sysctl_u64("hw.ncpu");
   environment->ram_bytes = sysctl_u64("hw.memsize");
 #else
   const long cores = sysconf(_SC_NPROCESSORS_ONLN);
-  if (cores > 0) environment->cores = static_cast<std::uint64_t>(cores);
-  struct sysinfo info {};
+  if (cores > 0)
+    environment->cores = static_cast<std::uint64_t>(cores);
+  struct sysinfo info{};
   if (sysinfo(&info) == 0) {
     environment->ram_bytes =
         static_cast<std::uint64_t>(info.totalram) * info.mem_unit;
@@ -209,8 +216,7 @@ void FillEnvironment(RunEnvironment* environment) {
 #endif
   environment->build_type = VERITAS_OBSERVABILITY_BUILD_TYPE;
   environment->host_compiler = std::string(VERITAS_OBSERVABILITY_COMPILER_ID) +
-                               " " +
-                               VERITAS_OBSERVABILITY_COMPILER_VERSION;
+                               " " + VERITAS_OBSERVABILITY_COMPILER_VERSION;
   const auto version = veritas::GetVersion();
   environment->veritas_version = std::to_string(version.major) + "." +
                                  std::to_string(version.minor) + "." +
@@ -218,4 +224,4 @@ void FillEnvironment(RunEnvironment* environment) {
   environment->git_revision = version.git_revision;
 }
 
-}  // namespace veritas::observability
+} // namespace veritas::observability

@@ -17,6 +17,7 @@
 #include "veritas/review/ReviewTypes.h"
 #include <set>
 #include <tuple>
+
 namespace veritas::review {
 // Trusted host policy; never decoded from a model request. Registering a name
 // alone grants no authority: an independently checked immutable receipt is

@@ -24,24 +24,26 @@
 namespace veritas::analysis::svf {
 namespace {
 
-bool FileContains(const std::filesystem::path& path, const std::string& pattern) {
+bool FileContains(const std::filesystem::path &path,
+                  const std::string &pattern) {
   std::ifstream in(path);
-  if (!in) return false;
+  if (!in)
+    return false;
   const std::string content((std::istreambuf_iterator<char>(in)),
                             std::istreambuf_iterator<char>());
   return content.find(pattern) != std::string::npos;
 }
 
 // Search a path (file or directory) under the repository root for a pattern.
-bool SourceTreeContains(const std::string& relative_path,
-                        const std::string& pattern) {
-  const auto root =
-      testing::TestSourceRoot().parent_path() / relative_path;
-  if (!std::filesystem::exists(root)) return false;
+bool SourceTreeContains(const std::string &relative_path,
+                        const std::string &pattern) {
+  const auto root = testing::TestSourceRoot().parent_path() / relative_path;
+  if (!std::filesystem::exists(root))
+    return false;
   if (std::filesystem::is_regular_file(root)) {
     return FileContains(root, pattern);
   }
-  for (const auto& entry :
+  for (const auto &entry :
        std::filesystem::recursive_directory_iterator(root)) {
     if (entry.is_regular_file() && FileContains(entry.path(), pattern)) {
       return true;
@@ -85,5 +87,5 @@ TEST(RequiredSvfBoundaryTest, SvfHeadersRemainPrivate) {
   EXPECT_FALSE(SourceTreeContains("include/veritas", "#include <llvm"));
 }
 
-}  // namespace
-}  // namespace veritas::analysis::svf
+} // namespace
+} // namespace veritas::analysis::svf

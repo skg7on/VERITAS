@@ -46,7 +46,7 @@ facts::AnalysisRunDescriptor ValidDescriptor() {
   return d;
 }
 
-}  // namespace
+} // namespace
 
 TEST(AnalysisRunTest, EveryDescriptorFieldChangesRunId) {
   auto base = ValidDescriptor();
@@ -91,10 +91,10 @@ TEST(AnalysisRunTest, RejectsWrongIdKinds) {
 
 TEST(AnalysisRunTest, RejectsNonCanonicalConfigurationHashes) {
   for (std::string bad : {
-           std::string(63, 'a'),          // too short
-           std::string(64, 'g'),          // non-hex
-           std::string(64, 'A'),          // uppercase
-           std::string(64, 'a') + "a",    // too long
+           std::string(63, 'a'),       // too short
+           std::string(64, 'g'),       // non-hex
+           std::string(64, 'A'),       // uppercase
+           std::string(64, 'a') + "a", // too long
        }) {
     auto descriptor = ValidDescriptor();
     descriptor.svf_configuration_hash = bad;

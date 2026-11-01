@@ -22,8 +22,8 @@
 
 namespace veritas::summary {
 
-veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
-    const v1::FunctionSummary& summary) {
+veritas::StatusOr<core::StableId>
+ComputeFunctionSummaryId(const v1::FunctionSummary &summary) {
   // Serialize the entire summary to canonical bytes
   std::string serialized;
   if (!summary.SerializeToString(&serialized)) {
@@ -35,8 +35,8 @@ veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
   return core::MakeStableId(core::IdKind::kFunctionSummary, bytes_span);
 }
 
-veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
-    const v2::FunctionSummary& summary) {
+veritas::StatusOr<core::StableId>
+ComputeFunctionSummaryId(const v2::FunctionSummary &summary) {
   // Serialize the entire summary to canonical bytes
   std::string serialized;
   if (!summary.SerializeToString(&serialized)) {
@@ -48,4 +48,4 @@ veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
   return core::MakeStableId(core::IdKind::kFunctionSummary, bytes_span);
 }
 
-}  // namespace veritas::summary
+} // namespace veritas::summary

@@ -26,7 +26,7 @@ namespace llvm {
 class LLVMContext;
 class Module;
 class Function;
-}  // namespace llvm
+} // namespace llvm
 
 namespace veritas::analysis::pipeline {
 
@@ -36,57 +36,60 @@ namespace veritas::analysis::pipeline {
 // origin map, the number of linked translation units, and a deterministic
 // module hash so downstream stages (M5, M6) can cite whole-program identity.
 class ProgramIr {
- public:
+public:
   ProgramIr();
   ~ProgramIr();
 
   // Non-copyable, movable
-  ProgramIr(const ProgramIr&) = delete;
-  ProgramIr& operator=(const ProgramIr&) = delete;
-  ProgramIr(ProgramIr&&) noexcept;
-  ProgramIr& operator=(ProgramIr&&) noexcept;
+  ProgramIr(const ProgramIr &) = delete;
+  ProgramIr &operator=(const ProgramIr &) = delete;
+  ProgramIr(ProgramIr &&) noexcept;
+  ProgramIr &operator=(ProgramIr &&) noexcept;
 
   // Takes ownership of the module. The module must have been created in the
   // context owned by this ProgramIr instance.
   void SetModule(std::unique_ptr<::llvm::Module> module);
 
   // Returns the owned module. May be nullptr if SetModule has not been called.
-  ::llvm::Module* GetModule() const { return module_.get(); }
+  ::llvm::Module *GetModule() const { return module_.get(); }
 
   // Returns the LLVMContext owned by this instance.
-  ::llvm::LLVMContext& GetContext() const { return *context_; }
+  ::llvm::LLVMContext &GetContext() const { return *context_; }
 
   // Returns the function with the given name, or nullptr if not found.
-  ::llvm::Function* GetFunction(const std::string& name) const;
+  ::llvm::Function *GetFunction(const std::string &name) const;
 
   // Returns all functions in the module.
-  std::vector<::llvm::Function*> GetAllFunctions() const;
+  std::vector<::llvm::Function *> GetAllFunctions() const;
 
   // Returns true if the module contains a function with the given name.
-  bool HasFunction(const std::string& name) const;
+  bool HasFunction(const std::string &name) const;
 
   // Returns the number of functions in the module.
   size_t GetFunctionCount() const;
 
   // LLVM-to-VERITAS origin map. Populated by ProjectIrBuilder.
-  ::veritas::analysis::llvm::OriginMap& mutable_origin_map() {
+  ::veritas::analysis::llvm::OriginMap &mutable_origin_map() {
     return origin_map_;
   }
-  const ::veritas::analysis::llvm::OriginMap& origin_map() const {
+
+  const ::veritas::analysis::llvm::OriginMap &origin_map() const {
     return origin_map_;
   }
 
   // Number of translation units linked into the module.
   size_t translation_unit_count() const { return translation_unit_count_; }
+
   void SetTranslationUnitCount(size_t count) {
     translation_unit_count_ = count;
   }
 
   // Deterministic hash of the linked module's canonical bitcode.
   std::string_view module_hash() const { return module_hash_; }
+
   void SetModuleHash(std::string hash) { module_hash_ = std::move(hash); }
 
- private:
+private:
   std::unique_ptr<::llvm::LLVMContext> context_;
   std::unique_ptr<::llvm::Module> module_;
   ::veritas::analysis::llvm::OriginMap origin_map_;
@@ -94,6 +97,6 @@ class ProgramIr {
   std::string module_hash_;
 };
 
-}  // namespace veritas::analysis::pipeline
+} // namespace veritas::analysis::pipeline
 
-#endif  // VERITAS_ANALYSIS_PIPELINE_PROGRAMIR_H_
+#endif // VERITAS_ANALYSIS_PIPELINE_PROGRAMIR_H_

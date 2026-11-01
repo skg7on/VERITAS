@@ -51,8 +51,8 @@ SemanticRow DirectCall(std::string_view from, std::string_view to) {
                       EpistemicState::kMay}};
 }
 
-WitnessEdge Edge(const SemanticRow& result, std::string_view rule,
-                 const SemanticRow& input, std::uint32_t ordinal) {
+WitnessEdge Edge(const SemanticRow &result, std::string_view rule,
+                 const SemanticRow &input, std::uint32_t ordinal) {
   return WitnessEdge{.result = SemanticKey{result},
                      .rule_id = std::string(rule),
                      .input = SemanticKey{input},
@@ -80,7 +80,7 @@ std::filesystem::path TempDbPath() {
   std::string tmpl =
       (std::filesystem::temp_directory_path() / "veritas-provenance-XXXXXX")
           .string();
-  char* made = ::mkdtemp(tmpl.data());
+  char *made = ::mkdtemp(tmpl.data());
   return std::filesystem::path(made);
 }
 
@@ -114,7 +114,7 @@ Chain MakeChain() {
   return chain;
 }
 
-}  // namespace
+} // namespace
 
 TEST(ProvenanceStoreTest, ExplainWalksTheFullDag) {
   const auto db = TempDbPath();

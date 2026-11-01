@@ -74,10 +74,11 @@ public:
   // That read is the reason a batch must not span two stores of the same
   // `(scc, component kind)` key: the second store would classify the component
   // against the previous run's row rather than the row the batch holds. This
-  // repository's only caller cannot do that — `WpaOrchestrator::Run` visits each
-  // key exactly once per run, because `SccGraph::ReverseTopologicalOrder` yields
-  // each SCC exactly once and the run's component list is a set of distinct
-  // component kinds. A caller that stores a key twice must flush in between.
+  // repository's only caller cannot do that — `WpaOrchestrator::Run` visits
+  // each key exactly once per run, because `SccGraph::ReverseTopologicalOrder`
+  // yields each SCC exactly once and the run's component list is a set of
+  // distinct component kinds. A caller that stores a key twice must flush in
+  // between.
   //
   // The per-`Run` flush is what extends that argument across runs. When the C++
   // conformance oracle is enabled, `ProjectAnalyzer` shares one repository

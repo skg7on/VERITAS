@@ -71,34 +71,34 @@ namespace {
 // this file emits.
 std::string_view ExpressionKindName(Expression::Kind kind) {
   switch (kind) {
-    case Expression::Kind::kUnspecified:
-      return "unspecified";
-    case Expression::Kind::kBool:
-      return "bool";
-    case Expression::Kind::kInteger:
-      return "integer";
-    case Expression::Kind::kString:
-      return "string";
-    case Expression::Kind::kSymbol:
-      return "symbol";
-    case Expression::Kind::kReference:
-      return "reference";
-    case Expression::Kind::kCall:
-      return "call";
-    case Expression::Kind::kNot:
-      return "not";
-    case Expression::Kind::kCompare:
-      return "compare";
-    case Expression::Kind::kAnd:
-      return "and";
-    case Expression::Kind::kOr:
-      return "or";
-    case Expression::Kind::kImplies:
-      return "implies";
-    case Expression::Kind::kForAll:
-      return "forall";
-    case Expression::Kind::kExists:
-      return "exists";
+  case Expression::Kind::kUnspecified:
+    return "unspecified";
+  case Expression::Kind::kBool:
+    return "bool";
+  case Expression::Kind::kInteger:
+    return "integer";
+  case Expression::Kind::kString:
+    return "string";
+  case Expression::Kind::kSymbol:
+    return "symbol";
+  case Expression::Kind::kReference:
+    return "reference";
+  case Expression::Kind::kCall:
+    return "call";
+  case Expression::Kind::kNot:
+    return "not";
+  case Expression::Kind::kCompare:
+    return "compare";
+  case Expression::Kind::kAnd:
+    return "and";
+  case Expression::Kind::kOr:
+    return "or";
+  case Expression::Kind::kImplies:
+    return "implies";
+  case Expression::Kind::kForAll:
+    return "forall";
+  case Expression::Kind::kExists:
+    return "exists";
   }
   return "expression";
 }
@@ -129,7 +129,7 @@ struct SortKey {
   std::string local_id;
 };
 
-bool SortKeyLess(const SortKey& left, const SortKey& right) {
+bool SortKeyLess(const SortKey &left, const SortKey &right) {
   if (left.kind != right.kind) {
     return left.kind < right.kind;
   }
@@ -139,7 +139,7 @@ bool SortKeyLess(const SortKey& left, const SortKey& right) {
   return left.local_id < right.local_id;
 }
 
-std::string StableIdOrEmpty(const std::optional<core::StableId>& stable_id) {
+std::string StableIdOrEmpty(const std::optional<core::StableId> &stable_id) {
   if (!stable_id.has_value()) {
     return std::string();
   }
@@ -152,7 +152,7 @@ std::string StableIdOrEmpty(const std::optional<core::StableId>& stable_id) {
 // This mirrors the canonicalizer's tie-break on the element's own encoding, and
 // it is total for the same reason that one is — two elements of such a
 // collection that render identically are the same element.
-std::string JsonText(const llvm::json::Value& value) {
+std::string JsonText(const llvm::json::Value &value) {
   std::string text;
   llvm::raw_string_ostream os(text);
   llvm::json::OStream(os, /*IndentSize=*/0).value(value);
@@ -160,23 +160,24 @@ std::string JsonText(const llvm::json::Value& value) {
   return text;
 }
 
-bool JsonTextLess(const llvm::json::Value& left,
-                  const llvm::json::Value& right) {
+bool JsonTextLess(const llvm::json::Value &left,
+                  const llvm::json::Value &right) {
   return JsonText(left) < JsonText(right);
 }
 
 // --- The emitter ------------------------------------------------------------
 
 class JsonEmitter {
- public:
+public:
   JsonEmitter() = default;
 
   bool ok() const { return failed_.ok(); }
-  const Status& status() const { return failed_; }
 
-  llvm::json::Value Case(const EvidenceCase& value);
+  const Status &status() const { return failed_; }
 
- private:
+  llvm::json::Value Case(const EvidenceCase &value);
+
+private:
   // --- The one decision -----------------------------------------------------
   //
   // Whether `text` has a spelling in JSON text, which is UTF-8 by definition
@@ -238,17 +239,17 @@ class JsonEmitter {
   // `verifier_kinds`. Each member goes out through `Text`, so a list is refused
   // on the same terms as any other string rather than reaching `llvm::json`
   // unguarded.
-  llvm::json::Array SortedStrings(const std::vector<std::string>& values) {
+  llvm::json::Array SortedStrings(const std::vector<std::string> &values) {
     std::vector<std::string> sorted(values);
     std::sort(sorted.begin(), sorted.end());
     llvm::json::Array array;
-    for (const std::string& value : sorted) {
+    for (const std::string &value : sorted) {
       array.push_back(Text(value));
     }
     return array;
   }
 
-  llvm::json::Value OptionalText(const std::optional<core::StableId>& id) {
+  llvm::json::Value OptionalText(const std::optional<core::StableId> &id) {
     if (!ok() || !id.has_value()) {
       return llvm::json::Value(nullptr);
     }
@@ -260,23 +261,24 @@ class JsonEmitter {
   // guessing, because which components a record carries is a property of the
   // record and not of the collection.
   template <typename Record, typename KeyFn, typename EmitFn>
-  llvm::json::Value Collection(const std::vector<Record>& records, KeyFn key,
+  llvm::json::Value Collection(const std::vector<Record> &records, KeyFn key,
                                EmitFn emit) {
     struct Entry {
       SortKey sort_key;
       llvm::json::Value value;
     };
+
     std::vector<Entry> entries;
     entries.reserve(records.size());
-    for (const Record& record : records) {
+    for (const Record &record : records) {
       entries.push_back(Entry{key(record), emit(record)});
     }
     std::stable_sort(entries.begin(), entries.end(),
-                     [](const Entry& left, const Entry& right) {
+                     [](const Entry &left, const Entry &right) {
                        return SortKeyLess(left.sort_key, right.sort_key);
                      });
     llvm::json::Array array;
-    for (Entry& entry : entries) {
+    for (Entry &entry : entries) {
       array.push_back(std::move(entry.value));
     }
     return llvm::json::Value(std::move(array));
@@ -285,34 +287,34 @@ class JsonEmitter {
   // Emits an expression tree. Every field of every node is written, leaves
   // included, so a consumer reads one shape; the sentinel kind is spelled like
   // every other sentinel the model renders.
-  llvm::json::Value EmitExpression(const Expression& value);
+  llvm::json::Value EmitExpression(const Expression &value);
 
-  llvm::json::Value EmitCommutativeOperands(
-      const std::vector<Expression>& values);
+  llvm::json::Value
+  EmitCommutativeOperands(const std::vector<Expression> &values);
 
-  llvm::json::Value EmitProgram(const ProgramBinding& value);
-  llvm::json::Value EmitClaim(const Claim& value);
-  llvm::json::Value EmitEntity(const Entity& value);
-  llvm::json::Value EmitEdge(const Edge& value);
-  llvm::json::Value EmitPath(const Path& value);
-  llvm::json::Value EmitFact(const Fact& value);
-  llvm::json::Value EmitAssumption(const Assumption& value);
-  llvm::json::Value EmitHypothesis(const Hypothesis& value);
-  llvm::json::Value EmitUnknown(const Unknown& value);
-  llvm::json::Value EmitConstraint(const Constraint& value);
-  llvm::json::Value EmitProvenance(const Provenance& value);
-  llvm::json::Value EmitProofObligation(const ProofObligation& value);
-  llvm::json::Value EmitSummaryReference(const SummaryReference& value);
-  llvm::json::Value EmitDependency(const Dependency& value);
-  llvm::json::Value EmitOmission(const Omission& value);
+  llvm::json::Value EmitProgram(const ProgramBinding &value);
+  llvm::json::Value EmitClaim(const Claim &value);
+  llvm::json::Value EmitEntity(const Entity &value);
+  llvm::json::Value EmitEdge(const Edge &value);
+  llvm::json::Value EmitPath(const Path &value);
+  llvm::json::Value EmitFact(const Fact &value);
+  llvm::json::Value EmitAssumption(const Assumption &value);
+  llvm::json::Value EmitHypothesis(const Hypothesis &value);
+  llvm::json::Value EmitUnknown(const Unknown &value);
+  llvm::json::Value EmitConstraint(const Constraint &value);
+  llvm::json::Value EmitProvenance(const Provenance &value);
+  llvm::json::Value EmitProofObligation(const ProofObligation &value);
+  llvm::json::Value EmitSummaryReference(const SummaryReference &value);
+  llvm::json::Value EmitDependency(const Dependency &value);
+  llvm::json::Value EmitOmission(const Omission &value);
 
-  llvm::json::Value EmitAnalyzerVersions(
-      const std::vector<AnalyzerVersion>& value);
+  llvm::json::Value
+  EmitAnalyzerVersions(const std::vector<AnalyzerVersion> &value);
 
   Status failed_ = Status::Ok();
 };
 
-llvm::json::Value JsonEmitter::EmitExpression(const Expression& value) {
+llvm::json::Value JsonEmitter::EmitExpression(const Expression &value) {
   llvm::json::Object object;
   object["kind"] = Text(ExpressionKindName(value.kind));
   object["text"] = Text(value.text);
@@ -322,7 +324,7 @@ llvm::json::Value JsonEmitter::EmitExpression(const Expression& value) {
     object["operands"] = EmitCommutativeOperands(value.operands);
   } else {
     llvm::json::Array operands;
-    for (const Expression& operand : value.operands) {
+    for (const Expression &operand : value.operands) {
       operands.push_back(EmitExpression(operand));
     }
     object["operands"] = llvm::json::Value(std::move(operands));
@@ -330,31 +332,31 @@ llvm::json::Value JsonEmitter::EmitExpression(const Expression& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitCommutativeOperands(
-    const std::vector<Expression>& values) {
+llvm::json::Value
+JsonEmitter::EmitCommutativeOperands(const std::vector<Expression> &values) {
   std::vector<llvm::json::Value> operands;
   operands.reserve(values.size());
-  for (const Expression& value : values) {
+  for (const Expression &value : values) {
     operands.push_back(EmitExpression(value));
   }
   std::stable_sort(operands.begin(), operands.end(), JsonTextLess);
   llvm::json::Array array;
-  for (llvm::json::Value& operand : operands) {
+  for (llvm::json::Value &operand : operands) {
     array.push_back(std::move(operand));
   }
   return llvm::json::Value(std::move(array));
 }
 
-llvm::json::Value JsonEmitter::EmitAnalyzerVersions(
-    const std::vector<AnalyzerVersion>& value) {
-  std::vector<const AnalyzerVersion*> ordered;
+llvm::json::Value
+JsonEmitter::EmitAnalyzerVersions(const std::vector<AnalyzerVersion> &value) {
+  std::vector<const AnalyzerVersion *> ordered;
   ordered.reserve(value.size());
-  for (const AnalyzerVersion& version : value) {
+  for (const AnalyzerVersion &version : value) {
     ordered.push_back(&version);
   }
   std::stable_sort(
       ordered.begin(), ordered.end(),
-      [](const AnalyzerVersion* left, const AnalyzerVersion* right) {
+      [](const AnalyzerVersion *left, const AnalyzerVersion *right) {
         if (left->producer != right->producer) {
           return left->producer < right->producer;
         }
@@ -364,7 +366,7 @@ llvm::json::Value JsonEmitter::EmitAnalyzerVersions(
         return left->configuration < right->configuration;
       });
   llvm::json::Array array;
-  for (const AnalyzerVersion* version : ordered) {
+  for (const AnalyzerVersion *version : ordered) {
     llvm::json::Object object;
     object["producer"] = Text(version->producer);
     object["version"] = Text(version->version);
@@ -374,7 +376,7 @@ llvm::json::Value JsonEmitter::EmitAnalyzerVersions(
   return llvm::json::Value(std::move(array));
 }
 
-llvm::json::Value JsonEmitter::EmitProgram(const ProgramBinding& value) {
+llvm::json::Value JsonEmitter::EmitProgram(const ProgramBinding &value) {
   llvm::json::Object object;
   object["repository_id"] = Text(value.repository_id);
   object["revision_id"] = Text(value.revision_id);
@@ -387,7 +389,7 @@ llvm::json::Value JsonEmitter::EmitProgram(const ProgramBinding& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitClaim(const Claim& value) {
+llvm::json::Value JsonEmitter::EmitClaim(const Claim &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["kind"] = Text(ToString(value.kind));
@@ -398,9 +400,9 @@ llvm::json::Value JsonEmitter::EmitClaim(const Claim& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitEntity(const Entity& value) {
+llvm::json::Value JsonEmitter::EmitEntity(const Entity &value) {
   llvm::json::Object properties;
-  for (const auto& entry : value.properties) {
+  for (const auto &entry : value.properties) {
     properties[Key(entry.first)] = EmitExpression(entry.second);
   }
   llvm::json::Object object;
@@ -411,7 +413,7 @@ llvm::json::Value JsonEmitter::EmitEntity(const Entity& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitEdge(const Edge& value) {
+llvm::json::Value JsonEmitter::EmitEdge(const Edge &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["from"] = Text(value.from);
@@ -424,9 +426,9 @@ llvm::json::Value JsonEmitter::EmitEdge(const Edge& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitPath(const Path& value) {
+llvm::json::Value JsonEmitter::EmitPath(const Path &value) {
   llvm::json::Array segments;
-  for (const std::string& segment : value.entity_ids) {
+  for (const std::string &segment : value.entity_ids) {
     segments.push_back(Text(segment));
   }
   llvm::json::Object object;
@@ -439,7 +441,7 @@ llvm::json::Value JsonEmitter::EmitPath(const Path& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitFact(const Fact& value) {
+llvm::json::Value JsonEmitter::EmitFact(const Fact &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["stable_id"] = OptionalText(value.stable_id);
@@ -452,7 +454,7 @@ llvm::json::Value JsonEmitter::EmitFact(const Fact& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitAssumption(const Assumption& value) {
+llvm::json::Value JsonEmitter::EmitAssumption(const Assumption &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["predicate"] = EmitExpression(value.predicate);
@@ -461,7 +463,7 @@ llvm::json::Value JsonEmitter::EmitAssumption(const Assumption& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitHypothesis(const Hypothesis& value) {
+llvm::json::Value JsonEmitter::EmitHypothesis(const Hypothesis &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["predicate"] = EmitExpression(value.predicate);
@@ -471,7 +473,7 @@ llvm::json::Value JsonEmitter::EmitHypothesis(const Hypothesis& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitUnknown(const Unknown& value) {
+llvm::json::Value JsonEmitter::EmitUnknown(const Unknown &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["property"] = EmitExpression(value.property);
@@ -482,7 +484,7 @@ llvm::json::Value JsonEmitter::EmitUnknown(const Unknown& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitConstraint(const Constraint& value) {
+llvm::json::Value JsonEmitter::EmitConstraint(const Constraint &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["expression"] = EmitExpression(value.expression);
@@ -492,7 +494,7 @@ llvm::json::Value JsonEmitter::EmitConstraint(const Constraint& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitProvenance(const Provenance& value) {
+llvm::json::Value JsonEmitter::EmitProvenance(const Provenance &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["producer"] = Text(value.producer);
@@ -506,8 +508,8 @@ llvm::json::Value JsonEmitter::EmitProvenance(const Provenance& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitProofObligation(
-    const ProofObligation& value) {
+llvm::json::Value
+JsonEmitter::EmitProofObligation(const ProofObligation &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["goal_kind"] = Text(ToString(value.goal_kind));
@@ -521,8 +523,8 @@ llvm::json::Value JsonEmitter::EmitProofObligation(
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitSummaryReference(
-    const SummaryReference& value) {
+llvm::json::Value
+JsonEmitter::EmitSummaryReference(const SummaryReference &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["function_id"] = Text(value.function_id);
@@ -531,7 +533,7 @@ llvm::json::Value JsonEmitter::EmitSummaryReference(
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitDependency(const Dependency& value) {
+llvm::json::Value JsonEmitter::EmitDependency(const Dependency &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["kind"] = Text(ToString(value.kind));
@@ -539,7 +541,7 @@ llvm::json::Value JsonEmitter::EmitDependency(const Dependency& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::EmitOmission(const Omission& value) {
+llvm::json::Value JsonEmitter::EmitOmission(const Omission &value) {
   llvm::json::Object object;
   object["id"] = Text(value.id);
   object["kind"] = Text(value.kind);
@@ -549,7 +551,7 @@ llvm::json::Value JsonEmitter::EmitOmission(const Omission& value) {
   return llvm::json::Value(std::move(object));
 }
 
-llvm::json::Value JsonEmitter::Case(const EvidenceCase& value) {
+llvm::json::Value JsonEmitter::Case(const EvidenceCase &value) {
   llvm::json::Object root;
 
   // `evidence_id` is the one member `core::CanonicalEncode` never reads — it is
@@ -568,118 +570,118 @@ llvm::json::Value JsonEmitter::Case(const EvidenceCase& value) {
 
   root["entities"] = Collection(
       value.entities,
-      [](const Entity& entity) {
+      [](const Entity &entity) {
         return SortKey{std::string(ToString(entity.kind)),
                        StableIdOrEmpty(entity.stable_id), entity.id};
       },
-      [this](const Entity& entity) { return EmitEntity(entity); });
+      [this](const Entity &entity) { return EmitEntity(entity); });
 
   root["edges"] = Collection(
       value.edges,
-      [](const Edge& edge) {
+      [](const Edge &edge) {
         return SortKey{std::string(ToString(edge.kind)), std::string(),
                        edge.id};
       },
-      [this](const Edge& edge) { return EmitEdge(edge); });
+      [this](const Edge &edge) { return EmitEdge(edge); });
 
   root["paths"] = Collection(
       value.paths,
-      [](const Path& path) {
+      [](const Path &path) {
         return SortKey{std::string(ToString(path.kind)), std::string(),
                        path.id};
       },
-      [this](const Path& path) { return EmitPath(path); });
+      [this](const Path &path) { return EmitPath(path); });
 
   root["facts"] = Collection(
       value.facts,
-      [](const Fact& fact) {
+      [](const Fact &fact) {
         return SortKey{std::string(), StableIdOrEmpty(fact.stable_id), fact.id};
       },
-      [this](const Fact& fact) { return EmitFact(fact); });
+      [this](const Fact &fact) { return EmitFact(fact); });
 
   root["assumptions"] = Collection(
       value.assumptions,
-      [](const Assumption& assumption) {
+      [](const Assumption &assumption) {
         return SortKey{std::string(), std::string(), assumption.id};
       },
-      [this](const Assumption& assumption) {
+      [this](const Assumption &assumption) {
         return EmitAssumption(assumption);
       });
 
   root["hypotheses"] = Collection(
       value.hypotheses,
-      [](const Hypothesis& hypothesis) {
+      [](const Hypothesis &hypothesis) {
         return SortKey{std::string(), std::string(), hypothesis.id};
       },
-      [this](const Hypothesis& hypothesis) {
+      [this](const Hypothesis &hypothesis) {
         return EmitHypothesis(hypothesis);
       });
 
   root["unknowns"] = Collection(
       value.unknowns,
-      [](const Unknown& unknown) {
+      [](const Unknown &unknown) {
         return SortKey{std::string(), std::string(), unknown.id};
       },
-      [this](const Unknown& unknown) { return EmitUnknown(unknown); });
+      [this](const Unknown &unknown) { return EmitUnknown(unknown); });
 
   root["constraints"] = Collection(
       value.constraints,
-      [](const Constraint& constraint) {
+      [](const Constraint &constraint) {
         return SortKey{std::string(), std::string(), constraint.id};
       },
-      [this](const Constraint& constraint) {
+      [this](const Constraint &constraint) {
         return EmitConstraint(constraint);
       });
 
   root["provenance"] = Collection(
       value.provenance,
-      [](const Provenance& record) {
+      [](const Provenance &record) {
         return SortKey{std::string(), std::string(), record.id};
       },
-      [this](const Provenance& record) { return EmitProvenance(record); });
+      [this](const Provenance &record) { return EmitProvenance(record); });
 
   root["proof_obligations"] = Collection(
       value.proof_obligations,
-      [](const ProofObligation& obligation) {
+      [](const ProofObligation &obligation) {
         return SortKey{std::string(ToString(obligation.goal_kind)),
                        std::string(), obligation.id};
       },
-      [this](const ProofObligation& obligation) {
+      [this](const ProofObligation &obligation) {
         return EmitProofObligation(obligation);
       });
 
   root["summaries"] = Collection(
       value.summaries,
-      [](const SummaryReference& summary) {
+      [](const SummaryReference &summary) {
         return SortKey{std::string(), std::string(), summary.id};
       },
-      [this](const SummaryReference& summary) {
+      [this](const SummaryReference &summary) {
         return EmitSummaryReference(summary);
       });
 
   root["dependencies"] = Collection(
       value.dependencies,
-      [](const Dependency& dependency) {
+      [](const Dependency &dependency) {
         return SortKey{std::string(ToString(dependency.kind)), std::string(),
                        dependency.id};
       },
-      [this](const Dependency& dependency) {
+      [this](const Dependency &dependency) {
         return EmitDependency(dependency);
       });
 
   root["omissions"] = Collection(
       value.omissions,
-      [](const Omission& omission) {
+      [](const Omission &omission) {
         return SortKey{std::string(), std::string(), omission.id};
       },
-      [this](const Omission& omission) { return EmitOmission(omission); });
+      [this](const Omission &omission) { return EmitOmission(omission); });
 
   return llvm::json::Value(std::move(root));
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<std::string> ToEvidenceJson(const EvidenceCase& value) {
+StatusOr<std::string> ToEvidenceJson(const EvidenceCase &value) {
   // The identity gate first, in `WriteEirText`'s order and with its semantics.
   // A case that has not been finalized carries no `evidence_id`, and one whose
   // identity is not its recomputed content address is a case whose declared
@@ -725,4 +727,4 @@ StatusOr<std::string> ToEvidenceJson(const EvidenceCase& value) {
   return out;
 }
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence

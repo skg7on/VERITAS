@@ -14,6 +14,7 @@
 
 #include "veritas/review/ReviewBackend.h"
 #include <gtest/gtest.h>
+
 namespace veritas::review {
 Json Request(std::string op, Json parameters, std::string id = "request-1") {
   return Json::Object{{"protocol", kProtocol},
@@ -21,6 +22,7 @@ Json Request(std::string op, Json parameters, std::string id = "request-1") {
                       {"operation", op},
                       {"parameters", parameters}};
 }
+
 TEST(ReviewBackendTest, HandshakeDoesNotRequireSummaryDb) {
   ReviewBackend backend(BackendConfig{});
   auto response = backend.Call(*CanonicalJson(Request(
@@ -32,6 +34,7 @@ TEST(ReviewBackendTest, HandshakeDoesNotRequireSummaryDb) {
   EXPECT_EQ(decoded->ok, true);
   EXPECT_FALSE(decoded->binding.has_value());
 }
+
 TEST(ReviewBackendTest, NoCapabilityDoesNotSelectPractice) {
   ReviewBackend backend(BackendConfig{});
   auto response = backend.Call(*CanonicalJson(Request(
@@ -43,6 +46,7 @@ TEST(ReviewBackendTest, NoCapabilityDoesNotSelectPractice) {
   EXPECT_EQ(decoded->ok, false);
   EXPECT_EQ(backend.published_snapshots(), 0U);
 }
+
 TEST(ReviewBackendTest,
      RejectsWrongOperationAndDuplicateRequestBeforePublication) {
   ReviewBackend backend(BackendConfig{});
@@ -57,6 +61,7 @@ TEST(ReviewBackendTest,
   EXPECT_FALSE(wrong.ok());
   EXPECT_EQ(backend.published_snapshots(), 0U);
 }
+
 TEST(ReviewBackendTest, VerifyIsAdvertisedOnlyWithAnIsolationProfile) {
   BackendConfig config;
   ReplayConfig replay;

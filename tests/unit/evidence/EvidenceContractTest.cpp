@@ -67,8 +67,7 @@ std::vector<QueryResultMetadata> InvalidMetadataCases() {
   missing_run.analysis_run_id = core::StableId{};
 
   QueryResultMetadata wrong_kind_run = ValidMetadata();
-  wrong_kind_run.analysis_run_id =
-      builder.Id(core::IdKind::kFact, "not-a-run");
+  wrong_kind_run.analysis_run_id = builder.Id(core::IdKind::kFact, "not-a-run");
 
   QueryResultMetadata missing_provenance = ValidMetadata();
   missing_provenance.query_provenance_id = core::StableId{};
@@ -77,21 +76,29 @@ std::vector<QueryResultMetadata> InvalidMetadataCases() {
   wrong_kind_provenance.query_provenance_id =
       builder.Id(core::IdKind::kAnalysisRun, "not-a-fact");
 
-  return {unspecified,      complete_with_reason, truncated_no_reason,
-          missing_run,      wrong_kind_run,       missing_provenance,
+  return {unspecified,          complete_with_reason, truncated_no_reason,
+          missing_run,          wrong_kind_run,       missing_provenance,
           wrong_kind_provenance};
 }
 
-const char* InvalidMetadataCaseName(std::size_t index) {
+const char *InvalidMetadataCaseName(std::size_t index) {
   switch (index) {
-    case 0: return "unspecified";
-    case 1: return "complete_with_reason";
-    case 2: return "truncated_no_reason";
-    case 3: return "missing_run";
-    case 4: return "wrong_kind_run";
-    case 5: return "missing_provenance";
-    case 6: return "wrong_kind_provenance";
-    default: return "unknown";
+  case 0:
+    return "unspecified";
+  case 1:
+    return "complete_with_reason";
+  case 2:
+    return "truncated_no_reason";
+  case 3:
+    return "missing_run";
+  case 4:
+    return "wrong_kind_run";
+  case 5:
+    return "missing_provenance";
+  case 6:
+    return "wrong_kind_provenance";
+  default:
+    return "unknown";
   }
 }
 
@@ -107,7 +114,7 @@ EvidenceQueryBudget Budget(std::size_t depth, std::size_t nodes,
   return budget;
 }
 
-EvidenceFactSet MakeFactSet(const EvidenceScenarioBuilder& builder,
+EvidenceFactSet MakeFactSet(const EvidenceScenarioBuilder &builder,
                             std::string_view run, std::string_view provenance,
                             QueryCompleteness completeness,
                             std::vector<TruncationReason> reasons,
@@ -115,9 +122,8 @@ EvidenceFactSet MakeFactSet(const EvidenceScenarioBuilder& builder,
                             std::vector<AnalysisFact> facts) {
   EvidenceFactSet set;
   set.facts = std::move(facts);
-  set.metadata =
-      builder.MakeMetadata(run, provenance, completeness, std::move(reasons),
-                           examined);
+  set.metadata = builder.MakeMetadata(run, provenance, completeness,
+                                      std::move(reasons), examined);
   return set;
 }
 
@@ -136,38 +142,35 @@ EvidenceBuildInput BuildInput() {
   const auto source = builder.MakeNode("length", cpg::NodeKind::kParameter);
   const auto sink = builder.MakeNode("memcpy", cpg::NodeKind::kCallSite);
   input.flow_slice.nodes = {source, sink};
-  cpg::CpgEdge flow_edge =
-      builder.MakeEdge("flow", cpg::EdgeKind::kFlowsTo, source.node_id,
-                       sink.node_id);
-  flow_edge.support = {
-      cpg::SupportRef{builder.Id(core::IdKind::kFunctionSummary, "summary"),
-                      "provenance-ref"}};
+  cpg::CpgEdge flow_edge = builder.MakeEdge("flow", cpg::EdgeKind::kFlowsTo,
+                                            source.node_id, sink.node_id);
+  flow_edge.support = {cpg::SupportRef{
+      builder.Id(core::IdKind::kFunctionSummary, "summary"), "provenance-ref"}};
   input.flow_slice.edges = {flow_edge};
-  input.flow_slice.supporting_facts = {builder.MakeRangeFact("range", 0, 65535)};
+  input.flow_slice.supporting_facts = {
+      builder.MakeRangeFact("range", 0, 65535)};
   input.flow_slice.unknowns = {builder.MakeUnknownFact("opaque", "unmodeled")};
   input.flow_slice.provenance_refs = {
       builder.Id(core::IdKind::kFact, "completion")};
-  input.flow_slice.metadata =
-      builder.MakeMetadata("run", "completion", QueryCompleteness::kComplete, {},
-                           2);
+  input.flow_slice.metadata = builder.MakeMetadata(
+      "run", "completion", QueryCompleteness::kComplete, {}, 2);
 
   input.ranges =
-      MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete, {},
-                  1, {builder.MakeRangeFact("range", 0, 65535)});
+      MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete,
+                  {}, 1, {builder.MakeRangeFact("range", 0, 65535)});
   input.capacities =
-      MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete, {},
-                  1, {builder.MakeCapacityFact("buffer", 2048)});
-  input.aliases =
-      MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete, {},
-                  1,
-                  {builder.MakeAliasFact("alias", AliasKind::kMayAlias,
-                                         sem::EpistemicState::kMay)});
+      MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete,
+                  {}, 1, {builder.MakeCapacityFact("buffer", 2048)});
+  input.aliases = MakeFactSet(
+      builder, "run", "completion", QueryCompleteness::kComplete, {}, 1,
+      {builder.MakeAliasFact("alias", AliasKind::kMayAlias,
+                             sem::EpistemicState::kMay)});
   input.dominating_checks =
-      MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete, {},
-                  1, {builder.MakeCheckFact("check")});
+      MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete,
+                  {}, 1, {builder.MakeCheckFact("check")});
   input.unknowns =
-      MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete, {},
-                  1, {builder.MakeUnknownFact("opaque", "unmodeled")});
+      MakeFactSet(builder, "run", "completion", QueryCompleteness::kComplete,
+                  {}, 1, {builder.MakeUnknownFact("opaque", "unmodeled")});
 
   QueryCompletionDescriptor descriptor;
   descriptor.query_kind = "value_flow";
@@ -186,15 +189,16 @@ EvidenceBuildInput BuildInput() {
   input.query_completion_bindings = {
       builder.MakeBinding(run_id, completion->fact_id, "w1")};
 
-  auto& provenance = input.provenance;
+  auto &provenance = input.provenance;
   provenance.set_run_id(core::ToString(run_id));
   provenance.set_fact_id(core::ToString(completion->fact_id));
   provenance.mutable_fact()->set_fact_id(core::ToString(completion->fact_id));
   provenance.mutable_fact()->set_relation_name("evidence.query_completion.v1");
   provenance.mutable_fact()->set_relation_schema_version("relations.v2");
   provenance.mutable_binding()->set_analysis_run_id(core::ToString(run_id));
-  provenance.mutable_binding()->set_fact_id(core::ToString(completion->fact_id));
-  auto* witness = provenance.add_nodes();
+  provenance.mutable_binding()->set_fact_id(
+      core::ToString(completion->fact_id));
+  auto *witness = provenance.add_nodes();
   witness->set_analysis_run_id(core::ToString(run_id));
   witness->set_output_fact_id(core::ToString(completion->fact_id));
   witness->set_witness_id("w1");
@@ -204,15 +208,14 @@ EvidenceBuildInput BuildInput() {
   return input;
 }
 
-}  // namespace
+} // namespace
 
 // AC-001: two empty fact sets that differ only in metadata are unequal in both
 // their typed form and their diagnostic JSON.
 TEST(EvidenceContractTest, CompleteEmptyDiffersFromTruncatedEmpty) {
   const auto complete = EmptyFactSet(QueryCompleteness::kComplete, {});
-  const auto truncated =
-      EmptyFactSet(QueryCompleteness::kTruncated,
-                   {TruncationReason::kMaxFacts});
+  const auto truncated = EmptyFactSet(QueryCompleteness::kTruncated,
+                                      {TruncationReason::kMaxFacts});
   EXPECT_NE(complete.metadata, truncated.metadata);
   EXPECT_NE(ToDiagnosticJson(complete), ToDiagnosticJson(truncated));
   EXPECT_TRUE(ValidateQueryResultMetadata(complete.metadata).ok());
@@ -230,21 +233,25 @@ TEST_P(InvalidQueryResultMetadataTest, RejectsInvalidResultMetadata) {
 INSTANTIATE_TEST_SUITE_P(
     InvalidMetadata, InvalidQueryResultMetadataTest,
     ::testing::ValuesIn(InvalidMetadataCases()),
-    [](const ::testing::TestParamInfo<QueryResultMetadata>& info) {
+    [](const ::testing::TestParamInfo<QueryResultMetadata> &info) {
       return InvalidMetadataCaseName(static_cast<std::size_t>(info.index));
     });
 
-// AC-003: exactly max_facts_per_query matching facts is complete, not truncated.
+// AC-003: exactly max_facts_per_query matching facts is complete, not
+// truncated.
 TEST(EvidenceContractTest, ExactFactBudgetBoundaryIsComplete) {
   EvidenceScenarioBuilder builder;
   const EvidenceQueryBudget budget = Budget(8, 256, 5, 3, 8);
   std::vector<AnalysisFact> candidates = {
-      builder.MakeAliasFact("a", AliasKind::kMustAlias, sem::EpistemicState::kMust),
-      builder.MakeAliasFact("b", AliasKind::kMayAlias, sem::EpistemicState::kMay),
-      builder.MakeAliasFact("c", AliasKind::kNoAlias, sem::EpistemicState::kMust),
+      builder.MakeAliasFact("a", AliasKind::kMustAlias,
+                            sem::EpistemicState::kMust),
+      builder.MakeAliasFact("b", AliasKind::kMayAlias,
+                            sem::EpistemicState::kMay),
+      builder.MakeAliasFact("c", AliasKind::kNoAlias,
+                            sem::EpistemicState::kMust),
   };
-  auto result = ApplyFactBudget(std::move(candidates), budget,
-                                QueryResultMetadata{});
+  auto result =
+      ApplyFactBudget(std::move(candidates), budget, QueryResultMetadata{});
   ASSERT_EQ(result.facts.size(), 3u);
   EXPECT_EQ(result.metadata.completeness, QueryCompleteness::kComplete);
   EXPECT_TRUE(result.metadata.truncation_reasons.empty());
@@ -256,24 +263,24 @@ TEST(EvidenceContractTest, ExactFactBudgetBoundaryIsComplete) {
 TEST(EvidenceContractTest, FactBudgetOverflowReturnsCanonicalPrefix) {
   EvidenceScenarioBuilder builder;
   const EvidenceQueryBudget budget = Budget(8, 256, 5, 2, 8);
-  const auto fact_a =
-      builder.MakeAliasFact("a", AliasKind::kMustAlias, sem::EpistemicState::kMust);
-  const auto fact_m =
-      builder.MakeAliasFact("m", AliasKind::kMayAlias, sem::EpistemicState::kMay);
-  const auto fact_z =
-      builder.MakeAliasFact("z", AliasKind::kNoAlias, sem::EpistemicState::kMust);
+  const auto fact_a = builder.MakeAliasFact("a", AliasKind::kMustAlias,
+                                            sem::EpistemicState::kMust);
+  const auto fact_m = builder.MakeAliasFact("m", AliasKind::kMayAlias,
+                                            sem::EpistemicState::kMay);
+  const auto fact_z = builder.MakeAliasFact("z", AliasKind::kNoAlias,
+                                            sem::EpistemicState::kMust);
 
   // Canonical order is by fact ID, not by the symbolic names used here.
   std::vector<AnalysisFact> canonical = {fact_a, fact_m, fact_z};
   std::sort(canonical.begin(), canonical.end(),
-            [](const AnalysisFact& x, const AnalysisFact& y) {
+            [](const AnalysisFact &x, const AnalysisFact &y) {
               return x.fact_id < y.fact_id;
             });
 
   // Deliberately unsorted input: the result must be the canonical prefix.
   std::vector<AnalysisFact> candidates = {fact_z, fact_a, fact_m};
-  auto result = ApplyFactBudget(std::move(candidates), budget,
-                                QueryResultMetadata{});
+  auto result =
+      ApplyFactBudget(std::move(candidates), budget, QueryResultMetadata{});
 
   ASSERT_EQ(result.facts.size(), 2u);
   EXPECT_EQ(result.facts[0].fact_id, canonical[0].fact_id);
@@ -302,17 +309,17 @@ TEST(EvidenceContractTest, FactBudgetCountsEveryAssessedCandidate) {
 
   std::vector<AnalysisFact> candidates;
   for (std::size_t i = 0; i < names.size(); ++i) {
-    candidates.push_back(builder.MakeAliasFact(names[i], kinds[i],
-                                               sem::EpistemicState::kMust));
+    candidates.push_back(
+        builder.MakeAliasFact(names[i], kinds[i], sem::EpistemicState::kMust));
   }
   std::vector<AnalysisFact> canonical = candidates;
   std::sort(canonical.begin(), canonical.end(),
-            [](const AnalysisFact& x, const AnalysisFact& y) {
+            [](const AnalysisFact &x, const AnalysisFact &y) {
               return x.fact_id < y.fact_id;
             });
 
-  auto result = ApplyFactBudget(std::move(candidates), budget,
-                                QueryResultMetadata{});
+  auto result =
+      ApplyFactBudget(std::move(candidates), budget, QueryResultMetadata{});
 
   ASSERT_EQ(result.facts.size(), 2u);
   EXPECT_EQ(result.facts[0].fact_id, canonical[0].fact_id);
@@ -336,10 +343,10 @@ TEST(EvidenceContractTest, MetadataOrderingIsCanonical) {
       {TruncationReason::kMaxFacts, TruncationReason::kMaxFacts}, 2);
   EXPECT_FALSE(ValidateQueryResultMetadata(duplicate).ok());
 
-  const auto fact_a =
-      builder.MakeAliasFact("a", AliasKind::kMustAlias, sem::EpistemicState::kMust);
-  const auto fact_b =
-      builder.MakeAliasFact("b", AliasKind::kMayAlias, sem::EpistemicState::kMay);
+  const auto fact_a = builder.MakeAliasFact("a", AliasKind::kMustAlias,
+                                            sem::EpistemicState::kMust);
+  const auto fact_b = builder.MakeAliasFact("b", AliasKind::kMayAlias,
+                                            sem::EpistemicState::kMay);
 
   EvidenceFactSet first;
   first.facts = {fact_b, fact_a};
@@ -373,21 +380,13 @@ TEST(EvidenceContractTest, EvidenceBuildInputJsonIsDeterministicAndComplete) {
   EvidenceScenarioBuilder::Reverse(input.flow_slice.nodes);
   EXPECT_EQ(first, ToDiagnosticJson(input));
 
-  for (const char* field : {"\"claim_seed\"",
-                            "\"flow_slice\"",
-                            "\"ranges\"",
-                            "\"capacities\"",
-                            "\"aliases\"",
-                            "\"dominating_checks\"",
-                            "\"unknowns\"",
-                            "\"query_completion_facts\"",
-                            "\"query_completion_bindings\"",
-                            "\"provenance\"",
-                            "\"completeness\"",
-                            "\"truncation_reasons\"",
-                            "\"examined_items\"",
-                            "\"analysis_run_id\"",
-                            "\"query_provenance_id\""}) {
+  for (const char *field :
+       {"\"claim_seed\"", "\"flow_slice\"", "\"ranges\"", "\"capacities\"",
+        "\"aliases\"", "\"dominating_checks\"", "\"unknowns\"",
+        "\"query_completion_facts\"", "\"query_completion_bindings\"",
+        "\"provenance\"", "\"completeness\"", "\"truncation_reasons\"",
+        "\"examined_items\"", "\"analysis_run_id\"",
+        "\"query_provenance_id\""}) {
     EXPECT_NE(first.find(field), std::string::npos) << field;
   }
 

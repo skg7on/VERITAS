@@ -109,9 +109,9 @@ v2::FunctionSummary V2Summary(std::string_view name) {
   return summary;
 }
 
-void AddV2Call(v2::FunctionSummary* summary, std::string_view from,
+void AddV2Call(v2::FunctionSummary *summary, std::string_view from,
                std::string_view to) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(core::ToString(
       Id(core::IdKind::kCallSite, std::string(from) + "->" + std::string(to))));
   call->set_callee_symbol(std::string(to));
@@ -122,9 +122,9 @@ void AddV2Call(v2::FunctionSummary* summary, std::string_view from,
   call->set_provenance_ref("test:call");
 }
 
-facts::AnalysisRunManifest MakeRunManifest(
-    facts::EngineIdentity engine, std::string_view revision = "rev",
-    std::string_view build_variant = "bv") {
+facts::AnalysisRunManifest
+MakeRunManifest(facts::EngineIdentity engine, std::string_view revision = "rev",
+                std::string_view build_variant = "bv") {
   facts::AnalysisRunDescriptor descriptor;
   descriptor.revision_id = Id(core::IdKind::kRevision, revision);
   descriptor.build_variant_id = Id(core::IdKind::kBuildVariant, build_variant);
@@ -144,7 +144,8 @@ TEST_F(WpaEndToEndTest, OrchestrationSchedulesPredecessorsOnExternalChange) {
   AddV2Call(&a, "A", "B");
   auto b = V2Summary("B");
   AddV2Call(&b, "B", "C");
-  const std::vector<summary::SummaryArtifact> summaries = {a, b, V2Summary("C")};
+  const std::vector<summary::SummaryArtifact> summaries = {a, b,
+                                                           V2Summary("C")};
 
   auto call_graph = CallGraph::FromSummaries(summaries);
   ASSERT_TRUE(call_graph.ok()) << call_graph.status().message();
@@ -157,10 +158,9 @@ TEST_F(WpaEndToEndTest, OrchestrationSchedulesPredecessorsOnExternalChange) {
   ASSERT_TRUE(a_scc.ok()) << a_scc.status().message();
   ASSERT_TRUE(b_scc.ok()) << b_scc.status().message();
 
-  const auto run_dir =
-      std::filesystem::temp_directory_path() /
-      ("veritas_wpa_sched_" + std::to_string(getpid()) + "_" +
-       std::to_string(reinterpret_cast<std::uintptr_t>(this)));
+  const auto run_dir = std::filesystem::temp_directory_path() /
+                       ("veritas_wpa_sched_" + std::to_string(getpid()) + "_" +
+                        std::to_string(reinterpret_cast<std::uintptr_t>(this)));
   auto run_repo = WpaRunRepository::Open(run_dir);
   ASSERT_TRUE(run_repo.ok()) << run_repo.status().message();
 
@@ -197,15 +197,16 @@ TEST_F(WpaEndToEndTest, OrchestrationSchedulesPredecessorsOnExternalChange) {
   std::filesystem::remove_all(run_dir);
 }
 
-// The M9 seam: a successful orchestration reduces to one valid, content-addressed
-// batch that the fact bus validates and delivers. This pins the handoff the
-// durable M9 store and explainFact will build on.
+// The M9 seam: a successful orchestration reduces to one valid,
+// content-addressed batch that the fact bus validates and delivers. This pins
+// the handoff the durable M9 store and explainFact will build on.
 TEST(WpaFactBusHandoffTest, OrchestrationProducesValidFactBusBatch) {
   auto a = V2Summary("A");
   AddV2Call(&a, "A", "B");
   auto b = V2Summary("B");
   AddV2Call(&b, "B", "C");
-  const std::vector<summary::SummaryArtifact> summaries = {a, b, V2Summary("C")};
+  const std::vector<summary::SummaryArtifact> summaries = {a, b,
+                                                           V2Summary("C")};
 
   const auto db = std::filesystem::temp_directory_path() /
                   ("veritas_wpa_bus_" + std::to_string(getpid()) + "_" +
@@ -231,13 +232,15 @@ TEST(WpaFactBusHandoffTest, OrchestrationProducesValidFactBusBatch) {
       facts::MakeAnalysisFactBatch(std::move(*result));
   EXPECT_FALSE(batch.facts.empty());
   EXPECT_FALSE(batch.witnesses.empty());
-  EXPECT_EQ(batch.expected_components.size(), batch.completed_components.size());
+  EXPECT_EQ(batch.expected_components.size(),
+            batch.completed_components.size());
 
   struct RecordingSink : facts::AnalysisFactSink {
-    Status Publish(const facts::AnalysisFactBatch&) override {
+    Status Publish(const facts::AnalysisFactBatch &) override {
       ++count;
       return Status::Ok();
     }
+
     int count = 0;
   } sink;
 

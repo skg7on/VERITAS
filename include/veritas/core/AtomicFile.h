@@ -23,9 +23,9 @@ namespace veritas::core {
 
 // Replaces `destination` with `bytes` through a sibling temporary, leaving an
 // existing destination untouched when writing or replacement fails.
-Status WriteFileAtomically(const std::string& destination,
-                           const std::string& bytes);
+Status WriteFileAtomically(const std::string &destination,
+                           const std::string &bytes);
 
-}  // namespace veritas::core
+} // namespace veritas::core
 
-#endif  // VERITAS_CORE_ATOMIC_FILE_H_
+#endif // VERITAS_CORE_ATOMIC_FILE_H_

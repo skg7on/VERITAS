@@ -18,6 +18,7 @@
 #include <iostream>
 #include <signal.h>
 #include <unistd.h>
+
 namespace {
 bool ReadBounded(std::istream &in, std::string &out, size_t limit, bool line) {
   out.clear();
@@ -32,6 +33,7 @@ bool ReadBounded(std::istream &in, std::string &out, size_t limit, bool line) {
   return !out.empty();
 }
 } // namespace
+
 int main(int argc, char **argv) {
   using namespace veritas::review;
   // No project-controlled executable/flags are accepted. Configuration is an

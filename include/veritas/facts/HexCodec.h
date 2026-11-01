@@ -66,6 +66,6 @@ inline StatusOr<std::string> HexDecode(std::string_view hex) {
   return out;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_HEX_CODEC_H_
+#endif // VERITAS_FACTS_HEX_CODEC_H_

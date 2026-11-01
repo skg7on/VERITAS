@@ -34,13 +34,13 @@ namespace fact_proto = veritas::fact::v1;
 
 // Serializes a canonical fact. Rejects a fact whose fact_id does not match its
 // semantic row (re-derived via MakeFact).
-StatusOr<fact_proto::Fact> ToProtoFact(const AnalysisFact& fact);
+StatusOr<fact_proto::Fact> ToProtoFact(const AnalysisFact &fact);
 
 // Reconstructs a canonical fact. Rejects a malformed fact_id, an unknown
 // relation name, a cell that does not match its relation schema, or a fact_id
 // that does not match the reconstructed semantic row.
-StatusOr<AnalysisFact> FromProtoFact(const fact_proto::Fact& proto);
+StatusOr<AnalysisFact> FromProtoFact(const fact_proto::Fact &proto);
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_FACT_PROTO_H_
+#endif // VERITAS_FACTS_FACT_PROTO_H_
