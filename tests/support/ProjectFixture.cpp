@@ -36,13 +36,14 @@ namespace {
 
 namespace fs = std::filesystem;
 
-std::atomic<std::uint64_t>& FixtureCounter() {
+std::atomic<std::uint64_t> &FixtureCounter() {
   static std::atomic<std::uint64_t> counter{0};
   return counter;
 }
 
 fs::path MakeUniqueTestDirectory(std::string_view slug) {
-  const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+  const auto stamp =
+      std::chrono::steady_clock::now().time_since_epoch().count();
   const auto pid = static_cast<std::uintmax_t>(::getpid());
   const auto seq = FixtureCounter().fetch_add(1, std::memory_order_relaxed);
   std::ostringstream name;
@@ -59,7 +60,7 @@ fs::path MakeUniqueTestDirectory(std::string_view slug) {
   return fs::canonical(path);
 }
 
-void ReplaceAllInFile(const fs::path& file, std::string_view needle,
+void ReplaceAllInFile(const fs::path &file, std::string_view needle,
                       std::string_view replacement) {
   std::ifstream in(file);
   if (!in) {
@@ -85,11 +86,9 @@ void ReplaceAllInFile(const fs::path& file, std::string_view needle,
   out << contents;
 }
 
-}  // namespace
+} // namespace
 
-fs::path TestSourceRoot() {
-  return fs::path(VERITAS_TESTS_SOURCE_DIR);
-}
+fs::path TestSourceRoot() { return fs::path(VERITAS_TESTS_SOURCE_DIR); }
 
 fs::path FixtureProject(std::string_view name) {
   const auto source = TestSourceRoot() / "fixtures" / "projects" / name;
@@ -104,9 +103,8 @@ fs::path FixtureProject(std::string_view name) {
            fs::copy_options::recursive | fs::copy_options::overwrite_existing,
            copy_error);
   if (copy_error) {
-    std::cerr << "cannot copy fixture " << source.string()
-              << " to " << destination.string() << ": "
-              << copy_error.message() << "\n";
+    std::cerr << "cannot copy fixture " << source.string() << " to "
+              << destination.string() << ": " << copy_error.message() << "\n";
     std::abort();
   }
 
@@ -117,4 +115,4 @@ fs::path FixtureProject(std::string_view name) {
   return destination;
 }
 
-}  // namespace veritas::testing
+} // namespace veritas::testing

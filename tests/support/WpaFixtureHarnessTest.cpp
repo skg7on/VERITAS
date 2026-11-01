@@ -28,10 +28,10 @@ namespace {
 namespace fs = std::filesystem;
 
 std::set<fs::path> FixtureRoots(std::string_view fixture_name) {
-  const std::string prefix = "veritas-fixture-" +
-                             std::string(fixture_name) + "-";
+  const std::string prefix =
+      "veritas-fixture-" + std::string(fixture_name) + "-";
   std::set<fs::path> roots;
-  for (const auto& entry : fs::directory_iterator(fs::temp_directory_path())) {
+  for (const auto &entry : fs::directory_iterator(fs::temp_directory_path())) {
     if (entry.is_directory() &&
         entry.path().filename().string().starts_with(prefix)) {
       roots.insert(entry.path());
@@ -40,9 +40,9 @@ std::set<fs::path> FixtureRoots(std::string_view fixture_name) {
   return roots;
 }
 
-void RemoveNewFixtureRoots(const std::set<fs::path>& before,
-                           const std::set<fs::path>& after) {
-  for (const auto& root : after) {
+void RemoveNewFixtureRoots(const std::set<fs::path> &before,
+                           const std::set<fs::path> &after) {
+  for (const auto &root : after) {
     if (!before.contains(root)) {
       std::error_code error;
       fs::remove_all(root, error);
@@ -93,10 +93,10 @@ TEST(WpaFixtureHarnessTest, SnapshotMoveTransfersFixtureCleanup) {
                                         analysis::AnalysisConfig::Default());
   ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
   const fs::path project_root = snapshot->project_root;
-  const auto calls = CallsWithDispatch(
-      snapshot->summaries, summary::v2::DISPATCH_KIND_INDIRECT);
+  const auto calls = CallsWithDispatch(snapshot->summaries,
+                                       summary::v2::DISPATCH_KIND_INDIRECT);
   ASSERT_FALSE(calls.empty());
-  const auto* call = calls.front();
+  const auto *call = calls.front();
   const std::string call_site_id = call->call_site_id();
 
   {
@@ -132,5 +132,5 @@ TEST(WpaFixtureHarnessTest, FailedAnalysisCleansFixtureCopy) {
   RemoveNewFixtureRoots(before, after);
 }
 
-}  // namespace
-}  // namespace veritas::testing
+} // namespace
+} // namespace veritas::testing

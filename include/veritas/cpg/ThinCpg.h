@@ -32,9 +32,10 @@ namespace veritas::cpg {
 // a no-op, while a duplicate ID with different content is a fatal consistency
 // error.
 class ThinCpg {
- public:
+public:
   void SetMetadata(ProjectionMetadata metadata);
-  const ProjectionMetadata& metadata() const { return metadata_; }
+
+  const ProjectionMetadata &metadata() const { return metadata_; }
 
   Status AddNode(CpgNode node);
   Status AddEdge(CpgEdge edge);
@@ -42,16 +43,19 @@ class ThinCpg {
   Status Validate() const;
 
   std::span<const CpgNode> nodes() const { return nodes_; }
+
   std::span<const CpgEdge> edges() const { return edges_; }
+
   std::span<const CallSiteBinding> callsites() const { return callsites_; }
+
   bool HasCompilerOwnership() const {
     return metadata_.schema_version == kCompilerOwnedProjection;
   }
 
-  bool HasNode(const core::StableId& node_id) const;
-  bool HasEdge(const core::StableId& edge_id) const;
+  bool HasNode(const core::StableId &node_id) const;
+  bool HasEdge(const core::StableId &edge_id) const;
 
- private:
+private:
   ProjectionMetadata metadata_;
   std::vector<CpgNode> nodes_;
   std::vector<CpgEdge> edges_;
@@ -61,6 +65,6 @@ class ThinCpg {
   std::unordered_map<std::string, size_t> callsite_positions_;
 };
 
-}  // namespace veritas::cpg
+} // namespace veritas::cpg
 
-#endif  // VERITAS_CPG_THINCPG_H_
+#endif // VERITAS_CPG_THINCPG_H_

@@ -44,8 +44,8 @@ facts::AnalysisRunManifest ManifestFor(facts::EngineIdentity engine,
 
 TEST(WpaExecutorTest, CppExecutorRequiresNonProductionIdentity) {
   // The C++ engine must never carry the production Souffle identity.
-  EXPECT_FALSE(CppConformanceExecutor::Create(
-                   facts::EngineIdentity::kSouffle, "souffle-toolchain")
+  EXPECT_FALSE(CppConformanceExecutor::Create(facts::EngineIdentity::kSouffle,
+                                              "souffle-toolchain")
                    .ok());
   EXPECT_TRUE(CppConformanceExecutor::Create(
                   facts::EngineIdentity::kCppConformance, "cpp-conformance")
@@ -83,5 +83,5 @@ TEST(WpaExecutorTest, CppExecutorRejectsDifferentToolchainIdentity) {
   EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

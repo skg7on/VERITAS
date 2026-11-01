@@ -73,39 +73,46 @@ std::vector<summary::SummaryArtifact> ChainProgram() {
 std::filesystem::path TempDbPath() {
   std::string tmpl =
       (std::filesystem::temp_directory_path() / "veritas-wpa-XXXXXX").string();
-  char* made = ::mkdtemp(tmpl.data());
+  char *made = ::mkdtemp(tmpl.data());
   return std::filesystem::path(made);
 }
 
 class WorkingExecutor : public WpaExecutor {
- public:
+public:
   facts::EngineIdentity identity() const override {
     return facts::EngineIdentity::kSouffle;
   }
+
   std::string_view toolchain_identity() const override {
     return "working-toolchain";
   }
-  StatusOr<facts::RawWpaEvaluation> Execute(
-      const WpaExecutionEnvelope&, const WpaExecutionLimits&) const override {
+
+  StatusOr<facts::RawWpaEvaluation>
+  Execute(const WpaExecutionEnvelope &,
+          const WpaExecutionLimits &) const override {
     return facts::RawWpaEvaluation{};
   }
 };
 
 class FailingExecutor : public WpaExecutor {
- public:
+public:
   explicit FailingExecutor(Status status) : status_(std::move(status)) {}
+
   facts::EngineIdentity identity() const override {
     return facts::EngineIdentity::kSouffle;
   }
+
   std::string_view toolchain_identity() const override {
     return "failing-toolchain";
   }
-  StatusOr<facts::RawWpaEvaluation> Execute(
-      const WpaExecutionEnvelope&, const WpaExecutionLimits&) const override {
+
+  StatusOr<facts::RawWpaEvaluation>
+  Execute(const WpaExecutionEnvelope &,
+          const WpaExecutionLimits &) const override {
     return status_;
   }
 
- private:
+private:
   Status status_;
 };
 
@@ -125,8 +132,8 @@ bool VerifyPriorSuccessRetainedAndNewRunIncomplete(FailureKind failure) {
   WorkingExecutor working;
   WpaOrchestrator ok_orchestrator(working, *repo);
   WpaRunRequest ok_request;
-  ok_request.run = MakeManifest(facts::EngineIdentity::kSouffle,
-                                "ok-toolchain");
+  ok_request.run =
+      MakeManifest(facts::EngineIdentity::kSouffle, "ok-toolchain");
   ok_request.summaries = program;
   ok_request.components = components;
   auto ok = ok_orchestrator.Run(ok_request);
@@ -136,8 +143,8 @@ bool VerifyPriorSuccessRetainedAndNewRunIncomplete(FailureKind failure) {
   FailingExecutor failing(FailureStatus(failure));
   WpaOrchestrator fail_orchestrator(failing, *repo);
   WpaRunRequest fail_request;
-  fail_request.run = MakeManifest(facts::EngineIdentity::kSouffle,
-                                  "fail-toolchain");
+  fail_request.run =
+      MakeManifest(facts::EngineIdentity::kSouffle, "fail-toolchain");
   fail_request.summaries = program;
   fail_request.components = components;
   auto failed = fail_orchestrator.Run(fail_request);
@@ -166,5 +173,5 @@ TEST(WpaFailureQualificationTest, EveryFailureRetainsPriorSuccess) {
   }
 }
 
-}  // namespace
-}  // namespace veritas::wpa::qualification
+} // namespace
+} // namespace veritas::wpa::qualification

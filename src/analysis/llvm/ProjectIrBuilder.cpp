@@ -224,8 +224,7 @@ ProjectIrBuilder::BuildProjectIr(const build::AnalysisManifest &manifest) {
     const ::llvm::Function *entry = module->get()->getFunction("main");
     if (entry != nullptr && !entry->isDeclaration()) {
       entry_point_sources.push_back(
-          (manifest.context.project_root /
-           command.source_path.relative_path)
+          (manifest.context.project_root / command.source_path.relative_path)
               .string());
     }
     modules.push_back(std::move(*module));

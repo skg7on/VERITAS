@@ -28,25 +28,27 @@ namespace {
 // The nine canonical cells of evidence.query_completion.v1. Lists are carried
 // as comma-joined canonical text; the separator never collides with the stable
 // ID spelling (<kind>:sha256:<hex>) or the enum spellings above.
-std::string EncodeScopeRefs(const std::vector<core::StableId>& refs) {
+std::string EncodeScopeRefs(const std::vector<core::StableId> &refs) {
   std::string out;
   for (std::size_t i = 0; i < refs.size(); ++i) {
-    if (i != 0) out.push_back(',');
+    if (i != 0)
+      out.push_back(',');
     out += core::ToString(refs[i]);
   }
   return out;
 }
 
-std::string EncodeReasons(const std::vector<TruncationReason>& reasons) {
+std::string EncodeReasons(const std::vector<TruncationReason> &reasons) {
   std::string out;
   for (std::size_t i = 0; i < reasons.size(); ++i) {
-    if (i != 0) out.push_back(',');
+    if (i != 0)
+      out.push_back(',');
     out += ToString(reasons[i]);
   }
   return out;
 }
 
-std::string EncodeBudget(const EvidenceQueryBudget& budget) {
+std::string EncodeBudget(const EvidenceQueryBudget &budget) {
   std::string out;
   out += std::to_string(budget.max_depth);
   out.push_back(',');
@@ -60,16 +62,17 @@ std::string EncodeBudget(const EvidenceQueryBudget& budget) {
   return out;
 }
 
-bool HasDuplicate(const std::vector<TruncationReason>& reasons) {
+bool HasDuplicate(const std::vector<TruncationReason> &reasons) {
   for (std::size_t i = 0; i < reasons.size(); ++i) {
     for (std::size_t j = i + 1; j < reasons.size(); ++j) {
-      if (reasons[i] == reasons[j]) return true;
+      if (reasons[i] == reasons[j])
+        return true;
     }
   }
   return false;
 }
 
-Status ValidateDescriptor(const QueryCompletionDescriptor& descriptor) {
+Status ValidateDescriptor(const QueryCompletionDescriptor &descriptor) {
   if (descriptor.completeness == QueryCompleteness::kUnspecified)
     return Status::InvalidArgument("completion certificate is unspecified");
   if (Status s = ValidateEvidenceQueryBudget(descriptor.budget); !s.ok())
@@ -89,11 +92,12 @@ Status ValidateDescriptor(const QueryCompletionDescriptor& descriptor) {
   return Status::Ok();
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<facts::AnalysisFact> MakeQueryCompletionFact(
-    const QueryCompletionDescriptor& descriptor) {
-  if (Status s = ValidateDescriptor(descriptor); !s.ok()) return s;
+StatusOr<facts::AnalysisFact>
+MakeQueryCompletionFact(const QueryCompletionDescriptor &descriptor) {
+  if (Status s = ValidateDescriptor(descriptor); !s.ok())
+    return s;
 
   facts::SemanticRow row;
   row.relation = facts::RelationId::kQueryCompletion;
@@ -111,11 +115,11 @@ StatusOr<facts::AnalysisFact> MakeQueryCompletionFact(
   return facts::MakeFact(row);
 }
 
-Status ValidateQueryCompletion(const facts::AnalysisFact& completion_fact,
-                               const facts::RunFactBinding& binding,
-                               const facts::FactWitness& witness,
-                               const QueryResultMetadata& metadata,
-                               const QueryCompletionDescriptor& descriptor) {
+Status ValidateQueryCompletion(const facts::AnalysisFact &completion_fact,
+                               const facts::RunFactBinding &binding,
+                               const facts::FactWitness &witness,
+                               const QueryResultMetadata &metadata,
+                               const QueryCompletionDescriptor &descriptor) {
   if (completion_fact.row.relation != facts::RelationId::kQueryCompletion)
     return Status::InvalidArgument("fact is not a query completion fact");
   if (Status s = facts::ValidateSemanticRow(completion_fact.row); !s.ok())
@@ -128,7 +132,8 @@ Status ValidateQueryCompletion(const facts::AnalysisFact& completion_fact,
   // The descriptor is the canonical payload; the fact must re-derive to the
   // same witness-independent ID or one of its cells disagrees.
   auto expected = MakeQueryCompletionFact(descriptor);
-  if (!expected.ok()) return expected.status();
+  if (!expected.ok())
+    return expected.status();
   if (expected->fact_id != completion_fact.fact_id)
     return Status::InvalidArgument(
         "completion fact does not match its descriptor");
@@ -138,12 +143,14 @@ Status ValidateQueryCompletion(const facts::AnalysisFact& completion_fact,
   if (metadata.truncation_reasons != descriptor.ordered_truncation_reasons)
     return Status::InvalidArgument("metadata reason order disagrees with fact");
   if (metadata.examined_items != descriptor.examined_items)
-    return Status::InvalidArgument("metadata examined count disagrees with fact");
+    return Status::InvalidArgument(
+        "metadata examined count disagrees with fact");
 
   if (binding.run_id != metadata.analysis_run_id)
     return Status::InvalidArgument("binding run does not match metadata");
   if (binding.fact_id != completion_fact.fact_id)
-    return Status::InvalidArgument("binding fact does not match completion fact");
+    return Status::InvalidArgument(
+        "binding fact does not match completion fact");
 
   if (witness.output_fact_id != completion_fact.fact_id)
     return Status::InvalidArgument("witness output fact does not match");
@@ -157,4 +164,4 @@ Status ValidateQueryCompletion(const facts::AnalysisFact& completion_fact,
   return Status::Ok();
 }
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence

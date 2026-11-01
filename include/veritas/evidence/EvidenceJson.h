@@ -104,7 +104,8 @@
 //
 //   * a case carrying no `evidence_id` — it has not been finalized, so its
 //     identity is not yet its own;
-//   * a case that is not well-formed, reported with `RequireValidEvidenceCase`'s
+//   * a case that is not well-formed, reported with
+//   `RequireValidEvidenceCase`'s
 //     own status;
 //   * a case whose `evidence_id` is not its recomputed content address;
 //   * a case holding a value this boundary cannot spell.
@@ -158,8 +159,8 @@ namespace veritas::evidence {
 //
 // `value` is not mutated. See the file header for the emitted shape, the
 // ordering contract, and the refusal conditions.
-StatusOr<std::string> ToEvidenceJson(const EvidenceCase& value);
+StatusOr<std::string> ToEvidenceJson(const EvidenceCase &value);
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EVIDENCE_JSON_H_
+#endif // VERITAS_EVIDENCE_EVIDENCE_JSON_H_

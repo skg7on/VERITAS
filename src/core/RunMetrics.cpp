@@ -64,23 +64,27 @@ void SleepFor(std::chrono::milliseconds duration) {
 
 // Nearest-rank percentile: samples[ceil(k/100 * n) - 1] over a sorted vector.
 nanoseconds NearestRank(std::vector<nanoseconds> sorted, int percentile) {
-  if (sorted.empty()) return nanoseconds::zero();
+  if (sorted.empty())
+    return nanoseconds::zero();
   std::sort(sorted.begin(), sorted.end());
   const std::size_t n = sorted.size();
   std::size_t rank =
       static_cast<std::size_t>(std::ceil(percentile / 100.0 * n));
-  if (rank < 1) rank = 1;
-  if (rank > n) rank = n;
+  if (rank < 1)
+    rank = 1;
+  if (rank > n)
+    rank = n;
   return sorted[rank - 1];
 }
 
-}  // namespace
+} // namespace
 
 nanoseconds ProcessCpuNow() {
-  struct rusage usage {};
-  if (getrusage(RUSAGE_SELF, &usage) != 0) return nanoseconds::zero();
-  const auto secs = std::chrono::seconds(usage.ru_utime.tv_sec +
-                                         usage.ru_stime.tv_sec);
+  struct rusage usage{};
+  if (getrusage(RUSAGE_SELF, &usage) != 0)
+    return nanoseconds::zero();
+  const auto secs =
+      std::chrono::seconds(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec);
   const auto usecs = std::chrono::microseconds(usage.ru_utime.tv_usec +
                                                usage.ru_stime.tv_usec);
   return std::chrono::duration_cast<nanoseconds>(secs + usecs);
@@ -88,7 +92,7 @@ nanoseconds ProcessCpuNow() {
 
 std::uint64_t CurrentResidentBytes() {
 #if defined(__APPLE__)
-  mach_task_basic_info_data_t info {};
+  mach_task_basic_info_data_t info{};
   mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
   if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
                 reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS) {
@@ -99,21 +103,23 @@ std::uint64_t CurrentResidentBytes() {
   // Linux: /proc/self/statm field 2 is the resident set in pages, and the
   // kernel reports its own page size only through sysconf, which is not
   // linked here; 4096 is the page size on every architecture this builds for.
-  std::FILE* file = std::fopen("/proc/self/statm", "r");
-  if (file == nullptr) return 0;
+  std::FILE *file = std::fopen("/proc/self/statm", "r");
+  if (file == nullptr)
+    return 0;
   unsigned long total_pages = 0;
   unsigned long resident_pages = 0;
-  const int matched = std::fscanf(file, "%lu %lu", &total_pages,
-                                 &resident_pages);
+  const int matched =
+      std::fscanf(file, "%lu %lu", &total_pages, &resident_pages);
   std::fclose(file);
-  if (matched != 2) return 0;
+  if (matched != 2)
+    return 0;
   return static_cast<std::uint64_t>(resident_pages) * 4096u;
 #endif
 }
 
 std::uint64_t CurrentFootprintBytes() {
 #if defined(__APPLE__)
-  task_vm_info_data_t info {};
+  task_vm_info_data_t info{};
   mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
   if (task_info(mach_task_self(), TASK_VM_INFO,
                 reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS) {
@@ -131,7 +137,8 @@ SeriesBuffer::SeriesBuffer(std::size_t capacity) : capacity_(capacity) {}
 
 void SeriesBuffer::Append(MemorySample sample) {
   samples_.push_back(sample);
-  if (samples_.size() <= capacity_) return;
+  if (samples_.size() <= capacity_)
+    return;
 
   // Overflow: keep every other sample, so the whole timeline stays covered at
   // half the resolution instead of the early curve being lost. The stride
@@ -144,7 +151,8 @@ void SeriesBuffer::Append(MemorySample sample) {
   // The newest sample survives too: if the stride stepped over it, it replaces
   // the last kept sample, which is the one nearest it in time. The index test
   // is exact, where comparing timestamps would also match a duplicate.
-  if ((samples_.size() - 1) % 2 != 0) kept.back() = samples_.back();
+  if ((samples_.size() - 1) % 2 != 0)
+    kept.back() = samples_.back();
   samples_.swap(kept);
   // Saturating, not wrapping. The factor doubles on every overflow, so an
   // unclamped multiply wraps to 0 after 64 doublings — roughly six days of
@@ -156,8 +164,8 @@ void SeriesBuffer::Append(MemorySample sample) {
   // as this counter can say, and the count stays monotone.
   constexpr std::uint64_t kMaxDecimation =
       std::numeric_limits<std::uint64_t>::max();
-  decimation_ = decimation_ > kMaxDecimation / 2 ? kMaxDecimation
-                                                : decimation_ * 2;
+  decimation_ =
+      decimation_ > kMaxDecimation / 2 ? kMaxDecimation : decimation_ * 2;
 }
 
 struct RunMetrics::Impl {
@@ -192,8 +200,8 @@ struct RunMetrics::Impl {
   // The thread handle and its stop flag only. The samples and the thinning
   // policy live in SeriesBuffer, which is the object the tests drive directly.
   struct Sampler {
-    pthread_t thread {};
-    std::atomic<bool> stop {false};
+    pthread_t thread{};
+    std::atomic<bool> stop{false};
     bool started = false;
   };
 
@@ -222,16 +230,15 @@ struct RunMetrics::Impl {
   bool memory_probe_failed = false;
 
   Impl(RunMetricsOptions opts, WallClock w, CpuClock c)
-      : options(opts),
-        wall(std::move(w)),
-        cpu(std::move(c)),
+      : options(opts), wall(std::move(w)), cpu(std::move(c)),
         series(opts.series_capacity) {
     // The zero of the series' time axis. Sampled before the sampler starts so
     // that every sample lands at a non-negative offset from it.
     run_start = this->wall();
     // Only a positive interval asks for a sampler thread. The default of zero
     // is deliberate: constructing a recorder must not start a thread.
-    if (options.sample_interval <= std::chrono::milliseconds::zero()) return;
+    if (options.sample_interval <= std::chrono::milliseconds::zero())
+      return;
     const int rc =
         pthread_create(&sampler.thread, nullptr, &Impl::SamplerMain, this);
     if (rc != 0) {
@@ -256,12 +263,13 @@ struct RunMetrics::Impl {
   // run is in progress this thread is the sole writer to the series buffer,
   // and the series is read only after StopSampler has joined it. Do not start
   // a second thread without re-reading the design spec, section 7.4.
-  static void* SamplerMain(void* arg);
+  static void *SamplerMain(void *arg);
 
   // Where a measurement comes from: the injected probe when the caller set
   // one, the platform readers otherwise.
   MemoryReading ProbeMemory() const {
-    if (options.memory_probe) return options.memory_probe();
+    if (options.memory_probe)
+      return options.memory_probe();
     return MemoryReading{CurrentResidentBytes(), CurrentFootprintBytes()};
   }
 
@@ -297,7 +305,8 @@ struct RunMetrics::Impl {
   // no-op when there is no sampler thread — including the boundary_only
   // fallback, where the analysis thread did the appending.
   void StopSampler() {
-    if (!sampler.started) return;
+    if (!sampler.started)
+      return;
     sampler.stop.store(true, std::memory_order_relaxed);
     const int rc = pthread_join(sampler.thread, nullptr);
     sampler.started = false;
@@ -322,18 +331,20 @@ struct RunMetrics::Impl {
   // average. rss_start and rss_end are the oldest and newest samples inside
   // the window, and the series is monotonic in t, so they are its first and
   // last in-window entries.
-  std::optional<SpanMemory> JoinMemory(const Accum& accum) const {
-    if (series.samples().empty()) return std::nullopt;
+  std::optional<SpanMemory> JoinMemory(const Accum &accum) const {
+    if (series.samples().empty())
+      return std::nullopt;
     SpanMemory memory;
     const auto offset = [this](std::chrono::steady_clock::time_point at) {
       return std::chrono::duration_cast<std::chrono::milliseconds>(at -
-                                                                  run_start);
+                                                                   run_start);
     };
     const auto start = offset(accum.first_start);
     const auto end = offset(accum.last_end);
     bool saw_any = false;
-    for (const MemorySample& sample : series.samples()) {
-      if (sample.t < start || sample.t > end) continue;
+    for (const MemorySample &sample : series.samples()) {
+      if (sample.t < start || sample.t > end)
+        continue;
       if (!saw_any) {
         memory.rss_start = sample.rss_bytes;
         saw_any = true;
@@ -343,7 +354,8 @@ struct RunMetrics::Impl {
       memory.footprint_peak =
           std::max(memory.footprint_peak, sample.footprint_bytes);
     }
-    if (!saw_any) return std::nullopt;
+    if (!saw_any)
+      return std::nullopt;
     // Signed: a phase may release more than it allocates.
     memory.rss_delta = static_cast<std::int64_t>(memory.rss_end) -
                        static_cast<std::int64_t>(memory.rss_start);
@@ -354,7 +366,8 @@ struct RunMetrics::Impl {
                                 SpanMode mode) {
     const auto key = std::make_pair(parent, std::string(name));
     const auto it = by_parent_name.find(key);
-    if (it != by_parent_name.end()) return it->second;
+    if (it != by_parent_name.end())
+      return it->second;
     Accum accum;
     accum.name = std::string(name);
     accum.parent_index = parent;
@@ -365,13 +378,15 @@ struct RunMetrics::Impl {
     return index;
   }
 
-  static void SortTop(std::vector<TopEntry>* top, std::size_t limit) {
+  static void SortTop(std::vector<TopEntry> *top, std::size_t limit) {
     std::sort(top->begin(), top->end(),
-              [](const TopEntry& left, const TopEntry& right) {
-                if (left.wall != right.wall) return left.wall > right.wall;
+              [](const TopEntry &left, const TopEntry &right) {
+                if (left.wall != right.wall)
+                  return left.wall > right.wall;
                 return left.label < right.label;
               });
-    if (top->size() > limit) top->resize(limit);
+    if (top->size() > limit)
+      top->resize(limit);
   }
 };
 
@@ -380,8 +395,8 @@ struct RunMetrics::Impl {
 // decimation arithmetic here. std::this_thread::sleep_for is not used, and
 // std::thread not at all: those signal failure with an exception, and this
 // build cannot handle one.
-void* RunMetrics::Impl::SamplerMain(void* arg) {
-  auto* self = static_cast<Impl*>(arg);
+void *RunMetrics::Impl::SamplerMain(void *arg) {
+  auto *self = static_cast<Impl *>(arg);
   const auto interval = self->options.sample_interval;
   const auto slice = std::min(interval, std::chrono::milliseconds(20));
   while (!self->sampler.stop.load(std::memory_order_relaxed)) {
@@ -393,7 +408,8 @@ void* RunMetrics::Impl::SamplerMain(void* arg) {
          slept += slice) {
       SleepFor(slice);
     }
-    if (self->sampler.stop.load(std::memory_order_relaxed)) break;
+    if (self->sampler.stop.load(std::memory_order_relaxed))
+      break;
     self->AppendSampleAt(self->wall());
   }
   return nullptr;
@@ -446,7 +462,7 @@ void RunMetrics::EndSpan(std::size_t token) {
   }
   const nanoseconds wall = ClampNonNegative(raw_wall);
 
-  Impl::Accum& accum = impl_->accums[span.accum_index];
+  Impl::Accum &accum = impl_->accums[span.accum_index];
   accum.count += 1;
   accum.inclusive += wall;
   if (span.mode == SpanMode::kBearing) {
@@ -460,8 +476,10 @@ void RunMetrics::EndSpan(std::size_t token) {
       accum.last_end = end_wall;
     }
   }
-  if (!accum.min_max_set || wall < accum.min) accum.min = wall;
-  if (!accum.min_max_set || wall > accum.max) accum.max = wall;
+  if (!accum.min_max_set || wall < accum.min)
+    accum.min = wall;
+  if (!accum.min_max_set || wall > accum.max)
+    accum.max = wall;
   accum.min_max_set = true;
 
   if (span.mode == SpanMode::kDistributed) {
@@ -520,11 +538,9 @@ void RunMetrics::AddDiagnostic(std::string message) {
   impl_->Diagnose(std::move(message));
 }
 
-SeriesBuffer& RunMetrics::series() { return impl_->series; }
+SeriesBuffer &RunMetrics::series() { return impl_->series; }
 
-void RunMetrics::RecordMemorySample() {
-  impl_->AppendSampleAt(impl_->wall());
-}
+void RunMetrics::RecordMemorySample() { impl_->AppendSampleAt(impl_->wall()); }
 
 RunMetricsStats RunMetrics::TakeStats() {
   // The series is read below and the join is done below that, so the sampler
@@ -537,7 +553,7 @@ RunMetricsStats RunMetrics::TakeStats() {
   stats.complete = impl_->complete;
 
   std::sort(impl_->counters.begin(), impl_->counters.end(),
-            [](const Counter& left, const Counter& right) {
+            [](const Counter &left, const Counter &right) {
               return left.name < right.name;
             });
   stats.counters = std::move(impl_->counters);
@@ -568,7 +584,7 @@ RunMetricsStats RunMetrics::TakeStats() {
   };
 
   std::function<SpanStats(std::size_t)> build = [&](std::size_t index) {
-    const Impl::Accum& accum = impl_->accums[index];
+    const Impl::Accum &accum = impl_->accums[index];
     SpanStats out;
     out.name = accum.name;
     out.count = accum.count;
@@ -619,7 +635,7 @@ RunMetricsStats RunMetrics::TakeStats() {
     for (const std::size_t index : roots) {
       stats.root.children.push_back(build(index));
     }
-    for (const SpanStats& child : stats.root.children) {
+    for (const SpanStats &child : stats.root.children) {
       stats.root.wall_inclusive += child.wall_inclusive;
       if (child.cpu_measured) {
         stats.root.cpu_measured = true;
@@ -643,7 +659,7 @@ RunMetricsStats RunMetrics::TakeStats() {
   // span: the maximum over the series, carrying the time it occurred at.
   // Ties keep the earliest occurrence. The footprint peak can fall at a
   // different sample, so it is tracked on its own and not given a time.
-  for (const MemorySample& sample : impl_->series.samples()) {
+  for (const MemorySample &sample : impl_->series.samples()) {
     if (sample.rss_bytes > stats.peak_rss_bytes) {
       stats.peak_rss_bytes = sample.rss_bytes;
       stats.peak_at = sample.t;
@@ -661,22 +677,26 @@ RunMetricsStats RunMetrics::TakeStats() {
   return stats;
 }
 
-PhaseSpan::PhaseSpan(RunMetrics* metrics, std::string_view name, SpanMode mode)
+PhaseSpan::PhaseSpan(RunMetrics *metrics, std::string_view name, SpanMode mode)
     : metrics_(metrics) {
-  if (metrics_ != nullptr) token_ = metrics_->BeginSpan(name, mode);
+  if (metrics_ != nullptr)
+    token_ = metrics_->BeginSpan(name, mode);
 }
 
 PhaseSpan::~PhaseSpan() {
-  if (metrics_ != nullptr) metrics_->EndSpan(token_);
+  if (metrics_ != nullptr)
+    metrics_->EndSpan(token_);
 }
 
 void PhaseSpan::SetLabel(std::string label) {
-  if (metrics_ != nullptr) metrics_->SetLabel(token_, std::move(label));
+  if (metrics_ != nullptr)
+    metrics_->SetLabel(token_, std::move(label));
 }
 
 void PhaseSpan::AddCounter(std::string_view name, std::uint64_t value,
                            std::string_view unit) {
-  if (metrics_ != nullptr) metrics_->AddCounter(name, value, unit);
+  if (metrics_ != nullptr)
+    metrics_->AddCounter(name, value, unit);
 }
 
-}  // namespace veritas::core
+} // namespace veritas::core

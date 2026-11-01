@@ -19,13 +19,13 @@
 #include <span>
 #include <string>
 
-#include "llvm/Support/JSON.h"
 #include "veritas/core/Hash.h"
+#include "llvm/Support/JSON.h"
 
 namespace veritas::analysis {
 namespace {
 
-StatusOr<std::string> ReadFile(const std::string& path) {
+StatusOr<std::string> ReadFile(const std::string &path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
     return Status::NotFound("cannot open file: " + path);
@@ -43,9 +43,9 @@ std::string Sha256Hex(std::string_view bytes) {
       std::as_bytes(std::span(bytes.data(), bytes.size()))));
 }
 
-StatusOr<std::string> GetStringField(const llvm::json::Object& obj,
+StatusOr<std::string> GetStringField(const llvm::json::Object &obj,
                                      llvm::StringRef key) {
-  const llvm::json::Value* value = obj.get(key);
+  const llvm::json::Value *value = obj.get(key);
   if (value == nullptr) {
     return Status::InvalidArgument("souffle provenance is missing field " +
                                    key.str());
@@ -58,11 +58,11 @@ StatusOr<std::string> GetStringField(const llvm::json::Object& obj,
   return std::string(*text);
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<SouffleProvenance> SouffleProvenance::Load(
-    const std::string& manifest_path,
-    const std::string& souffle_executable_path) {
+StatusOr<SouffleProvenance>
+SouffleProvenance::Load(const std::string &manifest_path,
+                        const std::string &souffle_executable_path) {
   auto manifest_bytes = ReadFile(manifest_path);
   if (!manifest_bytes.ok()) {
     return manifest_bytes.status();
@@ -72,7 +72,7 @@ StatusOr<SouffleProvenance> SouffleProvenance::Load(
   if (!parsed) {
     return Status::InvalidArgument("souffle provenance is malformed JSON");
   }
-  const llvm::json::Object* obj = parsed->getAsObject();
+  const llvm::json::Object *obj = parsed->getAsObject();
   if (obj == nullptr) {
     return Status::InvalidArgument("souffle provenance is not a JSON object");
   }
@@ -102,7 +102,7 @@ StatusOr<SouffleProvenance> SouffleProvenance::Load(
 
   // Recompute the canonical provenance digest over the recorded fields, in the
   // exact order WriteSouffleProvenance.cmake emits them.
-  const char* kCanonicalFields[] = {
+  const char *kCanonicalFields[] = {
       "source_revision",
       "souffle_executable_sha256",
       "runner_library_sha256",
@@ -123,7 +123,7 @@ StatusOr<SouffleProvenance> SouffleProvenance::Load(
       "executable_linker_flags",
   };
   std::string canonical;
-  for (const char* field : kCanonicalFields) {
+  for (const char *field : kCanonicalFields) {
     auto value = GetStringField(*obj, field);
     if (!value.ok()) {
       return value.status();
@@ -135,8 +135,7 @@ StatusOr<SouffleProvenance> SouffleProvenance::Load(
   }
   const std::string recomputed_digest = Sha256Hex(canonical);
 
-  auto recorded_canonical =
-      GetStringField(*obj, "canonical_provenance_sha256");
+  auto recorded_canonical = GetStringField(*obj, "canonical_provenance_sha256");
   if (!recorded_canonical.ok()) {
     return recorded_canonical.status();
   }
@@ -155,4 +154,4 @@ std::string SouffleProvenance::toolchain_identity() const {
   return "souffle-" + canonical_digest_;
 }
 
-}  // namespace veritas::analysis
+} // namespace veritas::analysis

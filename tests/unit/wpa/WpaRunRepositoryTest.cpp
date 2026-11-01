@@ -81,20 +81,19 @@ WpaComponentResult ResultFor(std::string_view scc_name) {
 std::filesystem::path TempDbPath() {
   std::string tmpl =
       (std::filesystem::temp_directory_path() / "veritas-wpa-XXXXXX").string();
-  char* made = ::mkdtemp(tmpl.data());
+  char *made = ::mkdtemp(tmpl.data());
   return std::filesystem::path(made);
 }
 
 WpaComponentKey ReachabilityKey(std::string_view scc_name) {
-  return WpaComponentKey{FunctionId(scc_name),
-                         WpaComponentKind::kReachability};
+  return WpaComponentKey{FunctionId(scc_name), WpaComponentKind::kReachability};
 }
 
 // Whether the store currently exposes a reusable result for `name`. A cache row
 // is visible only once the batch that holds it has been committed, so this is
 // how the tests read the batch window.
-bool IsComponentReusable(WpaRunRepository& repo,
-                         const facts::AnalysisRunManifest& run,
+bool IsComponentReusable(WpaRunRepository &repo,
+                         const facts::AnalysisRunManifest &run,
                          std::string_view name) {
   auto loaded = repo.LoadReusableComponent(
       MakeResultCacheDescriptor(run, ReachabilityKey(name), "logical"));
@@ -105,8 +104,8 @@ bool IsComponentReusable(WpaRunRepository& repo,
 }
 
 // Whether the store currently exposes the run's own state row for `name`.
-bool HasComponentState(WpaRunRepository& repo,
-                       const facts::AnalysisRunManifest& run,
+bool HasComponentState(WpaRunRepository &repo,
+                       const facts::AnalysisRunManifest &run,
                        std::string_view name) {
   auto object_key = repo.ResultObjectKey(run.run_id, ReachabilityKey(name));
   if (!object_key.ok() || !object_key->has_value()) {
@@ -115,23 +114,23 @@ bool HasComponentState(WpaRunRepository& repo,
   return true;
 }
 
-std::size_t CountRows(WpaRunRepository& repo, const std::string& sql,
-                      const std::vector<std::string>& params) {
+std::size_t CountRows(WpaRunRepository &repo, const std::string &sql,
+                      const std::vector<std::string> &params) {
   auto rows = repo.metadata_store().Query(sql, params);
   if (!rows.ok() || rows->empty() || (*rows)[0].empty()) {
     return std::numeric_limits<std::size_t>::max();
   }
   std::size_t parsed = 0;
-  const std::string& text = (*rows)[0][0];
-  const auto result = std::from_chars(text.data(), text.data() + text.size(),
-                                      parsed);
+  const std::string &text = (*rows)[0][0];
+  const auto result =
+      std::from_chars(text.data(), text.data() + text.size(), parsed);
   if (result.ec != std::errc{} || result.ptr != text.data() + text.size()) {
     return std::numeric_limits<std::size_t>::max();
   }
   return parsed;
 }
 
-std::size_t VisibleCacheRowCount(WpaRunRepository& repo) {
+std::size_t VisibleCacheRowCount(WpaRunRepository &repo) {
   return CountRows(repo, "SELECT COUNT(*) FROM wpa_component_result_cache_v2",
                    {});
 }
@@ -185,16 +184,15 @@ TEST(WpaRunRepositoryTest, AComponentIsVisibleOnlyAfterTheBatchCommits) {
   ASSERT_TRUE(repo->BeginRun(run).ok());
 
   const std::vector<std::string> names = {"a", "b", "c"};
-  for (const std::string& name : names) {
-    ASSERT_TRUE(repo
-                    ->StoreSuccessfulComponent(run, ReachabilityKey(name),
+  for (const std::string &name : names) {
+    ASSERT_TRUE(repo->StoreSuccessfulComponent(run, ReachabilityKey(name),
                                                ResultFor(name))
                     .ok());
   }
 
   // Queued, not committed: neither the cache row nor the run's state row is
   // readable yet.
-  for (const std::string& name : names) {
+  for (const std::string &name : names) {
     EXPECT_FALSE(IsComponentReusable(*repo, run, name));
     EXPECT_FALSE(HasComponentState(*repo, run, name));
   }
@@ -205,7 +203,7 @@ TEST(WpaRunRepositoryTest, AComponentIsVisibleOnlyAfterTheBatchCommits) {
   // The flush commits the whole batch, and every row it commits points at a
   // result object the store already held — so a visible cache row is always
   // loadable, never a dangling reference.
-  for (const std::string& name : names) {
+  for (const std::string &name : names) {
     EXPECT_TRUE(IsComponentReusable(*repo, run, name));
     EXPECT_TRUE(HasComponentState(*repo, run, name));
   }
@@ -228,10 +226,9 @@ TEST(WpaRunRepositoryTest, AFullBatchCommitsWithoutAnExplicitFlush) {
 
   for (std::size_t i = 0; i < kComponentBatchSize; ++i) {
     const std::string name = "scc-" + std::to_string(i);
-    ASSERT_TRUE(
-        repo->StoreSuccessfulComponent(run, ReachabilityKey(name),
-                                       ResultFor(name))
-            .ok());
+    ASSERT_TRUE(repo->StoreSuccessfulComponent(run, ReachabilityKey(name),
+                                               ResultFor(name))
+                    .ok());
   }
   // Filling the batch committed it; nothing else has been stored since.
   EXPECT_TRUE(IsComponentReusable(*repo, run, "scc-0"));
@@ -240,8 +237,7 @@ TEST(WpaRunRepositoryTest, AFullBatchCommitsWithoutAnExplicitFlush) {
   EXPECT_EQ(VisibleCacheRowCount(*repo), kComponentBatchSize);
 
   // One more store opens the next window and is not committed with the last.
-  ASSERT_TRUE(repo
-                  ->StoreSuccessfulComponent(run, ReachabilityKey("overflow"),
+  ASSERT_TRUE(repo->StoreSuccessfulComponent(run, ReachabilityKey("overflow"),
                                              ResultFor("overflow"))
                   .ok());
   EXPECT_FALSE(IsComponentReusable(*repo, run, "overflow"));
@@ -255,9 +251,9 @@ TEST(WpaRunRepositoryTest, AFullBatchCommitsWithoutAnExplicitFlush) {
 }
 
 // A completed run's whole cache is durable by the time `Run` returns: the final
-// flush is inside `CompleteRun`. A component left queued here would be invisible
-// to the next run's `LoadReusableComponent`, so a completed run would not leave
-// a consistent store behind it.
+// flush is inside `CompleteRun`. A component left queued here would be
+// invisible to the next run's `LoadReusableComponent`, so a completed run would
+// not leave a consistent store behind it.
 TEST(WpaRunRepositoryTest, CompletedRunLeavesEveryComponentLoadable) {
   const auto db = TempDbPath();
   auto repo = WpaRunRepository::Open(db);
@@ -267,9 +263,8 @@ TEST(WpaRunRepositoryTest, CompletedRunLeavesEveryComponentLoadable) {
   ASSERT_TRUE(repo->BeginRun(run).ok());
 
   const std::vector<std::string> names = {"a", "b", "c"};
-  for (const std::string& name : names) {
-    ASSERT_TRUE(repo
-                    ->StoreSuccessfulComponent(run, ReachabilityKey(name),
+  for (const std::string &name : names) {
+    ASSERT_TRUE(repo->StoreSuccessfulComponent(run, ReachabilityKey(name),
                                                ResultFor(name))
                     .ok());
   }
@@ -279,7 +274,7 @@ TEST(WpaRunRepositoryTest, CompletedRunLeavesEveryComponentLoadable) {
   auto status = repo->RunStatus(run.run_id);
   ASSERT_TRUE(status.ok());
   EXPECT_EQ(*status, WpaRunStatus::kComplete);
-  for (const std::string& name : names) {
+  for (const std::string &name : names) {
     EXPECT_TRUE(IsComponentReusable(*repo, run, name));
     EXPECT_TRUE(HasComponentState(*repo, run, name));
   }
@@ -301,9 +296,8 @@ TEST(WpaRunRepositoryTest, AnIncompleteRunCommitsNoHalfWrittenBatch) {
   ASSERT_TRUE(repo->BeginRun(run).ok());
 
   const std::vector<std::string> names = {"a", "b", "c"};
-  for (const std::string& name : names) {
-    ASSERT_TRUE(repo
-                    ->StoreSuccessfulComponent(run, ReachabilityKey(name),
+  for (const std::string &name : names) {
+    ASSERT_TRUE(repo->StoreSuccessfulComponent(run, ReachabilityKey(name),
                                                ResultFor(name))
                     .ok());
   }
@@ -312,7 +306,7 @@ TEST(WpaRunRepositoryTest, AnIncompleteRunCommitsNoHalfWrittenBatch) {
   auto status = repo->RunStatus(run.run_id);
   ASSERT_TRUE(status.ok());
   EXPECT_EQ(*status, WpaRunStatus::kIncomplete);
-  for (const std::string& name : names) {
+  for (const std::string &name : names) {
     EXPECT_FALSE(IsComponentReusable(*repo, run, name));
     EXPECT_FALSE(HasComponentState(*repo, run, name));
   }
@@ -329,7 +323,7 @@ TEST(WpaRunRepositoryTest, AnIncompleteRunCommitsNoHalfWrittenBatch) {
   // run never finished, and state rows claiming `kSucceeded` for a run that
   // is marked incomplete.
   ASSERT_TRUE(repo->FlushComponentCache().ok());
-  for (const std::string& name : names) {
+  for (const std::string &name : names) {
     EXPECT_FALSE(IsComponentReusable(*repo, run, name));
     EXPECT_FALSE(HasComponentState(*repo, run, name));
   }
@@ -359,9 +353,8 @@ TEST(WpaRunRepositoryTest, AFailedBatchFlushLeavesTheStoreUnchanged) {
   // does not exist.
 
   const std::vector<std::string> names = {"a", "b", "c"};
-  for (const std::string& name : names) {
-    ASSERT_TRUE(repo
-                    ->StoreSuccessfulComponent(run, ReachabilityKey(name),
+  for (const std::string &name : names) {
+    ASSERT_TRUE(repo->StoreSuccessfulComponent(run, ReachabilityKey(name),
                                                ResultFor(name))
                     .ok());
   }
@@ -371,7 +364,7 @@ TEST(WpaRunRepositoryTest, AFailedBatchFlushLeavesTheStoreUnchanged) {
 
   // The failed batch is rolled back whole, and abandoned rather than retried:
   // the run that owned it fails and a later run recomputes these components.
-  for (const std::string& name : names) {
+  for (const std::string &name : names) {
     EXPECT_FALSE(IsComponentReusable(*repo, run, name));
     EXPECT_FALSE(HasComponentState(*repo, run, name));
   }
@@ -408,8 +401,8 @@ TEST(WpaRunRepositoryTest, ReusesUnchangedResultAcrossRevisions) {
   // Two runs with different revisions but the same logical input and toolchain.
   auto run1 = MakeManifest(facts::EngineIdentity::kSouffle);
   auto run2 = MakeManifest(facts::EngineIdentity::kSouffle);
-  run2.revision_id = core::MakeStableId(
-      core::IdKind::kRevision, std::as_bytes(std::span("rev2", 4)));
+  run2.revision_id = core::MakeStableId(core::IdKind::kRevision,
+                                        std::as_bytes(std::span("rev2", 4)));
 
   ASSERT_TRUE(repo->BeginRun(run1).ok());
   auto stored1 = repo->StoreSuccessfulComponent(run1, key, result);
@@ -425,5 +418,5 @@ TEST(WpaRunRepositoryTest, ReusesUnchangedResultAcrossRevisions) {
   std::filesystem::remove_all(db);
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

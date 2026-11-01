@@ -21,18 +21,18 @@
 namespace llvm {
 class Function;
 class Value;
-}  // namespace llvm
+} // namespace llvm
 
 namespace veritas::analysis::llvm {
 
 // ValueFlowExtractor tracks data flow relationships within a function. It
 // identifies def-use chains and value propagation patterns.
 class ValueFlowExtractor {
- public:
+public:
   struct ValueFlow {
-    std::string source;       // source value name or description
-    std::string destination;  // destination value name or description
-    std::string operation;    // operation that connects them
+    std::string source;      // source value name or description
+    std::string destination; // destination value name or description
+    std::string operation;   // operation that connects them
   };
 
   ValueFlowExtractor() = default;
@@ -40,12 +40,12 @@ class ValueFlowExtractor {
 
   // Extracts data flow edges within a function. Returns a list of (source,
   // destination, operation) triples representing value propagation.
-  std::vector<ValueFlow> ExtractValueFlows(const ::llvm::Function* func) const;
+  std::vector<ValueFlow> ExtractValueFlows(const ::llvm::Function *func) const;
 
- private:
-  std::string GetValueName(const ::llvm::Value* val) const;
+private:
+  std::string GetValueName(const ::llvm::Value *val) const;
 };
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm
 
-#endif  // VERITAS_ANALYSIS_LLVM_VALUEFLOWEXTRACTOR_H_
+#endif // VERITAS_ANALYSIS_LLVM_VALUEFLOWEXTRACTOR_H_

@@ -67,7 +67,7 @@ namespace {
 // The canonical repository id is not carried on the CPG ProjectionMetadata, so
 // it is read back from the manifest context. It is content-derived (a hash of
 // the source tree), never the checkout path.
-StatusOr<std::string> RepositoryId(const std::filesystem::path& project_root) {
+StatusOr<std::string> RepositoryId(const std::filesystem::path &project_root) {
   const analysis::ProjectAnalysisRequest request{
       .project_root = project_root,
       .output_root = {},
@@ -83,7 +83,7 @@ StatusOr<std::string> RepositoryId(const std::filesystem::path& project_root) {
   return manifest->context.repository_id;
 }
 
-}  // namespace
+} // namespace
 
 // Materializes the named fixture, runs the full analysis, opens the FactStore
 // at the output root, loads the CPG projection, and derives a snapshot
@@ -91,7 +91,8 @@ StatusOr<std::string> RepositoryId(const std::filesystem::path& project_root) {
 // CPG ProjectionMetadata (revision/build-variant) and the manifest context
 // (repository). fact_snapshot_fingerprint is the canonical digest over the
 // run's current fact IDs.
-inline StatusOr<RealEvidenceSnapshot> AnalyzeRealFixture(std::string_view name) {
+inline StatusOr<RealEvidenceSnapshot>
+AnalyzeRealFixture(std::string_view name) {
   const auto project_root = FixtureProject(name);
   const auto output_root = project_root / ".veritas";
 
@@ -135,9 +136,8 @@ inline StatusOr<RealEvidenceSnapshot> AnalyzeRealFixture(std::string_view name) 
   }
 
   // Shared with the public CLI: one authority for the pinned descriptor.
-  evidence::SnapshotDescriptor descriptor =
-      evidence::DeriveSnapshotDescriptor(*cpg, *repository, *run_id,
-                                         *current_facts);
+  evidence::SnapshotDescriptor descriptor = evidence::DeriveSnapshotDescriptor(
+      *cpg, *repository, *run_id, *current_facts);
 
   RealEvidenceSnapshot snapshot{
       .project_root = project_root,
@@ -151,6 +151,6 @@ inline StatusOr<RealEvidenceSnapshot> AnalyzeRealFixture(std::string_view name) 
   return snapshot;
 }
 
-}  // namespace veritas::testing
+} // namespace veritas::testing
 
-#endif  // VERITAS_TESTING_REAL_EVIDENCE_PIPELINE_H_
+#endif // VERITAS_TESTING_REAL_EVIDENCE_PIPELINE_H_

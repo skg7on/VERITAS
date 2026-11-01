@@ -91,34 +91,33 @@ TEST(ModelBundleTest, LookupGroupsAllModelsForASymbol) {
 
 TEST(ModelBundleTest, RejectsDuplicateModelIds) {
   auto bundle = WriteTempBundle(
-      "models.v1",
-      "a.memcpy.read\tmemcpy\tread\tsource\tmay\n"
-      "a.memcpy.read\tmemcpy\twrite\tdestination\tmay\n");
+      "models.v1", "a.memcpy.read\tmemcpy\tread\tsource\tmay\n"
+                   "a.memcpy.read\tmemcpy\twrite\tdestination\tmay\n");
   auto loaded = ModelBundle::Load(bundle.rows, bundle.manifest);
   ASSERT_FALSE(loaded.ok());
   EXPECT_EQ(loaded.status().code(), StatusCode::kInvalidArgument);
 }
 
 TEST(ModelBundleTest, RejectsUnknownEffectKind) {
-  auto bundle = WriteTempBundle("models.v1",
-                                "malloc.alloc\tmalloc\tfrobnicate\treturn\tmay\n");
+  auto bundle = WriteTempBundle(
+      "models.v1", "malloc.alloc\tmalloc\tfrobnicate\treturn\tmay\n");
   auto loaded = ModelBundle::Load(bundle.rows, bundle.manifest);
   ASSERT_FALSE(loaded.ok());
   EXPECT_EQ(loaded.status().code(), StatusCode::kInvalidArgument);
 }
 
 TEST(ModelBundleTest, RejectsControlCharacters) {
-  auto bundle = WriteTempBundle("models.v1",
-                                "malloc.alloc\tmalloc\tallocate\tret\x01urn\tmay\n");
+  auto bundle = WriteTempBundle(
+      "models.v1", "malloc.alloc\tmalloc\tallocate\tret\x01urn\tmay\n");
   auto loaded = ModelBundle::Load(bundle.rows, bundle.manifest);
   ASSERT_FALSE(loaded.ok());
   EXPECT_EQ(loaded.status().code(), StatusCode::kInvalidArgument);
 }
 
 TEST(ModelBundleTest, RejectsUnsortedRows) {
-  auto bundle = WriteTempBundle("models.v1",
-                                "malloc.alloc\tmalloc\tallocate\treturn\tmay\n"
-                                "free.dealloc\tfree\tdeallocate\targument\tmay\n");
+  auto bundle = WriteTempBundle(
+      "models.v1", "malloc.alloc\tmalloc\tallocate\treturn\tmay\n"
+                   "free.dealloc\tfree\tdeallocate\targument\tmay\n");
   auto loaded = ModelBundle::Load(bundle.rows, bundle.manifest);
   ASSERT_FALSE(loaded.ok());
   EXPECT_EQ(loaded.status().code(), StatusCode::kInvalidArgument);
@@ -127,8 +126,8 @@ TEST(ModelBundleTest, RejectsUnsortedRows) {
 TEST(ModelBundleTest, HashChangesWithContent) {
   auto first = WriteTempBundle("models.v1",
                                "malloc.alloc\tmalloc\tallocate\treturn\tmay\n");
-  auto second = WriteTempBundle("models.v1",
-                                "malloc.alloc\tmalloc\tallocate\treturn\tmust\n");
+  auto second = WriteTempBundle(
+      "models.v1", "malloc.alloc\tmalloc\tallocate\treturn\tmust\n");
   auto first_bundle = ModelBundle::Load(first.rows, first.manifest);
   auto second_bundle = ModelBundle::Load(second.rows, second.manifest);
   ASSERT_TRUE(first_bundle.ok());
@@ -136,5 +135,5 @@ TEST(ModelBundleTest, HashChangesWithContent) {
   EXPECT_NE(first_bundle->hash(), second_bundle->hash());
 }
 
-}  // namespace
-}  // namespace veritas::analysis::semantic
+} // namespace
+} // namespace veritas::analysis::semantic

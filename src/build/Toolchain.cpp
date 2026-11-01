@@ -35,7 +35,7 @@ using CommandLineArguments = clang::tooling::CommandLineArguments;
 // links a prebuilt LLVM whose builtin headers live under the LLVM library
 // directory. Empty when the resource dir could not be located, in which case
 // ClangTool's own inference is left in place.
-constexpr const char* kClangResourceDir =
+constexpr const char *kClangResourceDir =
 #ifdef VERITAS_CLANG_RESOURCE_DIR
     VERITAS_CLANG_RESOURCE_DIR;
 #else
@@ -44,12 +44,12 @@ constexpr const char* kClangResourceDir =
 
 // Standard macOS SDK install locations, used as a last-resort fallback when
 // neither `SDKROOT` nor `xcrun` is available.
-constexpr const char* kWellKnownMacOSSdkPaths[] = {
+constexpr const char *kWellKnownMacOSSdkPaths[] = {
     "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
     "/Applications/Xcode.app/Contents/Developer/Platforms/"
-        "MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+    "MacOSX.platform/Developer/SDKs/MacOSX.sdk",
     "/Applications/Xcode-beta.app/Contents/Developer/Platforms/"
-        "MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+    "MacOSX.platform/Developer/SDKs/MacOSX.sdk",
 };
 
 bool IsDirectory(llvm::StringRef path) {
@@ -90,7 +90,7 @@ std::optional<std::string> XcrunShowSdkPath() {
   }
 
   std::error_code remove_error = llvm::sys::fs::remove(capture_path);
-  (void)remove_error;  // best-effort cleanup of a file in the system temp dir
+  (void)remove_error; // best-effort cleanup of a file in the system temp dir
   return sdk;
 }
 
@@ -100,7 +100,7 @@ std::optional<std::string> ResolveMacOSSysroot() {
     return std::nullopt;
   }
 
-  if (const char* sdkroot = std::getenv("SDKROOT");
+  if (const char *sdkroot = std::getenv("SDKROOT");
       sdkroot != nullptr && *sdkroot != '\0') {
     if (IsDirectory(sdkroot)) {
       return std::string(sdkroot);
@@ -111,7 +111,7 @@ std::optional<std::string> ResolveMacOSSysroot() {
     return sdk;
   }
 
-  for (const char* candidate : kWellKnownMacOSSdkPaths) {
+  for (const char *candidate : kWellKnownMacOSSdkPaths) {
     if (IsDirectory(candidate)) {
       return std::string(candidate);
     }
@@ -119,8 +119,8 @@ std::optional<std::string> ResolveMacOSSysroot() {
   return std::nullopt;
 }
 
-bool HasSysrootFlag(const CommandLineArguments& args) {
-  for (const std::string& arg : args) {
+bool HasSysrootFlag(const CommandLineArguments &args) {
+  for (const std::string &arg : args) {
     if (arg == "-isysroot" || arg.starts_with("-isysroot=") ||
         arg == "--sysroot" || arg.starts_with("--sysroot=")) {
       return true;
@@ -129,8 +129,8 @@ bool HasSysrootFlag(const CommandLineArguments& args) {
   return false;
 }
 
-bool HasFlagPrefix(const CommandLineArguments& args, llvm::StringRef prefix) {
-  for (const std::string& arg : args) {
+bool HasFlagPrefix(const CommandLineArguments &args, llvm::StringRef prefix) {
+  for (const std::string &arg : args) {
     if (llvm::StringRef(arg).starts_with(prefix)) {
       return true;
     }
@@ -138,19 +138,19 @@ bool HasFlagPrefix(const CommandLineArguments& args, llvm::StringRef prefix) {
   return false;
 }
 
-}  // namespace
+} // namespace
 
 clang::tooling::ArgumentsAdjuster MakeSystemIncludeAdjuster() {
   // The SDK root and clang resource dir are stable for the lifetime of the
   // process; resolve the sysroot once and capture the baked-in resource dir.
   static const std::optional<std::string> kSysroot = ResolveMacOSSysroot();
 
-  const std::string resource_dir =
-      kClangResourceDir[0] != '\0' ? std::string(kClangResourceDir)
-                                   : std::string{};
+  const std::string resource_dir = kClangResourceDir[0] != '\0'
+                                       ? std::string(kClangResourceDir)
+                                       : std::string{};
   const std::optional<std::string> sysroot = kSysroot;
 
-  return [resource_dir, sysroot](const CommandLineArguments& args,
+  return [resource_dir, sysroot](const CommandLineArguments &args,
                                  llvm::StringRef) {
     std::vector<std::string> extra;
     if (!resource_dir.empty() && !HasFlagPrefix(args, "-resource-dir")) {
@@ -167,11 +167,11 @@ clang::tooling::ArgumentsAdjuster MakeSystemIncludeAdjuster() {
     CommandLineArguments adjusted = args;
     auto position = adjusted.begin();
     if (position != adjusted.end()) {
-      ++position;  // keep the program name (argv[0]) first
+      ++position; // keep the program name (argv[0]) first
     }
     adjusted.insert(position, extra.begin(), extra.end());
     return adjusted;
   };
 }
 
-}  // namespace veritas::build
+} // namespace veritas::build

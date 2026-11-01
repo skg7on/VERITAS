@@ -50,8 +50,8 @@ struct PreparedArtifact {
 // digests for one artifact — everything the metadata staging needs. Does not
 // touch the object store; callers that need the immutable bytes written pair
 // this with PrepareArtifact.
-veritas::StatusOr<PreparedArtifact> PrepareArtifactMetadata(
-    const summary::SummaryArtifact &artifact) {
+veritas::StatusOr<PreparedArtifact>
+PrepareArtifactMetadata(const summary::SummaryArtifact &artifact) {
   auto id_result = summary::ComputeFunctionSummaryId(artifact);
   if (!id_result.ok()) {
     return id_result.status();
@@ -70,8 +70,9 @@ veritas::StatusOr<PreparedArtifact> PrepareArtifactMetadata(
 // Returns everything the metadata staging step needs. The object store write
 // happens before any metadata transaction so the CAS layer never participates
 // in a transaction.
-veritas::StatusOr<PreparedArtifact> PrepareArtifact(
-    ObjectStore &object_store, const summary::SummaryArtifact &artifact) {
+veritas::StatusOr<PreparedArtifact>
+PrepareArtifact(ObjectStore &object_store,
+                const summary::SummaryArtifact &artifact) {
   auto prepared = PrepareArtifactMetadata(artifact);
   if (!prepared.ok()) {
     return prepared.status();
@@ -82,7 +83,8 @@ veritas::StatusOr<PreparedArtifact> PrepareArtifact(
     return bytes_result.status();
   }
 
-  auto put_status = object_store.PutIfAbsent(prepared->object_key, *bytes_result);
+  auto put_status =
+      object_store.PutIfAbsent(prepared->object_key, *bytes_result);
   if (!put_status.ok()) {
     return put_status;
   }
@@ -135,10 +137,10 @@ veritas::Status StageBinding(MetadataStore &metadata_store,
 
 // Publish a single artifact and atomically bind it as current. The binding
 // uses the caller-supplied function_variant_id (the V1 contract).
-veritas::StatusOr<core::StableId> PublishSingleArtifact(
-    ObjectStore &object_store, MetadataStore &metadata_store,
-    const summary::SummaryArtifact &artifact,
-    const PublicationContext &context) {
+veritas::StatusOr<core::StableId>
+PublishSingleArtifact(ObjectStore &object_store, MetadataStore &metadata_store,
+                      const summary::SummaryArtifact &artifact,
+                      const PublicationContext &context) {
   auto prepared = PrepareArtifact(object_store, artifact);
   if (!prepared.ok()) {
     return prepared.status();
@@ -161,10 +163,9 @@ veritas::StatusOr<core::StableId> PublishSingleArtifact(
   if (!stage_object.ok()) {
     return stage_object;
   }
-  auto stage_binding = StageBinding(metadata_store, *prepared,
-                                    context.function_variant_id,
-                                    context.revision_id,
-                                    context.build_variant_id);
+  auto stage_binding =
+      StageBinding(metadata_store, *prepared, context.function_variant_id,
+                   context.revision_id, context.build_variant_id);
   if (!stage_binding.ok()) {
     return stage_binding;
   }
@@ -180,10 +181,11 @@ veritas::StatusOr<core::StableId> PublishSingleArtifact(
 
 // Publish a batch of artifacts atomically: every current binding advances in
 // one transaction, or none do.
-veritas::StatusOr<std::vector<core::StableId>> PublishBatchArtifacts(
-    ObjectStore &object_store, MetadataStore &metadata_store,
-    const std::string &revision_id, const std::string &build_variant_id,
-    const std::vector<summary::SummaryArtifact> &artifacts) {
+veritas::StatusOr<std::vector<core::StableId>>
+PublishBatchArtifacts(ObjectStore &object_store, MetadataStore &metadata_store,
+                      const std::string &revision_id,
+                      const std::string &build_variant_id,
+                      const std::vector<summary::SummaryArtifact> &artifacts) {
   std::vector<PreparedArtifact> prepared;
   prepared.reserve(artifacts.size());
   for (const auto &artifact : artifacts) {
@@ -214,9 +216,9 @@ veritas::StatusOr<std::vector<core::StableId>> PublishBatchArtifacts(
     if (!stage_object.ok()) {
       return stage_object;
     }
-    auto stage_binding = StageBinding(metadata_store, entry,
-                                      entry.function_variant_id, revision_id,
-                                      build_variant_id);
+    auto stage_binding =
+        StageBinding(metadata_store, entry, entry.function_variant_id,
+                     revision_id, build_variant_id);
     if (!stage_binding.ok()) {
       return stage_binding;
     }
@@ -243,7 +245,7 @@ std::vector<summary::SummaryArtifact> ToArtifacts(const std::vector<T> &items) {
   return artifacts;
 }
 
-}  // namespace
+} // namespace
 
 SummaryRepository::SummaryRepository(
     std::unique_ptr<ObjectStore> object_store,
@@ -352,9 +354,9 @@ veritas::Status SummaryRepository::StageCurrentArtifactBindings(
       return stage_object;
     }
 
-    auto stage_binding = StageBinding(*metadata_store_, *prepared,
-                                      prepared->function_variant_id,
-                                      revision_id, build_variant_id);
+    auto stage_binding =
+        StageBinding(*metadata_store_, *prepared, prepared->function_variant_id,
+                     revision_id, build_variant_id);
     if (!stage_binding.ok()) {
       return stage_binding;
     }
@@ -467,8 +469,8 @@ SummaryRepository::ListCurrentSummaryArtifacts(
 }
 
 veritas::StatusOr<std::vector<summary::v1::FunctionSummary>>
-SummaryRepository::ListCurrentSummaries(std::string_view revision_id,
-                                        std::string_view build_variant_id) const {
+SummaryRepository::ListCurrentSummaries(
+    std::string_view revision_id, std::string_view build_variant_id) const {
   auto artifacts = ListCurrentSummaryArtifacts(revision_id, build_variant_id);
   if (!artifacts.ok()) {
     return artifacts.status();

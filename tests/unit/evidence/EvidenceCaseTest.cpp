@@ -45,73 +45,72 @@ namespace {
 // renders to its enumerator and parses back to the same value.
 template <typename Enum, typename ToText, typename FromText, std::size_t N>
 void ExpectRoundTrips(
-    const std::array<std::pair<Enum, std::string_view>, N>& pairs,
+    const std::array<std::pair<Enum, std::string_view>, N> &pairs,
     ToText to_text, FromText from_text) {
-  for (const auto& [value, spelling] : pairs) {
+  for (const auto &[value, spelling] : pairs) {
     EXPECT_EQ(to_text(value), spelling);
     auto parsed = from_text(spelling);
-    ASSERT_TRUE(parsed.ok())
-        << spelling << ": " << parsed.status().message();
+    ASSERT_TRUE(parsed.ok()) << spelling << ": " << parsed.status().message();
     EXPECT_EQ(*parsed, value) << spelling;
   }
 }
 
 // Every reference a case can carry, resolved against the members that declare
 // it. Returns the sorted list of unresolvable references.
-std::vector<std::string> UnresolvedReferences(const EvidenceCase& value) {
+std::vector<std::string> UnresolvedReferences(const EvidenceCase &value) {
   std::set<std::string> entities;
   std::set<std::string> facts;
   std::set<std::string> provenance;
   std::set<std::string> summaries;
   std::set<std::string> members;
-  for (const auto& entity : value.entities) {
+  for (const auto &entity : value.entities) {
     entities.insert(entity.id);
     members.insert(entity.id);
   }
-  for (const auto& fact : value.facts) {
+  for (const auto &fact : value.facts) {
     facts.insert(fact.id);
     members.insert(fact.id);
   }
-  for (const auto& record : value.provenance) {
+  for (const auto &record : value.provenance) {
     provenance.insert(record.id);
     members.insert(record.id);
   }
-  for (const auto& summary : value.summaries) {
+  for (const auto &summary : value.summaries) {
     summaries.insert(summary.id);
     members.insert(summary.id);
   }
-  for (const auto& member : value.edges) {
+  for (const auto &member : value.edges) {
     members.insert(member.id);
   }
-  for (const auto& member : value.paths) {
+  for (const auto &member : value.paths) {
     members.insert(member.id);
   }
-  for (const auto& member : value.assumptions) {
+  for (const auto &member : value.assumptions) {
     members.insert(member.id);
   }
-  for (const auto& member : value.hypotheses) {
+  for (const auto &member : value.hypotheses) {
     members.insert(member.id);
   }
-  for (const auto& member : value.unknowns) {
+  for (const auto &member : value.unknowns) {
     members.insert(member.id);
   }
-  for (const auto& member : value.constraints) {
+  for (const auto &member : value.constraints) {
     members.insert(member.id);
   }
-  for (const auto& member : value.proof_obligations) {
+  for (const auto &member : value.proof_obligations) {
     members.insert(member.id);
   }
-  for (const auto& member : value.dependencies) {
+  for (const auto &member : value.dependencies) {
     members.insert(member.id);
   }
-  for (const auto& member : value.omissions) {
+  for (const auto &member : value.omissions) {
     members.insert(member.id);
   }
 
   std::vector<std::string> unresolved;
-  auto require = [&unresolved](const std::string& reference,
-                               const std::set<std::string>& scope,
-                               const char* what) {
+  auto require = [&unresolved](const std::string &reference,
+                               const std::set<std::string> &scope,
+                               const char *what) {
     if (scope.count(reference) == 0) {
       unresolved.push_back(std::string(what) + ": " + reference);
     }
@@ -120,7 +119,7 @@ std::vector<std::string> UnresolvedReferences(const EvidenceCase& value) {
   if (entities.count(value.primary_claim.subject) == 0) {
     unresolved.push_back("claim.subject: " + value.primary_claim.subject);
   }
-  for (const auto& edge : value.edges) {
+  for (const auto &edge : value.edges) {
     require(edge.from, entities, "edge.from");
     require(edge.to, entities, "edge.to");
     if (!edge.provenance_id.empty()) {
@@ -130,38 +129,38 @@ std::vector<std::string> UnresolvedReferences(const EvidenceCase& value) {
       require(edge.summarized_by, summaries, "edge.summarized_by");
     }
   }
-  for (const auto& path : value.paths) {
-    for (const auto& entity_id : path.entity_ids) {
+  for (const auto &path : value.paths) {
+    for (const auto &entity_id : path.entity_ids) {
       require(entity_id, entities, "path.entity_ids");
     }
     if (!path.provenance_id.empty()) {
       require(path.provenance_id, provenance, "path.provenance_id");
     }
   }
-  for (const auto& fact : value.facts) {
+  for (const auto &fact : value.facts) {
     if (!fact.provenance_id.empty()) {
       require(fact.provenance_id, provenance, "fact.provenance_id");
     }
   }
-  for (const auto& unknown : value.unknowns) {
-    for (const auto& blocking : unknown.blocking_ids) {
+  for (const auto &unknown : value.unknowns) {
+    for (const auto &blocking : unknown.blocking_ids) {
       require(blocking, facts, "unknown.blocking_ids");
     }
   }
-  for (const auto& constraint : value.constraints) {
+  for (const auto &constraint : value.constraints) {
     if (!constraint.provenance_id.empty()) {
       require(constraint.provenance_id, provenance, "constraint.provenance_id");
     }
   }
-  for (const auto& record : value.provenance) {
-    for (const auto& input : record.input_fact_ids) {
+  for (const auto &record : value.provenance) {
+    for (const auto &input : record.input_fact_ids) {
       require(input, facts, "provenance.input_fact_ids");
     }
   }
-  for (const auto& summary : value.summaries) {
+  for (const auto &summary : value.summaries) {
     require(summary.function_id, entities, "summary.function_id");
   }
-  for (const auto& omission : value.omissions) {
+  for (const auto &omission : value.omissions) {
     require(omission.subject, members, "omission.subject");
   }
   std::sort(unresolved.begin(), unresolved.end());
@@ -169,13 +168,13 @@ std::vector<std::string> UnresolvedReferences(const EvidenceCase& value) {
 }
 
 // The expression `value(@x) > capacity(@y)`.
-bool IsOverflowComparison(const Expression& expression) {
-  if (expression.kind != Expression::Kind::kCompare ||
-      expression.text != ">" || expression.operands.size() != 2) {
+bool IsOverflowComparison(const Expression &expression) {
+  if (expression.kind != Expression::Kind::kCompare || expression.text != ">" ||
+      expression.operands.size() != 2) {
     return false;
   }
-  const Expression& left = expression.operands[0];
-  const Expression& right = expression.operands[1];
+  const Expression &left = expression.operands[0];
+  const Expression &right = expression.operands[1];
   return left.kind == Expression::Kind::kCall && left.text == "value" &&
          left.operands.size() == 1 &&
          left.operands[0].kind == Expression::Kind::kReference &&
@@ -184,7 +183,7 @@ bool IsOverflowComparison(const Expression& expression) {
          right.operands[0].kind == Expression::Kind::kReference;
 }
 
-}  // namespace
+} // namespace
 
 TEST(EvidenceCaseTest, RepresentsInitialOverflowCaseState) {
   EvidenceCase value;
@@ -260,8 +259,8 @@ TEST(EvidenceCaseTest, LevelAndDependencyKindSpellingsAreLowercase) {
       [](std::string_view text) { return ParseDependencyKind(text); });
 }
 
-// EIR-T 1.0 §4.1/§5.1/§6.1/§8.1/§9/§10.1/§12: entity, relation, path, epistemic,
-// confidence, proof-status, feasibility, and proof-goal spellings.
+// EIR-T 1.0 §4.1/§5.1/§6.1/§8.1/§9/§10.1/§12: entity, relation, path,
+// epistemic, confidence, proof-status, feasibility, and proof-goal spellings.
 TEST(EvidenceCaseTest, SemanticEnumSpellingsMatchStabilizedGrammar) {
   const std::array<std::pair<EntityKind, std::string_view>, 5> entities{{
       {EntityKind::kFunction, "function"},
@@ -460,7 +459,7 @@ TEST(EvidenceCaseTest, MinimalCaseIsFactBearing) {
   EXPECT_FALSE(provenance_id.empty());
 
   bool provenance_found = false;
-  for (const auto& record : value.provenance) {
+  for (const auto &record : value.provenance) {
     if (record.id == provenance_id) {
       provenance_found = true;
     }
@@ -474,7 +473,7 @@ TEST(EvidenceCaseTest, MinimalCaseDeclaresItsClaimSubject) {
   const EvidenceCase value = MakeValidMinimalEvidenceCase();
   ASSERT_FALSE(value.primary_claim.subject.empty());
   bool subject_declared = false;
-  for (const auto& entity : value.entities) {
+  for (const auto &entity : value.entities) {
     if (entity.id == value.primary_claim.subject) {
       subject_declared = true;
     }
@@ -494,7 +493,7 @@ TEST(EvidenceCaseTest, MinimalCaseBindsOneCompleteAnalysisRun) {
   EXPECT_FALSE(value.program.type_layout_id.empty());
 
   ASSERT_FALSE(value.provenance.empty());
-  for (const auto& record : value.provenance) {
+  for (const auto &record : value.provenance) {
     ASSERT_TRUE(record.analysis_run_id.has_value());
     EXPECT_EQ(*record.analysis_run_id, *value.program.analysis_run_id);
   }
@@ -529,7 +528,7 @@ TEST(EvidenceCaseTest, OverflowCaseIsFullyPopulated) {
 TEST(EvidenceCaseTest, OverflowCaseCarriesAConnectedValueFlowPath) {
   const EvidenceCase value = MakeOverflowEvidenceCase();
   ASSERT_FALSE(value.paths.empty());
-  const Path& path = value.paths.front();
+  const Path &path = value.paths.front();
   EXPECT_EQ(path.kind, PathKind::kValueFlow);
   ASSERT_GE(path.entity_ids.size(), 2U);
   EXPECT_EQ(path.feasibility, Feasibility::kSat);
@@ -537,7 +536,7 @@ TEST(EvidenceCaseTest, OverflowCaseCarriesAConnectedValueFlowPath) {
   // Every consecutive segment is realized by a declared edge.
   for (std::size_t i = 1; i < path.entity_ids.size(); ++i) {
     bool connected = false;
-    for (const auto& edge : value.edges) {
+    for (const auto &edge : value.edges) {
       if (edge.from == path.entity_ids[i - 1] &&
           edge.to == path.entity_ids[i]) {
         connected = true;
@@ -553,13 +552,13 @@ TEST(EvidenceCaseTest, OverflowCaseCarriesAConnectedValueFlowPath) {
 TEST(EvidenceCaseTest, OverflowCaseRecordsTruncationWithoutNegativeFact) {
   const EvidenceCase value = MakeOverflowEvidenceCase();
 
-  for (const auto& fact : value.facts) {
+  for (const auto &fact : value.facts) {
     EXPECT_NE(fact.epistemic, EpistemicState::kMustNot);
     EXPECT_NE(fact.epistemic, EpistemicState::kUnspecified);
   }
 
   bool truncated_unknown = false;
-  for (const auto& unknown : value.unknowns) {
+  for (const auto &unknown : value.unknowns) {
     if (unknown.reason == "dominating-check query truncated") {
       truncated_unknown = true;
     }
@@ -567,7 +566,7 @@ TEST(EvidenceCaseTest, OverflowCaseRecordsTruncationWithoutNegativeFact) {
   EXPECT_TRUE(truncated_unknown);
 
   bool expandable_omission = false;
-  for (const auto& omission : value.omissions) {
+  for (const auto &omission : value.omissions) {
     if (omission.expandable) {
       expandable_omission = true;
     }
@@ -581,7 +580,7 @@ TEST(EvidenceCaseTest, OverflowCaseCarriesBothTruncationReasonForms) {
   const EvidenceCase value = MakeOverflowEvidenceCase();
 
   std::size_t matching = 0;
-  for (const auto& unknown : value.unknowns) {
+  for (const auto &unknown : value.unknowns) {
     if (unknown.reason_code == UnknownReasonCode::kAnalysisTimeout) {
       ++matching;
       EXPECT_EQ(unknown.reason, "dominating-check query truncated");
@@ -590,14 +589,14 @@ TEST(EvidenceCaseTest, OverflowCaseCarriesBothTruncationReasonForms) {
   EXPECT_EQ(matching, 1U);
 
   bool vendor_code = false;
-  for (const auto& unknown : value.unknowns) {
+  for (const auto &unknown : value.unknowns) {
     if (unknown.reason == "EXTERNAL_FUNCTION") {
       vendor_code = unknown.reason_code == UnknownReasonCode::kExternalFunction;
     }
   }
   EXPECT_TRUE(vendor_code);
 
-  for (const auto& unknown : value.unknowns) {
+  for (const auto &unknown : value.unknowns) {
     EXPECT_NE(unknown.reason_code, UnknownReasonCode::kUnspecified);
   }
 }
@@ -606,7 +605,7 @@ TEST(EvidenceCaseTest, OverflowCaseBindsOneAnalysisRun) {
   const EvidenceCase value = MakeOverflowEvidenceCase();
   ASSERT_TRUE(value.program.analysis_run_id.has_value());
   ASSERT_FALSE(value.provenance.empty());
-  for (const auto& record : value.provenance) {
+  for (const auto &record : value.provenance) {
     ASSERT_TRUE(record.analysis_run_id.has_value());
     EXPECT_EQ(*record.analysis_run_id, *value.program.analysis_run_id);
   }
@@ -617,7 +616,7 @@ TEST(EvidenceCaseTest, OverflowCaseBindsOneAnalysisRun) {
 TEST(EvidenceCaseTest, OverflowCaseProofObligationIsPending) {
   const EvidenceCase value = MakeOverflowEvidenceCase();
   ASSERT_EQ(value.proof_obligations.size(), 1U);
-  const ProofObligation& obligation = value.proof_obligations.front();
+  const ProofObligation &obligation = value.proof_obligations.front();
   EXPECT_EQ(obligation.goal_kind, ProofGoalKind::kProve);
   EXPECT_EQ(obligation.status, ProofStatus::kPending);
   EXPECT_TRUE(obligation.result_id.empty());
@@ -630,8 +629,8 @@ TEST(EvidenceCaseTest, OverflowCaseProofObligationIsPending) {
 // hypothesis whose local ID collides with a fact.
 TEST(EvidenceCaseTest, OverflowCaseKeepsHypothesesOutOfFacts) {
   const EvidenceCase value = MakeOverflowEvidenceCase();
-  for (const auto& hypothesis : value.hypotheses) {
-    for (const auto& fact : value.facts) {
+  for (const auto &hypothesis : value.hypotheses) {
+    for (const auto &fact : value.facts) {
       EXPECT_NE(hypothesis.id, fact.id);
     }
   }
@@ -640,12 +639,12 @@ TEST(EvidenceCaseTest, OverflowCaseKeepsHypothesesOutOfFacts) {
 TEST(EvidenceCaseTest, OverflowCaseRetainsSummaryAndDependencyIdentity) {
   const EvidenceCase value = MakeOverflowEvidenceCase();
   ASSERT_FALSE(value.summaries.empty());
-  const SummaryReference& summary = value.summaries.front();
+  const SummaryReference &summary = value.summaries.front();
   EXPECT_EQ(summary.summary_id.kind, core::IdKind::kFunctionSummary);
   EXPECT_FALSE(summary.components.empty());
 
   bool summary_dependency = false;
-  for (const auto& dependency : value.dependencies) {
+  for (const auto &dependency : value.dependencies) {
     if (dependency.kind == DependencyKind::kSummary) {
       summary_dependency = true;
       EXPECT_EQ(dependency.stable_id, summary.summary_id);
@@ -673,20 +672,21 @@ TEST(EvidenceCaseTest, BuilderRequestCarriesLevelAndTypedHandoff) {
             request.input.query_completion_bindings.size());
 
   // Every query provenance reference resolves to a completion fact and binding.
-  const std::array<const QueryResultMetadata*, 6> metadata{
+  const std::array<const QueryResultMetadata *, 6> metadata{
       {&request.input.flow_slice.metadata, &request.input.ranges.metadata,
        &request.input.capacities.metadata, &request.input.aliases.metadata,
-       &request.input.dominating_checks.metadata, &request.input.unknowns.metadata}};
-  for (const auto* entry : metadata) {
+       &request.input.dominating_checks.metadata,
+       &request.input.unknowns.metadata}};
+  for (const auto *entry : metadata) {
     EXPECT_TRUE(ValidateQueryResultMetadata(*entry).ok());
     bool fact_found = false;
     bool binding_found = false;
-    for (const auto& fact : request.input.query_completion_facts) {
+    for (const auto &fact : request.input.query_completion_facts) {
       if (fact.fact_id == entry->query_provenance_id) {
         fact_found = true;
       }
     }
-    for (const auto& binding : request.input.query_completion_bindings) {
+    for (const auto &binding : request.input.query_completion_bindings) {
       if (binding.fact_id == entry->query_provenance_id) {
         binding_found = true;
       }
@@ -699,18 +699,17 @@ TEST(EvidenceCaseTest, BuilderRequestCarriesLevelAndTypedHandoff) {
 // The truncated-check helper produces matching truncated metadata, completion
 // certificate, and case-visible unknown rather than an invalid combination.
 TEST(EvidenceCaseTest, TruncatedDominatingChecksStayConsistent) {
-  const EvidenceBuildRequest request = EvidenceScenarioBuilder()
-                                           .WithTruncatedDominatingChecks(
-                                               TruncationReason::kMaxPaths)
-                                           .BuildRequest(EvidenceLevel::kL1);
+  const EvidenceBuildRequest request =
+      EvidenceScenarioBuilder()
+          .WithTruncatedDominatingChecks(TruncationReason::kMaxPaths)
+          .BuildRequest(EvidenceLevel::kL1);
 
   EXPECT_EQ(request.input.dominating_checks.metadata.completeness,
             QueryCompleteness::kTruncated);
   ASSERT_EQ(request.input.dominating_checks.metadata.truncation_reasons.size(),
             1U);
-  EXPECT_EQ(
-      request.input.dominating_checks.metadata.truncation_reasons.front(),
-      TruncationReason::kMaxPaths);
+  EXPECT_EQ(request.input.dominating_checks.metadata.truncation_reasons.front(),
+            TruncationReason::kMaxPaths);
   EXPECT_TRUE(request.input.dominating_checks.facts.empty());
   EXPECT_TRUE(
       ValidateQueryResultMetadata(request.input.dominating_checks.metadata)
@@ -718,7 +717,7 @@ TEST(EvidenceCaseTest, TruncatedDominatingChecksStayConsistent) {
 
   const EvidenceCase value = MakeOverflowEvidenceCase();
   bool truncated_unknown = false;
-  for (const auto& unknown : value.unknowns) {
+  for (const auto &unknown : value.unknowns) {
     if (unknown.reason == "dominating-check query truncated") {
       truncated_unknown = true;
     }

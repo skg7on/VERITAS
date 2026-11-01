@@ -74,17 +74,23 @@ struct CanonicalValue {
 // Encode a CanonicalValue into a deterministic byte sequence. Keys in objects
 // are sorted; arrays preserve order. Tagged paths are encoded with their kind
 // and root ID; untagged absolute paths return InvalidArgument.
-StatusOr<std::vector<std::byte>> CanonicalEncode(const CanonicalValue& value);
+StatusOr<std::vector<std::byte>> CanonicalEncode(const CanonicalValue &value);
 
 // Helper constructors for test ergonomics.
 inline CanonicalValue Null() { return {CanonicalNull{}}; }
+
 inline CanonicalValue Bool(bool v) { return {v}; }
+
 inline CanonicalValue Int(int64_t v) { return {v}; }
+
 inline CanonicalValue String(std::string v) { return {std::move(v)}; }
+
 inline CanonicalValue Array(CanonicalArray v) { return {std::move(v)}; }
+
 inline CanonicalValue Object(CanonicalObject v) { return {std::move(v)}; }
+
 inline CanonicalValue Path(TaggedPath v) { return {std::move(v)}; }
 
-}  // namespace veritas::core
+} // namespace veritas::core
 
-#endif  // VERITAS_CORE_CANONICALVALUE_H_
+#endif // VERITAS_CORE_CANONICALVALUE_H_

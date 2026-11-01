@@ -23,6 +23,7 @@
 #include <map>
 #include <regex>
 #include <set>
+
 namespace veritas::review {
 
 Json::Kind Json::kind() const {
@@ -42,11 +43,13 @@ Json::Kind Json::kind() const {
     return Map;
   }
 }
+
 std::optional<bool> Json::getAsBoolean() const {
   if (auto p = std::get_if<bool>(&data))
     return *p;
   return std::nullopt;
 }
+
 std::optional<int64_t> Json::getAsInteger() const {
   if (auto p = std::get_if<int64_t>(&data))
     return *p;
@@ -55,6 +58,7 @@ std::optional<int64_t> Json::getAsInteger() const {
     return int64_t(*p);
   return std::nullopt;
 }
+
 std::optional<uint64_t> Json::getAsUINT64() const {
   if (auto p = std::get_if<uint64_t>(&data))
     return *p;
@@ -62,39 +66,49 @@ std::optional<uint64_t> Json::getAsUINT64() const {
     return uint64_t(*p);
   return std::nullopt;
 }
+
 std::optional<std::string> Json::getAsString() const {
   if (auto p = std::get_if<std::string>(&data))
     return *p;
   return std::nullopt;
 }
+
 const Json *JsonObject::get(std::string_view key) const {
   auto it = find(key);
   return it == end() ? nullptr : &it->second;
 }
+
 std::optional<std::string> JsonObject::getString(std::string_view key) const {
   auto p = get(key);
   return p ? p->getAsString() : std::nullopt;
 }
+
 std::optional<bool> JsonObject::getBoolean(std::string_view key) const {
   auto p = get(key);
   return p ? p->getAsBoolean() : std::nullopt;
 }
+
 const JsonObject *JsonObject::getObject(std::string_view key) const {
   auto p = get(key);
   return p ? p->getAsObject() : nullptr;
 }
+
 const std::vector<Json> *JsonObject::getArray(std::string_view key) const {
   auto p = get(key);
   return p ? p->getAsArray() : nullptr;
 }
+
 namespace {
 using V = Json;
 using O = Json::Object;
 using A = Json::Array;
+
 Status Bad() { return Status::InvalidArgument("invalid closed v2 wire value"); }
+
 class Parser {
 public:
   explicit Parser(std::string_view text) : text_(text) {}
+
   StatusOr<V> Parse(unsigned depth = 0) {
     Space();
     if (depth > 128 || pos_ == text_.size())
@@ -172,6 +186,7 @@ public:
       return Bad();
     return V(n);
   }
+
   bool Done() {
     Space();
     return pos_ == text_.size();
@@ -183,6 +198,7 @@ private:
                                    text_[pos_] == '\r' || text_[pos_] == '\t'))
       ++pos_;
   }
+
   bool Take(char c) {
     if (pos_ < text_.size() && text_[pos_] == c) {
       ++pos_;
@@ -190,6 +206,7 @@ private:
     }
     return false;
   }
+
   StatusOr<V> String() {
     if (!Take('"'))
       return Bad();
@@ -240,9 +257,11 @@ private:
     }
     return Bad();
   }
+
   std::string_view text_;
   size_t pos_ = 0;
 };
+
 void Quote(std::string_view s, std::string &out) {
   out += '"';
   const char *hex = "0123456789abcdef";
@@ -280,6 +299,7 @@ void Quote(std::string_view s, std::string &out) {
   }
   out += '"';
 }
+
 Status Encode(const V &v, std::string &out, unsigned depth = 0) {
   if (depth > 128)
     return Bad();
@@ -330,6 +350,7 @@ Status Encode(const V &v, std::string &out, unsigned depth = 0) {
     return Bad();
   return Status::Ok();
 }
+
 const V &Schema() {
   static const V schema = [] {
     auto s = ParseStrictJson(kReviewSchema);
@@ -337,14 +358,17 @@ const V &Schema() {
   }();
   return schema;
 }
+
 std::string Text(const O &o, std::string_view key) {
   auto s = o.getString(key);
   return s ? *s : "";
 }
+
 std::optional<uint64_t> UInt(const O &o, std::string_view key) {
   auto v = o.get(key);
   return v ? v->getAsUINT64() : std::nullopt;
 }
+
 Status Validate(const V &v, const V &rule, unsigned depth = 0) {
   if (depth > 160)
     return Bad();
@@ -467,6 +491,7 @@ Status Validate(const V &v, const V &rule, unsigned depth = 0) {
     return Bad();
   return Status::Ok();
 }
+
 A Strings(const std::vector<std::string> &strings) {
   A a;
   for (const auto &s : strings)
@@ -474,15 +499,18 @@ A Strings(const std::vector<std::string> &strings) {
   return a;
 }
 } // namespace
+
 bool IsDigest(std::string_view text) {
   return text.size() == 64 && std::all_of(text.begin(), text.end(), [](char c) {
            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
          });
 }
+
 std::string HashBytes(std::string_view text) {
   return core::DigestToHex(
       core::ComputeSHA256(std::as_bytes(std::span(text.data(), text.size()))));
 }
+
 StatusOr<V> ParseStrictJson(std::string_view text) {
   if (text.size() > 1024 * 1024 ||
       !llvm::json::isUTF8(llvm::StringRef(text.data(), text.size())))
@@ -495,6 +523,7 @@ StatusOr<V> ParseStrictJson(std::string_view text) {
     return Bad();
   return std::move(*value);
 }
+
 StatusOr<std::string> CanonicalJson(const V &value) {
   std::string out;
   auto status = Encode(value, out);
@@ -502,12 +531,14 @@ StatusOr<std::string> CanonicalJson(const V &value) {
     return status;
   return out;
 }
+
 Status ValidateWireType(const V &value, std::string_view name) {
   auto rule = Schema().getAsObject()->getObject("$defs")->get(name);
   if (!rule)
     return Bad();
   return Validate(value, *rule);
 }
+
 V ToJson(const ReviewBinding &b) {
   A providers;
   for (const auto &p : b.provider_versions)
@@ -530,6 +561,7 @@ V ToJson(const ReviewBinding &b) {
       {"native_binding", std::move(native)},
       {"provider_versions", std::move(providers)}};
 }
+
 V ToJson(const ProgramScope &s) {
   return O{
       {"member_tu_digests", Strings(s.member_tu_digests)},
@@ -540,6 +572,7 @@ V ToJson(const ProgramScope &s) {
       {"assumptions", Strings(s.assumptions)},
       {"frontier", Strings(s.frontier)}};
 }
+
 StatusOr<ReviewBinding> DecodeReviewBinding(const V &value) {
   auto status = ValidateWireType(value, "ReviewBinding");
   if (!status.ok())
@@ -564,6 +597,7 @@ StatusOr<ReviewBinding> DecodeReviewBinding(const V &value) {
   }
   return b;
 }
+
 StatusOr<BackendEnvelope> DecodeV2(std::string_view text,
                                    std::string_view expected_id,
                                    std::string_view expected_op) {

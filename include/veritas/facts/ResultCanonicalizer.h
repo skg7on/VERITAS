@@ -39,7 +39,7 @@ namespace veritas::facts {
 struct CanonicalizationRequest {
   std::span<const RootedInputFact> local_roots;
   std::span<const RootedInputFact> successor_roots;
-  const RawWpaEvaluation* evaluation = nullptr;
+  const RawWpaEvaluation *evaluation = nullptr;
 };
 
 struct CanonicalizedResult {
@@ -65,21 +65,21 @@ struct CanonicalResultHashes {
 // Computes the canonical content hashes used by CanonicalizedResult. The
 // inputs are sorted internally so callers cannot accidentally hash a
 // producer-dependent iteration order.
-CanonicalResultHashes ComputeCanonicalResultHashes(
-    std::span<const AnalysisFact> facts,
-    std::span<const WitnessEdge> witnesses);
+CanonicalResultHashes
+ComputeCanonicalResultHashes(std::span<const AnalysisFact> facts,
+                             std::span<const WitnessEdge> witnesses);
 
 class ResultCanonicalizer {
- public:
+public:
   // Fails with InvalidArgument on a malformed row, an unregistered rule, a
   // witness for an unpublished result, or one rule claiming two inputs at one
   // ordinal; and with FailedPrecondition when a result has no finite proof
   // rooted in the declared inputs, which covers both orphaned results and
   // results supported only by a cycle.
-  static StatusOr<CanonicalizedResult> Canonicalize(
-      const CanonicalizationRequest& request);
+  static StatusOr<CanonicalizedResult>
+  Canonicalize(const CanonicalizationRequest &request);
 };
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_RESULT_CANONICALIZER_H_
+#endif // VERITAS_FACTS_RESULT_CANONICALIZER_H_

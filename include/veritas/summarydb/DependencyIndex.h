@@ -77,7 +77,7 @@ struct ImpactBudget {
 
 // The set of consumers transitively affected by a summary delta.
 struct ImpactGraph {
-  std::vector<ConsumerRef> consumers;  // deduplicated, deterministically ordered
+  std::vector<ConsumerRef> consumers; // deduplicated, deterministically ordered
   std::size_t explored_edges = 0;
   bool truncated = false;
 };
@@ -87,33 +87,32 @@ struct ImpactGraph {
 // MetadataStore with SummaryRepository so dependency replacement can be
 // staged in the same transaction as summary publication.
 class DependencyIndex {
- public:
-  explicit DependencyIndex(MetadataStore& metadata_store);
+public:
+  explicit DependencyIndex(MetadataStore &metadata_store);
 
   // Atomically replace the current dependency edges for a consumer: delete the
   // consumer's current reverse-index rows, insert the new current rows, and
   // append historical rows. All within one transaction.
-  Status ReplaceCurrentDependencies(
-      core::StableId consumer_summary_id,
-      const std::vector<DependencyEdge>& edges);
+  Status ReplaceCurrentDependencies(core::StableId consumer_summary_id,
+                                    const std::vector<DependencyEdge> &edges);
 
   // Look up the current consumers of a producer component, ordered
   // deterministically by (consumer_id, consumer_component).
-  StatusOr<std::vector<ConsumerRef>> UsersOf(
-      core::StableId producer_id,
-      summary::v1::ComponentKind producer_component) const;
+  StatusOr<std::vector<ConsumerRef>>
+  UsersOf(core::StableId producer_id,
+          summary::v1::ComponentKind producer_component) const;
 
   // Traverse the reverse index transitively from a summary delta and return
   // the affected consumers. Semantic component deltas follow SEMANTIC edges
   // only; evidence-only deltas follow EVIDENCE_ONLY edges only. Traversal is
   // budgeted and reports truncation explicitly.
-  StatusOr<ImpactGraph> GetImpactSet(const SummaryDelta& delta,
+  StatusOr<ImpactGraph> GetImpactSet(const SummaryDelta &delta,
                                      ImpactBudget budget) const;
 
- private:
-  MetadataStore& metadata_store_;
+private:
+  MetadataStore &metadata_store_;
 };
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb
 
-#endif  // VERITAS_SUMMARYDB_DEPENDENCY_INDEX_H_
+#endif // VERITAS_SUMMARYDB_DEPENDENCY_INDEX_H_

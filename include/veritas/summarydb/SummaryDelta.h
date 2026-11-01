@@ -34,10 +34,15 @@ struct ComponentDelta {
   core::SHA256Digest old_evidence_hash;
   core::SHA256Digest new_evidence_hash;
 
-  bool SemanticChanged() const { return old_semantic_hash != new_semantic_hash; }
-  bool EvidenceChanged() const { return old_evidence_hash != new_evidence_hash; }
+  bool SemanticChanged() const {
+    return old_semantic_hash != new_semantic_hash;
+  }
 
-  bool operator==(const ComponentDelta&) const = default;
+  bool EvidenceChanged() const {
+    return old_evidence_hash != new_evidence_hash;
+  }
+
+  bool operator==(const ComponentDelta &) const = default;
 };
 
 // SummaryDelta is the M7 scheduling signal: which components of a summary
@@ -58,10 +63,10 @@ struct SummaryDelta {
 // Diff two summaries component-by-component using the M3 component hashes.
 // Returns the resulting SummaryDelta, or an error if either summary cannot be
 // serialized to compute its FunctionSummaryID.
-StatusOr<SummaryDelta> DiffSummaries(
-    const summary::v1::FunctionSummary& old_summary,
-    const summary::v1::FunctionSummary& new_summary);
+StatusOr<SummaryDelta>
+DiffSummaries(const summary::v1::FunctionSummary &old_summary,
+              const summary::v1::FunctionSummary &new_summary);
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb
 
-#endif  // VERITAS_SUMMARYDB_SUMMARY_DELTA_H_
+#endif // VERITAS_SUMMARYDB_SUMMARY_DELTA_H_

@@ -30,8 +30,8 @@
 
 namespace veritas::build {
 
-StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput& input);
+StatusOr<AnalysisManifest> LoadProjectManifest(const ProjectInput &input);
 
-}  // namespace veritas::build
+} // namespace veritas::build
 
-#endif  // VERITAS_BUILD_PROJECTMANIFESTLOADER_H_
+#endif // VERITAS_BUILD_PROJECTMANIFESTLOADER_H_

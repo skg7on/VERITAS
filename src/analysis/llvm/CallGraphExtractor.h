@@ -21,14 +21,14 @@
 namespace llvm {
 class Function;
 class Module;
-}  // namespace llvm
+} // namespace llvm
 
 namespace veritas::analysis::llvm {
 
 // CallGraphExtractor extracts direct function calls from LLVM IR. It produces
 // a list of (caller, callee) pairs where both are FunctionSymbolIDs.
 class CallGraphExtractor {
- public:
+public:
   struct CallEdge {
     std::string caller;
     std::string callee;
@@ -39,16 +39,16 @@ class CallGraphExtractor {
 
   // Extracts all direct calls from a function. Returns a list of callee
   // symbol IDs. Indirect calls through function pointers are not included.
-  std::vector<std::string> ExtractCalls(const ::llvm::Function* func) const;
+  std::vector<std::string> ExtractCalls(const ::llvm::Function *func) const;
 
   // Extracts the full call graph from a module. Returns all (caller, callee)
   // edges.
-  std::vector<CallEdge> ExtractCallGraph(const ::llvm::Module* module) const;
+  std::vector<CallEdge> ExtractCallGraph(const ::llvm::Module *module) const;
 
- private:
-  std::string GetFunctionSymbolId(const ::llvm::Function* func) const;
+private:
+  std::string GetFunctionSymbolId(const ::llvm::Function *func) const;
 };
 
-}  // namespace veritas::analysis::llvm
+} // namespace veritas::analysis::llvm
 
-#endif  // VERITAS_ANALYSIS_LLVM_CALLGRAPHEXTRACTOR_H_
+#endif // VERITAS_ANALYSIS_LLVM_CALLGRAPHEXTRACTOR_H_

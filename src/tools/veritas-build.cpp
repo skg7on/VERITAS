@@ -68,28 +68,31 @@ struct AnalyzeArguments {
   std::string wpa_engine = "souffle";
   std::string scale_profile = "baseline";
   bool field_sensitive = true;
-  std::size_t max_alias_pairs = 0;  // 0 = keep the AnalysisConfig default
+  std::size_t max_alias_pairs = 0; // 0 = keep the AnalysisConfig default
   bool metrics = true;
   std::size_t metrics_interval_ms = 250;
   std::size_t metrics_top_n = 10;
   bool metrics_series = true;
-  fs::path metrics_path;  // empty = <output>/run-metrics.json
+  fs::path metrics_path; // empty = <output>/run-metrics.json
 };
 
 // Parse a positive decimal integer without exceptions (the project builds with
 // -fno-exceptions). Returns false on empty, non-digit, zero, or overflow input.
-bool ParsePositiveSize(std::string_view value, std::size_t* out) {
-  if (value.empty() || out == nullptr) return false;
+bool ParsePositiveSize(std::string_view value, std::size_t *out) {
+  if (value.empty() || out == nullptr)
+    return false;
   std::size_t result = 0;
   for (char c : value) {
-    if (c < '0' || c > '9') return false;
+    if (c < '0' || c > '9')
+      return false;
     const std::size_t digit = static_cast<std::size_t>(c - '0');
     if (result > (std::numeric_limits<std::size_t>::max() - digit) / 10) {
       return false;
     }
     result = result * 10 + digit;
   }
-  if (result == 0) return false;
+  if (result == 0)
+    return false;
   *out = result;
   return true;
 }
@@ -99,18 +102,21 @@ bool ParsePositiveSize(std::string_view value, std::size_t* out) {
 // rejected one: it is how `--metrics-interval-ms` asks for no sampler thread
 // and no series at all, which ParsePositiveSize rejects by construction.
 bool ParseUnsigned(std::string_view value, std::size_t limit,
-                   std::size_t* out) {
-  if (value.empty() || out == nullptr) return false;
+                   std::size_t *out) {
+  if (value.empty() || out == nullptr)
+    return false;
   std::size_t result = 0;
   for (char c : value) {
-    if (c < '0' || c > '9') return false;
+    if (c < '0' || c > '9')
+      return false;
     const std::size_t digit = static_cast<std::size_t>(c - '0');
     if (result > (std::numeric_limits<std::size_t>::max() - digit) / 10) {
       return false;
     }
     result = result * 10 + digit;
   }
-  if (result > limit) return false;
+  if (result > limit)
+    return false;
   *out = result;
   return true;
 }
@@ -122,10 +128,11 @@ bool ParseUnsigned(std::string_view value, std::size_t limit,
 constexpr std::size_t kMaxMetricsIntervalMs =
     static_cast<std::size_t>(std::chrono::milliseconds::max().count());
 
-veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
-    const std::vector<std::string>& args) {
+veritas::StatusOr<AnalyzeArguments>
+ParseAnalyzeArguments(const std::vector<std::string> &args) {
   static constexpr std::string_view kRejectedFlags[] = {
-      "--compile-db", "--manifest", "--bitcode", "--llvm-module", "--svf-input"};
+      "--compile-db", "--manifest", "--bitcode", "--llvm-module",
+      "--svf-input"};
 
   AnalyzeArguments parsed;
   bool project_seen = false;
@@ -139,7 +146,8 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
   };
   auto is_rejected = [](std::string_view value) -> std::string_view {
     for (const auto rejected : kRejectedFlags) {
-      if (value == rejected) return rejected;
+      if (value == rejected)
+        return rejected;
     }
     return {};
   };
@@ -148,13 +156,14 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
   // and that it is not itself a rejected artifact flag — otherwise
   // `veritas-build analyze --project --compile-db path` would silently take
   // `--compile-db` as the project path and bypass the rejection contract.
-  auto take_value = [&](std::size_t& i, std::string_view option)
-      -> veritas::StatusOr<std::string> {
+  auto take_value =
+      [&](std::size_t &i,
+          std::string_view option) -> veritas::StatusOr<std::string> {
     if (i + 1 >= args.size()) {
-      return veritas::Status::InvalidArgument(
-          std::string(option) + " requires a value argument");
+      return veritas::Status::InvalidArgument(std::string(option) +
+                                              " requires a value argument");
     }
-    const auto& value = args[i + 1];
+    const auto &value = args[i + 1];
     if (const auto rejected = is_rejected(value); !rejected.empty()) {
       return rejection_error(rejected);
     }
@@ -167,7 +176,7 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
   };
 
   for (std::size_t i = 0; i < args.size(); ++i) {
-    const std::string& arg = args[i];
+    const std::string &arg = args[i];
     if (const auto rejected = is_rejected(arg); !rejected.empty()) {
       return rejection_error(rejected);
     }
@@ -177,7 +186,8 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
             "--project must be provided exactly once");
       }
       auto value = take_value(i, "--project");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       parsed.project = *value;
       project_seen = true;
     } else if (arg == "--output") {
@@ -186,12 +196,14 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
             "--output must be provided at most once");
       }
       auto value = take_value(i, "--output");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       parsed.output = *value;
       output_seen = true;
     } else if (arg == "--wpa-engine") {
       auto value = take_value(i, "--wpa-engine");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       if (*value != "souffle" && *value != "cpp-emergency") {
         return veritas::Status::InvalidArgument(
             "--wpa-engine must be souffle or cpp-emergency");
@@ -199,7 +211,8 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
       parsed.wpa_engine = *value;
     } else if (arg == "--scale-profile") {
       auto value = take_value(i, "--scale-profile");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       if (*value != "baseline" && *value != "scaled") {
         return veritas::Status::InvalidArgument(
             "--scale-profile must be baseline or scaled, got: " + *value);
@@ -207,7 +220,8 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
       parsed.scale_profile = *value;
     } else if (arg == "--field-sensitive") {
       auto value = take_value(i, "--field-sensitive");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       if (*value == "true") {
         parsed.field_sensitive = true;
       } else if (*value == "false") {
@@ -218,14 +232,16 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
       }
     } else if (arg == "--max-alias-pairs") {
       auto value = take_value(i, "--max-alias-pairs");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       if (!ParsePositiveSize(*value, &parsed.max_alias_pairs)) {
         return veritas::Status::InvalidArgument(
             "--max-alias-pairs requires a positive integer, got: " + *value);
       }
     } else if (arg == "--metrics") {
       auto value = take_value(i, "--metrics");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       if (*value == "true") {
         parsed.metrics = true;
       } else if (*value == "false") {
@@ -236,7 +252,8 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
       }
     } else if (arg == "--metrics-interval-ms") {
       auto value = take_value(i, "--metrics-interval-ms");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       if (!ParseUnsigned(*value, kMaxMetricsIntervalMs,
                          &parsed.metrics_interval_ms)) {
         return veritas::Status::InvalidArgument(
@@ -245,14 +262,16 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
       }
     } else if (arg == "--metrics-top-n") {
       auto value = take_value(i, "--metrics-top-n");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       if (!ParsePositiveSize(*value, &parsed.metrics_top_n)) {
         return veritas::Status::InvalidArgument(
             "--metrics-top-n requires a positive integer, got: " + *value);
       }
     } else if (arg == "--metrics-series") {
       auto value = take_value(i, "--metrics-series");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       if (*value == "true") {
         parsed.metrics_series = true;
       } else if (*value == "false") {
@@ -263,7 +282,8 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
       }
     } else if (arg == "--metrics-path") {
       auto value = take_value(i, "--metrics-path");
-      if (!value.ok()) return value.status();
+      if (!value.ok())
+        return value.status();
       parsed.metrics_path = *value;
     } else {
       return veritas::Status::InvalidArgument("unknown argument: " + arg);
@@ -277,14 +297,14 @@ veritas::StatusOr<AnalyzeArguments> ParseAnalyzeArguments(
   return parsed;
 }
 
-int ReportStatus(const veritas::Status& status) {
+int ReportStatus(const veritas::Status &status) {
   std::cerr << "veritas-build: " << status.message() << '\n';
   return 1;
 }
 
-veritas::Status WriteDiagnosticManifest(
-    const fs::path& output_root,
-    const veritas::build::AnalysisManifest& manifest) {
+veritas::Status
+WriteDiagnosticManifest(const fs::path &output_root,
+                        const veritas::build::AnalysisManifest &manifest) {
   std::error_code error;
   fs::create_directories(output_root, error);
   if (error) {
@@ -315,7 +335,7 @@ constexpr std::string_view kMetricsNote = "veritas-build: metrics note: ";
 // is reported rather than swallowed, and a partially written file is removed:
 // a truncated artifact is a smaller measurement presented as a whole one, which
 // is the reading this whole feature exists to prevent.
-veritas::Status WriteRunMetrics(const fs::path& path, std::string_view json) {
+veritas::Status WriteRunMetrics(const fs::path &path, std::string_view json) {
   std::ofstream out(path, std::ios::trunc);
   const bool opened = static_cast<bool>(out);
   if (opened) {
@@ -324,7 +344,8 @@ veritas::Status WriteRunMetrics(const fs::path& path, std::string_view json) {
   }
   const bool failed = !out;
   out.close();
-  if (!failed && out) return veritas::Status::Ok();
+  if (!failed && out)
+    return veritas::Status::Ok();
   if (opened) {
     // Only a file this call created is removed. A path that never opened may be
     // a directory, and fs::remove deletes an empty one — destruction the caller
@@ -340,11 +361,11 @@ veritas::Status WriteRunMetrics(const fs::path& path, std::string_view json) {
 // records a diagnostic naming it, so an uninstrumented zero is never mistaken
 // for a measured one.
 class ReportBuilder {
- public:
-  ReportBuilder(const std::vector<veritas::core::Counter>& counters,
-                veritas::observability::RunReport* report)
+public:
+  ReportBuilder(const std::vector<veritas::core::Counter> &counters,
+                veritas::observability::RunReport *report)
       : report_(report) {
-    for (const veritas::core::Counter& counter : counters) {
+    for (const veritas::core::Counter &counter : counters) {
       values_[counter.name] = counter.value;
     }
   }
@@ -358,7 +379,8 @@ class ReportBuilder {
   // producer recorded it.
   std::uint64_t Counter(std::string_view name) {
     const auto it = values_.find(std::string(name));
-    if (it != values_.end()) return it->second;
+    if (it != values_.end())
+      return it->second;
     Note("counter " + std::string(name) +
          " was not recorded; the report field it fills is zero rather than a "
          "measurement");
@@ -367,9 +389,7 @@ class ReportBuilder {
 
   // Values exposes the counter table, for the per-kind scan that has no single
   // name to look up.
-  const std::map<std::string, std::uint64_t>& Values() const {
-    return values_;
-  }
+  const std::map<std::string, std::uint64_t> &Values() const { return values_; }
 
   // Note records a diagnostic that does not mean a whole part of the report is
   // missing: an absent producer's zero, or a contradiction between two numbers
@@ -391,14 +411,12 @@ class ReportBuilder {
   // note_indices lists, in ascending order, the diagnostics that are notes.
   // Every other entry is a degradation: the recorder's own diagnostics all are
   // (each one cleared `complete`), and so is anything recorded by Degrade.
-  const std::vector<std::size_t>& note_indices() const {
-    return note_indices_;
-  }
+  const std::vector<std::size_t> &note_indices() const { return note_indices_; }
 
- private:
+private:
   std::map<std::string, std::uint64_t> values_;
   std::vector<std::size_t> note_indices_;
-  veritas::observability::RunReport* report_;
+  veritas::observability::RunReport *report_;
 };
 
 // FillReport populates the report from the analysis outcome, the manifest, the
@@ -410,12 +428,12 @@ class ReportBuilder {
 // Returns the indices, in ascending order, of the diagnostics that are notes
 // rather than degradations, so the caller can prefix the two differently on
 // stderr. Both kinds are entries in the artifact's `diagnostics`.
-std::vector<std::size_t> FillReport(
-    const veritas::analysis::ProjectAnalysisResult& result,
-    const veritas::build::AnalysisManifest& manifest,
-    const veritas::analysis::AnalysisConfig& config,
-    const fs::path& output_root,
-    veritas::observability::RunReport* report) {
+std::vector<std::size_t>
+FillReport(const veritas::analysis::ProjectAnalysisResult &result,
+           const veritas::build::AnalysisManifest &manifest,
+           const veritas::analysis::AnalysisConfig &config,
+           const fs::path &output_root,
+           veritas::observability::RunReport *report) {
   // The identity block is separated so a comparison script can address it
   // without parsing the rest — and it should be COMPARED, not excluded. All
   // nine coordinates are content- or config-derived, so none of them moves
@@ -425,8 +443,8 @@ std::vector<std::size_t> FillReport(
   // noise to be filtered; it means the two runs were not like-for-like.
   // Excluding the whole block would discard exactly the comparison it exists to
   // enable. Every coordinate comes from the run itself: four from the analysis
-  // outcome, the repository from the manifest, and the two configuration hashes,
-  // the toolchain identity and the batch id from the fields
+  // outcome, the repository from the manifest, and the two configuration
+  // hashes, the toolchain identity and the batch id from the fields
   // ProjectAnalysisResult carries for exactly this purpose. Without them the
   // artifact would record no configuration at all — nothing would separate a
   // cpp-emergency, non-field-sensitive, or alias-limited run from the default —
@@ -463,10 +481,11 @@ std::vector<std::size_t> FillReport(
   // four this run added — a field left out of this list would be omitted
   // silently, which is the failure the note exists to prevent. The names are
   // the artifact's key names, so a note and the key it is about agree.
-  const std::pair<std::string_view, const std::string*> kIdentityFields[] = {
+  const std::pair<std::string_view, const std::string *> kIdentityFields[] = {
       {"batch_id", &report->identity.batch_id},
       {"build_variant_id", &report->identity.build_variant_id},
-      {"engine_toolchain_identity", &report->identity.engine_toolchain_identity},
+      {"engine_toolchain_identity",
+       &report->identity.engine_toolchain_identity},
       {"projection_id", &report->identity.projection_id},
       {"repository_id", &report->identity.repository_id},
       {"revision_id", &report->identity.revision_id},
@@ -474,23 +493,23 @@ std::vector<std::size_t> FillReport(
       {"svf_config_hash", &report->identity.svf_config_hash},
       {"wpa_config_hash", &report->identity.wpa_config_hash},
   };
-  for (const auto& [field, value] : kIdentityFields) {
+  for (const auto &[field, value] : kIdentityFields) {
     if (value->empty()) {
       builder.Note("identity field " + std::string(field) +
                    " has no value; its key is omitted from the artifact");
     }
   }
-  veritas::observability::RunOutputInventory& output = report->inventory.output;
+  veritas::observability::RunOutputInventory &output = report->inventory.output;
 
   output.summaries_published = result.published_summary_ids.size();
   // Histogram over the unknowns, keyed by reason. std::map iterates in key
   // order, so the vector comes out sorted by key, which is what the artifact's
   // diffability wants.
   std::map<std::string, std::uint64_t> unknowns_by_reason;
-  for (const veritas::analysis::UnknownFact& unknown : result.unknowns) {
+  for (const veritas::analysis::UnknownFact &unknown : result.unknowns) {
     ++unknowns_by_reason[unknown.reason];
   }
-  for (const auto& entry : unknowns_by_reason) {
+  for (const auto &entry : unknowns_by_reason) {
     output.unknowns_by_reason.emplace_back(entry.first, entry.second);
   }
   output.cpg_nodes = result.cpg_node_count;
@@ -501,7 +520,7 @@ std::vector<std::size_t> FillReport(
   output.svfg_nodes = builder.Counter("svf.svfg_nodes");
   output.rooted_input_facts = builder.Counter("facts.rooted_input");
   output.canonical_facts = builder.Counter("facts.canonical");
-  veritas::observability::RunIncrementality& incrementality =
+  veritas::observability::RunIncrementality &incrementality =
       report->inventory.incrementality;
   incrementality.components_reused = builder.Counter("wpa.components.reused");
   incrementality.components_executed =
@@ -512,8 +531,8 @@ std::vector<std::size_t> FillReport(
   // unproduced count must be absent rather than 0, which would diff as
   // *unchanged* against a second run that also never measured it (design
   // section 6.3). svfg_edges is the sharpest case: a producer looked like it
-  // existed, but the SVF accessor it read returns a field nothing increments for
-  // an SVFG. The notes below name each one, since an absent key is visibly
+  // existed, but the SVF accessor it read returns a field nothing increments
+  // for an SVFG. The notes below name each one, since an absent key is visibly
   // absent only to a reader who knows the schema expects it.
   builder.Note(
       "inventory.incrementality.summaries_recomputed has no producer; its key "
@@ -530,20 +549,22 @@ std::vector<std::size_t> FillReport(
   // `wpa.component.<kind-name>.expected`.
   static constexpr std::string_view kKindPrefix = "wpa.component.";
   static constexpr std::string_view kKindSuffix = ".expected";
-  for (const auto& entry : builder.Values()) {
-    const std::string& name = entry.first;
-    if (name.size() <= kKindPrefix.size() + kKindSuffix.size()) continue;
-    if (!name.starts_with(kKindPrefix)) continue;
-    if (!name.ends_with(kKindSuffix)) continue;
+  for (const auto &entry : builder.Values()) {
+    const std::string &name = entry.first;
+    if (name.size() <= kKindPrefix.size() + kKindSuffix.size())
+      continue;
+    if (!name.starts_with(kKindPrefix))
+      continue;
+    if (!name.ends_with(kKindSuffix))
+      continue;
     output.components_by_kind.emplace_back(
         name.substr(kKindPrefix.size(),
                     name.size() - kKindPrefix.size() - kKindSuffix.size()),
         entry.second);
   }
   if (output.components_by_kind.empty()) {
-    builder.Note(
-        "no wpa.component.<kind>.expected counters were recorded; "
-        "components_by_kind is empty rather than a measured zero");
+    builder.Note("no wpa.component.<kind>.expected counters were recorded; "
+                 "components_by_kind is empty rather than a measured zero");
   }
 
   // The expected-component count is carried twice: the text report sums
@@ -559,7 +580,7 @@ std::vector<std::size_t> FillReport(
   if (builder.Has("wpa.components.expected") &&
       !output.components_by_kind.empty()) {
     std::uint64_t summed_components = 0;
-    for (const auto& kind : output.components_by_kind) {
+    for (const auto &kind : output.components_by_kind) {
       summed_components += kind.second;
     }
     if (summed_components != expected_components) {
@@ -592,13 +613,15 @@ std::vector<std::size_t> FillReport(
   // store. It is a cross-check only when both sides were measured: with the
   // counter absent there is nothing to compare, and a 0-versus-N "MISMATCH"
   // would be an uninstrumented zero dressed up as a disagreement.
-  if (!builder.Has("wpa.components.expected")) return builder.note_indices();
-  for (const veritas::observability::TableRowCount& table :
+  if (!builder.Has("wpa.components.expected"))
+    return builder.note_indices();
+  for (const veritas::observability::TableRowCount &table :
        report->store.tables) {
     // `_v2` deliberately. `wpa_component_states` (schema v1) is the SCC
     // convergence state and holds a different row count, so "correcting" this
     // name would silently make the cross-check meaningless while still passing.
-    if (table.table != "wpa_component_states_v2") continue;
+    if (table.table != "wpa_component_states_v2")
+      continue;
     report->store.cross_checks.push_back(veritas::observability::CrossCheck{
         "components", table.rows, expected_components,
         table.rows == expected_components});
@@ -610,9 +633,10 @@ std::vector<std::size_t> FillReport(
   return builder.note_indices();
 }
 
-veritas::Status Analyze(const std::vector<std::string>& args) {
+veritas::Status Analyze(const std::vector<std::string> &args) {
   auto parsed = ParseAnalyzeArguments(args);
-  if (!parsed.ok()) return parsed.status();
+  if (!parsed.ok())
+    return parsed.status();
 
   const veritas::analysis::ProjectAnalysisRequest request{
       .project_root = parsed->project,
@@ -648,9 +672,9 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
   // that implements `scaled` deletes the rejection and needs no other change
   // here. `scale_profile` is deliberately in no configuration hash, so this
   // assignment moves no identity.
-  config.scale_profile =
-      parsed->scale_profile == "scaled" ? veritas::analysis::ScaleProfile::kScaled
-                                        : veritas::analysis::ScaleProfile::kBaseline;
+  config.scale_profile = parsed->scale_profile == "scaled"
+                             ? veritas::analysis::ScaleProfile::kScaled
+                             : veritas::analysis::ScaleProfile::kBaseline;
 
   // The recorder is built before any ingest, and the "run" root opens
   // immediately after it, so that root encloses the whole command — including
@@ -667,7 +691,7 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
   metrics_options.top_n = parsed->metrics_top_n;
   metrics_options.emit_series = parsed->metrics_series;
   veritas::core::RunMetrics metrics(metrics_options);
-  veritas::core::RunMetrics* const recorder =
+  veritas::core::RunMetrics *const recorder =
       parsed->metrics ? &metrics : nullptr;
 
   {
@@ -678,13 +702,15 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
     // diagnostic manifest. The analyzer performs the same two steps again under
     // `m1.ingest`, so this pair is the measurable form of that duplication.
     {
-      veritas::core::PhaseSpan ingest_span(
-          recorder, "cli.ingest", veritas::core::SpanMode::kBearing);
+      veritas::core::PhaseSpan ingest_span(recorder, "cli.ingest",
+                                           veritas::core::SpanMode::kBearing);
       auto resolved = veritas::build::ResolveProjectInput(request);
-      if (!resolved.ok()) return resolved.status();
+      if (!resolved.ok())
+        return resolved.status();
       input = *resolved;
       auto loaded = veritas::build::LoadProjectManifest(input);
-      if (!loaded.ok()) return loaded.status();
+      if (!loaded.ok())
+        return loaded.status();
       manifest = *loaded;
       if (auto status = WriteDiagnosticManifest(input.output_root, manifest);
           !status.ok()) {
@@ -703,12 +729,13 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
 
     veritas::analysis::ProjectAnalyzer analyzer;
     auto analyzed = analyzer.AnalyzeProject(request, config, recorder);
-    if (!analyzed.ok()) return analyzed.status();
+    if (!analyzed.ok())
+      return analyzed.status();
     result = std::move(*analyzed);
 
     std::cout << "Analysis complete\n"
-              << "Published summaries: "
-              << result.published_summary_ids.size() << '\n'
+              << "Published summaries: " << result.published_summary_ids.size()
+              << '\n'
               << "CPG projection: " << result.projection_id << '\n'
               << "CPG nodes: " << result.cpg_node_count << '\n'
               << "CPG edges: " << result.cpg_edge_count << '\n'
@@ -727,7 +754,8 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
   // whole report is anchored to — would read zero instead of the command's wall
   // time. Only the report's own rendering and write fall outside the run.
 
-  if (!parsed->metrics) return veritas::Status::Ok();
+  if (!parsed->metrics)
+    return veritas::Status::Ok();
 
   veritas::observability::RunReport report;
   report.metrics = metrics.TakeStats();
@@ -767,14 +795,14 @@ veritas::Status Analyze(const std::vector<std::string>& args) {
   return veritas::Status::Ok();
 }
 
-int RunAnalyze(const std::vector<std::string>& args) {
+int RunAnalyze(const std::vector<std::string> &args) {
   const auto status = Analyze(args);
   return status.ok() ? 0 : ReportStatus(status);
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   if (argc == 2 && std::strcmp(argv[1], "--version") == 0) {
     std::cout << veritas::FormatVersion(veritas::GetVersion()) << '\n';
     return 0;
@@ -782,7 +810,8 @@ int main(int argc, char* argv[]) {
   if (argc >= 2 && std::strcmp(argv[1], "analyze") == 0) {
     std::vector<std::string> args;
     args.reserve(static_cast<std::size_t>(argc - 2));
-    for (int i = 2; i < argc; ++i) args.emplace_back(argv[i]);
+    for (int i = 2; i < argc; ++i)
+      args.emplace_back(argv[i]);
     return RunAnalyze(args);
   }
   std::cerr << kUsage;

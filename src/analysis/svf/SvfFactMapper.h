@@ -24,7 +24,7 @@
 
 namespace veritas::analysis::pipeline {
 class ProgramIr;
-}  // namespace veritas::analysis::pipeline
+} // namespace veritas::analysis::pipeline
 
 namespace veritas::analysis::svf {
 
@@ -64,12 +64,11 @@ struct SvfMappingResult {
 // Returns kComplete when all SVF results mapped successfully, or
 // kCompleteWithUnknowns when some results could not be resolved (unmapped SVF
 // nodes and empty/unknown indirect-call sets become scoped NormalizedUnknowns).
-Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
-                   const SvfSessionView& view,
-                   const AnalyzerRunContext& run_context,
-                   const SvfConfig& config,
-                   SvfMappingResult* result);
+Status MapSvfFacts(const pipeline::ProgramIr &program_ir,
+                   const SvfSessionView &view,
+                   const AnalyzerRunContext &run_context,
+                   const SvfConfig &config, SvfMappingResult *result);
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf
 
-#endif  // VERITAS_ANALYSIS_SVF_SVFFACTMAPPER_H_
+#endif // VERITAS_ANALYSIS_SVF_SVFFACTMAPPER_H_

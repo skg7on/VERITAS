@@ -252,7 +252,8 @@ SccStateRepository::StoreState(const SccContext &context,
   // this store committed per component. A stored row that no flush has covered
   // yet is invisible here, which is safe for this repository's only caller: a
   // run visits each `(scc, component kind)` key once, so no call reads back a
-  // row an open batch is holding. See the load-bearing note on `QueueStateRows`.
+  // row an open batch is holding. See the load-bearing note on
+  // `QueueStateRows`.
   auto previous = LoadState(context, result.scc_id, result.component_kind);
   if (!previous.ok())
     return previous.status();
@@ -318,9 +319,9 @@ Status SccStateRepository::FlushStateCache() {
   // the per-component commit — only the transaction boundary moved. A
   // `BulkInsertBatcher` is not used here: its statement is a prefix plus value
   // tuples, so it cannot carry this row's `ON CONFLICT ... DO UPDATE` suffix,
-  // and a batch of `kStateBatchSize` rows is far below the bind-parameter budget
-  // at which its multi-row path engages, so it would issue one statement per row
-  // inside this transaction anyway.
+  // and a batch of `kStateBatchSize` rows is far below the bind-parameter
+  // budget at which its multi-row path engages, so it would issue one statement
+  // per row inside this transaction anyway.
   for (std::vector<std::string> &row : pending_state_rows_) {
     Status stored = metadata_store_.Execute(kComponentStateUpsert, row);
     if (!stored.ok())

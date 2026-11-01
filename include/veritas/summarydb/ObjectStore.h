@@ -30,7 +30,7 @@ namespace veritas::summarydb {
 // objects. All summaries are stored by their content hash and never modified
 // after insertion.
 class ObjectStore {
- public:
+public:
   virtual ~ObjectStore() = default;
 
   // Store an object if it doesn't already exist. Idempotent: if an object with
@@ -40,8 +40,8 @@ class ObjectStore {
                                       std::span<const std::byte> bytes) = 0;
 
   // Retrieve an object by key. Returns NotFound if the key doesn't exist.
-  virtual veritas::StatusOr<std::vector<std::byte>> Get(
-      std::string_view key) const = 0;
+  virtual veritas::StatusOr<std::vector<std::byte>>
+  Get(std::string_view key) const = 0;
 
   // Check if an object exists.
   virtual bool Exists(std::string_view key) const = 0;
@@ -51,9 +51,9 @@ class ObjectStore {
 std::unique_ptr<ObjectStore> CreateInMemoryObjectStore();
 
 // Factory function for creating RocksDB stores.
-veritas::StatusOr<std::unique_ptr<ObjectStore>> CreateObjectStore(
-    const std::string& db_path);
+veritas::StatusOr<std::unique_ptr<ObjectStore>>
+CreateObjectStore(const std::string &db_path);
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb
 
-#endif  // VERITAS_SUMMARYDB_OBJECT_STORE_H_
+#endif // VERITAS_SUMMARYDB_OBJECT_STORE_H_

@@ -32,11 +32,11 @@ namespace {
 
 namespace sem = analysis::semantic;
 
-const facts::RelationSchema* SchemaByName(std::string_view name,
-                                          facts::RelationId* out_id) {
+const facts::RelationSchema *SchemaByName(std::string_view name,
+                                          facts::RelationId *out_id) {
   for (std::size_t i = 0; i < facts::kRelationCountV2; ++i) {
     const auto id = static_cast<facts::RelationId>(i);
-    const auto& schema = facts::RelationsV2().Get(id);
+    const auto &schema = facts::RelationsV2().Get(id);
     if (schema.name == name) {
       *out_id = id;
       return &schema;
@@ -45,7 +45,7 @@ const facts::RelationSchema* SchemaByName(std::string_view name,
   return nullptr;
 }
 
-}  // namespace
+} // namespace
 
 StatusOr<std::uint64_t> ParseUnsigned(std::string_view text) {
   if (text.empty())
@@ -74,7 +74,7 @@ StatusOr<facts::SemanticRow> RowFromKey(std::string_view key) {
     return decoded.status();
 
   facts::RelationId id{};
-  const facts::RelationSchema* schema =
+  const facts::RelationSchema *schema =
       SchemaByName(decoded->relation_name, &id);
   if (schema == nullptr)
     return Status::InvalidArgument("key names an unknown relation");
@@ -84,7 +84,7 @@ StatusOr<facts::SemanticRow> RowFromKey(std::string_view key) {
   facts::SemanticRow row;
   row.relation = id;
   for (std::size_t i = 0; i < decoded->cells.size(); ++i) {
-    const auto& field = decoded->cells[i];
+    const auto &field = decoded->cells[i];
     switch (schema->columns[i].domain) {
     case facts::ColumnDomain::kFunctionId:
     case facts::ColumnDomain::kValueId:
@@ -150,4 +150,4 @@ StatusOr<facts::SemanticRow> RowFromKey(std::string_view key) {
   return row;
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

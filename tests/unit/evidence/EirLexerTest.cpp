@@ -74,7 +74,7 @@ EirParseError Reject(std::string_view source) {
 }
 
 // Asserts that token `index` has kind `kind` and spelling `text`.
-void ExpectToken(const std::vector<Token>& tokens, std::size_t index,
+void ExpectToken(const std::vector<Token> &tokens, std::size_t index,
                  TokenKind kind, std::string_view text) {
   ASSERT_LT(index, tokens.size());
   EXPECT_EQ(tokens[index].kind, kind) << "token " << index;
@@ -83,12 +83,13 @@ void ExpectToken(const std::vector<Token>& tokens, std::size_t index,
 
 // Asserts that `message` mentions `fragment`, which is how a test pins *why*
 // the lexer rejected an input rather than merely that it did.
-void ExpectMessageMentions(std::string_view message, std::string_view fragment) {
+void ExpectMessageMentions(std::string_view message,
+                           std::string_view fragment) {
   EXPECT_NE(message.find(fragment), std::string_view::npos)
       << "message: " << message;
 }
 
-}  // namespace
+} // namespace
 
 TEST(EirLexerTest, TracksTokensAndSourceCoordinates) {
   EirParseError error;
@@ -138,12 +139,12 @@ TEST(EirLexerTest, RejectsInvalidEscapeWithLocation) {
 }
 
 TEST(EirLexerTest, SkipsLineAndBlockComments) {
-  const std::vector<Token> tokens = Lex(
-      "// leading\n"
-      "evidence /* inline */ E {\n"
-      "  /* multi\n"
-      "     line */ schema = \"eir.v1\"; // trailing\n"
-      "}");
+  const std::vector<Token> tokens =
+      Lex("// leading\n"
+          "evidence /* inline */ E {\n"
+          "  /* multi\n"
+          "     line */ schema = \"eir.v1\"; // trailing\n"
+          "}");
   ASSERT_EQ(tokens.size(), 9U);
   ExpectToken(tokens, 0, TokenKind::kIdentifier, "evidence");
   EXPECT_EQ(tokens[0].line, 2U);
@@ -282,8 +283,7 @@ TEST(EirLexerTest, RejectsADotInAQualifiedIdentifierThatPrecedesNoLetter) {
 }
 
 TEST(EirLexerTest, LexesPunctuationAndComparisonOperators) {
-  const std::vector<Token> tokens = Lex(
-      "{ } ( ) [ ] : ; , = == != < <= > >=");
+  const std::vector<Token> tokens = Lex("{ } ( ) [ ] : ; , = == != < <= > >=");
   ASSERT_EQ(tokens.size(), 17U);
   ExpectToken(tokens, 0, TokenKind::kLeftBrace, "{");
   ExpectToken(tokens, 1, TokenKind::kRightBrace, "}");
@@ -424,8 +424,9 @@ TEST(EirLexerTest, RejectsMalformedUtf8) {
   ExpectMessageMentions(outside.message, "UTF-8");
 
   // A surrogate half is well-formed byte-pattern-wise and still invalid UTF-8.
-  const char surrogate[] = {'"', static_cast<char>(0xED), static_cast<char>(0xA0),
-                            static_cast<char>(0x80), '"'};
+  const char surrogate[] = {'"', static_cast<char>(0xED),
+                            static_cast<char>(0xA0), static_cast<char>(0x80),
+                            '"'};
   const EirParseError encoded =
       Reject(std::string_view(surrogate, sizeof(surrogate)));
   EXPECT_EQ(encoded.offset, 1U);
@@ -437,8 +438,9 @@ TEST(EirLexerTest, KeepsWellFormedNonAsciiBytesInStringsAndComments) {
   // The positive control for the rejections above: a well-formed sequence is
   // preserved byte for byte inside a string literal and skipped inside a
   // comment, so this is not a lexer that forbids non-ASCII.
-  const char accented[] = {'"', 'c', 'a', 'f', static_cast<char>(0xC3),
-                           static_cast<char>(0xA9), '"'};
+  const char accented[] = {
+      '"', 'c', 'a', 'f', static_cast<char>(0xC3), static_cast<char>(0xA9),
+      '"'};
   const std::vector<Token> tokens =
       Lex(std::string_view(accented, sizeof(accented)));
   ASSERT_EQ(tokens.size(), 2U);
@@ -446,8 +448,9 @@ TEST(EirLexerTest, KeepsWellFormedNonAsciiBytesInStringsAndComments) {
   EXPECT_EQ(tokens[0].text, std::string("caf\xc3\xa9", 5));
   EXPECT_EQ(tokens[0].column, 1U);
 
-  const char commented[] = {'/', '/', ' ', static_cast<char>(0xC3),
-                            static_cast<char>(0xA9), '\n', 'x'};
+  const char commented[] = {
+      '/',  '/', ' ', static_cast<char>(0xC3), static_cast<char>(0xA9),
+      '\n', 'x'};
   const std::vector<Token> after =
       Lex(std::string_view(commented, sizeof(commented)));
   ASSERT_EQ(after.size(), 2U);
@@ -460,9 +463,10 @@ TEST(EirLexerTest, RejectsMalformedUtf8InALineComment) {
   // inside the comment is caught even though nothing about the comment is ever
   // emitted as a token. The `0xC3` here leads a two-byte sequence and is
   // followed by `(`, which is not a continuation byte.
-  const char source[] = {'/', '/', ' ', 'f', 'i', 'r', 's', 't', '\n',
-                         '/', '/', ' ', 'n', 'o', 't', 'e', ' ',
-                         static_cast<char>(0xC3), '(', '\n', 'x'};
+  const char source[] = {'/', '/',  ' ',  'f', 'i', 'r',
+                         's', 't',  '\n', '/', '/', ' ',
+                         'n', 'o',  't',  'e', ' ', static_cast<char>(0xC3),
+                         '(', '\n', 'x'};
   const EirParseError error = Reject(std::string_view(source, sizeof(source)));
   EXPECT_EQ(error.offset, 17U);
   EXPECT_EQ(error.line, 2U);
@@ -476,10 +480,25 @@ TEST(EirLexerTest, SkipsWellFormedNonAsciiInALineComment) {
   // well-formed sequence is skipped byte for byte, and the token after it keeps
   // its own coordinates — so the rejection is about the bytes, not about
   // non-ASCII content in a line comment.
-  const char source[] = {'/', '/', ' ', 'f', 'i', 'r', 's', 't', '\n',
-                         '/', '/', ' ', 'c', 'a', 'f',
-                         static_cast<char>(0xC3), static_cast<char>(0xA9),
-                         '\n', 'x'};
+  const char source[] = {'/',
+                         '/',
+                         ' ',
+                         'f',
+                         'i',
+                         'r',
+                         's',
+                         't',
+                         '\n',
+                         '/',
+                         '/',
+                         ' ',
+                         'c',
+                         'a',
+                         'f',
+                         static_cast<char>(0xC3),
+                         static_cast<char>(0xA9),
+                         '\n',
+                         'x'};
   const std::vector<Token> tokens =
       Lex(std::string_view(source, sizeof(source)));
   ASSERT_EQ(tokens.size(), 2U);
@@ -493,9 +512,20 @@ TEST(EirLexerTest, RejectsMalformedUtf8InABlockComment) {
   // invalid byte by its position in the source, not in the comment: this one is
   // five bytes into line 2. The comment closes with `*/` and nothing else in
   // the source is malformed, so the byte pair is the only thing that can fail.
-  const char source[] = {'e', 'v', 'i', 'd', 'e', 'n', 'c', 'e', ' ', '/', '*',
-                         ' ', 'n', 'o', 't', 'e', '\n', ' ', ' ', 'x', 'x',
-                         static_cast<char>(0xC3), '(', ' ', '*', '/', ' ', 'x'};
+  const char source[] = {'e',  'v',
+                         'i',  'd',
+                         'e',  'n',
+                         'c',  'e',
+                         ' ',  '/',
+                         '*',  ' ',
+                         'n',  'o',
+                         't',  'e',
+                         '\n', ' ',
+                         ' ',  'x',
+                         'x',  static_cast<char>(0xC3),
+                         '(',  ' ',
+                         '*',  '/',
+                         ' ',  'x'};
   const EirParseError error = Reject(std::string_view(source, sizeof(source)));
   EXPECT_EQ(error.offset, 21U);
   EXPECT_EQ(error.line, 2U);
@@ -506,10 +536,33 @@ TEST(EirLexerTest, RejectsMalformedUtf8InABlockComment) {
 
 TEST(EirLexerTest, SkipsWellFormedNonAsciiInABlockComment) {
   // The positive control for the rejection above.
-  const char source[] = {'e', 'v', 'i', 'd', 'e', 'n', 'c', 'e', ' ', '/', '*',
-                         ' ', 'c', 'a', 'f', static_cast<char>(0xC3),
-                         static_cast<char>(0xA9), '\n', ' ', ' ', 'o', 'k', ' ',
-                         '*', '/', ' ', 'x'};
+  const char source[] = {'e',
+                         'v',
+                         'i',
+                         'd',
+                         'e',
+                         'n',
+                         'c',
+                         'e',
+                         ' ',
+                         '/',
+                         '*',
+                         ' ',
+                         'c',
+                         'a',
+                         'f',
+                         static_cast<char>(0xC3),
+                         static_cast<char>(0xA9),
+                         '\n',
+                         ' ',
+                         ' ',
+                         'o',
+                         'k',
+                         ' ',
+                         '*',
+                         '/',
+                         ' ',
+                         'x'};
   const std::vector<Token> tokens =
       Lex(std::string_view(source, sizeof(source)));
   ASSERT_EQ(tokens.size(), 3U);

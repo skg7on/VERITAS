@@ -93,9 +93,9 @@ v2::FunctionSummary V2Summary(std::string_view name) {
   return summary;
 }
 
-void AddCall(v2::FunctionSummary* summary, std::string_view from,
+void AddCall(v2::FunctionSummary *summary, std::string_view from,
              std::string_view to) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(
       core::ToString(CallSiteId(std::string(from) + "->" + std::string(to))));
   call->set_callee_symbol(std::string(to));
@@ -105,9 +105,9 @@ void AddCall(v2::FunctionSummary* summary, std::string_view from,
   call->set_provenance_ref("test:call");
 }
 
-StatusOr<WpaLogicalComponentInput> InputFor(
-    const std::vector<summary::SummaryArtifact>& artifacts,
-    WpaComponentKind component, std::string_view root) {
+StatusOr<WpaLogicalComponentInput>
+InputFor(const std::vector<summary::SummaryArtifact> &artifacts,
+         WpaComponentKind component, std::string_view root) {
   auto graph = CallGraph::FromSummaries(artifacts);
   if (!graph.ok())
     return graph.status();
@@ -137,9 +137,9 @@ std::vector<summary::SummaryArtifact> RecursiveReachabilityProgram() {
   return {f, g, V2Summary("h")};
 }
 
-StatusOr<facts::CanonicalizedResult> Canonicalize(
-    const WpaLogicalComponentInput& logical,
-    const facts::RawWpaEvaluation& raw) {
+StatusOr<facts::CanonicalizedResult>
+Canonicalize(const WpaLogicalComponentInput &logical,
+             const facts::RawWpaEvaluation &raw) {
   facts::CanonicalizationRequest request;
   request.local_roots = logical.local_roots;
   request.successor_roots = logical.successor_roots;
@@ -148,9 +148,8 @@ StatusOr<facts::CanonicalizedResult> Canonicalize(
 }
 
 TEST(WpaExecutorConformanceTest, EnginesProduceSameCanonicalFacts) {
-  auto logical =
-      InputFor(RecursiveReachabilityProgram(), WpaComponentKind::kReachability,
-               "f");
+  auto logical = InputFor(RecursiveReachabilityProgram(),
+                          WpaComponentKind::kReachability, "f");
   ASSERT_TRUE(logical.ok());
 
   const auto souffle_manifest =
@@ -184,5 +183,5 @@ TEST(WpaExecutorConformanceTest, EnginesProduceSameCanonicalFacts) {
   EXPECT_FALSE(souffle_canonical->facts.empty());
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

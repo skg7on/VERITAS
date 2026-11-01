@@ -27,12 +27,14 @@ namespace {
 
 // Verify the graph's sorted summary-ID set exactly matches the completed
 // summaries. A mismatch is a fatal precondition: no binding may advance.
-Status ValidateSnapshotCorrespondence(const CompletedProjectAnalysis& completed) {
+Status
+ValidateSnapshotCorrespondence(const CompletedProjectAnalysis &completed) {
   std::vector<core::StableId> actual;
   actual.reserve(completed.summaries.size());
-  for (const auto& summary : completed.summaries) {
+  for (const auto &summary : completed.summaries) {
     auto id = summary::ComputeFunctionSummaryId(summary);
-    if (!id.ok()) return id.status();
+    if (!id.ok())
+      return id.status();
     actual.push_back(*id);
   }
   std::sort(actual.begin(), actual.end());
@@ -49,17 +51,17 @@ Status ValidateSnapshotCorrespondence(const CompletedProjectAnalysis& completed)
 
 // Wrap the completed summary.v2 objects in version-neutral artifacts so the
 // storage layer records their summary.v2 schema and CAS identity.
-std::vector<summary::SummaryArtifact> ToArtifacts(
-    const std::vector<summary::v2::FunctionSummary>& summaries) {
+std::vector<summary::SummaryArtifact>
+ToArtifacts(const std::vector<summary::v2::FunctionSummary> &summaries) {
   std::vector<summary::SummaryArtifact> artifacts;
   artifacts.reserve(summaries.size());
-  for (const auto& summary : summaries) {
+  for (const auto &summary : summaries) {
     artifacts.emplace_back(summary);
   }
   return artifacts;
 }
 
-}  // namespace
+} // namespace
 
 ProjectPublicationCoordinator::ProjectPublicationCoordinator(
     std::unique_ptr<summarydb::SummaryRepository> summaries)
@@ -70,56 +72,65 @@ ProjectPublicationCoordinator::ProjectPublicationCoordinator(
 ProjectPublicationCoordinator::~ProjectPublicationCoordinator() = default;
 
 StatusOr<std::unique_ptr<ProjectPublicationCoordinator>>
-ProjectPublicationCoordinator::Open(const std::string& db_path) {
+ProjectPublicationCoordinator::Open(const std::string &db_path) {
   auto summaries = summarydb::SummaryRepository::Open(db_path);
-  if (!summaries.ok()) return summaries.status();
+  if (!summaries.ok())
+    return summaries.status();
   return std::unique_ptr<ProjectPublicationCoordinator>(
       new ProjectPublicationCoordinator(std::move(*summaries)));
 }
 
 Status ProjectPublicationCoordinator::PersistManifestContext(
-    const build::AnalysisManifest& manifest) {
+    const build::AnalysisManifest &manifest) {
   return summaries_->PersistManifestContext(manifest);
 }
 
-StatusOr<std::vector<core::StableId>> ProjectPublicationCoordinator::Publish(
-    CompletedProjectAnalysis completed) {
+StatusOr<std::vector<core::StableId>>
+ProjectPublicationCoordinator::Publish(CompletedProjectAnalysis completed) {
   auto validate = completed.graph.Validate();
-  if (!validate.ok()) return validate;
+  if (!validate.ok())
+    return validate;
 
   auto correspondence = ValidateSnapshotCorrespondence(completed);
-  if (!correspondence.ok()) return correspondence;
+  if (!correspondence.ok())
+    return correspondence;
 
   // Immutable objects first (outside the transaction), through the
   // version-neutral CAS path so summary.v2 schema versions are recorded.
   std::vector<summary::SummaryArtifact> artifacts =
       ToArtifacts(completed.summaries);
   auto put = summaries_->PutImmutableSummaryArtifacts(artifacts);
-  if (!put.ok()) return put.status();
+  if (!put.ok())
+    return put.status();
 
-  auto& metadata = summaries_->metadata_store();
+  auto &metadata = summaries_->metadata_store();
   auto begin = metadata.BeginTransaction();
-  if (!begin.ok()) return begin;
+  if (!begin.ok())
+    return begin;
   bool committed = false;
-  auto rollback_guard = [&metadata](bool* c) {
-    if (!*c) metadata.RollbackTransaction();
+  auto rollback_guard = [&metadata](bool *c) {
+    if (!*c)
+      metadata.RollbackTransaction();
   };
   std::unique_ptr<bool, decltype(rollback_guard)> guard(&committed,
                                                         rollback_guard);
 
-  const auto& meta = completed.graph.metadata();
+  const auto &meta = completed.graph.metadata();
   auto stage_summaries = summaries_->StageCurrentArtifactBindings(
       core::ToString(meta.revision_id), core::ToString(meta.build_variant_id),
       artifacts);
-  if (!stage_summaries.ok()) return stage_summaries;
+  if (!stage_summaries.ok())
+    return stage_summaries;
 
   auto stage_cpg = cpg_->StageProjection(completed.graph);
-  if (!stage_cpg.ok()) return stage_cpg;
+  if (!stage_cpg.ok())
+    return stage_cpg;
 
   auto commit = metadata.CommitTransaction();
-  if (!commit.ok()) return commit;
+  if (!commit.ok())
+    return commit;
   committed = true;
   return *put;
 }
 
-}  // namespace veritas::analysis
+} // namespace veritas::analysis

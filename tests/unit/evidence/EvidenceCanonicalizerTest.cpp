@@ -89,7 +89,7 @@ Expression AndOp(std::vector<Expression> operands) {
 
 // Replaces the case's constraint expression with `expression`, which must refer
 // only to declared entities.
-void SetConstraintExpression(EvidenceCase& value, Expression expression) {
+void SetConstraintExpression(EvidenceCase &value, Expression expression) {
   ASSERT_FALSE(value.constraints.empty());
   value.constraints.front().expression = std::move(expression);
 }
@@ -101,14 +101,14 @@ void SetConstraintExpression(EvidenceCase& value, Expression expression) {
 // keeps every reference the original already resolved and changes only its
 // local handle — plus, for the reference lists, nothing at all — so the case
 // stays well-formed.
-void PopulateSecondMembers(EvidenceCase& value) {
+void PopulateSecondMembers(EvidenceCase &value) {
   // The path's conditions first, so the path clone inherits two. The second is
   // the first under `not`, not a copy of it: two equal values encode
   // identically, so the canonical sort would have nothing to do and the
   // reversal below would pass against an encoder that emitted conditions in
   // input order. Negating keeps every reference the first already resolved, so
   // the case stays well-formed.
-  for (Path& path : value.paths) {
+  for (Path &path : value.paths) {
     if (path.conditions.size() == 1) {
       Expression negated;
       negated.kind = Expression::Kind::kNot;
@@ -119,11 +119,11 @@ void PopulateSecondMembers(EvidenceCase& value) {
   // Each unknown blocks one fact; the second is a *different* declared fact, so
   // it still resolves. A copy would encode identically and leave the sort
   // untested, for the same reason as the conditions above.
-  for (Unknown& unknown : value.unknowns) {
+  for (Unknown &unknown : value.unknowns) {
     if (unknown.blocking_ids.size() != 1) {
       continue;
     }
-    for (const Fact& fact : value.facts) {
+    for (const Fact &fact : value.facts) {
       if (fact.id != unknown.blocking_ids.front()) {
         unknown.blocking_ids.push_back(fact.id);
         break;
@@ -176,8 +176,8 @@ void PopulateSecondMembers(EvidenceCase& value) {
 // reversal is a real reorder and the canonical sort is exercised. A failure
 // here means the fixture lost the population that makes the reversal
 // meaningful — the guard is the point, not decoration.
-::testing::AssertionResult EveryReversedCollectionIsPopulated(
-    const EvidenceCase& value) {
+::testing::AssertionResult
+EveryReversedCollectionIsPopulated(const EvidenceCase &value) {
   const std::pair<std::string_view, std::size_t> members[] = {
       {"program.analyzer_versions", value.program.analyzer_versions.size()},
       {"entities", value.entities.size()},
@@ -194,21 +194,21 @@ void PopulateSecondMembers(EvidenceCase& value) {
       {"dependencies", value.dependencies.size()},
       {"omissions", value.omissions.size()},
   };
-  for (const auto& member : members) {
+  for (const auto &member : members) {
     if (member.second < 2) {
       return ::testing::AssertionFailure()
              << member.first << " carries " << member.second
              << " member(s), so reversing it tests nothing";
     }
   }
-  for (const Path& path : value.paths) {
+  for (const Path &path : value.paths) {
     if (path.conditions.size() < 2) {
       return ::testing::AssertionFailure()
              << "path " << path.id << " carries " << path.conditions.size()
              << " condition(s), so reversing them tests nothing";
     }
   }
-  for (const Unknown& unknown : value.unknowns) {
+  for (const Unknown &unknown : value.unknowns) {
     if (unknown.blocking_ids.size() < 2) {
       return ::testing::AssertionFailure()
              << "unknown " << unknown.id << " carries "
@@ -216,7 +216,7 @@ void PopulateSecondMembers(EvidenceCase& value) {
              << " blocking id(s), so reversing them tests nothing";
     }
   }
-  for (const SummaryReference& summary : value.summaries) {
+  for (const SummaryReference &summary : value.summaries) {
     if (summary.components.size() < 2) {
       return ::testing::AssertionFailure()
              << "summary " << summary.id << " carries "
@@ -224,7 +224,7 @@ void PopulateSecondMembers(EvidenceCase& value) {
              << " component(s), so reversing them tests nothing";
     }
   }
-  for (const ProofObligation& obligation : value.proof_obligations) {
+  for (const ProofObligation &obligation : value.proof_obligations) {
     if (obligation.verifier_kinds.size() < 2) {
       return ::testing::AssertionFailure()
              << "obligation " << obligation.id << " carries "
@@ -234,7 +234,7 @@ void PopulateSecondMembers(EvidenceCase& value) {
   }
   // The input list is reversed on every provenance record; one record with two
   // inputs is enough to exercise the sort it uses.
-  for (const Provenance& record : value.provenance) {
+  for (const Provenance &record : value.provenance) {
     if (record.input_fact_ids.size() >= 2) {
       return ::testing::AssertionSuccess();
     }
@@ -252,8 +252,9 @@ void PopulateSecondMembers(EvidenceCase& value) {
 // case's canonical bytes; when it does not, the pair is a duplicate and the
 // reversal proves nothing about the sort.
 template <typename Collapse>
-::testing::AssertionResult CollapsingSecondElementChangesBytes(
-    const EvidenceCase& value, Collapse collapse, const char* what) {
+::testing::AssertionResult
+CollapsingSecondElementChangesBytes(const EvidenceCase &value,
+                                    Collapse collapse, const char *what) {
   EvidenceCase collapsed = value;
   collapse(collapsed);
 
@@ -282,7 +283,7 @@ template <typename Collapse>
 // semantically unordered, at every nesting level the fixtures use, and leaves
 // every semantically ordered sequence (path segments, non-commutative
 // expression operands) untouched.
-void ReverseUnorderedCollections(EvidenceCase& value) {
+void ReverseUnorderedCollections(EvidenceCase &value) {
   EvidenceScenarioBuilder::Reverse(value.program.analyzer_versions);
   EvidenceScenarioBuilder::Reverse(value.entities);
   EvidenceScenarioBuilder::Reverse(value.edges);
@@ -298,19 +299,19 @@ void ReverseUnorderedCollections(EvidenceCase& value) {
   EvidenceScenarioBuilder::Reverse(value.dependencies);
   EvidenceScenarioBuilder::Reverse(value.omissions);
 
-  for (Path& path : value.paths) {
+  for (Path &path : value.paths) {
     EvidenceScenarioBuilder::Reverse(path.conditions);
   }
-  for (Unknown& unknown : value.unknowns) {
+  for (Unknown &unknown : value.unknowns) {
     EvidenceScenarioBuilder::Reverse(unknown.blocking_ids);
   }
-  for (Provenance& record : value.provenance) {
+  for (Provenance &record : value.provenance) {
     EvidenceScenarioBuilder::Reverse(record.input_fact_ids);
   }
-  for (SummaryReference& summary : value.summaries) {
+  for (SummaryReference &summary : value.summaries) {
     EvidenceScenarioBuilder::Reverse(summary.components);
   }
-  for (ProofObligation& obligation : value.proof_obligations) {
+  for (ProofObligation &obligation : value.proof_obligations) {
     EvidenceScenarioBuilder::Reverse(obligation.verifier_kinds);
   }
 }
@@ -318,7 +319,7 @@ void ReverseUnorderedCollections(EvidenceCase& value) {
 // The offset of `needle` in `bytes`, or `std::string::npos` when it is absent.
 // The canonical order is only observable through the emitted bytes, so the one
 // test that pins it reads them directly.
-std::size_t OffsetOf(const std::vector<std::byte>& bytes,
+std::size_t OffsetOf(const std::vector<std::byte> &bytes,
                      std::string_view needle) {
   for (std::size_t offset = 0; offset + needle.size() <= bytes.size();
        ++offset) {
@@ -340,8 +341,8 @@ std::size_t OffsetOf(const std::vector<std::byte>& bytes,
 
 // The canonical bytes of two cases are equal, or a failure that says which
 // side failed to encode.
-::testing::AssertionResult SameCanonicalBytes(const EvidenceCase& left,
-                                            const EvidenceCase& right) {
+::testing::AssertionResult SameCanonicalBytes(const EvidenceCase &left,
+                                              const EvidenceCase &right) {
   const auto left_bytes = CanonicalEvidenceBytes(left);
   if (!left_bytes.ok()) {
     return ::testing::AssertionFailure()
@@ -349,9 +350,8 @@ std::size_t OffsetOf(const std::vector<std::byte>& bytes,
   }
   const auto right_bytes = CanonicalEvidenceBytes(right);
   if (!right_bytes.ok()) {
-    return ::testing::AssertionFailure()
-           << "right canonicalization failed: "
-           << right_bytes.status().message();
+    return ::testing::AssertionFailure() << "right canonicalization failed: "
+                                         << right_bytes.status().message();
   }
   if (*left_bytes == *right_bytes) {
     return ::testing::AssertionSuccess();
@@ -363,8 +363,8 @@ std::size_t OffsetOf(const std::vector<std::byte>& bytes,
 
 // Both cases finalize, and their identities are equal, or a failure naming the
 // status that refused.
-::testing::AssertionResult SameEvidenceId(EvidenceCase* left,
-                                        EvidenceCase* right) {
+::testing::AssertionResult SameEvidenceId(EvidenceCase *left,
+                                          EvidenceCase *right) {
   const Status left_status = FinalizeEvidenceIdentity(left);
   if (!left_status.ok()) {
     return ::testing::AssertionFailure()
@@ -387,7 +387,7 @@ std::size_t OffsetOf(const std::vector<std::byte>& bytes,
 // reason and would prove nothing about identity.
 template <typename Mutation>
 void ExpectMutationChangesIdentity(EvidenceCase left, Mutation mutate,
-                                   const char* what) {
+                                   const char *what) {
   EvidenceCase right = left;
   mutate(right);
 
@@ -409,7 +409,7 @@ void ExpectMutationChangesIdentity(EvidenceCase left, Mutation mutate,
 // that the bytes follow the case's content, not that every mutation is legal.
 template <typename Mutation>
 void ExpectMutationChangesBytesAndId(EvidenceCase left, Mutation mutate,
-                                     const char* what) {
+                                     const char *what) {
   EvidenceCase right = left;
   mutate(right);
 
@@ -424,7 +424,7 @@ void ExpectMutationChangesBytesAndId(EvidenceCase left, Mutation mutate,
   EXPECT_NE(*left_id, *right_id) << what;
 }
 
-}  // namespace
+} // namespace
 
 // --- VID-007: construction order and local paths do not affect identity ------
 
@@ -440,8 +440,8 @@ TEST(EvidenceCanonicalizerTest, VID007IdentityIgnoresUnorderedConstruction) {
   // encoding, or reversing it still reorders nothing.
   EXPECT_TRUE(CollapsingSecondElementChangesBytes(
       original,
-      [](EvidenceCase& value) {
-        for (Path& path : value.paths) {
+      [](EvidenceCase &value) {
+        for (Path &path : value.paths) {
           if (path.conditions.size() >= 2) {
             path.conditions[1] = path.conditions[0];
           }
@@ -450,8 +450,8 @@ TEST(EvidenceCanonicalizerTest, VID007IdentityIgnoresUnorderedConstruction) {
       "path conditions"));
   EXPECT_TRUE(CollapsingSecondElementChangesBytes(
       original,
-      [](EvidenceCase& value) {
-        for (Unknown& unknown : value.unknowns) {
+      [](EvidenceCase &value) {
+        for (Unknown &unknown : value.unknowns) {
           if (unknown.blocking_ids.size() >= 2) {
             unknown.blocking_ids[1] = unknown.blocking_ids[0];
           }
@@ -534,7 +534,8 @@ TEST(EvidenceCanonicalizerTest, VID007IdentityIsStableAcrossConstructions) {
 // one keyed on the spelling. Enumerators cannot be renumbered at runtime, so
 // the property is pinned where it is observable: the emitted bytes of a case
 // whose only two entities are of those kinds.
-TEST(EvidenceCanonicalizerTest, SortOrderFollowsKindSpellingNotEnumeratorValue) {
+TEST(EvidenceCanonicalizerTest,
+     SortOrderFollowsKindSpellingNotEnumeratorValue) {
   const auto entity_of_kind = [](EntityKind kind, std::string id) {
     Entity entity;
     entity.id = std::move(id);
@@ -570,7 +571,7 @@ TEST(EvidenceCanonicalizerTest, SortOrderFollowsKindSpellingNotEnumeratorValue) 
 TEST(EvidenceCanonicalizerTest, VID008EpistemicChangeChangesIdentity) {
   ExpectMutationChangesIdentity(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         value.facts.front().epistemic = EpistemicState::kMay;
       },
       "epistemic state");
@@ -579,7 +580,7 @@ TEST(EvidenceCanonicalizerTest, VID008EpistemicChangeChangesIdentity) {
 TEST(EvidenceCanonicalizerTest, VID008PredicateChangeChangesIdentity) {
   ExpectMutationChangesIdentity(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         // The range fact's upper bound: `range(E_copy_length, min, max)`.
         ASSERT_EQ(value.facts.front().predicate.operands.size(), 3u);
         value.facts.front().predicate.operands[2].integer += 1;
@@ -595,7 +596,7 @@ TEST(EvidenceCanonicalizerTest, VID008PredicateChangeChangesIdentity) {
 TEST(EvidenceCanonicalizerTest, VID008PathSegmentOrderChangesIdentity) {
   ExpectMutationChangesBytesAndId(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         ASSERT_GE(value.paths.front().entity_ids.size(), 2u);
         std::reverse(value.paths.front().entity_ids.begin(),
                      value.paths.front().entity_ids.end());
@@ -606,7 +607,7 @@ TEST(EvidenceCanonicalizerTest, VID008PathSegmentOrderChangesIdentity) {
 TEST(EvidenceCanonicalizerTest, VID008ProgramBindingChangeChangesIdentity) {
   ExpectMutationChangesIdentity(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         value.program.analysis_configuration_id = "cfg:other";
       },
       "program binding");
@@ -615,7 +616,7 @@ TEST(EvidenceCanonicalizerTest, VID008ProgramBindingChangeChangesIdentity) {
 TEST(EvidenceCanonicalizerTest, VID008AnalyzerVersionChangeChangesIdentity) {
   ExpectMutationChangesIdentity(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         ASSERT_FALSE(value.program.analyzer_versions.empty());
         value.program.analyzer_versions.front().version = "0.2";
       },
@@ -625,11 +626,10 @@ TEST(EvidenceCanonicalizerTest, VID008AnalyzerVersionChangeChangesIdentity) {
 TEST(EvidenceCanonicalizerTest, VID008DependencyChangeChangesIdentity) {
   ExpectMutationChangesIdentity(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         ASSERT_FALSE(value.dependencies.empty());
-        value.dependencies.front().stable_id =
-            EvidenceScenarioBuilder().Id(core::IdKind::kFact,
-                                         "other_dependency");
+        value.dependencies.front().stable_id = EvidenceScenarioBuilder().Id(
+            core::IdKind::kFact, "other_dependency");
       },
       "dependency");
 }
@@ -637,13 +637,13 @@ TEST(EvidenceCanonicalizerTest, VID008DependencyChangeChangesIdentity) {
 TEST(EvidenceCanonicalizerTest, VID008OmissionChangeChangesIdentity) {
   ExpectMutationChangesIdentity(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         // The fixture's non-expandable omission. The truncated-query omission
         // must stay expandable to remain well-formed (`hidden_omission`), so
         // flipping that one would change the bytes for the wrong reason.
         const auto omission = std::find_if(
             value.omissions.begin(), value.omissions.end(),
-            [](const Omission& candidate) { return !candidate.expandable; });
+            [](const Omission &candidate) { return !candidate.expandable; });
         ASSERT_NE(omission, value.omissions.end());
         omission->expandable = true;
       },
@@ -653,7 +653,7 @@ TEST(EvidenceCanonicalizerTest, VID008OmissionChangeChangesIdentity) {
 TEST(EvidenceCanonicalizerTest, VID008VerificationStateChangesIdentity) {
   ExpectMutationChangesIdentity(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         value.verification_state = VerificationState::kInconclusive;
       },
       "verification state");
@@ -662,9 +662,9 @@ TEST(EvidenceCanonicalizerTest, VID008VerificationStateChangesIdentity) {
 TEST(EvidenceCanonicalizerTest, VID008ProofStatusChangeChangesIdentity) {
   ExpectMutationChangesIdentity(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         ASSERT_FALSE(value.proof_obligations.empty());
-        ProofObligation& obligation = value.proof_obligations.front();
+        ProofObligation &obligation = value.proof_obligations.front();
         obligation.status = ProofStatus::kProved;
         obligation.result_id = "R_proof";
         obligation.verification_producer = "smt.z3";
@@ -679,10 +679,10 @@ TEST(EvidenceCanonicalizerTest, VID008ProofStatusChangeChangesIdentity) {
 TEST(EvidenceCanonicalizerTest, VID008AnalysisRunChangeChangesIdentity) {
   ExpectMutationChangesIdentity(
       MakeOverflowEvidenceCase(),
-      [](EvidenceCase& value) {
+      [](EvidenceCase &value) {
         const core::StableId run_id = RunId("other_run");
         value.program.analysis_run_id = run_id;
-        for (Provenance& record : value.provenance) {
+        for (Provenance &record : value.provenance) {
           record.analysis_run_id = run_id;
         }
       },
@@ -699,12 +699,12 @@ TEST(EvidenceCanonicalizerTest, CommutativeOperandsAreOrderFreeInIdentity) {
   const std::string second = left.entities[1].id;
   const std::string third = left.entities[2].id;
 
-  SetConstraintExpression(
-      left, AndOp({CompareOp("==", Ref(first), Ref(second)),
-                   CompareOp("!=", Ref(first), Ref(third))}));
+  SetConstraintExpression(left,
+                          AndOp({CompareOp("==", Ref(first), Ref(second)),
+                                 CompareOp("!=", Ref(first), Ref(third))}));
 
   EvidenceCase right = left;
-  Expression& operands = right.constraints.front().expression;
+  Expression &operands = right.constraints.front().expression;
   std::reverse(operands.operands.begin(), operands.operands.end());
 
   EXPECT_TRUE(SameCanonicalBytes(left, right));

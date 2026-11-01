@@ -30,7 +30,7 @@ core::StableId Stable(core::IdKind kind, std::uint8_t seed) {
   return core::MakeStableId(kind, bytes);
 }
 
-}  // namespace
+} // namespace
 
 TEST(DenseIdMapTest, SortsStableIdsBeforeAssigningDenseIds) {
   auto high = Stable(core::IdKind::kFunctionVariant, 0xf0);

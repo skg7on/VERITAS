@@ -26,15 +26,15 @@ class SVFIR;
 class AndersenWaveDiff;
 class SVFG;
 class LLVMModuleSet;
-}  // namespace SVF
+} // namespace SVF
 
 namespace veritas::analysis::pipeline {
 class ProgramIr;
-}  // namespace veritas::analysis::pipeline
+} // namespace veritas::analysis::pipeline
 
 namespace veritas::core {
 class RunMetrics;
-}  // namespace veritas::core
+} // namespace veritas::core
 
 namespace veritas::analysis::svf {
 
@@ -48,14 +48,14 @@ using veritas::Status;
 // than re-querying the process-wide singleton. This prevents cross-session
 // contamination when the singleton is released or replaced between runs.
 struct SvfSessionView {
-  SVF::SVFIR* svf_ir;
-  SVF::AndersenWaveDiff* andersen;
-  SVF::SVFG* svfg;
-  SVF::LLVMModuleSet* module_set;
+  SVF::SVFIR *svf_ir;
+  SVF::AndersenWaveDiff *andersen;
+  SVF::SVFG *svfg;
+  SVF::LLVMModuleSet *module_set;
 };
 
 // Callback invoked with live SVF session state.
-using SvfSessionCallback = std::function<Status(const SvfSessionView&)>;
+using SvfSessionCallback = std::function<Status(const SvfSessionView &)>;
 
 // RunWithSvfSession builds SVF directly from the live LLVM module owned by
 // program_ir, invokes the callback with the constructed SVF state, then
@@ -73,10 +73,9 @@ using SvfSessionCallback = std::function<Status(const SvfSessionView&)>;
 // happens and the report must be able to join the memory series to it. The
 // SVFG scale is recorded as counters from the map_facts scope, which is the
 // only scope in which the SVFG is live.
-Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
-                         const SvfConfig& config,
-                         SvfSessionCallback callback,
-                         core::RunMetrics* metrics = nullptr);
+Status RunWithSvfSession(pipeline::ProgramIr &program_ir,
+                         const SvfConfig &config, SvfSessionCallback callback,
+                         core::RunMetrics *metrics = nullptr);
 
 // Test-only: verify SVF global state is clean between runs. Declared and
 // defined unconditionally (rather than behind a macro) so the test target that
@@ -84,6 +83,6 @@ Status RunWithSvfSession(pipeline::ProgramIr& program_ir,
 // header and never reaches an installed API.
 bool SvfGlobalStateIsCleanForTest();
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf
 
-#endif  // VERITAS_ANALYSIS_SVF_SVFSESSION_H_
+#endif // VERITAS_ANALYSIS_SVF_SVFSESSION_H_

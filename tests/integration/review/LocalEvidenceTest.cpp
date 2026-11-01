@@ -27,6 +27,7 @@ void Write(const std::filesystem::path &path, std::string_view text) {
   std::ofstream out(path, std::ios::binary);
   out << text;
 }
+
 int Git(const std::filesystem::path &root, std::vector<std::string> args) {
   args.insert(args.begin(), {"/usr/bin/git", "-C", root.string()});
   std::vector<char *> argv;
@@ -55,6 +56,7 @@ public:
       std::abort();
     path_ = result;
   }
+
   ~TempDir() {
     std::error_code ec;
     for (auto it = std::filesystem::recursive_directory_iterator(path_, ec);
@@ -65,15 +67,18 @@ public:
                                      std::filesystem::perms::owner_all, ec);
     std::filesystem::remove_all(path_, ec);
   }
+
   const std::filesystem::path &path() const { return path_; }
 
 private:
   std::filesystem::path path_;
 };
+
 class LocalEvidenceTest : public ::testing::Test {
 protected:
   TempDir temp_;
   std::filesystem::path root_ = temp_.path() / "project";
+
   void SetUp() override {
     std::filesystem::create_directories(root_);
     ASSERT_EQ(Git(root_, {"init", "-q"}), 0);
@@ -88,6 +93,7 @@ protected:
                           "base"}),
               0);
   }
+
   void Commands(std::vector<std::string> extra) {
     Json::Array args{"clang++", "-std=c++20",
                      "--target=x86_64-unknown-linux-gnu"};
@@ -100,6 +106,7 @@ protected:
                                                   {"file", "main.cc"},
                                                   {"arguments", args}}}));
   }
+
   StatusOr<ReviewSnapshot> Capture() {
     SnapshotRequest r;
     r.project_root = root_;
@@ -107,6 +114,7 @@ protected:
     r.compile_commands_path = "compile_commands.json";
     return CaptureReviewSnapshot(r);
   }
+
   std::vector<EntityRef> Calls(const StructuralIndex &index) {
     std::vector<EntityRef> refs;
     for (const auto &e : index.entities())
@@ -114,6 +122,7 @@ protected:
         refs.push_back({index.id(), e.ordinal});
     return refs;
   }
+
   StatusOr<LocalEvidence>
   Query(const StructuralIndex &index, EntityRef ref,
         std::vector<std::string> slots = {"EXTENT", "GUARD", "OPERANDS"},
@@ -121,6 +130,7 @@ protected:
     return InvestigateLocal(
         {index, index.binding(), "copy_bound.v1", ref, slots, limit});
   }
+
   const LocalObservation *Slot(const LocalEvidence &e, std::string_view name) {
     for (const auto &o : e.observations)
       if (o.slot == name)
@@ -128,6 +138,7 @@ protected:
     return nullptr;
   }
 };
+
 TEST_F(LocalEvidenceTest, ArrayExtentIsBytes) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok()) << snap.status().message();
@@ -152,6 +163,7 @@ TEST_F(LocalEvidenceTest, ArrayExtentIsBytes) {
       "local-evidence:sha256:"));
   EXPECT_FALSE(Slot(*evidence, "EXTENT")->source_refs.empty());
 }
+
 TEST_F(LocalEvidenceTest, KeepsTwoMemcpySitesSeparate) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok());
@@ -171,6 +183,7 @@ TEST_F(LocalEvidenceTest, KeepsTwoMemcpySitesSeparate) {
   ASSERT_NE(Slot(*a, "GUARD"), nullptr);
   EXPECT_TRUE(std::get<LocalGuard>(Slot(*a, "GUARD")->value).dominates);
 }
+
 TEST_F(LocalEvidenceTest, SiblingGuardDoesNotDominate) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok());
@@ -183,6 +196,7 @@ TEST_F(LocalEvidenceTest, SiblingGuardDoesNotDominate) {
   ASSERT_NE(Slot(*e, "GUARD"), nullptr);
   EXPECT_FALSE(std::get<LocalGuard>(Slot(*e, "GUARD")->value).dominates);
 }
+
 TEST_F(LocalEvidenceTest, WideArrayExtentIsBytes) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok());
@@ -195,6 +209,7 @@ TEST_F(LocalEvidenceTest, WideArrayExtentIsBytes) {
   ASSERT_NE(Slot(*e, "EXTENT"), nullptr);
   EXPECT_EQ(std::get<ByteExtent>(Slot(*e, "EXTENT")->value).bytes, 32u);
 }
+
 TEST_F(LocalEvidenceTest, PointerExtentIsUnsupported) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok());
@@ -208,6 +223,7 @@ TEST_F(LocalEvidenceTest, PointerExtentIsUnsupported) {
   EXPECT_FALSE(e->coverage.supported);
   EXPECT_FALSE(e->coverage.reasons.empty());
 }
+
 TEST_F(LocalEvidenceTest, MissingHeaderIsPartial) {
   Write(root_ / "main.cc", "#include \"uncaptured.h\"\nvoid f() {}\n");
   auto snap = Capture();
@@ -218,6 +234,7 @@ TEST_F(LocalEvidenceTest, MissingHeaderIsPartial) {
   EXPECT_EQ(index->coverage().traversal, "INCOMPLETE");
   EXPECT_FALSE(index->coverage().frontier_refs.empty());
 }
+
 TEST_F(LocalEvidenceTest, NoNativeAnalysisAndCompilerCostsAreCounted) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok());
@@ -231,6 +248,7 @@ TEST_F(LocalEvidenceTest, NoNativeAnalysisAndCompilerCostsAreCounted) {
   EXPECT_GT(index->usage().cpu_ms, 0u);
   EXPECT_GT(index->usage().output_bytes, 0u);
 }
+
 TEST_F(LocalEvidenceTest, CapturedBytesAndIncludesIgnoreLiveEdits) {
   Write(root_ / "main.cc",
         "#include \"bound.h\"\nextern \"C\" void *memcpy(void*,const "
@@ -255,6 +273,7 @@ TEST_F(LocalEvidenceTest, CapturedBytesAndIncludesIgnoreLiveEdits) {
   EXPECT_FALSE(ctx->entity_bindings.empty());
   EXPECT_EQ(ctx->excerpt, *snap->Read("main.cc"));
 }
+
 TEST_F(LocalEvidenceTest, MutatedReferenceSizeCannotSupplyADominatingGuard) {
   Write(root_ / "main.cc",
         R"(extern "C" void *memcpy(void*,const void*,__SIZE_TYPE__);
@@ -272,6 +291,7 @@ void f(const char*s,__SIZE_TYPE__ n){char d[32];if(n<=sizeof(d)){change(n);memcp
   EXPECT_EQ(Slot(*e, "GUARD"), nullptr);
   EXPECT_FALSE(e->coverage.supported);
 }
+
 TEST_F(LocalEvidenceTest, MacroOperandsAndNonDefaultCopyAbiAreUnsupported) {
   for (
       const auto &source : std::vector<std::string>{
@@ -298,6 +318,7 @@ void f(const char*s,__SIZE_TYPE__ n){char d[32];memcpy(d,s,n);})"}) {
     EXPECT_FALSE(e->coverage.supported);
   }
 }
+
 TEST_F(LocalEvidenceTest, NoAmbientFilesystemFallbackAndResourceRefusals) {
   Write(temp_.path() / "secret.h", "#define CAP 99\n");
   Write(root_ / "main.cc", "#include \"" +
@@ -321,6 +342,7 @@ TEST_F(LocalEvidenceTest, NoAmbientFilesystemFallbackAndResourceRefusals) {
   budget.child_rss_bytes = 1;
   EXPECT_FALSE(BuildStructuralIndex(*snap, budget).ok());
 }
+
 TEST_F(LocalEvidenceTest, LocalOutputUsageIncludesTheSerializedUsage) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok());
@@ -334,6 +356,7 @@ TEST_F(LocalEvidenceTest, LocalOutputUsageIncludesTheSerializedUsage) {
   ASSERT_TRUE(encoded.ok());
   EXPECT_GE(e->usage.output_bytes, encoded->size());
 }
+
 TEST_F(LocalEvidenceTest, RejectsUnsafeCompilerFlagsBeforeExecution) {
   auto safe = Capture();
   ASSERT_TRUE(safe.ok());
@@ -355,6 +378,7 @@ TEST_F(LocalEvidenceTest, RejectsUnsafeCompilerFlagsBeforeExecution) {
     EXPECT_FALSE(BuildStructuralIndex(*snap, {}).ok());
   }
 }
+
 TEST_F(LocalEvidenceTest, CapturedResponseFilesAreBoundedAndValidated) {
   Write(root_ / "args.rsp", "-std=c++20 -DCOUNT=8");
   ASSERT_EQ(Git(root_, {"add", "args.rsp"}), 0);
@@ -371,6 +395,7 @@ TEST_F(LocalEvidenceTest, CapturedResponseFilesAreBoundedAndValidated) {
   ASSERT_TRUE(snap.ok());
   EXPECT_FALSE(BuildStructuralIndex(*snap, {}).ok());
 }
+
 TEST_F(LocalEvidenceTest, MacroCastAndIndirectFormsRetainGaps) {
   Write(root_ / "main.cc",
         R"(extern "C" void *memcpy(void*,const void*,__SIZE_TYPE__);
@@ -391,6 +416,7 @@ void f(char*p,const char*s,__SIZE_TYPE__ n){char d[32];COPY(d,s,n);memcpy((void*
   }
   EXPECT_FALSE(index->entities()[calls.back().ordinal].direct_call);
 }
+
 TEST_F(LocalEvidenceTest, CTranslationUnitRetainsItsLanguage) {
   Write(root_ / "main.c",
         R"(extern void *memcpy(void*,const void*,__SIZE_TYPE__);
@@ -413,6 +439,7 @@ void f(const char*s,__SIZE_TYPE__ n){int class[8];memcpy(class,s,n);})");
   ASSERT_NE(Slot(*e, "EXTENT"), nullptr);
   EXPECT_EQ(std::get<ByteExtent>(Slot(*e, "EXTENT")->value).bytes, 32u);
 }
+
 TEST_F(LocalEvidenceTest, OnlyDeclaredProgramTranslationUnitsAreParsed) {
   Write(root_ / "other.cc", "void unrelated(){}\n");
   Write(
@@ -444,6 +471,7 @@ TEST_F(LocalEvidenceTest, OnlyDeclaredProgramTranslationUnitsAreParsed) {
   for (const auto &e : index->entities())
     EXPECT_NE(e.path, "other.cc");
 }
+
 TEST_F(LocalEvidenceTest, RejectsForeignBindingRefsAndInvalidBudgets) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok());
@@ -468,6 +496,7 @@ TEST_F(LocalEvidenceTest, RejectsForeignBindingRefsAndInvalidBudgets) {
   b.max_tus = 0;
   EXPECT_FALSE(BuildStructuralIndex(*snap, b).ok());
 }
+
 TEST_F(LocalEvidenceTest, TruncationAndIdsPreserveCoverageAndIgnoreTiming) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok());
@@ -493,6 +522,7 @@ TEST_F(LocalEvidenceTest, TruncationAndIdsPreserveCoverageAndIgnoreTiming) {
   ASSERT_TRUE(truncated.ok());
   EXPECT_EQ(truncated->coverage().traversal, "INCOMPLETE");
 }
+
 TEST_F(LocalEvidenceTest, ReviewAggregateReferenceEscape) {
   Write(root_ / "main.cc",
         R"(extern "C" void *memcpy(void*,const void*,__SIZE_TYPE__);
@@ -509,6 +539,7 @@ void f(const char*s,__SIZE_TYPE__ n){char d[32];Ref r{n};if(n<=sizeof(d)){r.valu
   ASSERT_TRUE(e.ok());
   EXPECT_EQ(Slot(*e, "GUARD"), nullptr);
 }
+
 TEST_F(LocalEvidenceTest, ReviewConditionalReferenceEscape) {
   Write(root_ / "main.cc",
         R"(extern "C" void *memcpy(void*,const void*,__SIZE_TYPE__);
@@ -525,6 +556,7 @@ void f(const char*s,__SIZE_TYPE__ n,bool b){char d[32];if(n<=sizeof(d)){change(b
   ASSERT_TRUE(e.ok());
   EXPECT_EQ(Slot(*e, "GUARD"), nullptr);
 }
+
 TEST_F(LocalEvidenceTest, ReviewIndexedContextIdentity) {
   auto snap = Capture();
   ASSERT_TRUE(snap.ok());

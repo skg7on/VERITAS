@@ -43,10 +43,10 @@ v2::FunctionSummary V2Summary(std::string_view name) {
 }
 
 // A call whose target SVF resolved only as a MAY indirect candidate.
-void AddCall(v2::FunctionSummary* summary, std::string_view callee_symbol,
-             const std::string& resolved_target, v2::DispatchKind dispatch,
+void AddCall(v2::FunctionSummary *summary, std::string_view callee_symbol,
+             const std::string &resolved_target, v2::DispatchKind dispatch,
              v1::EpistemicState epistemic) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id("site:" + std::string(callee_symbol));
   call->set_callee_symbol(std::string(callee_symbol));
   call->set_resolved_callee_function_variant_id(resolved_target);
@@ -63,8 +63,8 @@ TEST(CallGraphTest, V2IndirectMayTargetBecomesEdge) {
   AddCall(&caller, "target", core::ToString(FunctionId("target")),
           v2::DISPATCH_KIND_INDIRECT, v1::EPISTEMIC_STATE_MAY);
 
-  const std::vector<summary::SummaryArtifact> artifacts = {
-      caller, V2Summary("target")};
+  const std::vector<summary::SummaryArtifact> artifacts = {caller,
+                                                           V2Summary("target")};
 
   auto graph = CallGraph::FromSummaries(artifacts);
   ASSERT_TRUE(graph.ok());
@@ -79,11 +79,11 @@ TEST(CallGraphTest, V2IndirectMayTargetBecomesEdge) {
 // out to every function in the program.
 TEST(CallGraphTest, V2UnresolvedTargetStaysScopedUnknownCall) {
   auto caller = V2Summary("caller");
-  AddCall(&caller, "opaque", /*resolved_target=*/"",
-          v2::DISPATCH_KIND_INDIRECT, v1::EPISTEMIC_STATE_UNKNOWN);
+  AddCall(&caller, "opaque", /*resolved_target=*/"", v2::DISPATCH_KIND_INDIRECT,
+          v1::EPISTEMIC_STATE_UNKNOWN);
 
-  const std::vector<summary::SummaryArtifact> artifacts = {
-      caller, V2Summary("other")};
+  const std::vector<summary::SummaryArtifact> artifacts = {caller,
+                                                           V2Summary("other")};
 
   auto graph = CallGraph::FromSummaries(artifacts);
   ASSERT_TRUE(graph.ok());
@@ -100,8 +100,8 @@ TEST(CallGraphTest, V2AssumedTargetBecomesEdge) {
   AddCall(&caller, "target", core::ToString(FunctionId("target")),
           v2::DISPATCH_KIND_DIRECT, v1::EPISTEMIC_STATE_ASSUMED);
 
-  const std::vector<summary::SummaryArtifact> artifacts = {
-      caller, V2Summary("target")};
+  const std::vector<summary::SummaryArtifact> artifacts = {caller,
+                                                           V2Summary("target")};
 
   auto graph = CallGraph::FromSummaries(artifacts);
   ASSERT_TRUE(graph.ok());
@@ -117,7 +117,7 @@ TEST(CallGraphTest, V1ArtifactsRemainSupported) {
   caller.mutable_header()->set_schema_version("summary.v1");
   caller.mutable_identity()->set_function_variant_id(
       core::ToString(FunctionId("caller")));
-  auto* call = caller.add_calls();
+  auto *call = caller.add_calls();
   call->set_callee_symbol("target");
   call->set_resolved_callee_function_variant_id(
       core::ToString(FunctionId("target")));
@@ -138,5 +138,5 @@ TEST(CallGraphTest, V1ArtifactsRemainSupported) {
             v1::EPISTEMIC_STATE_MUST);
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

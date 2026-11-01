@@ -37,9 +37,9 @@ struct ProjectInput {
   std::filesystem::path output_root;
 };
 
-StatusOr<ProjectInput> ResolveProjectInput(
-    const analysis::ProjectAnalysisRequest& request);
+StatusOr<ProjectInput>
+ResolveProjectInput(const analysis::ProjectAnalysisRequest &request);
 
-}  // namespace veritas::build
+} // namespace veritas::build
 
-#endif  // VERITAS_BUILD_PROJECTINPUT_H_
+#endif // VERITAS_BUILD_PROJECTINPUT_H_

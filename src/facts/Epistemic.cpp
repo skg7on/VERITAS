@@ -25,26 +25,26 @@ namespace sem = analysis::semantic;
 // Evidence-strength rank, weakest first. The meet takes the minimum rank.
 int Rank(sem::EpistemicState state) {
   switch (state) {
-    case sem::EpistemicState::kUnknown:
-      return 0;
-    case sem::EpistemicState::kInferred:
-      return 1;
-    case sem::EpistemicState::kAssumed:
-      return 2;
-    case sem::EpistemicState::kMay:
-      return 3;
-    case sem::EpistemicState::kMustNot:
-      return 4;
-    case sem::EpistemicState::kMust:
-      return 5;
+  case sem::EpistemicState::kUnknown:
+    return 0;
+  case sem::EpistemicState::kInferred:
+    return 1;
+  case sem::EpistemicState::kAssumed:
+    return 2;
+  case sem::EpistemicState::kMay:
+    return 3;
+  case sem::EpistemicState::kMustNot:
+    return 4;
+  case sem::EpistemicState::kMust:
+    return 5;
   }
   return 0;
 }
 
-}  // namespace
+} // namespace
 
-sem::EpistemicState JoinEpistemic(
-    std::span<const sem::EpistemicState> inputs, RuleSoundness soundness) {
+sem::EpistemicState JoinEpistemic(std::span<const sem::EpistemicState> inputs,
+                                  RuleSoundness soundness) {
   if (inputs.empty()) {
     return sem::EpistemicState::kUnknown;
   }
@@ -65,27 +65,28 @@ sem::EpistemicState JoinEpistemic(
 
   // Both definite truth and definite falsehood with no weaker state in between
   // is a contradiction; the fact cannot be grounded.
-  if (has_must && has_must_not && weakest_rank >= Rank(sem::EpistemicState::kMustNot)) {
+  if (has_must && has_must_not &&
+      weakest_rank >= Rank(sem::EpistemicState::kMustNot)) {
     return sem::EpistemicState::kUnknown;
   }
 
   sem::EpistemicState result = sem::EpistemicState::kMust;
   switch (weakest_rank) {
-    case 1:
-      result = sem::EpistemicState::kInferred;
-      break;
-    case 2:
-      result = sem::EpistemicState::kAssumed;
-      break;
-    case 3:
-      result = sem::EpistemicState::kMay;
-      break;
-    case 4:
-      result = sem::EpistemicState::kMustNot;
-      break;
-    default:
-      result = sem::EpistemicState::kMust;
-      break;
+  case 1:
+    result = sem::EpistemicState::kInferred;
+    break;
+  case 2:
+    result = sem::EpistemicState::kAssumed;
+    break;
+  case 3:
+    result = sem::EpistemicState::kMay;
+    break;
+  case 4:
+    result = sem::EpistemicState::kMustNot;
+    break;
+  default:
+    result = sem::EpistemicState::kMust;
+    break;
   }
 
   // An over-approximating rule only establishes possibility, never a definite
@@ -99,4 +100,4 @@ sem::EpistemicState JoinEpistemic(
   return result;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts

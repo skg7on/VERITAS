@@ -17,6 +17,7 @@
 #include "veritas/review/ReviewTypes.h"
 #include <map>
 #include <optional>
+
 namespace veritas::review {
 struct ProgramScopeInput {
   std::optional<Json> manifest;
@@ -25,6 +26,7 @@ struct ProgramScopeInput {
   std::map<std::string, std::string> translation_unit_digests;
   std::map<std::string, std::string> artifact_digests;
 };
+
 // Manifest schema errors are InvalidArgument. Missing
 // targets/dependencies/input artifacts produce UNRESOLVED with a frontier,
 // never a closed inferred scope.

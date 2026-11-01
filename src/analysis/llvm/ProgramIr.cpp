@@ -24,33 +24,33 @@ ProgramIr::ProgramIr() : context_(std::make_unique<::llvm::LLVMContext>()) {}
 
 ProgramIr::~ProgramIr() = default;
 
-ProgramIr::ProgramIr(ProgramIr&&) noexcept = default;
+ProgramIr::ProgramIr(ProgramIr &&) noexcept = default;
 
-ProgramIr& ProgramIr::operator=(ProgramIr&&) noexcept = default;
+ProgramIr &ProgramIr::operator=(ProgramIr &&) noexcept = default;
 
 void ProgramIr::SetModule(std::unique_ptr<::llvm::Module> module) {
   module_ = std::move(module);
 }
 
-::llvm::Function* ProgramIr::GetFunction(const std::string& name) const {
+::llvm::Function *ProgramIr::GetFunction(const std::string &name) const {
   if (!module_) {
     return nullptr;
   }
   return module_->getFunction(name);
 }
 
-std::vector<::llvm::Function*> ProgramIr::GetAllFunctions() const {
-  std::vector<::llvm::Function*> functions;
+std::vector<::llvm::Function *> ProgramIr::GetAllFunctions() const {
+  std::vector<::llvm::Function *> functions;
   if (!module_) {
     return functions;
   }
-  for (auto& func : *module_) {
+  for (auto &func : *module_) {
     functions.push_back(&func);
   }
   return functions;
 }
 
-bool ProgramIr::HasFunction(const std::string& name) const {
+bool ProgramIr::HasFunction(const std::string &name) const {
   return GetFunction(name) != nullptr;
 }
 
@@ -61,4 +61,4 @@ size_t ProgramIr::GetFunctionCount() const {
   return module_->size();
 }
 
-}  // namespace veritas::analysis::pipeline
+} // namespace veritas::analysis::pipeline

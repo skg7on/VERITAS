@@ -23,13 +23,13 @@
 
 #include "analysis/svf/SvfBudget.h"
 
-#include <SVF-LLVM/LLVMModule.h>
-#include <SVFIR/SVFIR.h>
-#include <WPA/Andersen.h>
+#include <Graphs/CallGraph.h>
 #include <Graphs/SVFG.h>
 #include <Graphs/SVFGNode.h>
-#include <Graphs/CallGraph.h>
+#include <SVF-LLVM/LLVMModule.h>
+#include <SVFIR/SVFIR.h>
 #include <Util/Casting.h>
+#include <WPA/Andersen.h>
 #include <llvm/BinaryFormat/Dwarf.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/DebugInfoMetadata.h>
@@ -49,28 +49,32 @@ using veritas::core::StableId;
 
 // Resolve an SVF value to its underlying LLVM value, or nullptr when there is
 // no underlying LLVM value (e.g. a pure memory-region node).
-const ::llvm::Value* ResolveLlvmValue(const SVF::SVFValue* svf_value,
-                                      const SvfSessionView& view) {
-  if (!svf_value || !view.module_set) return nullptr;
-  if (!view.module_set->hasLLVMValue(svf_value)) return nullptr;
+const ::llvm::Value *ResolveLlvmValue(const SVF::SVFValue *svf_value,
+                                      const SvfSessionView &view) {
+  if (!svf_value || !view.module_set)
+    return nullptr;
+  if (!view.module_set->hasLLVMValue(svf_value))
+    return nullptr;
   return view.module_set->getLLVMValue(svf_value);
 }
 
 // Resolve an SVF value to its stable kValueRef identity, or nullopt when it
 // has no underlying LLVM value.
-std::optional<StableId> ResolveValueId(const SVF::SVFValue* svf_value,
-                                       const SvfSessionView& view,
-                                       const llvm::StableValueMapper& values) {
-  const ::llvm::Value* llvm_value = ResolveLlvmValue(svf_value, view);
-  if (!llvm_value) return std::nullopt;
+std::optional<StableId> ResolveValueId(const SVF::SVFValue *svf_value,
+                                       const SvfSessionView &view,
+                                       const llvm::StableValueMapper &values) {
+  const ::llvm::Value *llvm_value = ResolveLlvmValue(svf_value, view);
+  if (!llvm_value)
+    return std::nullopt;
   auto id = values.IdFor(*llvm_value);
-  if (!id.ok()) return std::nullopt;
+  if (!id.ok())
+    return std::nullopt;
   return *id;
 }
 
 // True when the SVF value resolves to an LLVM value of pointer type.
-bool IsPointer(const SVF::SVFValue* var, const SvfSessionView& view) {
-  const ::llvm::Value* llvm_value = ResolveLlvmValue(var, view);
+bool IsPointer(const SVF::SVFValue *var, const SvfSessionView &view) {
+  const ::llvm::Value *llvm_value = ResolveLlvmValue(var, view);
   return llvm_value && llvm_value->getType()->isPointerTy();
 }
 
@@ -78,26 +82,26 @@ bool IsPointer(const SVF::SVFValue* var, const SvfSessionView& view) {
 // and reloads it before the indirect call. Recover the single stored value so
 // callback classification keys off the stable origin, but stop as soon as the
 // slot shape admits multiple or non-store writers.
-const ::llvm::Value* RecoverSingleStoreSlotValue(const ::llvm::Value* value) {
-  const auto* load = ::llvm::dyn_cast<::llvm::LoadInst>(value);
+const ::llvm::Value *RecoverSingleStoreSlotValue(const ::llvm::Value *value) {
+  const auto *load = ::llvm::dyn_cast<::llvm::LoadInst>(value);
   if (!load) {
     return value;
   }
-  const auto* slot = ::llvm::dyn_cast<::llvm::AllocaInst>(
+  const auto *slot = ::llvm::dyn_cast<::llvm::AllocaInst>(
       load->getPointerOperand()->stripPointerCasts());
   if (!slot) {
     return value;
   }
 
-  const ::llvm::Value* stored = nullptr;
-  for (const ::llvm::User* user : slot->users()) {
-    if (const auto* slot_load = ::llvm::dyn_cast<::llvm::LoadInst>(user)) {
+  const ::llvm::Value *stored = nullptr;
+  for (const ::llvm::User *user : slot->users()) {
+    if (const auto *slot_load = ::llvm::dyn_cast<::llvm::LoadInst>(user)) {
       if (slot_load->getPointerOperand()->stripPointerCasts() != slot) {
         return value;
       }
       continue;
     }
-    const auto* store = ::llvm::dyn_cast<::llvm::StoreInst>(user);
+    const auto *store = ::llvm::dyn_cast<::llvm::StoreInst>(user);
     if (!store || store->getPointerOperand()->stripPointerCasts() != slot) {
       return value;
     }
@@ -109,27 +113,27 @@ const ::llvm::Value* RecoverSingleStoreSlotValue(const ::llvm::Value* value) {
   return stored != nullptr ? stored : value;
 }
 
-const ::llvm::DIType* StripDebugTypeAliases(const ::llvm::DIType* type) {
-  while (const auto* derived =
+const ::llvm::DIType *StripDebugTypeAliases(const ::llvm::DIType *type) {
+  while (const auto *derived =
              ::llvm::dyn_cast_or_null<::llvm::DIDerivedType>(type)) {
     switch (derived->getTag()) {
-      case ::llvm::dwarf::DW_TAG_typedef:
-      case ::llvm::dwarf::DW_TAG_const_type:
-      case ::llvm::dwarf::DW_TAG_volatile_type:
-      case ::llvm::dwarf::DW_TAG_restrict_type:
-      case ::llvm::dwarf::DW_TAG_atomic_type:
-        type = derived->getBaseType();
-        continue;
-      default:
-        return type;
+    case ::llvm::dwarf::DW_TAG_typedef:
+    case ::llvm::dwarf::DW_TAG_const_type:
+    case ::llvm::dwarf::DW_TAG_volatile_type:
+    case ::llvm::dwarf::DW_TAG_restrict_type:
+    case ::llvm::dwarf::DW_TAG_atomic_type:
+      type = derived->getBaseType();
+      continue;
+    default:
+      return type;
     }
   }
   return type;
 }
 
-bool IsFunctionPointerDebugType(const ::llvm::DIType* type) {
+bool IsFunctionPointerDebugType(const ::llvm::DIType *type) {
   type = StripDebugTypeAliases(type);
-  const auto* pointer = ::llvm::dyn_cast_or_null<::llvm::DIDerivedType>(type);
+  const auto *pointer = ::llvm::dyn_cast_or_null<::llvm::DIDerivedType>(type);
   if (!pointer || pointer->getTag() != ::llvm::dwarf::DW_TAG_pointer_type) {
     return false;
   }
@@ -137,8 +141,8 @@ bool IsFunctionPointerDebugType(const ::llvm::DIType* type) {
       StripDebugTypeAliases(pointer->getBaseType()));
 }
 
-bool IsFunctionPointerFormal(const ::llvm::Argument& argument) {
-  const ::llvm::DISubprogram* subprogram =
+bool IsFunctionPointerFormal(const ::llvm::Argument &argument) {
+  const ::llvm::DISubprogram *subprogram =
       argument.getParent()->getSubprogram();
   if (!subprogram || !subprogram->getType()) {
     return false;
@@ -156,11 +160,11 @@ bool IsFunctionPointerFormal(const ::llvm::Argument& argument) {
 // Loads from globals, tables, and local forwarding slots intentionally remain
 // ordinary indirect calls. Virtual-call classification is handled
 // independently by CallICFGNode::isVirtualCall at the call site.
-bool IsFormalFunctionPointerCall(const ::llvm::CallBase& call) {
-  const ::llvm::Value* origin =
+bool IsFormalFunctionPointerCall(const ::llvm::CallBase &call) {
+  const ::llvm::Value *origin =
       RecoverSingleStoreSlotValue(call.getCalledOperand()->stripPointerCasts());
   origin = origin->stripPointerCasts();
-  const auto* argument = ::llvm::dyn_cast<::llvm::Argument>(origin);
+  const auto *argument = ::llvm::dyn_cast<::llvm::Argument>(origin);
   return argument && argument->getParent() == call.getFunction() &&
          IsFunctionPointerFormal(*argument);
 }
@@ -173,8 +177,8 @@ struct AliasObservation {
   semantic::EpistemicState epistemic;
 };
 
-std::string MakeProvenance(const AnalyzerRunContext& run_context,
-                           const SvfConfig& config) {
+std::string MakeProvenance(const AnalyzerRunContext &run_context,
+                           const SvfConfig &config) {
   return "analyzer=" + run_context.analyzer_run_id +
          ";config=" + config.CanonicalAnalyzerConfig();
 }
@@ -182,8 +186,8 @@ std::string MakeProvenance(const AnalyzerRunContext& run_context,
 // A pointer admitted as an alias candidate, carrying its stable value identity
 // and its resolved memory location beside the SVF var (for Andersen queries).
 struct AliasPointer {
-  const SVF::SVFVar* var;
-  StableId value_id;  // kValueRef, the dedup/sort key
+  const SVF::SVFVar *var;
+  StableId value_id; // kValueRef, the dedup/sort key
   semantic::MemoryLocation location;
 };
 
@@ -192,12 +196,11 @@ struct AliasPointer {
 // object is a proof stronger than overlap alone: both values name the same
 // abstract object in this analysis run. Empty, multi-object, and black-hole
 // sets remain non-proofs and therefore cannot be promoted.
-bool ResolvesToOneProvenObject(const AliasPointer& left,
-                               const AliasPointer& right,
-                               const SvfSessionView& view) {
-  const SVF::PointsTo& left_points = view.andersen->getPts(left.var->getId());
-  const SVF::PointsTo& right_points =
-      view.andersen->getPts(right.var->getId());
+bool ResolvesToOneProvenObject(const AliasPointer &left,
+                               const AliasPointer &right,
+                               const SvfSessionView &view) {
+  const SVF::PointsTo &left_points = view.andersen->getPts(left.var->getId());
+  const SVF::PointsTo &right_points = view.andersen->getPts(right.var->getId());
   if (left_points.count() != 1 || right_points.count() != 1 ||
       left_points != right_points) {
     return false;
@@ -208,24 +211,27 @@ bool ResolvesToOneProvenObject(const AliasPointer& left,
 
 // Resolve an SVF pointer var into an AliasPointer, or nullopt when it is not a
 // pointer or cannot be mapped to a stable value/location identity.
-std::optional<AliasPointer> ResolveAliasPointer(
-    const SVF::SVFVar* var, const SvfSessionView& view,
-    const llvm::StableValueMapper& values,
-    const llvm::AbstractMemoryBuilder& memory) {
-  const ::llvm::Value* llvm_value = ResolveLlvmValue(var, view);
-  if (!llvm_value || !llvm_value->getType()->isPointerTy()) return std::nullopt;
+std::optional<AliasPointer>
+ResolveAliasPointer(const SVF::SVFVar *var, const SvfSessionView &view,
+                    const llvm::StableValueMapper &values,
+                    const llvm::AbstractMemoryBuilder &memory) {
+  const ::llvm::Value *llvm_value = ResolveLlvmValue(var, view);
+  if (!llvm_value || !llvm_value->getType()->isPointerTy())
+    return std::nullopt;
   auto id = values.IdFor(*llvm_value);
-  if (!id.ok()) return std::nullopt;
+  if (!id.ok())
+    return std::nullopt;
   auto location = memory.LocationFor(*llvm_value, std::nullopt);
-  if (!location.ok()) return std::nullopt;
+  if (!location.ok())
+    return std::nullopt;
   return AliasPointer{var, *id, std::move(*location)};
 }
 
 // Two ascending-sorted NodeID sequences intersect iff they share an element.
 // A two-pointer scan is O(|a| + |b|) and cache-friendly, replacing SVF's
 // linked-list SparseBitVector intersection in the alias hot loop.
-bool IntersectsSorted(const std::vector<SVF::NodeID>& a,
-                      const std::vector<SVF::NodeID>& b) {
+bool IntersectsSorted(const std::vector<SVF::NodeID> &a,
+                      const std::vector<SVF::NodeID> &b) {
   std::size_t i = 0;
   std::size_t j = 0;
   while (i < a.size() && j < b.size()) {
@@ -241,25 +247,25 @@ bool IntersectsSorted(const std::vector<SVF::NodeID>& a,
 }
 
 // Sort + unique a vector of fully-orderable facts (operator<=>/==).
-template <typename Vec>
-void Canonicalize(Vec& facts) {
+template <typename Vec> void Canonicalize(Vec &facts) {
   std::sort(facts.begin(), facts.end());
   facts.erase(std::unique(facts.begin(), facts.end()), facts.end());
 }
 
-}  // namespace
+} // namespace
 
-Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
-                   const SvfSessionView& view,
-                   const AnalyzerRunContext& run_context,
-                   const SvfConfig& config,
-                   SvfMappingResult* result) {
-  if (!result) return Status::Internal("result is null");
+Status MapSvfFacts(const pipeline::ProgramIr &program_ir,
+                   const SvfSessionView &view,
+                   const AnalyzerRunContext &run_context,
+                   const SvfConfig &config, SvfMappingResult *result) {
+  if (!result)
+    return Status::Internal("result is null");
   if (!view.svf_ir || !view.andersen || !view.svfg || !view.module_set) {
     return Status::Internal("incomplete SVF session view");
   }
-  const ::llvm::Module* module = program_ir.GetModule();
-  if (!module) return Status::Internal("ProgramIr has no module");
+  const ::llvm::Module *module = program_ir.GetModule();
+  if (!module)
+    return Status::Internal("ProgramIr has no module");
 
   llvm::StableValueMapper values(*module, program_ir.origin_map());
   llvm::AbstractMemoryBuilder memory(module->getDataLayout(), values,
@@ -277,11 +283,12 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
 
   // ---- Pass 1: value flows, memory effects, and alias pointers ----
   for (auto it = view.svfg->begin(); it != view.svfg->end(); ++it) {
-    const SVF::SVFGNode* node = it->second;
-    if (!node) continue;
+    const SVF::SVFGNode *node = it->second;
+    if (!node)
+      continue;
 
-    if (const auto* load = SVF::SVFUtil::dyn_cast<SVF::LoadVFGNode>(node)) {
-      const SVF::SVFVar* pointer = load->getSrcNode();
+    if (const auto *load = SVF::SVFUtil::dyn_cast<SVF::LoadVFGNode>(node)) {
+      const SVF::SVFVar *pointer = load->getSrcNode();
       auto location = ResolveAliasPointer(pointer, view, values, memory);
       if (!location) {
         ++unmapped_count;
@@ -314,8 +321,9 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
           truncated = true;
         }
       }
-    } else if (const auto* store = SVF::SVFUtil::dyn_cast<SVF::StoreVFGNode>(node)) {
-      const SVF::SVFVar* pointer = store->getDstNode();
+    } else if (const auto *store =
+                   SVF::SVFUtil::dyn_cast<SVF::StoreVFGNode>(node)) {
+      const SVF::SVFVar *pointer = store->getDstNode();
       auto location = ResolveAliasPointer(pointer, view, values, memory);
       if (!location) {
         ++unmapped_count;
@@ -354,12 +362,13 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
     // edge whose endpoints both resolve to LLVM values is a value flow).
     for (auto edge_it = node->OutEdgeBegin(); edge_it != node->OutEdgeEnd();
          ++edge_it) {
-      const SVF::SVFGEdge* edge = *edge_it;
-      if (!edge) continue;
+      const SVF::SVFGEdge *edge = *edge_it;
+      if (!edge)
+        continue;
 
-      const SVF::SVFVar* source_var =
+      const SVF::SVFVar *source_var =
           edge->getSrcNode() ? edge->getSrcNode()->getValue() : nullptr;
-      const SVF::SVFVar* dest_var =
+      const SVF::SVFVar *dest_var =
           edge->getDstNode() ? edge->getDstNode()->getValue() : nullptr;
       auto source = ResolveValueId(source_var, view, values);
       auto dest = ResolveValueId(dest_var, view, values);
@@ -402,9 +411,11 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
 
   // ---- Pass 2: alias relationships over all admitted pointer pairs ----
   {
-    std::vector<const AliasPointer*> ordered;
+    std::vector<const AliasPointer *> ordered;
     ordered.reserve(alias_pointers.size());
-    for (const auto& entry : alias_pointers) ordered.push_back(&entry.second);
+    for (const auto &entry : alias_pointers)
+      ordered.push_back(&entry.second);
+
     // std::map iteration is already key-ordered (by value id), so `ordered`
     // is sorted and the cross-product below is deterministic.
 
@@ -417,16 +428,17 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
     // MayAlias iff either side reaches the black hole or the expanded sets
     // intersect -- while removing the dominant per-pair cost.
     struct ExpandedPointsTo {
-      std::vector<SVF::NodeID> objects;  // ascending, black-hole node excluded
+      std::vector<SVF::NodeID> objects; // ascending, black-hole node excluded
       bool has_black_hole = false;
     };
+
     std::vector<ExpandedPointsTo> expanded(ordered.size());
     const SVF::NodeID black_hole = view.svf_ir->getBlackHoleNode();
     for (std::size_t i = 0; i < ordered.size(); ++i) {
       SVF::PointsTo pts;
       view.andersen->expandFIObjs(
           view.andersen->getPts(ordered[i]->var->getId()), pts);
-      ExpandedPointsTo& info = expanded[i];
+      ExpandedPointsTo &info = expanded[i];
       info.objects.reserve(pts.count());
       for (SVF::NodeID obj : pts) {
         if (obj == black_hole) {
@@ -449,18 +461,17 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
           alias_truncated = true;
           break;
         }
-        const AliasPointer& left = *ordered[i];
-        const AliasPointer& right = *ordered[j];
-        const ExpandedPointsTo& lhs = expanded[i];
-        const ExpandedPointsTo& rhs = expanded[j];
+        const AliasPointer &left = *ordered[i];
+        const AliasPointer &right = *ordered[j];
+        const ExpandedPointsTo &lhs = expanded[i];
+        const ExpandedPointsTo &rhs = expanded[j];
         const bool may_alias = lhs.has_black_hole || rhs.has_black_hole ||
                                IntersectsSorted(lhs.objects, rhs.objects);
         AliasObservation observation =
-            may_alias
-                ? AliasObservation{semantic::AliasKind::kMayAlias,
-                                   semantic::EpistemicState::kMay}
-                : AliasObservation{semantic::AliasKind::kNoAlias,
-                                   semantic::EpistemicState::kMust};
+            may_alias ? AliasObservation{semantic::AliasKind::kMayAlias,
+                                         semantic::EpistemicState::kMay}
+                      : AliasObservation{semantic::AliasKind::kNoAlias,
+                                         semantic::EpistemicState::kMust};
         if (observation.kind == semantic::AliasKind::kMayAlias &&
             ResolvesToOneProvenObject(left, right, view)) {
           observation = {semantic::AliasKind::kMustAlias,
@@ -487,7 +498,7 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
 
   // ---- Pass 3: indirect and virtual call targets ----
   {
-    const SVF::CallGraph* callgraph = view.andersen->getCallGraph();
+    const SVF::CallGraph *callgraph = view.andersen->getCallGraph();
 
     // Resolve each indirect call site to stable identities first, then sort by
     // (call_site, caller, callee) so emission never depends on SVF's
@@ -499,12 +510,13 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
       semantic::DispatchKind dispatch;
       std::string diagnostic_symbol;
     };
+
     std::vector<ResolvedCall> resolved_calls;
 
-    for (const auto& entry : view.svf_ir->getIndirectCallsites()) {
-      const SVF::CallICFGNode* call_block = entry.first;
-      const ::llvm::Value* call_value = ResolveLlvmValue(call_block, view);
-      const auto* call = ::llvm::dyn_cast<::llvm::CallBase>(call_value);
+    for (const auto &entry : view.svf_ir->getIndirectCallsites()) {
+      const SVF::CallICFGNode *call_block = entry.first;
+      const ::llvm::Value *call_value = ResolveLlvmValue(call_block, view);
+      const auto *call = ::llvm::dyn_cast<::llvm::CallBase>(call_value);
       if (!call || !call->getFunction()) {
         ++unmapped_count;
         facts.unknowns.push_back(semantic::NormalizedUnknown{
@@ -536,7 +548,7 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
                      ? semantic::DispatchKind::kCallback
                      : semantic::DispatchKind::kIndirect);
 
-      const SVF::CallGraph::FunctionSet* candidates = nullptr;
+      const SVF::CallGraph::FunctionSet *candidates = nullptr;
       if (callgraph && callgraph->hasIndCSCallees(call_block)) {
         candidates = &callgraph->getIndCSCallees(call_block);
       }
@@ -551,10 +563,10 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
         continue;
       }
 
-      for (const SVF::FunObjVar* candidate : *candidates) {
-        const ::llvm::Value* candidate_value =
+      for (const SVF::FunObjVar *candidate : *candidates) {
+        const ::llvm::Value *candidate_value =
             ResolveLlvmValue(candidate, view);
-        const auto* callee_fn =
+        const auto *callee_fn =
             ::llvm::dyn_cast<::llvm::Function>(candidate_value);
         auto callee_id = ResolveValueId(candidate, view, values);
         if (!callee_fn || !callee_id) {
@@ -578,14 +590,17 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
     }
 
     std::sort(resolved_calls.begin(), resolved_calls.end(),
-              [](const ResolvedCall& a, const ResolvedCall& b) {
-                if (a.call_site != b.call_site) return a.call_site < b.call_site;
-                if (a.caller != b.caller) return a.caller < b.caller;
-                if (a.callee != b.callee) return a.callee < b.callee;
+              [](const ResolvedCall &a, const ResolvedCall &b) {
+                if (a.call_site != b.call_site)
+                  return a.call_site < b.call_site;
+                if (a.caller != b.caller)
+                  return a.caller < b.caller;
+                if (a.callee != b.callee)
+                  return a.callee < b.callee;
                 return a.dispatch < b.dispatch;
               });
 
-    for (const ResolvedCall& call : resolved_calls) {
+    for (const ResolvedCall &call : resolved_calls) {
       if (!budget.TryEmit()) {
         truncated = true;
         break;
@@ -622,8 +637,9 @@ Status MapSvfFacts(const pipeline::ProgramIr& program_ir,
   const auto completion = (unmapped_count > 0 || truncated)
                               ? SvfMappingCompletion::kCompleteWithUnknowns
                               : SvfMappingCompletion::kComplete;
-  *result = SvfMappingResult{.completion = completion, .facts = std::move(facts)};
+  *result =
+      SvfMappingResult{.completion = completion, .facts = std::move(facts)};
   return Status::Ok();
 }
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf

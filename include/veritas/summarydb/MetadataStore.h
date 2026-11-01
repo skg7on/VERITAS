@@ -86,12 +86,12 @@ struct AnalyzerRunRow {
 };
 
 class MetadataStore {
- public:
+public:
   ~MetadataStore();
 
   // Open or create a metadata database at db_path. Returns InvalidArgument
   // if the path is invalid, Internal if SQLite fails.
-  static StatusOr<MetadataStore> Open(const std::filesystem::path& db_path);
+  static StatusOr<MetadataStore> Open(const std::filesystem::path &db_path);
 
   // Open an existing metadata database for reading only. Unlike `Open`, this
   // never creates the file and never applies the schema: it sets
@@ -103,8 +103,8 @@ class MetadataStore {
   // An inspection tool must use this. `Open` would create an empty store at a
   // mistyped path, and an empty store compares equal to nothing while looking
   // like a successful comparison.
-  static StatusOr<MetadataStore> OpenReadOnly(
-      const std::filesystem::path& db_path);
+  static StatusOr<MetadataStore>
+  OpenReadOnly(const std::filesystem::path &db_path);
 
   // Apply the V1 schema to a fresh database. Idempotent; safe to call on an
   // already-initialized database. Returns FailedPrecondition if the database
@@ -112,34 +112,34 @@ class MetadataStore {
   Status ApplySchema();
 
   // Insert a repository row. Idempotent; duplicate repository_id is a no-op.
-  Status PutRepository(const RepositoryRow& row);
+  Status PutRepository(const RepositoryRow &row);
 
   // Insert a revision row. Idempotent.
-  Status PutRevision(const RevisionRow& row);
+  Status PutRevision(const RevisionRow &row);
 
   // Insert a build variant row. Idempotent.
-  Status PutBuildVariant(const BuildVariantRow& row);
+  Status PutBuildVariant(const BuildVariantRow &row);
 
   // Insert a translation unit row. Idempotent.
-  Status PutTranslationUnit(const TranslationUnitRow& row);
+  Status PutTranslationUnit(const TranslationUnitRow &row);
 
   // Insert an analyzer run row. Returns the auto-generated analyzer_run_id.
-  StatusOr<int64_t> PutAnalyzerRun(const AnalyzerRunRow& row);
+  StatusOr<int64_t> PutAnalyzerRun(const AnalyzerRunRow &row);
 
   // Persist an M1 analysis manifest in a single transaction. Inserts the
   // repository, revision, build variant, and every translation unit atomically.
   // If any row fails, the entire transaction is rolled back and no partial
   // manifest context is committed. Idempotent: storing the same manifest twice
   // produces one logical analysis context.
-  Status PutManifestContext(const veritas::build::AnalysisManifest& manifest);
+  Status PutManifestContext(const veritas::build::AnalysisManifest &manifest);
 
   // M3: Execute a SQL statement with parameters. Used for summary metadata.
-  Status Execute(const std::string& sql,
-                 const std::vector<std::string>& params);
+  Status Execute(const std::string &sql,
+                 const std::vector<std::string> &params);
 
   // M3: Query with parameters, returning rows as vectors of strings.
-  StatusOr<std::vector<std::vector<std::string>>> Query(
-      const std::string& sql, const std::vector<std::string>& params);
+  StatusOr<std::vector<std::vector<std::string>>>
+  Query(const std::string &sql, const std::vector<std::string> &params);
 
   // M3: Begin a transaction.
   Status BeginTransaction();
@@ -156,21 +156,21 @@ class MetadataStore {
   // 3.32, and the vendored toolchain is not the only one that can open a store.
   int MaxBindParameters() const;
 
-  MetadataStore(MetadataStore&&) noexcept;
-  MetadataStore& operator=(MetadataStore&&) noexcept;
+  MetadataStore(MetadataStore &&) noexcept;
+  MetadataStore &operator=(MetadataStore &&) noexcept;
 
- private:
-  explicit MetadataStore(sqlite3* db);
+private:
+  explicit MetadataStore(sqlite3 *db);
   void FinalizeCachedStatements();
 
-  sqlite3* db_;
+  sqlite3 *db_;
   bool in_transaction_ = false;
-  std::map<std::string, sqlite3_stmt*> statement_cache_;
+  std::map<std::string, sqlite3_stmt *> statement_cache_;
 
   friend class MetadataStoreTestPeer;
 
-  MetadataStore(const MetadataStore&) = delete;
-  MetadataStore& operator=(const MetadataStore&) = delete;
+  MetadataStore(const MetadataStore &) = delete;
+  MetadataStore &operator=(const MetadataStore &) = delete;
 };
 
 // Batches rows for one multi-row INSERT.
@@ -183,11 +183,11 @@ class MetadataStore {
 // Rows are queued and emitted in order, so a table with an AUTOINCREMENT key
 // assigns the same ids it would assign one row at a time.
 class BulkInsertBatcher {
- public:
+public:
   // `sql_prefix` is the statement up to and including its VALUES keyword, for
   // example "INSERT OR IGNORE INTO analysis_facts (a, b, c) VALUES". It must
   // name exactly `columns` parameters per row.
-  BulkInsertBatcher(MetadataStore& store, std::string sql_prefix,
+  BulkInsertBatcher(MetadataStore &store, std::string sql_prefix,
                     std::size_t columns);
 
   // Queues one row, flushing first if the pending batch is already full.
@@ -198,8 +198,8 @@ class BulkInsertBatcher {
   // failed write is reported rather than silently dropped.
   Status Flush();
 
- private:
-  MetadataStore& store_;
+private:
+  MetadataStore &store_;
   std::string batch_sql_;
   std::string single_sql_;
   std::size_t columns_;
@@ -209,6 +209,6 @@ class BulkInsertBatcher {
   friend class MetadataStoreTestPeer;
 };
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb
 
-#endif  // VERITAS_SUMMARYDB_METADATASTORE_H_
+#endif // VERITAS_SUMMARYDB_METADATASTORE_H_

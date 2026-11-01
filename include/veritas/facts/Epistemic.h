@@ -50,10 +50,10 @@ enum class RuleSoundness : std::uint8_t {
 
 // Joins the epistemic states of a rule's inputs into the output state. An
 // empty input set yields UNKNOWN (nothing was established).
-analysis::semantic::EpistemicState JoinEpistemic(
-    std::span<const analysis::semantic::EpistemicState> inputs,
-    RuleSoundness soundness);
+analysis::semantic::EpistemicState
+JoinEpistemic(std::span<const analysis::semantic::EpistemicState> inputs,
+              RuleSoundness soundness);
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_EPISTEMIC_H_
+#endif // VERITAS_FACTS_EPISTEMIC_H_

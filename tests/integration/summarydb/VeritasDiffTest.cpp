@@ -57,16 +57,16 @@ std::string ShellQuote(std::string_view value) {
   return out;
 }
 
-CliResult RunVeritasDiff(const std::vector<std::string>& arguments) {
+CliResult RunVeritasDiff(const std::vector<std::string> &arguments) {
   std::string command = ShellQuote(VERITAS_DIFF_BINARY);
-  for (const auto& argument : arguments) {
+  for (const auto &argument : arguments) {
     command.push_back(' ');
     command.append(ShellQuote(argument));
   }
   command.append(" 2>&1");
 
   CliResult result;
-  FILE* pipe = ::popen(command.c_str(), "r");
+  FILE *pipe = ::popen(command.c_str(), "r");
   if (pipe == nullptr) {
     result.exit_code = -1;
     return result;
@@ -90,18 +90,18 @@ CliResult RunVeritasDiff(const std::vector<std::string>& arguments) {
 summary::v1::FunctionSummary MakeRangeSummary(int64_t max_value) {
   summary::v1::FunctionSummary summary;
 
-  auto* header = summary.mutable_header();
+  auto *header = summary.mutable_header();
   header->set_schema_version("summary.v1");
   header->set_creation_epoch_ms(0);
 
-  auto* identity = summary.mutable_identity();
+  auto *identity = summary.mutable_identity();
   identity->set_repository_id("repo:sha256:abc");
   identity->set_revision_id("rev:sha256:def");
   identity->set_build_variant_id("bv:sha256:ghi");
   identity->set_function_variant_id("funcvar:sha256:jkl");
   identity->set_function_body_id("funcbody:sha256:mno");
 
-  auto* range = summary.add_range_facts();
+  auto *range = summary.add_range_facts();
   range->set_variable("buffer_size");
   range->set_min_value(0);
   range->set_max_value(max_value);
@@ -127,7 +127,7 @@ DependencyEdge RangeEdge(char consumer_char, core::StableId producer_id) {
 }
 
 class VeritasDiffTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     db_dir_ = fs::temp_directory_path() /
               ("veritas_diff_" + std::to_string(::getpid()) + "_" +
@@ -162,9 +162,9 @@ TEST_F(VeritasDiffTest, ReportsChangedComponentsAndConsumers) {
                     .ok());
   }
 
-  const auto result =
-      RunVeritasDiff({"--db", db_dir_.string(), "--old",
-                      core::ToString(*old_id), "--new", core::ToString(*new_id)});
+  const auto result = RunVeritasDiff({"--db", db_dir_.string(), "--old",
+                                      core::ToString(*old_id), "--new",
+                                      core::ToString(*new_id)});
   EXPECT_EQ(result.exit_code, 0) << result.stdout_text;
   EXPECT_NE(result.stdout_text.find("Semantic changed: yes"), std::string::npos)
       << result.stdout_text;
@@ -207,12 +207,11 @@ TEST_F(VeritasDiffTest, ReportsTruncationWhenBudgetExceeded) {
       {"--db", db_dir_.string(), "--old", core::ToString(*old_id), "--new",
        core::ToString(*new_id), "--max-consumers", "1"});
   EXPECT_EQ(result.exit_code, 0) << result.stdout_text;
-  EXPECT_NE(result.stdout_text.find("Impacted consumers: 1"),
-            std::string::npos)
+  EXPECT_NE(result.stdout_text.find("Impacted consumers: 1"), std::string::npos)
       << result.stdout_text;
   EXPECT_NE(result.stdout_text.find("Truncated: yes"), std::string::npos)
       << result.stdout_text;
 }
 
-}  // namespace
-}  // namespace veritas::summarydb
+} // namespace
+} // namespace veritas::summarydb

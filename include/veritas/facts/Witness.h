@@ -36,8 +36,8 @@ namespace veritas::facts {
 struct SemanticKey {
   SemanticRow row;
 
-  auto operator<=>(const SemanticKey&) const = default;
-  bool operator==(const SemanticKey&) const = default;
+  auto operator<=>(const SemanticKey &) const = default;
+  bool operator==(const SemanticKey &) const = default;
 };
 
 // One immediate derivation step. `input_ordinal` is the rule's argument
@@ -55,8 +55,8 @@ struct WitnessEdge {
   SemanticKey input;
   std::uint32_t input_ordinal = 0;
 
-  auto operator<=>(const WitnessEdge&) const = default;
-  bool operator==(const WitnessEdge&) const = default;
+  auto operator<=>(const WitnessEdge &) const = default;
+  bool operator==(const WitnessEdge &) const = default;
 };
 
 // An input fact together with where it came from. Roots terminate every
@@ -91,14 +91,14 @@ struct RawWpaEvaluation {
 // differently, and a cell containing the encoding's own delimiters is inert.
 // The relation name and every cell participate, so two relations sharing a
 // column shape never collide.
-std::string EncodeSemanticKey(const SemanticRow& row);
+std::string EncodeSemanticKey(const SemanticRow &row);
 
 // Appends the same canonical encoding to `out`. `EncodeSemanticKey` is this
 // function plus a fresh string, so a caller that already owns a scratch buffer
 // can encode a row without allocating one per row. Callers that only feed the
 // bytes to a hash (the batch id derives from every row) should use this.
-void AppendSemanticKey(std::string* out, const SemanticRow& row);
+void AppendSemanticKey(std::string *out, const SemanticRow &row);
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_WITNESS_H_
+#endif // VERITAS_FACTS_WITNESS_H_

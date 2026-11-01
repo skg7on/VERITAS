@@ -42,4 +42,4 @@ std::string SvfConfig::CanonicalAnalyzerConfig() const {
          "field_sensitive=" + (field_sensitive ? "true\n" : "false\n");
 }
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf

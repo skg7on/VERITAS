@@ -36,47 +36,52 @@ namespace sem = analysis::semantic;
 namespace v1 = summary::v1;
 namespace v2 = summary::v2;
 
-std::string FunctionIdForSymbol(const AnalyzedFixtureSnapshot& snapshot,
+std::string FunctionIdForSymbol(const AnalyzedFixtureSnapshot &snapshot,
                                 std::string_view symbol) {
   const auto it =
       snapshot.function_variant_ids_by_symbol.find(std::string(symbol));
   EXPECT_NE(it, snapshot.function_variant_ids_by_symbol.end()) << symbol;
-  if (it == snapshot.function_variant_ids_by_symbol.end()) return {};
+  if (it == snapshot.function_variant_ids_by_symbol.end())
+    return {};
   return it->second;
 }
 
-std::string FunctionIdForSymbol(const LocalFixtureSnapshot& snapshot,
+std::string FunctionIdForSymbol(const LocalFixtureSnapshot &snapshot,
                                 std::string_view symbol) {
   const auto it =
       snapshot.function_variant_ids_by_symbol.find(std::string(symbol));
   EXPECT_NE(it, snapshot.function_variant_ids_by_symbol.end()) << symbol;
-  if (it == snapshot.function_variant_ids_by_symbol.end()) return {};
+  if (it == snapshot.function_variant_ids_by_symbol.end())
+    return {};
   return it->second;
 }
 
-std::string FunctionIdForSymbol(const SvfFixtureSnapshot& snapshot,
+std::string FunctionIdForSymbol(const SvfFixtureSnapshot &snapshot,
                                 std::string_view symbol) {
   const auto it =
       snapshot.function_variant_ids_by_symbol.find(std::string(symbol));
   EXPECT_NE(it, snapshot.function_variant_ids_by_symbol.end()) << symbol;
-  if (it == snapshot.function_variant_ids_by_symbol.end()) return {};
+  if (it == snapshot.function_variant_ids_by_symbol.end())
+    return {};
   return it->second;
 }
 
-std::string FunctionValueRefForSymbol(const SvfFixtureSnapshot& snapshot,
+std::string FunctionValueRefForSymbol(const SvfFixtureSnapshot &snapshot,
                                       std::string_view symbol) {
   const std::string function_id = FunctionIdForSymbol(snapshot, symbol);
-  if (function_id.empty()) return {};
+  if (function_id.empty())
+    return {};
   return core::ToString(
       analysis::llvm::StableValueMapper::FunctionValueRef(function_id));
 }
 
-std::vector<const sem::NormalizedCallTarget*> SvfCallsForSymbol(
-    const SvfFixtureSnapshot& snapshot, std::string_view symbol) {
-  std::vector<const sem::NormalizedCallTarget*> calls;
+std::vector<const sem::NormalizedCallTarget *>
+SvfCallsForSymbol(const SvfFixtureSnapshot &snapshot, std::string_view symbol) {
+  std::vector<const sem::NormalizedCallTarget *> calls;
   const std::string caller = FunctionValueRefForSymbol(snapshot, symbol);
-  if (caller.empty()) return calls;
-  for (const auto& call : snapshot.mapping.facts.calls) {
+  if (caller.empty())
+    return calls;
+  for (const auto &call : snapshot.mapping.facts.calls) {
     if (core::ToString(call.caller) == caller) {
       calls.push_back(&call);
     }
@@ -84,10 +89,10 @@ std::vector<const sem::NormalizedCallTarget*> SvfCallsForSymbol(
   return calls;
 }
 
-std::set<std::string> StableTargetIds(
-    std::span<const sem::NormalizedCallTarget* const> calls) {
+std::set<std::string>
+StableTargetIds(std::span<const sem::NormalizedCallTarget *const> calls) {
   std::set<std::string> targets;
-  for (const auto* call : calls) {
+  for (const auto *call : calls) {
     if (call->callee.has_value()) {
       targets.insert(core::ToString(*call->callee));
     }
@@ -95,14 +100,14 @@ std::set<std::string> StableTargetIds(
   return targets;
 }
 
-void ExpectSvfCallSite(const SvfFixtureSnapshot& snapshot,
+void ExpectSvfCallSite(const SvfFixtureSnapshot &snapshot,
                        std::string_view caller, sem::DispatchKind dispatch) {
   const auto calls = SvfCallsForSymbol(snapshot, caller);
   ASSERT_FALSE(calls.empty()) << caller;
 
   const core::StableId call_site_id = calls.front()->call_site;
   EXPECT_EQ(call_site_id.kind, core::IdKind::kCallSite) << caller;
-  for (const auto* call : calls) {
+  for (const auto *call : calls) {
     EXPECT_EQ(call->call_site, call_site_id) << caller;
     EXPECT_EQ(call->dispatch, dispatch) << caller;
     EXPECT_EQ(call->epistemic, sem::EpistemicState::kMay) << caller;
@@ -110,28 +115,30 @@ void ExpectSvfCallSite(const SvfFixtureSnapshot& snapshot,
   }
 }
 
-void ExpectSvfCallSiteTargets(const SvfFixtureSnapshot& snapshot,
+void ExpectSvfCallSiteTargets(const SvfFixtureSnapshot &snapshot,
                               std::string_view caller,
                               sem::DispatchKind dispatch,
-                              const std::set<std::string>& expected_targets) {
+                              const std::set<std::string> &expected_targets) {
   const auto calls = SvfCallsForSymbol(snapshot, caller);
   ASSERT_EQ(calls.size(), expected_targets.size()) << caller;
   ExpectSvfCallSite(snapshot, caller, dispatch);
   EXPECT_EQ(StableTargetIds(calls), expected_targets) << caller;
 }
 
-std::vector<const v2::Call*> CallsForSymbol(
-    const AnalyzedFixtureSnapshot& snapshot, std::string_view symbol) {
-  std::vector<const v2::Call*> calls;
+std::vector<const v2::Call *>
+CallsForSymbol(const AnalyzedFixtureSnapshot &snapshot,
+               std::string_view symbol) {
+  std::vector<const v2::Call *> calls;
   const std::string function_id = FunctionIdForSymbol(snapshot, symbol);
-  if (function_id.empty()) return calls;
-  for (const auto& artifact : snapshot.summaries) {
-    const auto* summary = std::get_if<v2::FunctionSummary>(&artifact);
+  if (function_id.empty())
+    return calls;
+  for (const auto &artifact : snapshot.summaries) {
+    const auto *summary = std::get_if<v2::FunctionSummary>(&artifact);
     if (summary == nullptr ||
         summary->identity().function_variant_id() != function_id) {
       continue;
     }
-    for (const auto& call : summary->calls()) {
+    for (const auto &call : summary->calls()) {
       calls.push_back(&call);
     }
     return calls;
@@ -140,16 +147,17 @@ std::vector<const v2::Call*> CallsForSymbol(
   return calls;
 }
 
-std::vector<const v2::Call*> CallsForSymbol(
-    const LocalFixtureSnapshot& snapshot, std::string_view symbol) {
-  std::vector<const v2::Call*> calls;
+std::vector<const v2::Call *>
+CallsForSymbol(const LocalFixtureSnapshot &snapshot, std::string_view symbol) {
+  std::vector<const v2::Call *> calls;
   const std::string function_id = FunctionIdForSymbol(snapshot, symbol);
-  if (function_id.empty()) return calls;
-  for (const auto& summary : snapshot.summaries) {
+  if (function_id.empty())
+    return calls;
+  for (const auto &summary : snapshot.summaries) {
     if (summary.identity().function_variant_id() != function_id) {
       continue;
     }
-    for (const auto& call : summary.calls()) {
+    for (const auto &call : summary.calls()) {
       calls.push_back(&call);
     }
     return calls;
@@ -158,9 +166,9 @@ std::vector<const v2::Call*> CallsForSymbol(
   return calls;
 }
 
-std::set<std::string> StableTargetIds(std::span<const v2::Call* const> calls) {
+std::set<std::string> StableTargetIds(std::span<const v2::Call *const> calls) {
   std::set<std::string> targets;
-  for (const auto* call : calls) {
+  for (const auto *call : calls) {
     if (!call->resolved_callee_function_variant_id().empty()) {
       targets.insert(call->resolved_callee_function_variant_id());
     }
@@ -168,10 +176,10 @@ std::set<std::string> StableTargetIds(std::span<const v2::Call* const> calls) {
   return targets;
 }
 
-void ExpectSingleStableCall(const AnalyzedFixtureSnapshot& snapshot,
+void ExpectSingleStableCall(const AnalyzedFixtureSnapshot &snapshot,
                             std::string_view caller, v2::DispatchKind dispatch,
                             v1::EpistemicState epistemic,
-                            const std::set<std::string>& expected_targets) {
+                            const std::set<std::string> &expected_targets) {
   const auto calls = CallsForSymbol(snapshot, caller);
   const std::size_t expected_call_rows =
       expected_targets.empty() ? 1u : expected_targets.size();
@@ -180,7 +188,7 @@ void ExpectSingleStableCall(const AnalyzedFixtureSnapshot& snapshot,
 
   const std::string call_site_id = calls.front()->call_site_id();
   ASSERT_TRUE(call_site_id.starts_with("callsite:sha256:")) << caller;
-  for (const auto* call : calls) {
+  for (const auto *call : calls) {
     EXPECT_EQ(call->call_site_id(), call_site_id) << caller;
     EXPECT_EQ(call->dispatch(), dispatch) << caller;
     EXPECT_EQ(call->epistemic(), epistemic) << caller;
@@ -188,10 +196,10 @@ void ExpectSingleStableCall(const AnalyzedFixtureSnapshot& snapshot,
   EXPECT_EQ(StableTargetIds(calls), expected_targets) << caller;
 }
 
-void ExpectSingleStableCall(const LocalFixtureSnapshot& snapshot,
+void ExpectSingleStableCall(const LocalFixtureSnapshot &snapshot,
                             std::string_view caller, v2::DispatchKind dispatch,
                             v1::EpistemicState epistemic,
-                            const std::set<std::string>& expected_targets) {
+                            const std::set<std::string> &expected_targets) {
   const auto calls = CallsForSymbol(snapshot, caller);
   const std::size_t expected_call_rows =
       expected_targets.empty() ? 1u : expected_targets.size();
@@ -200,7 +208,7 @@ void ExpectSingleStableCall(const LocalFixtureSnapshot& snapshot,
 
   const std::string call_site_id = calls.front()->call_site_id();
   ASSERT_TRUE(call_site_id.starts_with("callsite:sha256:")) << caller;
-  for (const auto* call : calls) {
+  for (const auto *call : calls) {
     EXPECT_EQ(call->call_site_id(), call_site_id) << caller;
     EXPECT_EQ(call->dispatch(), dispatch) << caller;
     EXPECT_EQ(call->epistemic(), epistemic) << caller;
@@ -271,37 +279,37 @@ TEST(SccGraphTest, FocusedRecursionHasExpectedSccShapes) {
 
   bool has_recursive_singleton = false;
   bool has_two_member_scc = false;
-  for (const auto& function : graph->Functions()) {
+  for (const auto &function : graph->Functions()) {
     auto scc = sccs->SccForFunction(function);
     ASSERT_TRUE(scc.ok()) << scc.status().message();
     auto members = sccs->Members(*scc);
     ASSERT_TRUE(members.ok()) << members.status().message();
     if (members->size() == 1 &&
-        std::ranges::any_of(graph->Outgoing(function),
-                            [&](const auto& edge) {
-                              return edge.callee == function;
-                            })) {
+        std::ranges::any_of(graph->Outgoing(function), [&](const auto &edge) {
+          return edge.callee == function;
+        })) {
       has_recursive_singleton = true;
     }
-    if (members->size() == 2) has_two_member_scc = true;
+    if (members->size() == 2)
+      has_two_member_scc = true;
   }
   EXPECT_TRUE(has_recursive_singleton);
   EXPECT_TRUE(has_two_member_scc);
 
-  const auto self = artifacts->function_variant_ids_by_symbol.find(
-      "recursive_self");
-  const auto leaf = artifacts->function_variant_ids_by_symbol.find(
-      "recursive_leaf");
+  const auto self =
+      artifacts->function_variant_ids_by_symbol.find("recursive_self");
+  const auto leaf =
+      artifacts->function_variant_ids_by_symbol.find("recursive_leaf");
   ASSERT_NE(self, artifacts->function_variant_ids_by_symbol.end());
   ASSERT_NE(leaf, artifacts->function_variant_ids_by_symbol.end());
   auto self_id = core::ParseStableId(self->second);
   auto leaf_id = core::ParseStableId(leaf->second);
   ASSERT_TRUE(self_id.ok()) << self_id.status().message();
   ASSERT_TRUE(leaf_id.ok()) << leaf_id.status().message();
-  EXPECT_TRUE(std::ranges::any_of(graph->Outgoing(*self_id),
-                                  [&](const auto& edge) {
-                                    return edge.callee == *leaf_id;
-                                  }));
+  EXPECT_TRUE(
+      std::ranges::any_of(graph->Outgoing(*self_id), [&](const auto &edge) {
+        return edge.callee == *leaf_id;
+      }));
 }
 
 TEST(CallGraphTest, UnknownExternalDoesNotFanOut) {
@@ -310,8 +318,8 @@ TEST(CallGraphTest, UnknownExternalDoesNotFanOut) {
   ASSERT_TRUE(artifacts.ok()) << artifacts.status().message();
   auto graph = wpa::CallGraph::FromSummaries(artifacts->summaries);
   ASSERT_TRUE(graph.ok()) << graph.status().message();
-  const auto entry = artifacts->function_variant_ids_by_symbol.find(
-      "unknown_external_entry");
+  const auto entry =
+      artifacts->function_variant_ids_by_symbol.find("unknown_external_entry");
   ASSERT_NE(entry, artifacts->function_variant_ids_by_symbol.end());
   auto entry_id = core::ParseStableId(entry->second);
   ASSERT_TRUE(entry_id.ok()) << entry_id.status().message();
@@ -319,5 +327,5 @@ TEST(CallGraphTest, UnknownExternalDoesNotFanOut) {
   EXPECT_TRUE(graph->Outgoing(*entry_id).empty());
 }
 
-}  // namespace
-}  // namespace veritas::testing
+} // namespace
+} // namespace veritas::testing

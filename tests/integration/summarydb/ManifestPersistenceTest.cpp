@@ -33,14 +33,14 @@ using veritas::build::LoadProjectManifest;
 using veritas::build::ResolveProjectInput;
 using veritas::summarydb::MetadataStore;
 
-std::filesystem::path TempDbPath(const std::string& suffix) {
+std::filesystem::path TempDbPath(const std::string &suffix) {
   return std::filesystem::temp_directory_path() /
-         ("veritas_manifest_test_" + std::to_string(::getpid()) + "_" +
-          suffix + ".db");
+         ("veritas_manifest_test_" + std::to_string(::getpid()) + "_" + suffix +
+          ".db");
 }
 
-veritas::StatusOr<AnalysisManifest> LoadFixtureManifest(
-    const std::string& fixture_name) {
+veritas::StatusOr<AnalysisManifest>
+LoadFixtureManifest(const std::string &fixture_name) {
   const veritas::analysis::ProjectAnalysisRequest request{
       .project_root = veritas::testing::FixtureProject(fixture_name),
       .output_root = {},
@@ -52,14 +52,15 @@ veritas::StatusOr<AnalysisManifest> LoadFixtureManifest(
   return LoadProjectManifest(*input);
 }
 
-int CountRows(const std::filesystem::path& db_path, const std::string& table) {
-  sqlite3* db = nullptr;
+int CountRows(const std::filesystem::path &db_path, const std::string &table) {
+  sqlite3 *db = nullptr;
   if (sqlite3_open(db_path.string().c_str(), &db) != SQLITE_OK) {
-    if (db) sqlite3_close(db);
+    if (db)
+      sqlite3_close(db);
     return -1;
   }
   std::string sql = "SELECT COUNT(*) FROM " + table;
-  sqlite3_stmt* stmt = nullptr;
+  sqlite3_stmt *stmt = nullptr;
   if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
     sqlite3_close(db);
     return -1;
@@ -74,11 +75,10 @@ int CountRows(const std::filesystem::path& db_path, const std::string& table) {
 }
 
 class ManifestPersistenceTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
-    db_path_ = TempDbPath(::testing::UnitTest::GetInstance()
-                              ->current_test_info()
-                              ->name());
+    db_path_ = TempDbPath(
+        ::testing::UnitTest::GetInstance()->current_test_info()->name());
     std::filesystem::remove(db_path_);
   }
 
@@ -87,7 +87,7 @@ class ManifestPersistenceTest : public ::testing::Test {
   std::filesystem::path db_path_;
 };
 
-}  // namespace
+} // namespace
 
 TEST_F(ManifestPersistenceTest, PersistsSmokeManifest) {
   auto manifest = LoadFixtureManifest("smoke");

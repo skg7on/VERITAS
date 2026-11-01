@@ -39,31 +39,38 @@ enum class StatusCode {
 };
 
 class Status {
- public:
+public:
   Status() : code_(StatusCode::kOk) {}
 
   static Status Ok() { return Status(); }
+
   static Status InvalidArgument(std::string message) {
     return Status(StatusCode::kInvalidArgument, std::move(message));
   }
+
   static Status NotFound(std::string message) {
     return Status(StatusCode::kNotFound, std::move(message));
   }
+
   static Status FailedPrecondition(std::string message) {
     return Status(StatusCode::kFailedPrecondition, std::move(message));
   }
+
   static Status Internal(std::string message) {
     return Status(StatusCode::kInternal, std::move(message));
   }
+
   static Status DeadlineExceeded(std::string message) {
     return Status(StatusCode::kDeadlineExceeded, std::move(message));
   }
 
   bool ok() const { return code_ == StatusCode::kOk; }
+
   StatusCode code() const { return code_; }
+
   std::string_view message() const { return message_; }
 
- private:
+private:
   Status(StatusCode code, std::string message)
       : code_(code), message_(std::move(message)) {}
 
@@ -71,34 +78,40 @@ class Status {
   std::string message_;
 };
 
-template <typename T>
-class StatusOr {
- public:
+template <typename T> class StatusOr {
+public:
   StatusOr(T value) : status_(Status::Ok()), value_(std::move(value)) {}
+
   StatusOr(Status status) : status_(std::move(status)) {
     // An Ok status with no value is a programming error: StatusOr must
     // always resolve to either "value" or "non-ok status".
   }
 
   bool ok() const { return status_.ok() && value_.has_value(); }
-  const Status& status() const { return status_; }
 
-  const T& value() const& { return *value_; }
-  T& value() & { return *value_; }
-  T&& value() && { return std::move(*value_); }
+  const Status &status() const { return status_; }
 
-  const T& operator*() const& { return *value_; }
-  T& operator*() & { return *value_; }
-  T&& operator*() && { return std::move(*value_); }
+  const T &value() const & { return *value_; }
 
-  const T* operator->() const { return &*value_; }
-  T* operator->() { return &*value_; }
+  T &value() & { return *value_; }
 
- private:
+  T &&value() && { return std::move(*value_); }
+
+  const T &operator*() const & { return *value_; }
+
+  T &operator*() & { return *value_; }
+
+  T &&operator*() && { return std::move(*value_); }
+
+  const T *operator->() const { return &*value_; }
+
+  T *operator->() { return &*value_; }
+
+private:
   Status status_;
   std::optional<T> value_;
 };
 
-}  // namespace veritas
+} // namespace veritas
 
-#endif  // VERITAS_CORE_STATUS_H_
+#endif // VERITAS_CORE_STATUS_H_

@@ -16,12 +16,12 @@
 
 #include <gtest/gtest.h>
 
-#include <filesystem>
 #include <cstdlib>
-#include <unistd.h>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
+#include <unistd.h>
 
 #include "cpg/CpgCanonicalizer.h"
 #include "veritas/cpg/CpgRepository.h"
@@ -85,10 +85,12 @@ ThinCpg BuildFlowGraph() {
 CpgQuery OpenQuery(const ThinCpg &graph) {
   // CTest runs these cases as independent processes. Each must own its SQLite
   // file; unlinking another case's database can turn a setup failure into UB.
-  std::string pattern = (std::filesystem::temp_directory_path() /
-                         "veritas-cpg-query-XXXXXX").string();
+  std::string pattern =
+      (std::filesystem::temp_directory_path() / "veritas-cpg-query-XXXXXX")
+          .string();
   int fd = mkstemp(pattern.data());
-  if (fd < 0) std::abort();
+  if (fd < 0)
+    std::abort();
   close(fd);
   const std::filesystem::path path(pattern);
   auto md = std::move(*summarydb::MetadataStore::Open(path));

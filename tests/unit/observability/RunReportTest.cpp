@@ -34,25 +34,28 @@ namespace {
 // Counts terminal columns: the tree's box-drawing characters are one column
 // each whatever their byte length, so this is the measure a padded label column
 // has to use.
-std::size_t DisplayColumns(const std::string& text) {
+std::size_t DisplayColumns(const std::string &text) {
   std::size_t columns = 0;
   for (const char c : text) {
     // 0b10xxxxxx is a UTF-8 continuation byte; every other byte opens a
     // character, and every character in a report line is one column wide.
-    if ((static_cast<unsigned char>(c) & 0xc0) != 0x80) ++columns;
+    if ((static_cast<unsigned char>(c) & 0xc0) != 0x80)
+      ++columns;
   }
   return columns;
 }
 
-std::vector<std::string> SplitLines(const std::string& text) {
+std::vector<std::string> SplitLines(const std::string &text) {
   std::vector<std::string> lines;
   std::size_t start = 0;
   for (std::size_t i = 0; i < text.size(); ++i) {
-    if (text[i] != '\n') continue;
+    if (text[i] != '\n')
+      continue;
     lines.push_back(text.substr(start, i - start));
     start = i + 1;
   }
-  if (start < text.size()) lines.push_back(text.substr(start));
+  if (start < text.size())
+    lines.push_back(text.substr(start));
   return lines;
 }
 
@@ -164,7 +167,7 @@ TEST(RunReportTest, JsonParsesAndCarriesTheSchemaVersion) {
   const std::string json = RenderRunReportJson(MakeFixtureReport());
   auto parsed = llvm::json::parse(json);
   ASSERT_TRUE(static_cast<bool>(parsed));
-  const llvm::json::Object* root = parsed->getAsObject();
+  const llvm::json::Object *root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
   EXPECT_EQ(*root->getString("schema"), "veritas.run-metrics.v1");
 }
@@ -178,9 +181,9 @@ TEST(RunReportTest, OmitsIdentityKeysThatHaveNoValue) {
   const std::string json = RenderRunReportJson(MakeFixtureReport());
   auto parsed = llvm::json::parse(json);
   ASSERT_TRUE(static_cast<bool>(parsed));
-  const llvm::json::Object* root = parsed->getAsObject();
+  const llvm::json::Object *root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
-  const llvm::json::Object* identity = root->getObject("identity");
+  const llvm::json::Object *identity = root->getObject("identity");
   ASSERT_NE(identity, nullptr);
 
   // The fixture sets only run_id, so this case covers both directions: the
@@ -188,10 +191,10 @@ TEST(RunReportTest, OmitsIdentityKeysThatHaveNoValue) {
   const std::optional<llvm::StringRef> run_id = identity->getString("run_id");
   ASSERT_TRUE(run_id.has_value());
   EXPECT_EQ(*run_id, "run:sha256:0000");
-  for (const char* key : {"batch_id", "build_variant_id",
-                          "engine_toolchain_identity", "projection_id",
-                          "repository_id", "revision_id", "svf_config_hash",
-                          "wpa_config_hash"}) {
+  for (const char *key :
+       {"batch_id", "build_variant_id", "engine_toolchain_identity",
+        "projection_id", "repository_id", "revision_id", "svf_config_hash",
+        "wpa_config_hash"}) {
     EXPECT_FALSE(identity->getString(key).has_value())
         << key << " was emitted for a field with no value: " << json;
   }
@@ -207,14 +210,13 @@ TEST(RunReportTest, OmitsUnproducedCountsInsteadOfEmittingZero) {
   const std::string unproduced_json = RenderRunReportJson(MakeFixtureReport());
   auto unproduced = llvm::json::parse(unproduced_json);
   ASSERT_TRUE(static_cast<bool>(unproduced));
-  const llvm::json::Object* unproduced_root = unproduced->getAsObject();
+  const llvm::json::Object *unproduced_root = unproduced->getAsObject();
   ASSERT_NE(unproduced_root, nullptr);
-  const llvm::json::Object* inventory =
-      unproduced_root->getObject("inventory");
+  const llvm::json::Object *inventory = unproduced_root->getObject("inventory");
   ASSERT_NE(inventory, nullptr);
-  const llvm::json::Object* output = inventory->getObject("output");
+  const llvm::json::Object *output = inventory->getObject("output");
   ASSERT_NE(output, nullptr);
-  const llvm::json::Object* incrementality =
+  const llvm::json::Object *incrementality =
       inventory->getObject("incrementality");
   ASSERT_NE(incrementality, nullptr);
 
@@ -224,11 +226,11 @@ TEST(RunReportTest, OmitsUnproducedCountsInsteadOfEmittingZero) {
   EXPECT_EQ(output->getInteger("svfg_edges"), std::nullopt);
   EXPECT_EQ(incrementality->getInteger("summaries_recomputed"), std::nullopt);
   EXPECT_EQ(incrementality->getInteger("summaries_reused"), std::nullopt);
-  for (const char* key :
+  for (const char *key :
        {"\"svfg_edges\"", "\"summaries_recomputed\"", "\"summaries_reused\""}) {
     EXPECT_EQ(unproduced_json.find(key), std::string::npos)
-        << key << " was emitted for a count nothing produces: "
-        << unproduced_json;
+        << key
+        << " was emitted for a count nothing produces: " << unproduced_json;
   }
 
   // The blocks and their produced neighbours stay, so this is an absent key
@@ -244,13 +246,13 @@ TEST(RunReportTest, OmitsUnproducedCountsInsteadOfEmittingZero) {
   produced_report.inventory.incrementality.summaries_reused = 11;
   auto produced = llvm::json::parse(RenderRunReportJson(produced_report));
   ASSERT_TRUE(static_cast<bool>(produced));
-  const llvm::json::Object* produced_inventory =
+  const llvm::json::Object *produced_inventory =
       produced->getAsObject()->getObject("inventory");
   ASSERT_NE(produced_inventory, nullptr);
-  const llvm::json::Object* produced_output =
+  const llvm::json::Object *produced_output =
       produced_inventory->getObject("output");
   ASSERT_NE(produced_output, nullptr);
-  const llvm::json::Object* produced_incrementality =
+  const llvm::json::Object *produced_incrementality =
       produced_inventory->getObject("incrementality");
   ASSERT_NE(produced_incrementality, nullptr);
   EXPECT_EQ(produced_output->getInteger("svfg_edges"), 19);
@@ -263,10 +265,10 @@ TEST(RunReportTest, EmitsAMeasuredZeroInsteadOfOmittingIt) {
   // "presence means measured", not "presence means nonzero": a producer that
   // measured zero must be seen to have measured zero, and the artifact must say
   // so with a key carrying `0`. The case above uses positive values only, so a
-  // guard written as `if (*value != 0)` would satisfy it and every other case in
-  // this file while silently hiding a real measured zero — trading one lie for
-  // another, which is the whole reason the omission rule exists. This case pins
-  // the direction: a set zero is emitted, not omitted.
+  // guard written as `if (*value != 0)` would satisfy it and every other case
+  // in this file while silently hiding a real measured zero — trading one lie
+  // for another, which is the whole reason the omission rule exists. This case
+  // pins the direction: a set zero is emitted, not omitted.
   RunReport report = MakeFixtureReport();
   report.inventory.output.svfg_edges = 0;
   report.inventory.incrementality.summaries_recomputed = 0;
@@ -275,12 +277,12 @@ TEST(RunReportTest, EmitsAMeasuredZeroInsteadOfOmittingIt) {
   const std::string json = RenderRunReportJson(report);
   auto parsed = llvm::json::parse(json);
   ASSERT_TRUE(static_cast<bool>(parsed));
-  const llvm::json::Object* inventory =
+  const llvm::json::Object *inventory =
       parsed->getAsObject()->getObject("inventory");
   ASSERT_NE(inventory, nullptr);
-  const llvm::json::Object* output = inventory->getObject("output");
+  const llvm::json::Object *output = inventory->getObject("output");
   ASSERT_NE(output, nullptr);
-  const llvm::json::Object* incrementality =
+  const llvm::json::Object *incrementality =
       inventory->getObject("incrementality");
   ASSERT_NE(incrementality, nullptr);
 
@@ -291,11 +293,11 @@ TEST(RunReportTest, EmitsAMeasuredZeroInsteadOfOmittingIt) {
   EXPECT_EQ(output->getInteger("svfg_edges"), 0);
   EXPECT_EQ(incrementality->getInteger("summaries_recomputed"), 0);
   EXPECT_EQ(incrementality->getInteger("summaries_reused"), 0);
-  for (const char* key :
+  for (const char *key :
        {"\"svfg_edges\"", "\"summaries_recomputed\"", "\"summaries_reused\""}) {
     EXPECT_NE(json.find(key), std::string::npos)
-        << key << " was omitted for a count a producer measured as zero: "
-        << json;
+        << key
+        << " was omitted for a count a producer measured as zero: " << json;
   }
 }
 
@@ -306,7 +308,7 @@ TEST(RunReportTest, JsonCarriesEverySchemaBlockWithItsExpectedType) {
   const std::string json = RenderRunReportJson(MakeFixtureReport());
   auto parsed = llvm::json::parse(json);
   ASSERT_TRUE(static_cast<bool>(parsed));
-  const llvm::json::Object* root = parsed->getAsObject();
+  const llvm::json::Object *root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
 
   EXPECT_TRUE(root->getBoolean("complete").has_value());
@@ -319,7 +321,7 @@ TEST(RunReportTest, JsonCarriesEverySchemaBlockWithItsExpectedType) {
   EXPECT_NE(root->getObject("memory"), nullptr);
   EXPECT_NE(root->getObject("store"), nullptr);
 
-  const llvm::json::Object* inventory = root->getObject("inventory");
+  const llvm::json::Object *inventory = root->getObject("inventory");
   ASSERT_NE(inventory, nullptr);
   EXPECT_NE(inventory->getObject("input"), nullptr);
   EXPECT_NE(inventory->getObject("output"), nullptr);
@@ -329,12 +331,12 @@ TEST(RunReportTest, JsonCarriesEverySchemaBlockWithItsExpectedType) {
   // counters the fixture supplied, sorted by name.
   ASSERT_EQ(root->getArray("phases")->size(), 1u);
   ASSERT_EQ(root->getArray("counters")->size(), 2u);
-  const llvm::json::Value* first_counter = &root->getArray("counters")->front();
-  const llvm::json::Object* first_counter_object = first_counter->getAsObject();
+  const llvm::json::Value *first_counter = &root->getArray("counters")->front();
+  const llvm::json::Object *first_counter_object = first_counter->getAsObject();
   ASSERT_NE(first_counter_object, nullptr);
   EXPECT_EQ(*first_counter_object->getString("name"), "a.counter");
 
-  const llvm::json::Object* root_phase =
+  const llvm::json::Object *root_phase =
       root->getArray("phases")->front().getAsObject();
   ASSERT_NE(root_phase, nullptr);
   EXPECT_EQ(*root_phase->getString("name"), "run");
@@ -359,7 +361,7 @@ TEST(RunReportTest, OmitsTheStoreBlockWhenNothingWasReadBack) {
   const std::string json = RenderRunReportJson(report);
   auto parsed = llvm::json::parse(json);
   ASSERT_TRUE(static_cast<bool>(parsed));
-  const llvm::json::Object* root = parsed->getAsObject();
+  const llvm::json::Object *root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
   EXPECT_EQ(root->getObject("store"), nullptr) << json;
   EXPECT_EQ(json.find("\"store\""), std::string::npos) << json;
@@ -378,10 +380,10 @@ TEST(RunReportTest, OmitsTheStoreBlockWhenNothingWasReadBack) {
   const std::string present_json = RenderRunReportJson(MakeFixtureReport());
   auto present = llvm::json::parse(present_json);
   ASSERT_TRUE(static_cast<bool>(present));
-  const llvm::json::Object* present_store =
+  const llvm::json::Object *present_store =
       present->getAsObject()->getObject("store");
   ASSERT_NE(present_store, nullptr) << present_json;
-  const llvm::json::Array* present_tables = present_store->getArray("tables");
+  const llvm::json::Array *present_tables = present_store->getArray("tables");
   ASSERT_NE(present_tables, nullptr);
   ASSERT_EQ(present_tables->size(), 1u);
   EXPECT_EQ(*present_tables->front().getAsObject()->getString("table"),
@@ -418,7 +420,8 @@ TEST(RunReportTest, MemoryColumnWidthsFitTheWidestRenderedMeasurement) {
   report.metrics.root.children.push_back(peak);
   report.metrics.root.children.push_back(release);
 
-  const std::vector<std::string> lines = SplitLines(RenderRunReportText(report));
+  const std::vector<std::string> lines =
+      SplitLines(RenderRunReportText(report));
   ASSERT_EQ(lines.size(), 4u) << RenderRunReportText(report);
   // Row 0 is the `Analysis phase report` title — there is no column-header
   // row — row 1 the root (which carries no memory block, so it prints the "-"
@@ -478,7 +481,8 @@ TEST(RunReportTest, TextReportKeepsSmallMemoryDeltasVisible) {
   const std::string shrunk = RenderRunReportText(report);
   EXPECT_NE(shrunk.find("-3.00 MiB"), std::string::npos) << shrunk;
 
-  // A release smaller than a byte count can express is still signed and spelled.
+  // A release smaller than a byte count can express is still signed and
+  // spelled.
   report.metrics.root.memory = core::SpanMemory{0, 0, 512, 0, 512};
   EXPECT_NE(RenderRunReportText(report).find("+512 B"), std::string::npos);
   report.metrics.root.memory = core::SpanMemory{0, 0, 512, 0, 0};
@@ -495,7 +499,7 @@ TEST(RunReportTest, EmitsRunMemoryOnlyWhenMemoryWasMeasured) {
   not_measured.metrics.series.clear();
   auto parsed = llvm::json::parse(RenderRunReportJson(not_measured));
   ASSERT_TRUE(static_cast<bool>(parsed));
-  const llvm::json::Object* root = parsed->getAsObject();
+  const llvm::json::Object *root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
   EXPECT_EQ(root->getObject("memory"), nullptr);
 
@@ -508,11 +512,11 @@ TEST(RunReportTest, EmitsRunMemoryOnlyWhenMemoryWasMeasured) {
   measured.metrics.peak_at = std::chrono::milliseconds(100);
   auto parsed_full = llvm::json::parse(RenderRunReportJson(measured));
   ASSERT_TRUE(static_cast<bool>(parsed_full));
-  const llvm::json::Object* full_root = parsed_full->getAsObject();
+  const llvm::json::Object *full_root = parsed_full->getAsObject();
   ASSERT_NE(full_root, nullptr);
-  const llvm::json::Object* memory = full_root->getObject("memory");
+  const llvm::json::Object *memory = full_root->getObject("memory");
   ASSERT_NE(memory, nullptr);
-  const llvm::json::Object* peak = memory->getObject("peak");
+  const llvm::json::Object *peak = memory->getObject("peak");
   ASSERT_NE(peak, nullptr);
   const std::optional<std::int64_t> rss = peak->getInteger("rss_bytes");
   const std::optional<std::int64_t> footprint =
@@ -524,7 +528,7 @@ TEST(RunReportTest, EmitsRunMemoryOnlyWhenMemoryWasMeasured) {
   EXPECT_EQ(*rss, 200);
   EXPECT_EQ(*footprint, 180);
   EXPECT_EQ(*at_ms, 100);
-  const llvm::json::Array* series = memory->getArray("series");
+  const llvm::json::Array *series = memory->getArray("series");
   ASSERT_NE(series, nullptr);
   EXPECT_EQ(series->size(), 2u);
 }
@@ -545,11 +549,11 @@ TEST(RunReportTest, EmitsRunMemoryPeakWhenTheSeriesIsSuppressed) {
 
   auto parsed = llvm::json::parse(RenderRunReportJson(report));
   ASSERT_TRUE(static_cast<bool>(parsed));
-  const llvm::json::Object* root = parsed->getAsObject();
+  const llvm::json::Object *root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
-  const llvm::json::Object* memory = root->getObject("memory");
+  const llvm::json::Object *memory = root->getObject("memory");
   ASSERT_NE(memory, nullptr);
-  const llvm::json::Object* peak = memory->getObject("peak");
+  const llvm::json::Object *peak = memory->getObject("peak");
   ASSERT_NE(peak, nullptr);
   const std::optional<std::int64_t> rss = peak->getInteger("rss_bytes");
   const std::optional<std::int64_t> footprint =
@@ -574,9 +578,9 @@ TEST(RunReportTest, EmitsTheConformanceOracleFlag) {
   report.conformance_oracle = true;
   auto parsed = llvm::json::parse(RenderRunReportJson(report));
   ASSERT_TRUE(static_cast<bool>(parsed));
-  const llvm::json::Object* root = parsed->getAsObject();
+  const llvm::json::Object *root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
-  const llvm::json::Object* config = root->getObject("config");
+  const llvm::json::Object *config = root->getObject("config");
   ASSERT_NE(config, nullptr);
   const std::optional<bool> oracle = config->getBoolean("conformance_oracle");
   ASSERT_TRUE(oracle.has_value());
@@ -593,9 +597,9 @@ TEST(RunReportTest, ConfigBlockCarriesNoAnalysisObject) {
   // no identity.
   auto parsed = llvm::json::parse(RenderRunReportJson(MakeFixtureReport()));
   ASSERT_TRUE(static_cast<bool>(parsed));
-  const llvm::json::Object* root = parsed->getAsObject();
+  const llvm::json::Object *root = parsed->getAsObject();
   ASSERT_NE(root, nullptr);
-  const llvm::json::Object* config = root->getObject("config");
+  const llvm::json::Object *config = root->getObject("config");
   ASSERT_NE(config, nullptr);
   EXPECT_EQ(config->getObject("analysis"), nullptr);
   EXPECT_NE(config->getObject("metrics"), nullptr);
@@ -620,7 +624,8 @@ TEST(RunReportTest, TextReportIsPristineAndNamesThePhases) {
   EXPECT_EQ(text.back(), '\n');
   std::size_t line_start = 0;
   for (std::size_t i = 0; i < text.size(); ++i) {
-    if (text[i] != '\n') continue;
+    if (text[i] != '\n')
+      continue;
     if (i > line_start) {
       EXPECT_NE(text[i - 1], ' ') << "trailing space at offset " << i - 1;
     }
@@ -649,7 +654,8 @@ TEST(RunReportTest, AlignsEveryTreeRowDespiteMultibyteConnectors) {
   report.metrics.root.children.push_back(first);
   report.metrics.root.children.push_back(last);
 
-  const std::vector<std::string> lines = SplitLines(RenderRunReportText(report));
+  const std::vector<std::string> lines =
+      SplitLines(RenderRunReportText(report));
   ASSERT_EQ(lines.size(), 5u) << RenderRunReportText(report);
   EXPECT_EQ(lines[0], "Analysis phase report");
   // Depth-first order, connectors nested: the not-last child's subtree hangs
@@ -687,5 +693,5 @@ TEST(RunReportTest, RenderersDoNotMutateTheReportTheyAreGiven) {
   EXPECT_EQ(text_first, RenderRunReportText(report));
 }
 
-}  // namespace
-}  // namespace veritas::observability
+} // namespace
+} // namespace veritas::observability

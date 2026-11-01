@@ -85,12 +85,12 @@ struct ScannedRow {
   std::vector<std::string> symbols;
 };
 
-int Collect(void* context, const VeritasSouffleCell* cells,
+int Collect(void *context, const VeritasSouffleCell *cells,
             unsigned long long arity) {
-  auto* rows = static_cast<std::vector<ScannedRow>*>(context);
+  auto *rows = static_cast<std::vector<ScannedRow> *>(context);
   ScannedRow row;
   for (unsigned long long i = 0; i < arity; ++i) {
-    const char* symbol = cells[i].symbol == nullptr ? "" : cells[i].symbol;
+    const char *symbol = cells[i].symbol == nullptr ? "" : cells[i].symbol;
     row.kinds.push_back(cells[i].kind);
     row.numbers.push_back(cells[i].number);
     row.symbols.push_back(symbol);
@@ -109,7 +109,7 @@ std::vector<unsigned char> CellKindsFor(std::string_view relation) {
   if (!id.has_value()) {
     return kinds;
   }
-  for (const auto& column : facts::RelationsV2().Get(*id).columns) {
+  for (const auto &column : facts::RelationsV2().Get(*id).columns) {
     kinds.push_back(column.domain == facts::ColumnDomain::kString
                         ? VERITAS_SOUFFLE_CELL_SYMBOL
                         : VERITAS_SOUFFLE_CELL_NUMBER);
@@ -119,13 +119,13 @@ std::vector<unsigned char> CellKindsFor(std::string_view relation) {
 
 // One execution row as the session's flat cell buffer. `row` must outlive the
 // returned cells: a symbol cell points into the row's own string.
-std::vector<VeritasSouffleCell> CellsFromRow(const facts::ExecutionRow& row) {
+std::vector<VeritasSouffleCell> CellsFromRow(const facts::ExecutionRow &row) {
   std::vector<VeritasSouffleCell> cells;
-  for (const auto& cell : row.cells) {
+  for (const auto &cell : row.cells) {
     VeritasSouffleCell flat{};
     flat.kind = VERITAS_SOUFFLE_CELL_NUMBER;
     std::visit(
-        [&flat](const auto& value) {
+        [&flat](const auto &value) {
           using T = std::decay_t<decltype(value)>;
           if constexpr (std::is_same_v<T, std::string>) {
             flat.kind = VERITAS_SOUFFLE_CELL_SYMBOL;
@@ -149,9 +149,9 @@ std::vector<VeritasSouffleCell> CellsFromRow(const facts::ExecutionRow& row) {
 }
 
 // Inserts every row of one relation, deriving the cell kinds from the schema.
-void InsertRows(VeritasSouffleSession* session,
-                const std::vector<facts::ExecutionRow>& rows) {
-  for (const auto& row : rows) {
+void InsertRows(VeritasSouffleSession *session,
+                const std::vector<facts::ExecutionRow> &rows) {
+  for (const auto &row : rows) {
     const std::string name = facts::RelationsV2().Get(row.relation).name;
     const std::vector<VeritasSouffleCell> cells = CellsFromRow(row);
     ASSERT_EQ(veritas_souffle_session_insert(session, name.c_str(),
@@ -162,9 +162,9 @@ void InsertRows(VeritasSouffleSession* session,
 }
 
 // Scans a relation whose column kinds the caller states.
-std::vector<ScannedRow> Scan(VeritasSouffleSession* session,
-                             const char* relation,
-                             const std::vector<unsigned char>& kinds) {
+std::vector<ScannedRow> Scan(VeritasSouffleSession *session,
+                             const char *relation,
+                             const std::vector<unsigned char> &kinds) {
   std::vector<ScannedRow> rows;
   EXPECT_EQ(veritas_souffle_session_scan(session, relation, kinds.data(),
                                          kinds.size(), Collect, &rows),
@@ -204,7 +204,7 @@ std::vector<std::string> SplitTab(std::string_view line) {
 
 // The tab-separated text of a scanned row: the form the file-backed path writes
 // the same cells in.
-std::vector<std::string> RowText(const ScannedRow& row) {
+std::vector<std::string> RowText(const ScannedRow &row) {
   std::vector<std::string> cells;
   for (std::size_t i = 0; i < row.kinds.size(); ++i) {
     if (row.kinds[i] == VERITAS_SOUFFLE_CELL_SYMBOL) {
@@ -216,7 +216,7 @@ std::vector<std::string> RowText(const ScannedRow& row) {
   return cells;
 }
 
-std::vector<std::vector<std::string>> ReadRelationFile(const fs::path& file) {
+std::vector<std::vector<std::string>> ReadRelationFile(const fs::path &file) {
   std::ifstream stream(file);
   EXPECT_TRUE(stream.is_open()) << file.string();
   std::vector<std::vector<std::string>> rows;
@@ -254,7 +254,7 @@ std::vector<facts::ExecutionRow> ReachabilityEdb() {
 }
 
 TEST(SouffleSessionTest, InsertRunScanReturnsTheDerivedRows) {
-  VeritasSouffleSession* session = nullptr;
+  VeritasSouffleSession *session = nullptr;
   ASSERT_EQ(veritas_souffle_session_open("reachability", 1, &session), 0);
   ASSERT_NE(session, nullptr);
 
@@ -270,14 +270,14 @@ TEST(SouffleSessionTest, InsertRunScanReturnsTheDerivedRows) {
 
   EXPECT_EQ(rows[0].kinds, kinds);
   EXPECT_EQ(rows[0].numbers,
-            (std::vector<unsigned long long>{1, 2, 0}));  // 1 -> 2, MUST
+            (std::vector<unsigned long long>{1, 2, 0})); // 1 -> 2, MUST
   EXPECT_EQ(rows[0].symbols, (std::vector<std::string>{"", "", ""}));
 
   veritas_souffle_session_close(session);
 }
 
 TEST(SouffleSessionTest, ScanReportsSymbolAndUnsignedColumnsAsDeclared) {
-  VeritasSouffleSession* session = nullptr;
+  VeritasSouffleSession *session = nullptr;
   ASSERT_EQ(veritas_souffle_session_open("reachability", 1, &session), 0);
   ASSERT_NE(session, nullptr);
 
@@ -306,7 +306,7 @@ TEST(SouffleSessionTest, SessionAgreesWithTheFileBackedPath) {
   const std::vector<facts::ExecutionRow> edb = ReachabilityEdb();
 
   // The session path: the same rows, handed over as cells.
-  VeritasSouffleSession* session = nullptr;
+  VeritasSouffleSession *session = nullptr;
   ASSERT_EQ(veritas_souffle_session_open("reachability", 1, &session), 0);
   ASSERT_NE(session, nullptr);
   InsertRows(session, edb);
@@ -358,7 +358,7 @@ TEST(SouffleSessionTest, SessionAgreesWithTheFileBackedPath) {
 }
 
 TEST(SouffleSessionTest, UnsignedSizeColumnsRoundTripInMemoryEffects) {
-  VeritasSouffleSession* session = nullptr;
+  VeritasSouffleSession *session = nullptr;
   ASSERT_EQ(veritas_souffle_session_open("memory-effects", 1, &session), 0);
   ASSERT_NE(session, nullptr);
 
@@ -384,7 +384,7 @@ TEST(SouffleSessionTest, UnsignedSizeColumnsRoundTripInMemoryEffects) {
 }
 
 TEST(SouffleSessionTest, OpeningAnUnknownComponentFails) {
-  VeritasSouffleSession* session = nullptr;
+  VeritasSouffleSession *session = nullptr;
   EXPECT_NE(veritas_souffle_session_open("not-a-component", 1, &session), 0);
   EXPECT_EQ(session, nullptr);
 }
@@ -435,9 +435,9 @@ v2::FunctionSummary FixtureSummary(std::string_view name) {
 
 // A call edge; `resolved` false leaves the callee unresolved, which is how the
 // fixture puts a row into UnknownCall.
-void AddFixtureCall(v2::FunctionSummary* summary, std::string_view from,
+void AddFixtureCall(v2::FunctionSummary *summary, std::string_view from,
                     std::string_view to, bool resolved) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(core::ToString(
       FixtureCallSiteId(std::string(from) + "->" + std::string(to))));
   call->set_callee_symbol(std::string(to));
@@ -450,26 +450,26 @@ void AddFixtureCall(v2::FunctionSummary* summary, std::string_view from,
   call->set_provenance_ref("test:call");
 }
 
-void AddFixtureMemoryEffect(v2::FunctionSummary* summary,
+void AddFixtureMemoryEffect(v2::FunctionSummary *summary,
                             std::string_view memory, bool is_write,
                             bool known_range, std::int64_t offset,
                             std::uint64_t size) {
-  auto* effect = summary->add_memory_effects();
+  auto *effect = summary->add_memory_effects();
   effect->set_kind(is_write ? v1::EFFECT_KIND_WRITE : v1::EFFECT_KIND_READ);
   effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   effect->set_provenance_ref("test:memory");
-  auto* location = effect->mutable_location();
+  auto *location = effect->mutable_location();
   location->set_memory_location_id(core::ToString(FixtureMemoryId(memory)));
-  auto* range = location->mutable_byte_range();
+  auto *range = location->mutable_byte_range();
   range->set_offset_known(known_range);
   range->set_offset(offset);
   range->set_size_known(known_range);
   range->set_size(size);
 }
 
-void AddFixtureValueFlow(v2::FunctionSummary* summary, std::string_view source,
+void AddFixtureValueFlow(v2::FunctionSummary *summary, std::string_view source,
                          std::string_view destination) {
-  auto* flow = summary->add_value_flows();
+  auto *flow = summary->add_value_flows();
   flow->set_source_value_id(core::ToString(FixtureValueId(source)));
   flow->set_destination_value_id(core::ToString(FixtureValueId(destination)));
   flow->set_epistemic(v1::EPISTEMIC_STATE_MUST);
@@ -511,9 +511,9 @@ std::vector<summary::SummaryArtifact> BaselineFixtureProgram() {
   return {f, g, FixtureSummary("h")};
 }
 
-StatusOr<WpaLogicalComponentInput> BaselineFixtureInput(
-    const std::vector<summary::SummaryArtifact>& artifacts,
-    WpaComponentKind component, std::string_view root) {
+StatusOr<WpaLogicalComponentInput>
+BaselineFixtureInput(const std::vector<summary::SummaryArtifact> &artifacts,
+                     WpaComponentKind component, std::string_view root) {
   auto graph = CallGraph::FromSummaries(artifacts);
   if (!graph.ok()) {
     return graph.status();
@@ -544,8 +544,8 @@ StatusOr<WpaLogicalComponentInput> BaselineFixtureInput(
 
 // One fixture component through the production executor, exactly as the
 // orchestrator drives it.
-StatusOr<facts::RawWpaEvaluation> ExecuteBaselineFixture(
-    WpaComponentKind component, std::string_view root) {
+StatusOr<facts::RawWpaEvaluation>
+ExecuteBaselineFixture(WpaComponentKind component, std::string_view root) {
   auto logical =
       BaselineFixtureInput(BaselineFixtureProgram(), component, root);
   if (!logical.ok()) {
@@ -573,13 +573,15 @@ StatusOr<facts::RawWpaEvaluation> ExecuteBaselineFixture(
   WpaExecutionEnvelope envelope{*manifest, std::move(*logical)};
   // The worker path is accepted for API compatibility and unused: the engine is
   // linked in-process, so the executor never starts a subprocess.
-  const SouffleWpaExecutor executor(std::filesystem::path{}, "souffle-toolchain");
-  return executor.Execute(envelope, WpaExecutionLimits{std::chrono::seconds(30), 0, 1});
+  const SouffleWpaExecutor executor(std::filesystem::path{},
+                                    "souffle-toolchain");
+  return executor.Execute(envelope,
+                          WpaExecutionLimits{std::chrono::seconds(30), 0, 1});
 }
 
-std::string RenderCell(const facts::SemanticCellValue& cell) {
+std::string RenderCell(const facts::SemanticCellValue &cell) {
   return std::visit(
-      [](const auto& value) -> std::string {
+      [](const auto &value) -> std::string {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, core::StableId>) {
           return core::ToString(value);
@@ -599,19 +601,19 @@ std::string RenderCell(const facts::SemanticCellValue& cell) {
 // A whole raw evaluation as deterministic text: one line per result row and one
 // per witness edge, sorted, so the dump does not depend on the engine's
 // iteration order.
-std::string RenderRowsSorted(const facts::RawWpaEvaluation& raw) {
+std::string RenderRowsSorted(const facts::RawWpaEvaluation &raw) {
   std::vector<std::string> lines;
   lines.reserve(raw.results.size() + raw.witnesses.size());
-  for (const auto& row : raw.results) {
+  for (const auto &row : raw.results) {
     std::string line = "result ";
     line += facts::RelationsV2().Get(row.relation).name;
-    for (const auto& cell : row.cells) {
+    for (const auto &cell : row.cells) {
       line.push_back('|');
       line += RenderCell(cell);
     }
     lines.push_back(std::move(line));
   }
-  for (const auto& edge : raw.witnesses) {
+  for (const auto &edge : raw.witnesses) {
     std::string line = "witness ";
     line += edge.rule_id;
     line += " ord=";
@@ -626,17 +628,16 @@ std::string RenderRowsSorted(const facts::RawWpaEvaluation& raw) {
   }
   std::sort(lines.begin(), lines.end());
   std::string dump;
-  for (const auto& line : lines) {
+  for (const auto &line : lines) {
     dump += line;
     dump.push_back('\n');
   }
   return dump;
 }
 
-
 // Splits a dump into its rows, without a trailing empty line for the trailing
 // newline every dump ends with.
-std::vector<std::string> SplitLines(const std::string& text) {
+std::vector<std::string> SplitLines(const std::string &text) {
   std::vector<std::string> lines;
   std::size_t start = 0;
   while (start < text.size()) {
@@ -654,7 +655,7 @@ std::vector<std::string> SplitLines(const std::string& text) {
 // Compares a captured dump with the current one and reports the first row that
 // differs, so a regression names the row it changed instead of burying the
 // difference in a one-thousand-character line.
-void ExpectSameRows(const std::string& expected, const std::string& actual,
+void ExpectSameRows(const std::string &expected, const std::string &actual,
                     std::string_view label) {
   const std::vector<std::string> expected_lines = SplitLines(expected);
   const std::vector<std::string> actual_lines = SplitLines(actual);
@@ -665,8 +666,9 @@ void ExpectSameRows(const std::string& expected, const std::string& actual,
   }
   for (std::size_t i = 0; i < expected_lines.size(); ++i) {
     if (expected_lines[i] != actual_lines[i]) {
-      ADD_FAILURE() << label << ": row " << i << " differs\ncaptured: "
-                    << expected_lines[i] << "\nactual:   " << actual_lines[i];
+      ADD_FAILURE() << label << ": row " << i
+                    << " differs\ncaptured: " << expected_lines[i]
+                    << "\nactual:   " << actual_lines[i];
       return;
     }
   }
@@ -771,7 +773,8 @@ TEST(SouffleSessionTest, ExecutorRowsMatchTheCapturedReachabilityBaseline) {
   // Non-vacuity: a dump pinned against an empty evaluation would prove nothing.
   ASSERT_FALSE(raw->results.empty());
   ASSERT_FALSE(raw->witnesses.empty());
-  ExpectSameRows(kCapturedReachabilityRows, RenderRowsSorted(*raw), "fixture kReachability");
+  ExpectSameRows(kCapturedReachabilityRows, RenderRowsSorted(*raw),
+                 "fixture kReachability");
 }
 
 TEST(SouffleSessionTest, ExecutorRowsMatchTheCapturedMemoryEffectsBaseline) {
@@ -780,7 +783,8 @@ TEST(SouffleSessionTest, ExecutorRowsMatchTheCapturedMemoryEffectsBaseline) {
   // Non-vacuity: a dump pinned against an empty evaluation would prove nothing.
   ASSERT_FALSE(raw->results.empty());
   ASSERT_FALSE(raw->witnesses.empty());
-  ExpectSameRows(kCapturedMemoryEffectsRows, RenderRowsSorted(*raw), "fixture kMemoryEffects");
+  ExpectSameRows(kCapturedMemoryEffectsRows, RenderRowsSorted(*raw),
+                 "fixture kMemoryEffects");
 }
 
 TEST(SouffleSessionTest, ExecutorRowsMatchTheCapturedEffectsBaseline) {
@@ -789,7 +793,8 @@ TEST(SouffleSessionTest, ExecutorRowsMatchTheCapturedEffectsBaseline) {
   // Non-vacuity: a dump pinned against an empty evaluation would prove nothing.
   ASSERT_FALSE(raw->results.empty());
   ASSERT_FALSE(raw->witnesses.empty());
-  ExpectSameRows(kCapturedEffectsRows, RenderRowsSorted(*raw), "fixture kEffects");
+  ExpectSameRows(kCapturedEffectsRows, RenderRowsSorted(*raw),
+                 "fixture kEffects");
 }
 
 TEST(SouffleSessionTest, ExecutorRowsMatchTheCapturedFlowBaseline) {
@@ -801,7 +806,8 @@ TEST(SouffleSessionTest, ExecutorRowsMatchTheCapturedFlowBaseline) {
   ExpectSameRows(kCapturedFlowRows, RenderRowsSorted(*raw), "fixture kFlow");
 }
 
-TEST(SouffleSessionTest, TheFixtureCarriesRelationsItsComponentDoesNotRegister) {
+TEST(SouffleSessionTest,
+     TheFixtureCarriesRelationsItsComponentDoesNotRegister) {
   // Non-vacuity for the skip path, and the reason the executor probes at all. A
   // component's compiled program contains only the relations its rules mention
   // -- Souffle eliminates the rest -- while the logical input carries the whole
@@ -816,28 +822,28 @@ TEST(SouffleSessionTest, TheFixtureCarriesRelationsItsComponentDoesNotRegister) 
   // relation rather than as a mystery failure elsewhere.
   const std::vector<summary::SummaryArtifact> artifacts =
       BaselineFixtureProgram();
-  const std::vector<std::pair<WpaComponentKind, std::string_view>> components = {
-      {WpaComponentKind::kReachability, "reachability"},
-      {WpaComponentKind::kMemoryEffects, "memory-effects"},
-      {WpaComponentKind::kFlow, "flow"},
-      {WpaComponentKind::kEffects, "effects"}};
+  const std::vector<std::pair<WpaComponentKind, std::string_view>> components =
+      {{WpaComponentKind::kReachability, "reachability"},
+       {WpaComponentKind::kMemoryEffects, "memory-effects"},
+       {WpaComponentKind::kFlow, "flow"},
+       {WpaComponentKind::kEffects, "effects"}};
   const std::map<std::string, std::vector<std::string>> expected = {
       {"reachability", {"UnmodeledExternal", "UnknownCall"}},
       {"memory-effects", {"UnmodeledExternal", "UnknownCall"}},
       {"flow", {"DirectCall", "UnknownCall", "UnmodeledExternal"}},
       {"effects", {}}};
 
-  for (const auto& [component, name] : components) {
+  for (const auto &[component, name] : components) {
     auto logical = BaselineFixtureInput(artifacts, component, "f");
     ASSERT_TRUE(logical.ok()) << name << ": " << logical.status().message();
 
-    VeritasSouffleSession* session = nullptr;
+    VeritasSouffleSession *session = nullptr;
     ASSERT_EQ(
         veritas_souffle_session_open(std::string(name).c_str(), 1, &session),
         0);
     std::vector<std::string> unregistered;
-    for (const auto& row : logical->edb) {
-      const auto& schema = facts::RelationsV2().Get(row.relation);
+    for (const auto &row : logical->edb) {
+      const auto &schema = facts::RelationsV2().Get(row.relation);
       if (std::find(unregistered.begin(), unregistered.end(), schema.name) !=
           unregistered.end()) {
         continue;
@@ -855,10 +861,11 @@ TEST(SouffleSessionTest, TheFixtureCarriesRelationsItsComponentDoesNotRegister) 
     std::sort(unregistered.begin(), unregistered.end());
     std::sort(expected_names.begin(), expected_names.end());
     EXPECT_EQ(unregistered, expected_names)
-        << name << " eliminates a different set of EDB relations than the "
-                   "pinned baselines were captured against";
+        << name
+        << " eliminates a different set of EDB relations than the "
+           "pinned baselines were captured against";
   }
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

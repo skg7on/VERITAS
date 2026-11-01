@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <chrono>
 #include <sys/resource.h>
+
 namespace veritas::review {
 namespace {
 Json ProducerJson(const ProviderVersion &p) {
@@ -24,6 +25,7 @@ Json ProducerJson(const ProviderVersion &p) {
                       {"version", p.version},
                       {"config_digest", p.config_digest}};
 }
+
 Json Semantic(const LocalEvidence &e) {
   Json::Array observations, assumptions;
   for (const auto &a : e.assumptions)
@@ -63,7 +65,9 @@ Json Semantic(const LocalEvidence &e) {
                       {"producer", ProducerJson(e.producer)}};
 }
 } // namespace
+
 Json LocalEvidenceSemanticJson(const LocalEvidence &e) { return Semantic(e); }
+
 Json ToJson(const LocalEvidence &e) {
   auto json = Semantic(e);
   auto &object = std::get<Json::Object>(json.data);
@@ -71,6 +75,7 @@ Json ToJson(const LocalEvidence &e) {
   object["usage"] = UsageJson(e.usage);
   return json;
 }
+
 StatusOr<LocalEvidence> InvestigateLocal(const LocalRequest &request) {
   const auto start = std::chrono::steady_clock::now();
   rusage cpu_start{};

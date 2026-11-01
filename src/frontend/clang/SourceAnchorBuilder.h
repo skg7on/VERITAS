@@ -18,18 +18,18 @@
 namespace clang {
 class SourceManager;
 class SourceRange;
-}  // namespace clang
+} // namespace clang
 
 namespace veritas::frontend::clang {
 
 struct SourceAnchor;
 
 class SourceAnchorBuilder {
- public:
-  SourceAnchor Build(const ::clang::SourceRange& range,
-                     const ::clang::SourceManager& source_manager);
+public:
+  SourceAnchor Build(const ::clang::SourceRange &range,
+                     const ::clang::SourceManager &source_manager);
 };
 
-}  // namespace veritas::frontend::clang
+} // namespace veritas::frontend::clang
 
-#endif  // VERITAS_FRONTEND_CLANG_SOURCEANCHORBUILDER_H_
+#endif // VERITAS_FRONTEND_CLANG_SOURCEANCHORBUILDER_H_

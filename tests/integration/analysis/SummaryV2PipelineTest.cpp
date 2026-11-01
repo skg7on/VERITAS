@@ -36,9 +36,10 @@ namespace v2 = veritas::summary::v2;
 // Materialize a fixture exactly once per name so the analysis and the
 // repository-open share the same on-disk project (FixtureProject returns a
 // fresh directory on every call).
-const std::filesystem::path& FixtureRoot(std::string_view name) {
+const std::filesystem::path &FixtureRoot(std::string_view name) {
   static std::map<std::string, std::filesystem::path> cache;
-  auto [it, inserted] = cache.emplace(std::string(name), std::filesystem::path{});
+  auto [it, inserted] =
+      cache.emplace(std::string(name), std::filesystem::path{});
   if (inserted) {
     it->second = testing::FixtureProject(name);
   }
@@ -55,8 +56,8 @@ StatusOr<ProjectAnalysisResult> AnalyzeProjectFixture(std::string_view name) {
   return analyzer.AnalyzeProject(request, AnalysisConfig::Default());
 }
 
-std::unique_ptr<summarydb::SummaryRepository> OpenFixtureRepository(
-    std::string_view name) {
+std::unique_ptr<summarydb::SummaryRepository>
+OpenFixtureRepository(std::string_view name) {
   const auto root = FixtureRoot(name) / ".veritas";
   auto repository = summarydb::SummaryRepository::Open(root.string());
   if (!repository.ok()) {
@@ -68,13 +69,13 @@ std::unique_ptr<summarydb::SummaryRepository> OpenFixtureRepository(
 // True when any V2 summary carries an indirect call target published as a
 // stable MAY call (a function-pointer target resolved by SVF).
 bool ContainsIndirectMayTarget(
-    const std::vector<summary::SummaryArtifact>& summaries) {
-  for (const auto& artifact : summaries) {
-    const auto* summary = std::get_if<v2::FunctionSummary>(&artifact);
+    const std::vector<summary::SummaryArtifact> &summaries) {
+  for (const auto &artifact : summaries) {
+    const auto *summary = std::get_if<v2::FunctionSummary>(&artifact);
     if (!summary) {
       continue;
     }
-    for (const auto& call : summary->calls()) {
+    for (const auto &call : summary->calls()) {
       if (call.dispatch() == v2::DISPATCH_KIND_INDIRECT &&
           call.epistemic() == v1::EPISTEMIC_STATE_MAY) {
         return true;
@@ -92,11 +93,11 @@ TEST(SummaryV2PipelineTest, PublishesIndirectTargetsAndStructuredMemory) {
   auto summaries = repository->ListCurrentSummaryArtifacts(
       result->revision_id, result->build_variant_id);
   ASSERT_TRUE(summaries.ok()) << summaries.status().message();
-  EXPECT_TRUE(std::ranges::all_of(*summaries, [](const auto& artifact) {
+  EXPECT_TRUE(std::ranges::all_of(*summaries, [](const auto &artifact) {
     return std::holds_alternative<v2::FunctionSummary>(artifact);
   }));
   EXPECT_TRUE(ContainsIndirectMayTarget(*summaries));
 }
 
-}  // namespace
-}  // namespace veritas::analysis
+} // namespace
+} // namespace veritas::analysis

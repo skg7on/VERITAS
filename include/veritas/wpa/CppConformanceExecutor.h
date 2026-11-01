@@ -30,19 +30,19 @@
 namespace veritas::wpa {
 
 class CppConformanceExecutor final : public WpaExecutor {
- public:
+public:
   // Constructs an executor with the given non-production identity. Returns
   // InvalidArgument for kSouffle, which the C++ engine must never carry.
-  static StatusOr<CppConformanceExecutor> Create(
-      facts::EngineIdentity identity, std::string toolchain_identity);
+  static StatusOr<CppConformanceExecutor>
+  Create(facts::EngineIdentity identity, std::string toolchain_identity);
 
   facts::EngineIdentity identity() const override;
   std::string_view toolchain_identity() const override;
-  StatusOr<facts::RawWpaEvaluation> Execute(
-      const WpaExecutionEnvelope& input,
-      const WpaExecutionLimits& limits) const override;
+  StatusOr<facts::RawWpaEvaluation>
+  Execute(const WpaExecutionEnvelope &input,
+          const WpaExecutionLimits &limits) const override;
 
- private:
+private:
   CppConformanceExecutor(facts::EngineIdentity identity,
                          std::string toolchain_identity);
 
@@ -50,6 +50,6 @@ class CppConformanceExecutor final : public WpaExecutor {
   std::string toolchain_identity_;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_CPP_CONFORMANCE_EXECUTOR_H_
+#endif // VERITAS_WPA_CPP_CONFORMANCE_EXECUTOR_H_

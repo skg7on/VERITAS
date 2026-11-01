@@ -32,36 +32,37 @@ namespace veritas::analysis {
 
 // The vendored Souffle tree is committed at this revision (tag 2.5); the
 // runtime requires the generated manifest to record exactly it.
-inline constexpr const char* kSoufflePinnedRevision =
+inline constexpr const char *kSoufflePinnedRevision =
     "5682a9f12e2668ecdd26348fe63cc508bc0fcf47";
 
 // Verified identity material for the compiled-Souffle production engine.
 class SouffleProvenance {
- public:
+public:
   // Parses `manifest_path` (the generated souffle-provenance.json), requires
   // the pinned source revision, recomputes the SHA-256 of `souffle_executable`
   // and checks it against the recorded executable digest, and recomputes the
   // canonical provenance digest over the manifest's recorded fields. Returns
   // InvalidArgument for a malformed manifest, FailedPrecondition for a
   // revision or digest mismatch, or NotFound for a missing file.
-  static StatusOr<SouffleProvenance> Load(
-      const std::string& manifest_path,
-      const std::string& souffle_executable_path);
+  static StatusOr<SouffleProvenance>
+  Load(const std::string &manifest_path,
+       const std::string &souffle_executable_path);
 
   // The versioned toolchain identity derived from the verified canonical
   // digest. Replaces the former label-only "souffle-2.5-pinned" string.
   std::string toolchain_identity() const;
 
-  const std::string& canonical_digest() const { return canonical_digest_; }
-  const std::string& source_revision() const { return source_revision_; }
+  const std::string &canonical_digest() const { return canonical_digest_; }
 
- private:
+  const std::string &source_revision() const { return source_revision_; }
+
+private:
   SouffleProvenance() = default;
 
   std::string source_revision_;
   std::string canonical_digest_;
 };
 
-}  // namespace veritas::analysis
+} // namespace veritas::analysis
 
-#endif  // VERITAS_ANALYSIS_SOUFFLE_PROVENANCE_H_
+#endif // VERITAS_ANALYSIS_SOUFFLE_PROVENANCE_H_

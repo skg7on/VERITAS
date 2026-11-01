@@ -29,10 +29,12 @@ namespace {
 bool ValidId(const core::StableId &id, core::IdKind kind) {
   return id.kind == kind && core::ParseStableId(core::ToString(id)).ok();
 }
+
 bool KnownKind(std::string_view kind) {
   return kind == "value_flow" || kind == "range" || kind == "capacity" ||
          kind == "alias" || kind == "unknown" || kind == "dominating_check";
 }
+
 const std::string *TextCell(const facts::AnalysisFact &fact,
                             std::size_t index) {
   return index < fact.row.cells.size()

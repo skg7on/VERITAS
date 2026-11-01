@@ -131,9 +131,9 @@ bool IsIdentifier(std::string_view text) {
   }
   std::size_t index = 1;
   const auto consume_segment = [&text, &index]() {
-    while (index < text.size() &&
-           (IsLetter(text[index]) || IsDigit(text[index]) ||
-            text[index] == '_')) {
+    while (
+        index < text.size() &&
+        (IsLetter(text[index]) || IsDigit(text[index]) || text[index] == '_')) {
       ++index;
     }
   };
@@ -221,13 +221,13 @@ bool ContainsLineBreak(std::string_view text) {
 //   * a boolean argument is `true` or `false`, and a nested call is scanned
 //     recursively.
 class CanonicalCallScanner {
- public:
+public:
   explicit CanonicalCallScanner(std::string_view text) : text_(text) {}
 
   // True when the whole of `text_` is one canonical call spelling.
   bool Scan() { return ScanCall() && AtEnd(); }
 
- private:
+private:
   bool AtEnd() const { return index_ >= text_.size(); }
 
   bool Eat(char expected) {
@@ -369,7 +369,7 @@ class CanonicalCallScanner {
   // `IntegerLiteral` the reader could lower. The magnitude is accumulated in
   // `std::uint64_t` so the one value whose negation overflows is not itself
   // undefined.
-  static bool ParseInteger(std::string_view spelling, std::int64_t* out) {
+  static bool ParseInteger(std::string_view spelling, std::int64_t *out) {
     const bool negative = !spelling.empty() && spelling[0] == '-';
     const std::string_view digits = negative ? spelling.substr(1) : spelling;
     if (digits.empty()) {
@@ -377,7 +377,8 @@ class CanonicalCallScanner {
     }
     const auto limit = negative
                            ? static_cast<std::uint64_t>(
-                                 std::numeric_limits<std::int64_t>::max()) + 1
+                                 std::numeric_limits<std::int64_t>::max()) +
+                                 1
                            : static_cast<std::uint64_t>(
                                  std::numeric_limits<std::int64_t>::max());
     std::uint64_t magnitude = 0;
@@ -389,9 +390,8 @@ class CanonicalCallScanner {
       magnitude = magnitude * 10 + digit;
     }
     if (negative) {
-      *out = magnitude == limit
-                 ? std::numeric_limits<std::int64_t>::min()
-                 : -static_cast<std::int64_t>(magnitude);
+      *out = magnitude == limit ? std::numeric_limits<std::int64_t>::min()
+                                : -static_cast<std::int64_t>(magnitude);
     } else {
       *out = static_cast<std::int64_t>(magnitude);
     }
@@ -427,7 +427,7 @@ struct SortKey {
   std::string id;
 };
 
-bool KeyLess(const SortKey& left, const SortKey& right) {
+bool KeyLess(const SortKey &left, const SortKey &right) {
   if (left.kind != right.kind) {
     return left.kind < right.kind;
   }
@@ -437,11 +437,11 @@ bool KeyLess(const SortKey& left, const SortKey& right) {
   return left.id < right.id;
 }
 
-std::string StableIdComponent(const std::optional<core::StableId>& stable_id) {
+std::string StableIdComponent(const std::optional<core::StableId> &stable_id) {
   return stable_id.has_value() ? core::ToString(*stable_id) : std::string();
 }
 
-std::vector<std::size_t> CanonicalOrder(const std::vector<SortKey>& keys) {
+std::vector<std::size_t> CanonicalOrder(const std::vector<SortKey> &keys) {
   std::vector<std::size_t> order(keys.size());
   for (std::size_t index = 0; index < order.size(); ++index) {
     order[index] = index;
@@ -456,12 +456,12 @@ std::vector<std::size_t> CanonicalOrder(const std::vector<SortKey>& keys) {
 // --- The writer -------------------------------------------------------------
 
 class EirWriter {
- public:
-  EirWriter(EirTextStyle style, std::string* out) : out_(out), style_(style) {}
+public:
+  EirWriter(EirTextStyle style, std::string *out) : out_(out), style_(style) {}
 
-  Status Run(const EvidenceCase& value);
+  Status Run(const EvidenceCase &value);
 
- private:
+private:
   // --- Failure --------------------------------------------------------------
 
   bool ok() const { return failed_.ok(); }
@@ -512,24 +512,24 @@ class EirWriter {
     literal.push_back('"');
     for (const char c : text) {
       switch (c) {
-        case '"':
-          literal += "\\\"";
-          break;
-        case '\\':
-          literal += "\\\\";
-          break;
-        case '\n':
-          literal += "\\n";
-          break;
-        case '\r':
-          literal += "\\r";
-          break;
-        case '\t':
-          literal += "\\t";
-          break;
-        default:
-          literal.push_back(c);
-          break;
+      case '"':
+        literal += "\\\"";
+        break;
+      case '\\':
+        literal += "\\\\";
+        break;
+      case '\n':
+        literal += "\\n";
+        break;
+      case '\r':
+        literal += "\\r";
+        break;
+      case '\t':
+        literal += "\\t";
+        break;
+      default:
+        literal.push_back(c);
+        break;
       }
     }
     literal.push_back('"');
@@ -574,8 +574,7 @@ class EirWriter {
   // rather than emitted: its `ToString` rendering is "unspecified", which no
   // `Parse*` helper accepts, so emitting it would produce text the reader
   // refuses.
-  template <typename T>
-  void EnumTerminal(std::string_view what, T value) {
+  template <typename T> void EnumTerminal(std::string_view what, T value) {
     if (!ok()) {
       return;
     }
@@ -665,33 +664,33 @@ class EirWriter {
 
   static int BindingPower(Expression::Kind kind) {
     switch (kind) {
-      case Expression::Kind::kBool:
-      case Expression::Kind::kInteger:
-      case Expression::Kind::kString:
-      case Expression::Kind::kSymbol:
-      case Expression::Kind::kReference:
-      case Expression::Kind::kCall:
-        return 60;
-      case Expression::Kind::kNot:
-        return 50;
-      case Expression::Kind::kCompare:
-        return 40;
-      case Expression::Kind::kAnd:
-        return 30;
-      case Expression::Kind::kOr:
-        return 20;
-      case Expression::Kind::kImplies:
-        return 10;
-      case Expression::Kind::kForAll:
-      case Expression::Kind::kExists:
-        return 0;
-      default:
-        break;
+    case Expression::Kind::kBool:
+    case Expression::Kind::kInteger:
+    case Expression::Kind::kString:
+    case Expression::Kind::kSymbol:
+    case Expression::Kind::kReference:
+    case Expression::Kind::kCall:
+      return 60;
+    case Expression::Kind::kNot:
+      return 50;
+    case Expression::Kind::kCompare:
+      return 40;
+    case Expression::Kind::kAnd:
+      return 30;
+    case Expression::Kind::kOr:
+      return 20;
+    case Expression::Kind::kImplies:
+      return 10;
+    case Expression::Kind::kForAll:
+    case Expression::Kind::kExists:
+      return 0;
+    default:
+      break;
     }
     return -1;
   }
 
-  const Expression* Operand(const Expression& value, std::size_t index) {
+  const Expression *Operand(const Expression &value, std::size_t index) {
     if (index < value.operands.size()) {
       return &value.operands[index];
     }
@@ -709,7 +708,7 @@ class EirWriter {
   // `ParseAnd` and so needs 30, an operand of a comparison or of `not` is read
   // by `ParseUnary` and so needs 50, and an implication's antecedent is read by
   // `ParseOr` while its consequent is read by `ParseImplication` itself.
-  void Predicate(const Expression& value, int min_bp) {
+  void Predicate(const Expression &value, int min_bp) {
     if (!ok()) {
       return;
     }
@@ -723,117 +722,117 @@ class EirWriter {
       Raw("(");
     }
     switch (value.kind) {
-      case Expression::Kind::kBool:
-        Raw(value.boolean ? "true" : "false");
-        break;
-      case Expression::Kind::kInteger:
-        Raw(std::to_string(value.integer));
-        break;
-      case Expression::Kind::kString:
-        StringLiteral(value.text);
-        break;
-      case Expression::Kind::kSymbol:
-        if (IsReservedPredicateName(value.text)) {
-          Refuse(Joined("the symbol ", Quoted(value.text)) +
-                 " is read as an operator or a literal in a predicate "
-                 "position, so it has no spelling there");
-          break;
-        }
-        Identifier("symbol", value.text);
-        break;
-      case Expression::Kind::kReference:
-        Reference("expression reference", value.text);
-        break;
-      case Expression::Kind::kCall:
-        Call(value, /*predicate_position=*/true);
-        break;
-      case Expression::Kind::kNot: {
-        const Expression* const operand = Operand(value, 0);
-        if (operand == nullptr) {
-          break;
-        }
-        Raw("not ");
-        Predicate(*operand, 50);
+    case Expression::Kind::kBool:
+      Raw(value.boolean ? "true" : "false");
+      break;
+    case Expression::Kind::kInteger:
+      Raw(std::to_string(value.integer));
+      break;
+    case Expression::Kind::kString:
+      StringLiteral(value.text);
+      break;
+    case Expression::Kind::kSymbol:
+      if (IsReservedPredicateName(value.text)) {
+        Refuse(Joined("the symbol ", Quoted(value.text)) +
+               " is read as an operator or a literal in a predicate "
+               "position, so it has no spelling there");
         break;
       }
-      case Expression::Kind::kCompare: {
-        const Expression* const left = Operand(value, 0);
-        const Expression* const right = Operand(value, 1);
-        if (left == nullptr || right == nullptr) {
-          break;
-        }
-        // Both sides are read by `ParseUnary`, so a nested comparison is
-        // parenthesised: `kCompare` is non-associative and the parser refuses a
-        // chain rather than grouping one.
-        Predicate(*left, 50);
-        Raw(" ");
-        Raw(value.text);
-        Raw(" ");
-        Predicate(*right, 50);
+      Identifier("symbol", value.text);
+      break;
+    case Expression::Kind::kReference:
+      Reference("expression reference", value.text);
+      break;
+    case Expression::Kind::kCall:
+      Call(value, /*predicate_position=*/true);
+      break;
+    case Expression::Kind::kNot: {
+      const Expression *const operand = Operand(value, 0);
+      if (operand == nullptr) {
         break;
       }
-      case Expression::Kind::kAnd:
-      case Expression::Kind::kOr: {
-        const bool conjunction = value.kind == Expression::Kind::kAnd;
-        const std::string_view separator = conjunction ? " and " : " or ";
-        // The model's connective is n-ary and flat and the parser splices a
-        // parenthesised chain into one list, so the chain is written flattened
-        // and never re-parenthesised.
-        const int operand_bp = conjunction ? 40 : 30;
-        if (value.operands.size() < 2) {
-          Refuse("a connective carries fewer than two operands, so it has no "
-                 "spelling");
-          break;
-        }
-        for (std::size_t index = 0; index < value.operands.size(); ++index) {
-          if (index != 0) {
-            Raw(separator);
-          }
-          Predicate(value.operands[index], operand_bp);
-        }
+      Raw("not ");
+      Predicate(*operand, 50);
+      break;
+    }
+    case Expression::Kind::kCompare: {
+      const Expression *const left = Operand(value, 0);
+      const Expression *const right = Operand(value, 1);
+      if (left == nullptr || right == nullptr) {
         break;
       }
-      case Expression::Kind::kImplies: {
-        const Expression* const antecedent = Operand(value, 0);
-        const Expression* const consequent = Operand(value, 1);
-        if (antecedent == nullptr || consequent == nullptr) {
-          break;
-        }
-        Predicate(*antecedent, 20);
-        Raw(" implies ");
-        Predicate(*consequent, 10);
+      // Both sides are read by `ParseUnary`, so a nested comparison is
+      // parenthesised: `kCompare` is non-associative and the parser refuses a
+      // chain rather than grouping one.
+      Predicate(*left, 50);
+      Raw(" ");
+      Raw(value.text);
+      Raw(" ");
+      Predicate(*right, 50);
+      break;
+    }
+    case Expression::Kind::kAnd:
+    case Expression::Kind::kOr: {
+      const bool conjunction = value.kind == Expression::Kind::kAnd;
+      const std::string_view separator = conjunction ? " and " : " or ";
+      // The model's connective is n-ary and flat and the parser splices a
+      // parenthesised chain into one list, so the chain is written flattened
+      // and never re-parenthesised.
+      const int operand_bp = conjunction ? 40 : 30;
+      if (value.operands.size() < 2) {
+        Refuse("a connective carries fewer than two operands, so it has no "
+               "spelling");
         break;
       }
-      case Expression::Kind::kForAll:
-      case Expression::Kind::kExists: {
-        const Expression* const domain = Operand(value, 0);
-        const Expression* const body = Operand(value, 1);
-        if (domain == nullptr || body == nullptr) {
-          break;
+      for (std::size_t index = 0; index < value.operands.size(); ++index) {
+        if (index != 0) {
+          Raw(separator);
         }
-        Raw(value.kind == Expression::Kind::kForAll ? "forall " : "exists ");
-        Identifier("bound variable", value.text);
-        Raw(" in ");
-        // `Domain ::= Identifier "(" [ ArgumentList ] ")" | Reference`, and
-        // `ArgumentList` is a list of `PropertyValue`, so a domain call's
-        // arguments are written in the value position, not the predicate one.
-        if (domain->kind == Expression::Kind::kReference) {
-          Reference("quantifier domain", domain->text);
-        } else if (domain->kind == Expression::Kind::kCall) {
-          Call(*domain, /*predicate_position=*/false);
-        } else {
-          Refuse("a quantifier domain is neither a reference nor a function "
-                 "call, so it has no EIR-T spelling");
-        }
-        Raw(": ");
-        // A quantifier is the loosest level and owns everything after its
-        // colon, so its body is written at the top of the chain.
-        Predicate(*body, 0);
+        Predicate(value.operands[index], operand_bp);
+      }
+      break;
+    }
+    case Expression::Kind::kImplies: {
+      const Expression *const antecedent = Operand(value, 0);
+      const Expression *const consequent = Operand(value, 1);
+      if (antecedent == nullptr || consequent == nullptr) {
         break;
       }
-      default:
-        Refuse("an expression carries a kind with no EIR-T spelling");
+      Predicate(*antecedent, 20);
+      Raw(" implies ");
+      Predicate(*consequent, 10);
+      break;
+    }
+    case Expression::Kind::kForAll:
+    case Expression::Kind::kExists: {
+      const Expression *const domain = Operand(value, 0);
+      const Expression *const body = Operand(value, 1);
+      if (domain == nullptr || body == nullptr) {
         break;
+      }
+      Raw(value.kind == Expression::Kind::kForAll ? "forall " : "exists ");
+      Identifier("bound variable", value.text);
+      Raw(" in ");
+      // `Domain ::= Identifier "(" [ ArgumentList ] ")" | Reference`, and
+      // `ArgumentList` is a list of `PropertyValue`, so a domain call's
+      // arguments are written in the value position, not the predicate one.
+      if (domain->kind == Expression::Kind::kReference) {
+        Reference("quantifier domain", domain->text);
+      } else if (domain->kind == Expression::Kind::kCall) {
+        Call(*domain, /*predicate_position=*/false);
+      } else {
+        Refuse("a quantifier domain is neither a reference nor a function "
+               "call, so it has no EIR-T spelling");
+      }
+      Raw(": ");
+      // A quantifier is the loosest level and owns everything after its
+      // colon, so its body is written at the top of the chain.
+      Predicate(*body, 0);
+      break;
+    }
+    default:
+      Refuse("an expression carries a kind with no EIR-T spelling");
+      break;
     }
     if (parenthesise) {
       Raw(")");
@@ -845,47 +844,48 @@ class EirWriter {
   // widening — a bare identifier. It admits no parenthesised sub-expression at
   // all, so nothing here is ever parenthesised: a compound value has no
   // spelling in this position and is refused.
-  void Value(const Expression& value) {
+  void Value(const Expression &value) {
     if (!ok()) {
       return;
     }
     switch (value.kind) {
-      case Expression::Kind::kString:
-        StringLiteral(value.text);
+    case Expression::Kind::kString:
+      StringLiteral(value.text);
+      break;
+    case Expression::Kind::kInteger:
+      Raw(std::to_string(value.integer));
+      break;
+    case Expression::Kind::kBool:
+      Raw(value.boolean ? "true" : "false");
+      break;
+    case Expression::Kind::kReference:
+      Reference("property reference", value.text);
+      break;
+    case Expression::Kind::kSymbol:
+      if (IsBooleanSpelling(value.text)) {
+        Refuse(Joined("the symbol ", Quoted(value.text)) +
+               " is read as a boolean literal, so it has no spelling as a "
+               "symbol");
         break;
-      case Expression::Kind::kInteger:
-        Raw(std::to_string(value.integer));
-        break;
-      case Expression::Kind::kBool:
-        Raw(value.boolean ? "true" : "false");
-        break;
-      case Expression::Kind::kReference:
-        Reference("property reference", value.text);
-        break;
-      case Expression::Kind::kSymbol:
-        if (IsBooleanSpelling(value.text)) {
-          Refuse(Joined("the symbol ", Quoted(value.text)) +
-                 " is read as a boolean literal, so it has no spelling as a "
-                 "symbol");
-          break;
-        }
-        Identifier("symbol", value.text);
-        break;
-      case Expression::Kind::kCall:
-        Call(value, /*predicate_position=*/false);
-        break;
-      default:
-        Refuse("a property value carries a compound expression, which this "
-               "position has no spelling for");
-        break;
+      }
+      Identifier("symbol", value.text);
+      break;
+    case Expression::Kind::kCall:
+      Call(value, /*predicate_position=*/false);
+      break;
+    default:
+      Refuse("a property value carries a compound expression, which this "
+             "position has no spelling for");
+      break;
     }
   }
 
-  // `FunctionCall ::= Identifier "(" [ ArgumentList ] ")"`. `predicate_position`
-  // selects the argument grammar: a call read by `ParsePredicateArgumentList`
-  // takes full predicates, while one read by `ParsePropertyValueList` or
-  // `ParseResourceBudget` takes property values only.
-  void Call(const Expression& value, bool predicate_position) {
+  // `FunctionCall ::= Identifier "(" [ ArgumentList ] ")"`.
+  // `predicate_position` selects the argument grammar: a call read by
+  // `ParsePredicateArgumentList` takes full predicates, while one read by
+  // `ParsePropertyValueList` or `ParseResourceBudget` takes property values
+  // only.
+  void Call(const Expression &value, bool predicate_position) {
     if (!ok()) {
       return;
     }
@@ -912,26 +912,25 @@ class EirWriter {
 
   // --- Declarations ---------------------------------------------------------
 
-  void WriteContext(const ProgramBinding& program);
-  void WriteEntity(const Entity& entity);
-  void WriteClaim(const Claim& claim);
-  void WriteFact(const Fact& fact);
-  void WriteAssumption(const Assumption& assumption);
-  void WriteHypothesis(const Hypothesis& hypothesis);
-  void WriteUnknown(const Unknown& unknown);
-  void WriteEdge(const Edge& edge);
-  void WritePath(const Path& path);
-  void WriteConstraint(const Constraint& constraint);
-  void WriteProvenance(const Provenance& record);
-  void WriteVerification(const ProofObligation& obligation);
-  void WriteSummary(const SummaryReference& summary);
-  void WriteDependency(const Dependency& dependency);
-  void WriteOmission(const Omission& omission);
+  void WriteContext(const ProgramBinding &program);
+  void WriteEntity(const Entity &entity);
+  void WriteClaim(const Claim &claim);
+  void WriteFact(const Fact &fact);
+  void WriteAssumption(const Assumption &assumption);
+  void WriteHypothesis(const Hypothesis &hypothesis);
+  void WriteUnknown(const Unknown &unknown);
+  void WriteEdge(const Edge &edge);
+  void WritePath(const Path &path);
+  void WriteConstraint(const Constraint &constraint);
+  void WriteProvenance(const Provenance &record);
+  void WriteVerification(const ProofObligation &obligation);
+  void WriteSummary(const SummaryReference &summary);
+  void WriteDependency(const Dependency &dependency);
+  void WriteOmission(const Omission &omission);
 
   // One `name = value;` line at `depth`, for an attribute written as a bare
   // identifier.
-  void AttributeLine(int depth, std::string_view name,
-                     std::string_view value) {
+  void AttributeLine(int depth, std::string_view name, std::string_view value) {
     if (!ok()) {
       return;
     }
@@ -1042,7 +1041,7 @@ class EirWriter {
 
   // A `name = <predicate>;` line at `depth`.
   void PredicateLine(int depth, std::string_view name,
-                     const Expression& predicate) {
+                     const Expression &predicate) {
     if (!ok()) {
       return;
     }
@@ -1071,7 +1070,7 @@ class EirWriter {
   // the key is what closes both; guarding the spelling of the output would
   // not, since the injected document is well-formed.
   void ValueLine(int depth, std::string_view what, std::string_view name,
-                 const Expression& value) {
+                 const Expression &value) {
     if (!ok()) {
       return;
     }
@@ -1082,12 +1081,12 @@ class EirWriter {
     Raw(";\n");
   }
 
-  std::string* out_;
+  std::string *out_;
   EirTextStyle style_;
   Status failed_;
 };
 
-void EirWriter::WriteContext(const ProgramBinding& program) {
+void EirWriter::WriteContext(const ProgramBinding &program) {
   Indent(1);
   Raw("context {\n");
 
@@ -1116,10 +1115,10 @@ void EirWriter::WriteContext(const ProgramBinding& program) {
   // total and does not depend on the order the versions arrived in.
   std::vector<AnalyzerVersion> versions = program.analyzer_versions;
   std::sort(versions.begin(), versions.end(),
-            [](const AnalyzerVersion& left, const AnalyzerVersion& right) {
+            [](const AnalyzerVersion &left, const AnalyzerVersion &right) {
               return left < right;
             });
-  for (const AnalyzerVersion& version : versions) {
+  for (const AnalyzerVersion &version : versions) {
     if (!ok()) {
       return;
     }
@@ -1145,7 +1144,7 @@ void EirWriter::WriteContext(const ProgramBinding& program) {
   Raw("}\n");
 }
 
-void EirWriter::WriteEntity(const Entity& entity) {
+void EirWriter::WriteEntity(const Entity &entity) {
   Indent(1);
   Raw("entity ");
   Identifier("entity identifier", entity.id);
@@ -1173,7 +1172,7 @@ void EirWriter::WriteEntity(const Entity& entity) {
       entity.properties.empty()
           ? std::string()
           : Joined("property key of entity ", Quoted(entity.id));
-  for (const auto& property : entity.properties) {
+  for (const auto &property : entity.properties) {
     if (!ok()) {
       return;
     }
@@ -1184,7 +1183,7 @@ void EirWriter::WriteEntity(const Entity& entity) {
   Raw("}\n");
 }
 
-void EirWriter::WriteClaim(const Claim& claim) {
+void EirWriter::WriteClaim(const Claim &claim) {
   Indent(1);
   Raw("claim ");
   Identifier("claim identifier", claim.id);
@@ -1200,7 +1199,7 @@ void EirWriter::WriteClaim(const Claim& claim) {
   Raw("}\n");
 }
 
-void EirWriter::WriteFact(const Fact& fact) {
+void EirWriter::WriteFact(const Fact &fact) {
   Indent(1);
   Raw("fact ");
   Identifier("fact identifier", fact.id);
@@ -1229,7 +1228,7 @@ void EirWriter::WriteFact(const Fact& fact) {
   Raw("}\n");
 }
 
-void EirWriter::WriteAssumption(const Assumption& assumption) {
+void EirWriter::WriteAssumption(const Assumption &assumption) {
   Indent(1);
   Raw("assumption ");
   Identifier("assumption identifier", assumption.id);
@@ -1253,7 +1252,7 @@ void EirWriter::WriteAssumption(const Assumption& assumption) {
   Raw("}\n");
 }
 
-void EirWriter::WriteHypothesis(const Hypothesis& hypothesis) {
+void EirWriter::WriteHypothesis(const Hypothesis &hypothesis) {
   Indent(1);
   Raw("hypothesis ");
   Identifier("hypothesis identifier", hypothesis.id);
@@ -1273,7 +1272,7 @@ void EirWriter::WriteHypothesis(const Hypothesis& hypothesis) {
   Raw("}\n");
 }
 
-void EirWriter::WriteUnknown(const Unknown& unknown) {
+void EirWriter::WriteUnknown(const Unknown &unknown) {
   Indent(1);
   Raw("unknown ");
   Identifier("unknown identifier", unknown.id);
@@ -1300,7 +1299,7 @@ void EirWriter::WriteUnknown(const Unknown& unknown) {
   Raw("}\n");
 }
 
-void EirWriter::WriteEdge(const Edge& edge) {
+void EirWriter::WriteEdge(const Edge &edge) {
   Indent(1);
   Raw("edge ");
   Identifier("edge identifier", edge.id);
@@ -1324,7 +1323,7 @@ void EirWriter::WriteEdge(const Edge& edge) {
   Raw("}\n");
 }
 
-void EirWriter::WritePath(const Path& path) {
+void EirWriter::WritePath(const Path &path) {
   Indent(1);
   Raw("path ");
   Identifier("path identifier", path.id);
@@ -1346,7 +1345,7 @@ void EirWriter::WritePath(const Path& path) {
   if (!path.conditions.empty()) {
     Indent(2);
     Raw("conditions {\n");
-    for (const Expression& condition : path.conditions) {
+    for (const Expression &condition : path.conditions) {
       if (!ok()) {
         return;
       }
@@ -1368,7 +1367,7 @@ void EirWriter::WritePath(const Path& path) {
   Raw("}\n");
 }
 
-void EirWriter::WriteConstraint(const Constraint& constraint) {
+void EirWriter::WriteConstraint(const Constraint &constraint) {
   Indent(1);
   Raw("constraint ");
   Identifier("constraint identifier", constraint.id);
@@ -1390,7 +1389,7 @@ void EirWriter::WriteConstraint(const Constraint& constraint) {
   Raw("}\n");
 }
 
-void EirWriter::WriteProvenance(const Provenance& record) {
+void EirWriter::WriteProvenance(const Provenance &record) {
   Indent(1);
   Raw("provenance ");
   Identifier("provenance identifier", record.id);
@@ -1433,7 +1432,7 @@ void EirWriter::WriteProvenance(const Provenance& record) {
   Raw("}\n");
 }
 
-void EirWriter::WriteVerification(const ProofObligation& obligation) {
+void EirWriter::WriteVerification(const ProofObligation &obligation) {
   Indent(1);
   Raw("verify ");
   Identifier("proof obligation identifier", obligation.id);
@@ -1472,15 +1471,14 @@ void EirWriter::WriteVerification(const ProofObligation& obligation) {
   if (!obligation.verification_producer.empty()) {
     Indent(2);
     Raw("producer = ");
-    ProducerCarrier("verification producer",
-                    obligation.verification_producer);
+    ProducerCarrier("verification producer", obligation.verification_producer);
     Raw(";\n");
   }
   Indent(1);
   Raw("}\n");
 }
 
-void EirWriter::WriteSummary(const SummaryReference& summary) {
+void EirWriter::WriteSummary(const SummaryReference &summary) {
   Indent(1);
   Raw("summary ");
   Identifier("summary reference identifier", summary.id);
@@ -1494,7 +1492,7 @@ void EirWriter::WriteSummary(const SummaryReference& summary) {
   Raw("}\n");
 }
 
-void EirWriter::WriteDependency(const Dependency& dependency) {
+void EirWriter::WriteDependency(const Dependency &dependency) {
   Indent(1);
   Raw("dependency ");
   Identifier("dependency identifier", dependency.id);
@@ -1505,7 +1503,7 @@ void EirWriter::WriteDependency(const Dependency& dependency) {
   Raw("}\n");
 }
 
-void EirWriter::WriteOmission(const Omission& omission) {
+void EirWriter::WriteOmission(const Omission &omission) {
   Indent(1);
   Raw("omission ");
   Identifier("omission identifier", omission.id);
@@ -1524,7 +1522,7 @@ void EirWriter::WriteOmission(const Omission& omission) {
   Raw("}\n");
 }
 
-Status EirWriter::Run(const EvidenceCase& value) {
+Status EirWriter::Run(const EvidenceCase &value) {
   // `evidence {` — and no case identifier. §3.1 makes the label a display
   // label the model has no member for, so a writer that derived one from
   // `EvidenceID` would emit text that parses back to the same case and would
@@ -1541,7 +1539,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.entities.size());
-    for (const Entity& entity : value.entities) {
+    for (const Entity &entity : value.entities) {
       keys.push_back(SortKey{std::string(ToString(entity.kind)),
                              StableIdComponent(entity.stable_id), entity.id});
     }
@@ -1567,7 +1565,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.facts.size());
-    for (const Fact& fact : value.facts) {
+    for (const Fact &fact : value.facts) {
       keys.push_back(
           SortKey{std::string(), StableIdComponent(fact.stable_id), fact.id});
     }
@@ -1584,7 +1582,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.assumptions.size());
-    for (const Assumption& assumption : value.assumptions) {
+    for (const Assumption &assumption : value.assumptions) {
       keys.push_back(SortKey{std::string(), std::string(), assumption.id});
     }
     const std::vector<std::size_t> order = CanonicalOrder(keys);
@@ -1600,7 +1598,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.hypotheses.size());
-    for (const Hypothesis& hypothesis : value.hypotheses) {
+    for (const Hypothesis &hypothesis : value.hypotheses) {
       keys.push_back(SortKey{std::string(), std::string(), hypothesis.id});
     }
     const std::vector<std::size_t> order = CanonicalOrder(keys);
@@ -1616,7 +1614,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.unknowns.size());
-    for (const Unknown& unknown : value.unknowns) {
+    for (const Unknown &unknown : value.unknowns) {
       keys.push_back(SortKey{std::string(), std::string(), unknown.id});
     }
     const std::vector<std::size_t> order = CanonicalOrder(keys);
@@ -1632,9 +1630,9 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.edges.size());
-    for (const Edge& edge : value.edges) {
-      keys.push_back(SortKey{std::string(ToString(edge.kind)), std::string(),
-                             edge.id});
+    for (const Edge &edge : value.edges) {
+      keys.push_back(
+          SortKey{std::string(ToString(edge.kind)), std::string(), edge.id});
     }
     const std::vector<std::size_t> order = CanonicalOrder(keys);
     for (const std::size_t index : order) {
@@ -1649,7 +1647,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.paths.size());
-    for (const Path& path : value.paths) {
+    for (const Path &path : value.paths) {
       keys.push_back(
           SortKey{std::string(ToString(path.kind)), std::string(), path.id});
     }
@@ -1666,7 +1664,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.constraints.size());
-    for (const Constraint& constraint : value.constraints) {
+    for (const Constraint &constraint : value.constraints) {
       keys.push_back(SortKey{std::string(), std::string(), constraint.id});
     }
     const std::vector<std::size_t> order = CanonicalOrder(keys);
@@ -1682,7 +1680,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.provenance.size());
-    for (const Provenance& record : value.provenance) {
+    for (const Provenance &record : value.provenance) {
       keys.push_back(SortKey{std::string(), std::string(), record.id});
     }
     const std::vector<std::size_t> order = CanonicalOrder(keys);
@@ -1698,7 +1696,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.proof_obligations.size());
-    for (const ProofObligation& obligation : value.proof_obligations) {
+    for (const ProofObligation &obligation : value.proof_obligations) {
       keys.push_back(SortKey{std::string(ToString(obligation.goal_kind)),
                              std::string(), obligation.id});
     }
@@ -1715,7 +1713,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.summaries.size());
-    for (const SummaryReference& summary : value.summaries) {
+    for (const SummaryReference &summary : value.summaries) {
       // The canonicalizer's key for this family is
       // `SortKey{"", "", summary.id}` — its middle component is empty, because
       // `summary_id` is not part of the order. Inserting it here would make the
@@ -1736,7 +1734,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.dependencies.size());
-    for (const Dependency& dependency : value.dependencies) {
+    for (const Dependency &dependency : value.dependencies) {
       // `SortKey{ToString(kind), "", id}` — the canonicalizer's key, whose
       // empty middle component is reproduced for the same reason as the
       // summaries' above.
@@ -1756,7 +1754,7 @@ Status EirWriter::Run(const EvidenceCase& value) {
   {
     std::vector<SortKey> keys;
     keys.reserve(value.omissions.size());
-    for (const Omission& omission : value.omissions) {
+    for (const Omission &omission : value.omissions) {
       keys.push_back(SortKey{std::string(), std::string(), omission.id});
     }
     const std::vector<std::size_t> order = CanonicalOrder(keys);
@@ -1773,9 +1771,9 @@ Status EirWriter::Run(const EvidenceCase& value) {
   return failed_;
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<std::string> WriteEirText(const EvidenceCase& value,
+StatusOr<std::string> WriteEirText(const EvidenceCase &value,
                                    EirTextStyle style) {
   // The identity gate first. A case that has not been finalized carries no
   // `evidence_id`, and one whose identity is not its recomputed content address
@@ -1812,4 +1810,4 @@ StatusOr<std::string> WriteEirText(const EvidenceCase& value,
   return out;
 }
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence

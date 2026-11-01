@@ -55,15 +55,15 @@ struct WpaExecutionEnvelope {
 // The abstract engine. Each adapter rejects an envelope whose manifest engine
 // identity differs from its own, so a run can never silently switch engines.
 class WpaExecutor {
- public:
+public:
   virtual ~WpaExecutor() = default;
   virtual facts::EngineIdentity identity() const = 0;
   virtual std::string_view toolchain_identity() const = 0;
-  virtual StatusOr<facts::RawWpaEvaluation> Execute(
-      const WpaExecutionEnvelope& input,
-      const WpaExecutionLimits& limits) const = 0;
+  virtual StatusOr<facts::RawWpaEvaluation>
+  Execute(const WpaExecutionEnvelope &input,
+          const WpaExecutionLimits &limits) const = 0;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_WPA_EXECUTOR_H_
+#endif // VERITAS_WPA_WPA_EXECUTOR_H_

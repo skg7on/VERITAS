@@ -53,8 +53,8 @@
 // `core::CanonicalEncode` would *not* catch a path-typed field if one were ever
 // added — it encodes every kind, `TaggedPath` included — so this property rests
 // entirely on the model and is not guarded by anything here. (The executable
-// path-variation test belongs at the M10B-to-EIR assembly boundary, where a real
-// checkout path exists.)
+// path-variation test belongs at the M10B-to-EIR assembly boundary, where a
+// real checkout path exists.)
 //
 // CANONICAL ORDER
 //
@@ -140,8 +140,8 @@ namespace veritas::evidence {
 //
 // Fails only if the value cannot be canonically encoded, which this encoding
 // never produces (it contains no path carrier).
-StatusOr<std::vector<std::byte>> CanonicalEvidenceBytes(
-    const EvidenceCase& value);
+StatusOr<std::vector<std::byte>>
+CanonicalEvidenceBytes(const EvidenceCase &value);
 
 // The content address of `value`: `core::IdKind::kEvidence` over
 // `CanonicalEvidenceBytes(value)`, spelled `evidence:sha256:<digest>`.
@@ -149,7 +149,7 @@ StatusOr<std::vector<std::byte>> CanonicalEvidenceBytes(
 // Does not validate `value`; the bytes it hashes are exactly those
 // `CanonicalEvidenceBytes` returns, so a case and its re-decoded
 // representations agree.
-StatusOr<core::StableId> ComputeEvidenceId(const EvidenceCase& value);
+StatusOr<core::StableId> ComputeEvidenceId(const EvidenceCase &value);
 
 // Validates `value`, computes its identity, and assigns it — in that order,
 // and the assignment happens only after every earlier step succeeded, so a
@@ -159,8 +159,8 @@ StatusOr<core::StableId> ComputeEvidenceId(const EvidenceCase& value);
 // violates the well-formedness contract, and `InvalidArgument` when `value` is
 // null. On success `value->evidence_id` is the freshly computed identity, which
 // replaces any identity the case already carried.
-Status FinalizeEvidenceIdentity(EvidenceCase* value);
+Status FinalizeEvidenceIdentity(EvidenceCase *value);
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EVIDENCE_CANONICALIZER_H_
+#endif // VERITAS_EVIDENCE_EVIDENCE_CANONICALIZER_H_

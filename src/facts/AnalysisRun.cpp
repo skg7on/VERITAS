@@ -23,11 +23,11 @@ namespace veritas::facts {
 
 namespace {
 
-void AppendU8(std::vector<std::byte>& out, std::uint8_t value) {
+void AppendU8(std::vector<std::byte> &out, std::uint8_t value) {
   out.push_back(static_cast<std::byte>(value));
 }
 
-void AppendLenPrefixed(std::vector<std::byte>& out, std::string_view text) {
+void AppendLenPrefixed(std::vector<std::byte> &out, std::string_view text) {
   const std::uint64_t size = text.size();
   for (int i = 7; i >= 0; --i) {
     out.push_back(static_cast<std::byte>((size >> (i * 8)) & 0xFF));
@@ -61,7 +61,7 @@ bool IsRecognizedEngine(EngineIdentity engine) {
   return false;
 }
 
-Status ValidateDescriptor(const AnalysisRunDescriptor& d) {
+Status ValidateDescriptor(const AnalysisRunDescriptor &d) {
   if (d.revision_id.kind != core::IdKind::kRevision) {
     return Status::InvalidArgument("revision id has wrong kind");
   }
@@ -81,12 +81,13 @@ Status ValidateDescriptor(const AnalysisRunDescriptor& d) {
     return Status::InvalidArgument("unrecognized engine identity");
   }
   if (d.engine_toolchain_identity.empty()) {
-    return Status::InvalidArgument("engine toolchain identity must be non-empty");
+    return Status::InvalidArgument(
+        "engine toolchain identity must be non-empty");
   }
   return Status::Ok();
 }
 
-std::vector<std::byte> Canonicalize(const AnalysisRunDescriptor& d) {
+std::vector<std::byte> Canonicalize(const AnalysisRunDescriptor &d) {
   std::vector<std::byte> bytes;
   AppendLenPrefixed(bytes, "veritas.wpa-run.v1");
   AppendLenPrefixed(bytes, core::ToString(d.revision_id));
@@ -102,17 +103,18 @@ std::vector<std::byte> Canonicalize(const AnalysisRunDescriptor& d) {
   return bytes;
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<AnalysisRunManifest> MakeAnalysisRun(AnalysisRunDescriptor descriptor) {
+StatusOr<AnalysisRunManifest>
+MakeAnalysisRun(AnalysisRunDescriptor descriptor) {
   if (Status status = ValidateDescriptor(descriptor); !status.ok()) {
     return status;
   }
   AnalysisRunManifest manifest;
-  static_cast<AnalysisRunDescriptor&>(manifest) = descriptor;
+  static_cast<AnalysisRunDescriptor &>(manifest) = descriptor;
   manifest.run_id =
       core::MakeStableId(core::IdKind::kAnalysisRun, Canonicalize(descriptor));
   return manifest;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts

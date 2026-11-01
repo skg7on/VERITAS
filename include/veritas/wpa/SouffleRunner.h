@@ -37,8 +37,8 @@ extern "C" {
 // -F relation inputs) and writes derived relations and witnesses to
 // `output_dir` (the -D destination). `component` is "reachability" or
 // "memory-effects". Returns 0 on success and a non-zero status otherwise.
-int veritas_souffle_run(const char* component, const char* input_dir,
-                        const char* output_dir, unsigned jobs);
+int veritas_souffle_run(const char *component, const char *input_dir,
+                        const char *output_dir, unsigned jobs);
 
 // --- In-memory component session -------------------------------------------
 //
@@ -67,9 +67,9 @@ enum VeritasSouffleCellKind {
 };
 
 typedef struct {
-  unsigned char kind;         // one of VeritasSouffleCellKind
-  unsigned long long number;  // meaningful when kind is ..._NUMBER
-  const char* symbol;         // meaningful when kind is ..._SYMBOL
+  unsigned char kind;        // one of VeritasSouffleCellKind
+  unsigned long long number; // meaningful when kind is ..._NUMBER
+  const char *symbol;        // meaningful when kind is ..._SYMBOL
 } VeritasSouffleCell;
 
 typedef struct VeritasSouffleSession VeritasSouffleSession;
@@ -77,8 +77,8 @@ typedef struct VeritasSouffleSession VeritasSouffleSession;
 // Called once per row while scanning. Returns 0 to continue, non-zero to stop
 // the scan early (which is not an error). The cell array and every symbol it
 // points at are owned by the runner and valid only for the call.
-typedef int (*VeritasSouffleRowSink)(void* context,
-                                     const VeritasSouffleCell* cells,
+typedef int (*VeritasSouffleRowSink)(void *context,
+                                     const VeritasSouffleCell *cells,
                                      unsigned long long arity);
 
 // Opens a session over one component's compiled program. `jobs` is the worker
@@ -89,8 +89,8 @@ typedef int (*VeritasSouffleRowSink)(void* context,
 // Only the relations the component's rules actually use are present in the
 // compiled program — Souffle eliminates the rest — so a relation the component
 // never mentions is reported as unknown rather than as empty.
-int veritas_souffle_session_open(const char* component, unsigned jobs,
-                                 VeritasSouffleSession** out_session);
+int veritas_souffle_session_open(const char *component, unsigned jobs,
+                                 VeritasSouffleSession **out_session);
 
 // Inserts `row_count` consecutive rows of `arity` cells each into `relation`,
 // which must be an EDB relation of the session's component. `arity` must equal
@@ -102,15 +102,15 @@ int veritas_souffle_session_open(const char* component, unsigned jobs,
 // a failure on a later row leaves the rows before it in the relation. A caller
 // that continues with a session after a failed insert is asking for the rows it
 // already handed over.
-int veritas_souffle_session_insert(VeritasSouffleSession* session,
-                                   const char* relation,
-                                   const VeritasSouffleCell* cells,
+int veritas_souffle_session_insert(VeritasSouffleSession *session,
+                                   const char *relation,
+                                   const VeritasSouffleCell *cells,
                                    unsigned long long arity,
                                    unsigned long long row_count);
 
 // Evaluates the program with I/O disabled: no relation is loaded from or
 // stored to a file.
-int veritas_souffle_session_run(VeritasSouffleSession* session);
+int veritas_souffle_session_run(VeritasSouffleSession *session);
 
 // Walks every row of `relation`, in the engine's iteration order, and calls
 // `sink` once per row. `cell_kinds[i]` is the VeritasSouffleCellKind of column
@@ -118,12 +118,11 @@ int veritas_souffle_session_run(VeritasSouffleSession* session);
 // VERITAS_SOUFFLE_CELL_SYMBOL and every other domain to
 // VERITAS_SOUFFLE_CELL_NUMBER, so the runner never guesses a column's type from
 // its bytes.
-int veritas_souffle_session_scan(VeritasSouffleSession* session,
-                                 const char* relation,
-                                 const unsigned char* cell_kinds,
+int veritas_souffle_session_scan(VeritasSouffleSession *session,
+                                 const char *relation,
+                                 const unsigned char *cell_kinds,
                                  unsigned long long arity,
-                                 VeritasSouffleRowSink sink,
-                                 void* context);
+                                 VeritasSouffleRowSink sink, void *context);
 
 // Drops every row of every relation so the session could evaluate another
 // component. Permanently unimplemented, on purpose.
@@ -137,13 +136,13 @@ int veritas_souffle_session_scan(VeritasSouffleSession* session,
 // next and change derived facts silently. That trade is not worth 0.037 %, so
 // no session is reused: every component execution opens and closes its own and
 // `veritas_souffle_session_reset` remains a stub returning 4.
-int veritas_souffle_session_reset(VeritasSouffleSession* session);
+int veritas_souffle_session_reset(VeritasSouffleSession *session);
 
 // Releases the session and its program instance. Null is accepted.
-void veritas_souffle_session_close(VeritasSouffleSession* session);
+void veritas_souffle_session_close(VeritasSouffleSession *session);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif  // VERITAS_WPA_SOUFFLE_RUNNER_H_
+#endif // VERITAS_WPA_SOUFFLE_RUNNER_H_

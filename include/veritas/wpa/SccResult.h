@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // SccResult.h — the shared SCC convergence/status types for the incremental WPA
-// scheduler. Extracted from the retired FixpointEngine so SccStateRepository and
-// WpaOrchestrator can describe a converged component without the legacy
+// scheduler. Extracted from the retired FixpointEngine so SccStateRepository
+// and WpaOrchestrator can describe a converged component without the legacy
 // FactTuple fact system; derived facts now live in the V2 run repository.
 
 #ifndef VERITAS_WPA_SCC_RESULT_H_
@@ -45,6 +45,6 @@ struct SccResult {
   SccStatus status;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_SCC_RESULT_H_
+#endif // VERITAS_WPA_SCC_RESULT_H_

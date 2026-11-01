@@ -48,12 +48,14 @@ namespace veritas::testing {
 
 // The run every provenance record and the case binding agree on.
 inline constexpr std::string_view kOverflowRunId =
-    "run:sha256:0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5";
+    "run:sha256:"
+    "0d5c1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5";
 
 // A complete, validator-clean EIR V0.1 case. Parsing it must succeed and
 // produce a case whose `evidence_id` is the content address of its semantics
 // alone.
-inline constexpr std::string_view kOverflowEirText = R"EIR(// The DEM-001 overflow case, in the stabilized EIR-T 1.0 text format.
+inline constexpr std::string_view kOverflowEirText =
+    R"EIR(// The DEM-001 overflow case, in the stabilized EIR-T 1.0 text format.
 evidence Overflow_001 {
     schema = "eir.v1";
     level = l1;
@@ -223,7 +225,8 @@ evidence Overflow_001 {
 // no semantic content, so the two documents must produce the same case and the
 // same `EvidenceID`. The writer task shares these so the falsification is
 // asserted once, against one pair of documents.
-inline constexpr std::string_view kOverflowEirTextWithoutLabel = R"EIR(evidence {
+inline constexpr std::string_view kOverflowEirTextWithoutLabel =
+    R"EIR(evidence {
     schema = "eir.v1";
     level = l1;
     state = POSSIBLE_DEFECT;
@@ -388,6 +391,6 @@ inline constexpr std::string_view kOverflowEirTextWithoutLabel = R"EIR(evidence 
 }
 )EIR";
 
-}  // namespace veritas::testing
+} // namespace veritas::testing
 
-#endif  // VERITAS_TESTING_EVIDENCE_EIR_FIXTURE_TEXT_H_
+#endif // VERITAS_TESTING_EVIDENCE_EIR_FIXTURE_TEXT_H_

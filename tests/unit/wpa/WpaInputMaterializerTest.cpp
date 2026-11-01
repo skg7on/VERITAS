@@ -15,9 +15,9 @@
 #include "veritas/wpa/WpaInputMaterializer.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
-#include <cstddef>
 #include <span>
 #include <string>
 #include <string_view>
@@ -74,10 +74,10 @@ v2::FunctionSummary V2Summary(std::string_view name) {
   return summary;
 }
 
-void AddCall(v2::FunctionSummary* summary, std::string_view site,
-             const std::string& resolved_target, v2::DispatchKind dispatch,
+void AddCall(v2::FunctionSummary *summary, std::string_view site,
+             const std::string &resolved_target, v2::DispatchKind dispatch,
              v1::EpistemicState epistemic) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(core::ToString(CallSiteId(site)));
   call->set_callee_symbol(std::string(site));
   call->set_resolved_callee_function_variant_id(resolved_target);
@@ -86,31 +86,30 @@ void AddCall(v2::FunctionSummary* summary, std::string_view site,
   call->set_provenance_ref("test:call");
 }
 
-void AddWrite(v2::FunctionSummary* summary, std::string_view memory) {
-  auto* effect = summary->add_memory_effects();
+void AddWrite(v2::FunctionSummary *summary, std::string_view memory) {
+  auto *effect = summary->add_memory_effects();
   effect->set_kind(v1::EFFECT_KIND_WRITE);
   effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   effect->set_provenance_ref("test:write");
-  auto* location = effect->mutable_location();
+  auto *location = effect->mutable_location();
   location->set_memory_location_id(core::ToString(MemoryId(memory)));
 }
 
 std::size_t CountRows(std::span<const facts::ExecutionRow> edb,
                       facts::RelationId relation) {
   return static_cast<std::size_t>(std::ranges::count_if(
-      edb, [&](const auto& row) { return row.relation == relation; }));
+      edb, [&](const auto &row) { return row.relation == relation; }));
 }
 
-const facts::ExecutionRow* FirstRow(std::span<const facts::ExecutionRow> edb,
+const facts::ExecutionRow *FirstRow(std::span<const facts::ExecutionRow> edb,
                                     facts::RelationId relation) {
   const auto it = std::ranges::find_if(
-      edb, [&](const auto& row) { return row.relation == relation; });
+      edb, [&](const auto &row) { return row.relation == relation; });
   return it == edb.end() ? nullptr : &*it;
 }
 
-void ExpectRootedInputsEqual(
-    std::span<const facts::RootedInputFact> actual,
-    std::span<const facts::RootedInputFact> expected) {
+void ExpectRootedInputsEqual(std::span<const facts::RootedInputFact> actual,
+                             std::span<const facts::RootedInputFact> expected) {
   ASSERT_EQ(actual.size(), expected.size());
   for (std::size_t i = 0; i < actual.size(); ++i) {
     EXPECT_EQ(actual[i].fact, expected[i].fact);
@@ -140,9 +139,9 @@ std::vector<summary::SummaryArtifact> CallSummaryWithMayTargetAndUnknown() {
   return {caller, V2Summary("target")};
 }
 
-WpaMaterializationRequest Request(
-    std::span<const summary::SummaryArtifact> artifacts,
-    WpaComponentKind component, std::string_view root_function) {
+WpaMaterializationRequest
+Request(std::span<const summary::SummaryArtifact> artifacts,
+        WpaComponentKind component, std::string_view root_function) {
   WpaMaterializationRequest request;
   request.semantics = Semantics();
   request.scc_id = SccIdFor(artifacts, root_function);
@@ -155,7 +154,7 @@ WpaMaterializationRequest Request(
 // Writes a throwaway model bundle so the test does not depend on the shipped
 // models, whose symbols no fixture currently exercises.
 class ModelBundleFixture {
- public:
+public:
   ModelBundleFixture() {
     dir_ = std::filesystem::temp_directory_path() /
            ("veritas_materializer_models_" +
@@ -169,6 +168,7 @@ class ModelBundleFixture {
     std::ofstream manifest(dir_ / "models.manifest");
     manifest << "model_bundle_version=models.test\n";
   }
+
   ~ModelBundleFixture() { std::filesystem::remove_all(dir_); }
 
   StatusOr<analysis::semantic::ModelBundle> Load() const {
@@ -176,7 +176,7 @@ class ModelBundleFixture {
                                                  dir_ / "models.manifest");
   }
 
- private:
+private:
   std::filesystem::path dir_;
 };
 
@@ -203,7 +203,7 @@ TEST(WpaInputMaterializerTest, AttributesModeledEffectsToTheCallingMember) {
   // Two model rows for memcpy: a read of source and a write of destination.
   EXPECT_EQ(CountRows(input->edb, facts::RelationId::kModeledEffect), 2u);
 
-  const auto* modeled = FirstRow(input->edb, facts::RelationId::kModeledEffect);
+  const auto *modeled = FirstRow(input->edb, facts::RelationId::kModeledEffect);
   ASSERT_NE(modeled, nullptr);
   // function_id resolves to the caller, not to memcpy.
   auto function = input->mappings.functions.ToStable(
@@ -276,11 +276,13 @@ TEST(WpaInputMaterializerTest, EmitsNoModeledEffectsWithoutABundle) {
   EXPECT_EQ(CountRows(input->edb, facts::RelationId::kModeledEffect), 0u);
 }
 
-TEST(WpaInputMaterializerTest, UnresolvedTargetsDoNotInheritDefiniteCallAuthority) {
+TEST(WpaInputMaterializerTest,
+     UnresolvedTargetsDoNotInheritDefiniteCallAuthority) {
   struct Case {
     v1::EpistemicState source;
     semantic::EpistemicState projected;
   };
+
   const Case cases[] = {
       {v1::EPISTEMIC_STATE_MUST, semantic::EpistemicState::kMay},
       {v1::EPISTEMIC_STATE_MAY, semantic::EpistemicState::kMay},
@@ -288,7 +290,7 @@ TEST(WpaInputMaterializerTest, UnresolvedTargetsDoNotInheritDefiniteCallAuthorit
       {v1::EPISTEMIC_STATE_ASSUMED, semantic::EpistemicState::kUnknown},
       {v1::EPISTEMIC_STATE_UNKNOWN, semantic::EpistemicState::kUnknown},
   };
-  for (const auto& test : cases) {
+  for (const auto &test : cases) {
     SCOPED_TRACE(static_cast<int>(test.source));
     auto caller = V2Summary("caller");
     AddCall(&caller, "external", "", v2::DISPATCH_KIND_EXTERNAL, test.source);
@@ -296,9 +298,10 @@ TEST(WpaInputMaterializerTest, UnresolvedTargetsDoNotInheritDefiniteCallAuthorit
     auto input = WpaInputMaterializer::Build(
         Request(artifacts, WpaComponentKind::kReachability, "caller"));
     ASSERT_TRUE(input.ok()) << input.status().message();
-    const auto* row = FirstRow(input->edb, facts::RelationId::kUnknownCall);
+    const auto *row = FirstRow(input->edb, facts::RelationId::kUnknownCall);
     ASSERT_NE(row, nullptr);
-    EXPECT_EQ(std::get<semantic::EpistemicState>(row->cells[3]), test.projected);
+    EXPECT_EQ(std::get<semantic::EpistemicState>(row->cells[3]),
+              test.projected);
   }
 }
 
@@ -315,7 +318,7 @@ TEST(WpaInputMaterializerTest, EmitsIndirectCallAndExplicitUnknownCall) {
   EXPECT_EQ(CountRows(input->edb, facts::RelationId::kDirectCall), 1u);
   EXPECT_EQ(CountRows(input->edb, facts::RelationId::kUnknownCall), 1u);
 
-  const auto* call = FirstRow(input->edb, facts::RelationId::kDirectCall);
+  const auto *call = FirstRow(input->edb, facts::RelationId::kDirectCall);
   ASSERT_NE(call, nullptr);
   EXPECT_EQ(std::get<semantic::DispatchKind>(call->cells[3]),
             semantic::DispatchKind::kIndirect);
@@ -329,9 +332,9 @@ TEST(WpaInputMaterializerTest, DenseIdsRoundTripToStableIds) {
       Request(artifacts, WpaComponentKind::kReachability, "caller"));
   ASSERT_TRUE(input.ok());
 
-  const auto& functions = input->mappings.functions;
+  const auto &functions = input->mappings.functions;
   ASSERT_FALSE(functions.StableIds().empty());
-  for (const auto& stable : functions.StableIds()) {
+  for (const auto &stable : functions.StableIds()) {
     auto dense = functions.ToDense(stable);
     ASSERT_TRUE(dense.ok());
     auto round_tripped = functions.ToStable(*dense);
@@ -375,7 +378,7 @@ TEST(WpaInputMaterializerTest, MemberBaseFactsAreRootedInputs) {
 
   // One resolved call and one unresolved call.
   ASSERT_EQ(input->local_roots.size(), 2u);
-  for (const auto& root : input->local_roots) {
+  for (const auto &root : input->local_roots) {
     EXPECT_FALSE(root.provenance_ref.empty());
     EXPECT_EQ(root.fact.fact_id.kind, core::IdKind::kFact);
     auto summary_id = core::ParseStableId(root.summary_id);
@@ -410,8 +413,8 @@ TEST(WpaInputMaterializerTest, LogicalInputHashSeparatesComponents) {
   AddCall(&caller, "target", core::ToString(FunctionId("target")),
           v2::DISPATCH_KIND_DIRECT, v1::EPISTEMIC_STATE_MUST);
   AddWrite(&caller, "heap");
-  const std::vector<summary::SummaryArtifact> artifacts = {
-      caller, V2Summary("target")};
+  const std::vector<summary::SummaryArtifact> artifacts = {caller,
+                                                           V2Summary("target")};
 
   auto reachability = WpaInputMaterializer::Build(
       Request(artifacts, WpaComponentKind::kReachability, "caller"));
@@ -429,8 +432,8 @@ TEST(WpaInputMaterializerTest, MemoryComponentEmitsWritesAndCalls) {
   AddCall(&caller, "target", core::ToString(FunctionId("target")),
           v2::DISPATCH_KIND_DIRECT, v1::EPISTEMIC_STATE_MUST);
   AddWrite(&caller, "heap");
-  const std::vector<summary::SummaryArtifact> artifacts = {
-      caller, V2Summary("target")};
+  const std::vector<summary::SummaryArtifact> artifacts = {caller,
+                                                           V2Summary("target")};
 
   auto input = WpaInputMaterializer::Build(
       Request(artifacts, WpaComponentKind::kMemoryEffects, "caller"));
@@ -472,8 +475,7 @@ TEST(WpaInputMaterializerTest,
   ASSERT_TRUE(indexed.ok()) << indexed.status().message();
   EXPECT_EQ(indexed->edb, fallback->edb);
   ExpectRootedInputsEqual(indexed->local_roots, fallback->local_roots);
-  ExpectRootedInputsEqual(indexed->successor_roots,
-                          fallback->successor_roots);
+  ExpectRootedInputsEqual(indexed->successor_roots, fallback->successor_roots);
   EXPECT_EQ(indexed->logical_input_hash, fallback->logical_input_hash);
   EXPECT_TRUE(std::ranges::equal(indexed->mappings.functions.StableIds(),
                                  fallback->mappings.functions.StableIds()));
@@ -501,5 +503,5 @@ TEST(WpaInputMaterializerTest, RejectsDuplicateSummaryFunctionIdentity) {
   EXPECT_EQ(index.status().message(), "duplicate summary function identity");
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

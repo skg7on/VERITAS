@@ -58,10 +58,10 @@ AnalysisManifest MakeManifest(std::vector<TranslationUnitCommand> units) {
 }
 
 TEST(AnalysisManifestTest, TranslationUnitOrderDoesNotChangeCanonicalBytes) {
-  auto first = MakeManifest({MakeTu("b.cpp", "hash-b"),
-                             MakeTu("a.cpp", "hash-a")});
-  auto second = MakeManifest({MakeTu("a.cpp", "hash-a"),
-                              MakeTu("b.cpp", "hash-b")});
+  auto first =
+      MakeManifest({MakeTu("b.cpp", "hash-b"), MakeTu("a.cpp", "hash-a")});
+  auto second =
+      MakeManifest({MakeTu("a.cpp", "hash-a"), MakeTu("b.cpp", "hash-b")});
   EXPECT_EQ(ToCanonicalBytes(first), ToCanonicalBytes(second));
   EXPECT_EQ(ToDiagnosticJson(first), ToDiagnosticJson(second));
 }
@@ -106,8 +106,8 @@ TEST(AnalysisManifestTest, EmptyManifestIsStable) {
 }
 
 TEST(AnalysisManifestTest, DiagnosticJsonKeysAreSortedAndStable) {
-  auto manifest = MakeManifest({MakeTu("a.cpp", "hash-a"),
-                                MakeTu("b.cpp", "hash-b")});
+  auto manifest =
+      MakeManifest({MakeTu("a.cpp", "hash-a"), MakeTu("b.cpp", "hash-b")});
   const auto json = ToDiagnosticJson(manifest);
   const auto compiler_id_pos = json.find("\"compiler_id\"");
   const auto compiler_version_pos = json.find("\"compiler_version\"");
@@ -116,5 +116,5 @@ TEST(AnalysisManifestTest, DiagnosticJsonKeysAreSortedAndStable) {
   EXPECT_LT(compiler_id_pos, compiler_version_pos);
 }
 
-}  // namespace
-}  // namespace veritas::build
+} // namespace
+} // namespace veritas::build

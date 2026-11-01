@@ -52,9 +52,9 @@ core::StableId ValueId(std::string_view name) {
 }
 
 SemanticRow Reachable(std::string_view from, std::string_view to) {
-  return SemanticRow{RelationId::kReachableCall,
-                     {FunctionId(from), FunctionId(to),
-                      sem::EpistemicState::kMay}};
+  return SemanticRow{
+      RelationId::kReachableCall,
+      {FunctionId(from), FunctionId(to), sem::EpistemicState::kMay}};
 }
 
 SemanticRow DirectCall(std::string_view from, std::string_view to) {
@@ -64,13 +64,13 @@ SemanticRow DirectCall(std::string_view from, std::string_view to) {
                       sem::DispatchKind::kDirect, sem::EpistemicState::kMay}};
 }
 
-RootedInputFact Root(const SemanticRow& row) {
+RootedInputFact Root(const SemanticRow &row) {
   auto fact = MakeFact(row);
   return RootedInputFact{.fact = *fact, .provenance_ref = "test:root"};
 }
 
-WitnessEdge Edge(const SemanticRow& result, std::string_view rule,
-                 const SemanticRow& input, std::uint32_t ordinal) {
+WitnessEdge Edge(const SemanticRow &result, std::string_view rule,
+                 const SemanticRow &input, std::uint32_t ordinal) {
   return WitnessEdge{.result = SemanticKey{result},
                      .rule_id = std::string(rule),
                      .input = SemanticKey{input},
@@ -79,9 +79,9 @@ WitnessEdge Edge(const SemanticRow& result, std::string_view rule,
 
 // One edge of a named derivation. Distinct derivation keys model the distinct
 // Datalog firings an engine may report for the same result and rule.
-WitnessEdge Derivation(const SemanticRow& result, std::string_view rule,
+WitnessEdge Derivation(const SemanticRow &result, std::string_view rule,
                        std::string_view derivation_key,
-                       const SemanticRow& input, std::uint32_t ordinal) {
+                       const SemanticRow &input, std::uint32_t ordinal) {
   return WitnessEdge{.result = SemanticKey{result},
                      .rule_id = std::string(rule),
                      .derivation_key = std::string(derivation_key),
@@ -92,10 +92,9 @@ WitnessEdge Derivation(const SemanticRow& result, std::string_view rule,
 // A local flow m -> m inside `function`.
 SemanticRow LocalFlow(std::string_view function, std::string_view from,
                       std::string_view to) {
-  return SemanticRow{
-      RelationId::kLocalFlow,
-      {FunctionId(function), ValueId(from), ValueId(to), std::string("local"),
-       sem::EpistemicState::kMay}};
+  return SemanticRow{RelationId::kLocalFlow,
+                     {FunctionId(function), ValueId(from), ValueId(to),
+                      std::string("local"), sem::EpistemicState::kMay}};
 }
 
 // A global flow `from` -> `to` at MAY warrant.
@@ -124,8 +123,8 @@ SemanticRow Coverage(std::string_view scope, std::uint64_t complete) {
                       complete, sem::EpistemicState::kMust}};
 }
 
-CanonicalizationRequest RequestFor(const std::vector<RootedInputFact>& roots,
-                                   const RawWpaEvaluation& raw) {
+CanonicalizationRequest RequestFor(const std::vector<RootedInputFact> &roots,
+                                   const RawWpaEvaluation &raw) {
   CanonicalizationRequest request;
   request.local_roots = roots;
   request.evaluation = &raw;
@@ -166,8 +165,7 @@ TEST(ResultCanonicalizerTest, RejectsOutOfRangeOrdinal) {
   const std::vector<RootedInputFact> roots = {Root(DirectCall("f", "g"))};
   RawWpaEvaluation raw;
   raw.results = {Reachable("f", "g")};
-  raw.witnesses = {
-      Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 1)};
+  raw.witnesses = {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 1)};
 
   auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
   ASSERT_FALSE(result.ok());
@@ -216,53 +214,53 @@ TEST(ResultCanonicalizerTest, RejectsCyclicUnrootedWitnesses) {
   // The two candidate proofs of R(u5,q) that tie on cost are emitted with the
   // later-sorting derivation key first, so only an ordering on the keys
   // themselves selects "two_step" over "two_step_other".
-  chained.witnesses = {
-      Derivation(Reachable("u1", "q"), kDirect, "one", DirectCall("u1", "q"), 0),
-      Derivation(Reachable("u2", "q"), kTransitive, "two",
-                 DirectCall("u2", "u1"), 0),
-      Derivation(Reachable("u2", "q"), kTransitive, "two",
-                 Reachable("u1", "q"), 1),
-      Derivation(Reachable("u3", "q"), kTransitive, "three",
-                 DirectCall("u3", "u2"), 0),
-      Derivation(Reachable("u3", "q"), kTransitive, "three",
-                 Reachable("u2", "q"), 1),
-      Derivation(Reachable("u4", "q"), kTransitive, "four",
-                 DirectCall("u4", "u3"), 0),
-      Derivation(Reachable("u4", "q"), kTransitive, "four",
-                 Reachable("u3", "q"), 1),
-      Derivation(Reachable("u5", "q"), kTransitive, "long",
-                 DirectCall("u5", "u4"), 0),
-      Derivation(Reachable("u5", "q"), kTransitive, "long",
-                 Reachable("u4", "q"), 1),
-      Derivation(Reachable("u5", "q"), kTransitive, "two_step_other",
-                 DirectCall("u5", "zz"), 0),
-      Derivation(Reachable("u5", "q"), kTransitive, "two_step_other",
-                 Reachable("u3", "q"), 1),
-      Derivation(Reachable("u5", "q"), kTransitive, "two_step",
-                 DirectCall("u5", "u3"), 0),
-      Derivation(Reachable("u5", "q"), kTransitive, "two_step",
-                 Reachable("u3", "q"), 1),
-      Derivation(Reachable("g", "h"), kTransitive, "chain",
-                 DirectCall("g", "u5"), 0),
-      Derivation(Reachable("g", "h"), kTransitive, "chain",
-                 Reachable("u5", "q"), 1),
-      Derivation(Reachable("f", "h"), kTransitive, "loop_a",
-                 DirectCall("f", "g"), 0),
-      Derivation(Reachable("f", "h"), kTransitive, "loop_a",
-                 Reachable("g", "h"), 1),
-      Derivation(Reachable("g", "h"), kTransitive, "loop_b",
-                 DirectCall("g", "f"), 0),
-      Derivation(Reachable("g", "h"), kTransitive, "loop_b",
-                 Reachable("f", "h"), 1)};
+  chained.witnesses = {Derivation(Reachable("u1", "q"), kDirect, "one",
+                                  DirectCall("u1", "q"), 0),
+                       Derivation(Reachable("u2", "q"), kTransitive, "two",
+                                  DirectCall("u2", "u1"), 0),
+                       Derivation(Reachable("u2", "q"), kTransitive, "two",
+                                  Reachable("u1", "q"), 1),
+                       Derivation(Reachable("u3", "q"), kTransitive, "three",
+                                  DirectCall("u3", "u2"), 0),
+                       Derivation(Reachable("u3", "q"), kTransitive, "three",
+                                  Reachable("u2", "q"), 1),
+                       Derivation(Reachable("u4", "q"), kTransitive, "four",
+                                  DirectCall("u4", "u3"), 0),
+                       Derivation(Reachable("u4", "q"), kTransitive, "four",
+                                  Reachable("u3", "q"), 1),
+                       Derivation(Reachable("u5", "q"), kTransitive, "long",
+                                  DirectCall("u5", "u4"), 0),
+                       Derivation(Reachable("u5", "q"), kTransitive, "long",
+                                  Reachable("u4", "q"), 1),
+                       Derivation(Reachable("u5", "q"), kTransitive,
+                                  "two_step_other", DirectCall("u5", "zz"), 0),
+                       Derivation(Reachable("u5", "q"), kTransitive,
+                                  "two_step_other", Reachable("u3", "q"), 1),
+                       Derivation(Reachable("u5", "q"), kTransitive, "two_step",
+                                  DirectCall("u5", "u3"), 0),
+                       Derivation(Reachable("u5", "q"), kTransitive, "two_step",
+                                  Reachable("u3", "q"), 1),
+                       Derivation(Reachable("g", "h"), kTransitive, "chain",
+                                  DirectCall("g", "u5"), 0),
+                       Derivation(Reachable("g", "h"), kTransitive, "chain",
+                                  Reachable("u5", "q"), 1),
+                       Derivation(Reachable("f", "h"), kTransitive, "loop_a",
+                                  DirectCall("f", "g"), 0),
+                       Derivation(Reachable("f", "h"), kTransitive, "loop_a",
+                                  Reachable("g", "h"), 1),
+                       Derivation(Reachable("g", "h"), kTransitive, "loop_b",
+                                  DirectCall("g", "f"), 0),
+                       Derivation(Reachable("g", "h"), kTransitive, "loop_b",
+                                  Reachable("f", "h"), 1)};
 
   auto chained_result =
       ResultCanonicalizer::Canonicalize(RequestFor(chained_roots, chained));
   ASSERT_TRUE(chained_result.ok()) << chained_result.status().message();
   EXPECT_EQ(chained_result->facts.size(), 7u);
 
-  auto proof_of = [&](const SemanticRow& result) {
+  auto proof_of = [&](const SemanticRow &result) {
     std::vector<WitnessEdge> proof;
-    for (const auto& edge : chained_result->witnesses) {
+    for (const auto &edge : chained_result->witnesses) {
       if (edge.result == SemanticKey{result})
         proof.push_back(edge);
     }
@@ -271,30 +269,29 @@ TEST(ResultCanonicalizerTest, RejectsCyclicUnrootedWitnesses) {
   // The two-step proof, not the four-step one, and between the two equally
   // cheap candidates the one whose derivation key sorts first. The loop's own
   // derivation of R(g,h) costs more than the chain's and is not selected.
-  EXPECT_EQ(proof_of(Reachable("u5", "q")),
-            (std::vector<WitnessEdge>{
-                Edge(Reachable("u5", "q"), kTransitive, DirectCall("u5", "u3"),
-                     0),
-                Edge(Reachable("u5", "q"), kTransitive, Reachable("u3", "q"),
-                     1)}));
-  EXPECT_EQ(proof_of(Reachable("g", "h")),
-            (std::vector<WitnessEdge>{
-                Edge(Reachable("g", "h"), kTransitive, DirectCall("g", "u5"),
-                     0),
-                Edge(Reachable("g", "h"), kTransitive, Reachable("u5", "q"),
-                     1)}));
+  EXPECT_EQ(
+      proof_of(Reachable("u5", "q")),
+      (std::vector<WitnessEdge>{
+          Edge(Reachable("u5", "q"), kTransitive, DirectCall("u5", "u3"), 0),
+          Edge(Reachable("u5", "q"), kTransitive, Reachable("u3", "q"), 1)}));
+  EXPECT_EQ(
+      proof_of(Reachable("g", "h")),
+      (std::vector<WitnessEdge>{
+          Edge(Reachable("g", "h"), kTransitive, DirectCall("g", "u5"), 0),
+          Edge(Reachable("g", "h"), kTransitive, Reachable("u5", "q"), 1)}));
 
   // Neither the selected proofs nor the hashes may depend on the order the
   // engine emitted its witness edges in.
   RawWpaEvaluation chained_reversed = chained;
   std::ranges::reverse(chained_reversed.witnesses);
-  auto reversed_result =
-      ResultCanonicalizer::Canonicalize(RequestFor(chained_roots, chained_reversed));
+  auto reversed_result = ResultCanonicalizer::Canonicalize(
+      RequestFor(chained_roots, chained_reversed));
   ASSERT_TRUE(reversed_result.ok()) << reversed_result.status().message();
   EXPECT_EQ(reversed_result->facts, chained_result->facts);
   EXPECT_EQ(reversed_result->witnesses, chained_result->witnesses);
   EXPECT_EQ(reversed_result->fixpoint_hash, chained_result->fixpoint_hash);
 }
+
 TEST(ResultCanonicalizerTest, SelectsShortestProofDeterministically) {
   const std::vector<RootedInputFact> roots = {Root(DirectCall("f", "g")),
                                               Root(DirectCall("g", "h")),
@@ -328,8 +325,8 @@ TEST(ResultCanonicalizerTest, SelectsShortestProofDeterministically) {
 
   // Reachable("f","h") must be proved by the single direct edge, not the
   // two-edge transitive derivation.
-  const auto chosen = std::ranges::count_if(
-      first->witnesses, [&](const WitnessEdge& edge) {
+  const auto chosen =
+      std::ranges::count_if(first->witnesses, [&](const WitnessEdge &edge) {
         return edge.result == SemanticKey{Reachable("f", "h")};
       });
   EXPECT_EQ(chosen, 1);
@@ -342,27 +339,30 @@ TEST(ResultCanonicalizerTest, SelectsShortestProofDeterministically) {
   // encoding length-prefixes every field, so the shorter "7" precedes "-7". The
   // gap cell holds the numbers 7 and 10, which the same length prefix orders
   // the same way.
-  const std::vector<RootedInputFact> coverage_roots = {Root(UnresolvedCall("f"))};
+  const std::vector<RootedInputFact> coverage_roots = {
+      Root(UnresolvedCall("f"))};
   const SemanticRow bare = Coverage("7", 7);
   const SemanticRow negative = Coverage("-7", 7);
   const SemanticRow wider = Coverage("-7", 10);
 
   RawWpaEvaluation coverage_forward;
   coverage_forward.results = {bare, negative, wider};
-  coverage_forward.witnesses = {Edge(bare, kCoverage, UnresolvedCall("f"), 0),
-                                Edge(negative, kCoverage, UnresolvedCall("f"), 0),
-                                Edge(wider, kCoverage, UnresolvedCall("f"), 0)};
+  coverage_forward.witnesses = {
+      Edge(bare, kCoverage, UnresolvedCall("f"), 0),
+      Edge(negative, kCoverage, UnresolvedCall("f"), 0),
+      Edge(wider, kCoverage, UnresolvedCall("f"), 0)};
 
   RawWpaEvaluation coverage_reverse;
   coverage_reverse.results = {wider, negative, bare};
-  coverage_reverse.witnesses = {Edge(wider, kCoverage, UnresolvedCall("f"), 0),
-                                Edge(negative, kCoverage, UnresolvedCall("f"), 0),
-                                Edge(bare, kCoverage, UnresolvedCall("f"), 0)};
+  coverage_reverse.witnesses = {
+      Edge(wider, kCoverage, UnresolvedCall("f"), 0),
+      Edge(negative, kCoverage, UnresolvedCall("f"), 0),
+      Edge(bare, kCoverage, UnresolvedCall("f"), 0)};
 
-  auto coverage_first =
-      ResultCanonicalizer::Canonicalize(RequestFor(coverage_roots, coverage_forward));
-  auto coverage_second =
-      ResultCanonicalizer::Canonicalize(RequestFor(coverage_roots, coverage_reverse));
+  auto coverage_first = ResultCanonicalizer::Canonicalize(
+      RequestFor(coverage_roots, coverage_forward));
+  auto coverage_second = ResultCanonicalizer::Canonicalize(
+      RequestFor(coverage_roots, coverage_reverse));
   ASSERT_TRUE(coverage_first.ok()) << coverage_first.status().message();
   ASSERT_TRUE(coverage_second.ok()) << coverage_second.status().message();
   EXPECT_EQ(coverage_first->facts, coverage_second->facts);
@@ -397,9 +397,8 @@ TEST(ResultCanonicalizerTest, RejectsConflictingOrdinal) {
                                               Root(DirectCall("g", "h"))};
   RawWpaEvaluation raw;
   raw.results = {Reachable("f", "g")};
-  raw.witnesses = {
-      Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0),
-      Edge(Reachable("f", "g"), kDirect, DirectCall("g", "h"), 0)};
+  raw.witnesses = {Edge(Reachable("f", "g"), kDirect, DirectCall("f", "g"), 0),
+                   Edge(Reachable("f", "g"), kDirect, DirectCall("g", "h"), 0)};
 
   auto result = ResultCanonicalizer::Canonicalize(RequestFor(roots, raw));
   EXPECT_FALSE(result.ok());
@@ -435,8 +434,8 @@ TEST(ResultCanonicalizerTest, AcceptsSelfJoiningDerivationSharingOneInput) {
   ASSERT_TRUE(result.ok()) << result.status().message();
 
   // The base proof is the cheaper one and must be the selected proof.
-  const auto chosen = std::ranges::count_if(
-      result->witnesses, [&](const WitnessEdge& edge) {
+  const auto chosen =
+      std::ranges::count_if(result->witnesses, [&](const WitnessEdge &edge) {
         return edge.result == SemanticKey{self_flow};
       });
   EXPECT_EQ(chosen, 1);
@@ -463,8 +462,10 @@ TEST(ResultCanonicalizerTest, WitnessOnlyChangeLeavesExternalHashStable) {
       Edge(Reachable("f", "h"), kTransitive, Reachable("g", "h"), 1),
       Edge(Reachable("g", "h"), kDirect, DirectCall("g", "h"), 0)};
 
-  auto first = ResultCanonicalizer::Canonicalize(RequestFor(roots, short_proof));
-  auto second = ResultCanonicalizer::Canonicalize(RequestFor(roots, long_proof));
+  auto first =
+      ResultCanonicalizer::Canonicalize(RequestFor(roots, short_proof));
+  auto second =
+      ResultCanonicalizer::Canonicalize(RequestFor(roots, long_proof));
   ASSERT_TRUE(first.ok());
   ASSERT_TRUE(second.ok());
 
@@ -474,12 +475,12 @@ TEST(ResultCanonicalizerTest, WitnessOnlyChangeLeavesExternalHashStable) {
   same_facts_other_proof.results = {Reachable("f", "h")};
   same_facts_other_proof.witnesses = {
       Edge(Reachable("f", "h"), kDirect, DirectCall("f", "h"), 0)};
-  auto third =
-      ResultCanonicalizer::Canonicalize(RequestFor(roots, same_facts_other_proof));
+  auto third = ResultCanonicalizer::Canonicalize(
+      RequestFor(roots, same_facts_other_proof));
   ASSERT_TRUE(third.ok());
   EXPECT_EQ(first->external_hash, third->external_hash);
   EXPECT_NE(first->external_hash, second->external_hash);
 }
 
-}  // namespace
-}  // namespace veritas::facts
+} // namespace
+} // namespace veritas::facts

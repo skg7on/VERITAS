@@ -38,25 +38,25 @@ namespace sem = analysis::semantic;
 
 constexpr std::string_view kResultMagic = "veritas.wpa-result.v1";
 
-void AppendString(std::string* out, std::string_view value) {
+void AppendString(std::string *out, std::string_view value) {
   std::uint64_t size = value.size();
-  out->append(reinterpret_cast<const char*>(&size), sizeof(size));
+  out->append(reinterpret_cast<const char *>(&size), sizeof(size));
   out->append(value);
 }
 
-void AppendU64(std::string* out, std::uint64_t value) {
-  out->append(reinterpret_cast<const char*>(&value), sizeof(value));
+void AppendU64(std::string *out, std::uint64_t value) {
+  out->append(reinterpret_cast<const char *>(&value), sizeof(value));
 }
 
-void AppendU32(std::string* out, std::uint32_t value) {
-  out->append(reinterpret_cast<const char*>(&value), sizeof(value));
+void AppendU32(std::string *out, std::uint32_t value) {
+  out->append(reinterpret_cast<const char *>(&value), sizeof(value));
 }
 
 // Serializes one semantic cell. The tag is the variant index; a stable ID is
 // carried as its canonical text.
-void AppendCell(std::string* out, const facts::SemanticCellValue& cell) {
+void AppendCell(std::string *out, const facts::SemanticCellValue &cell) {
   std::visit(
-      [&](const auto& value) {
+      [&](const auto &value) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, core::StableId>) {
           AppendU32(out, 0);
@@ -80,34 +80,34 @@ void AppendCell(std::string* out, const facts::SemanticCellValue& cell) {
           AppendU32(out, 6);
           AppendU64(out, static_cast<std::uint64_t>(value));
         } else {
-          AppendU32(out, 7);  // sem::EpistemicState
+          AppendU32(out, 7); // sem::EpistemicState
           AppendU64(out, static_cast<std::uint64_t>(value));
         }
       },
       cell);
 }
 
-void AppendRow(std::string* out, const facts::SemanticRow& row) {
+void AppendRow(std::string *out, const facts::SemanticRow &row) {
   AppendU32(out, static_cast<std::uint32_t>(row.relation));
   AppendU32(out, static_cast<std::uint32_t>(row.cells.size()));
-  for (const auto& cell : row.cells) {
+  for (const auto &cell : row.cells) {
     AppendCell(out, cell);
   }
 }
 
-void AppendFact(std::string* out, const facts::AnalysisFact& fact) {
+void AppendFact(std::string *out, const facts::AnalysisFact &fact) {
   AppendString(out, core::ToString(fact.fact_id));
   AppendRow(out, fact.row);
 }
 
-void AppendWitness(std::string* out, const facts::WitnessEdge& edge) {
+void AppendWitness(std::string *out, const facts::WitnessEdge &edge) {
   AppendRow(out, edge.result.row);
   AppendString(out, edge.rule_id);
   AppendRow(out, edge.input.row);
   AppendU32(out, edge.input_ordinal);
 }
 
-std::string SerializeResult(const WpaComponentResult& result) {
+std::string SerializeResult(const WpaComponentResult &result) {
   std::string out(kResultMagic);
   AppendString(&out, core::ToString(result.scc_id));
   AppendU32(&out, static_cast<std::uint32_t>(result.component));
@@ -115,15 +115,15 @@ std::string SerializeResult(const WpaComponentResult& result) {
   AppendString(&out, result.fixpoint_hash);
   AppendString(&out, result.external_hash);
   AppendU32(&out, static_cast<std::uint32_t>(result.facts.size()));
-  for (const auto& fact : result.facts) {
+  for (const auto &fact : result.facts) {
     AppendFact(&out, fact);
   }
   AppendU32(&out, static_cast<std::uint32_t>(result.witnesses.size()));
-  for (const auto& edge : result.witnesses) {
+  for (const auto &edge : result.witnesses) {
     AppendWitness(&out, edge);
   }
   AppendU32(&out, static_cast<std::uint32_t>(result.diagnostics.size()));
-  for (const auto& diagnostic : result.diagnostics) {
+  for (const auto &diagnostic : result.diagnostics) {
     AppendString(&out, diagnostic);
   }
   return out;
@@ -132,7 +132,7 @@ std::string SerializeResult(const WpaComponentResult& result) {
 // ---- Deserialization. ----
 
 class Reader {
- public:
+public:
   explicit Reader(std::string_view data) : data_(data) {}
 
   StatusOr<std::string_view> ReadString() {
@@ -170,79 +170,76 @@ class Reader {
     return value;
   }
 
- private:
+private:
   std::string_view data_;
   std::size_t pos_ = 0;
 };
 
-StatusOr<facts::SemanticCellValue> ReadCell(Reader* reader) {
+StatusOr<facts::SemanticCellValue> ReadCell(Reader *reader) {
   auto tag = reader->ReadU32();
   if (!tag.ok()) {
     return tag.status();
   }
   switch (*tag) {
-    case 0: {
-      auto text = reader->ReadString();
-      if (!text.ok()) {
-        return text.status();
-      }
-      auto id = core::ParseStableId(*text);
-      if (!id.ok()) {
-        return id.status();
-      }
-      return facts::SemanticCellValue{std::move(*id)};
+  case 0: {
+    auto text = reader->ReadString();
+    if (!text.ok()) {
+      return text.status();
     }
-    case 1: {
-      auto value = reader->ReadU64();
-      if (!value.ok()) {
-        return value.status();
-      }
-      return facts::SemanticCellValue{static_cast<std::int64_t>(*value)};
+    auto id = core::ParseStableId(*text);
+    if (!id.ok()) {
+      return id.status();
     }
-    case 2: {
-      auto value = reader->ReadU64();
-      if (!value.ok()) {
-        return value.status();
-      }
-      return facts::SemanticCellValue{*value};
+    return facts::SemanticCellValue{std::move(*id)};
+  }
+  case 1: {
+    auto value = reader->ReadU64();
+    if (!value.ok()) {
+      return value.status();
     }
-    case 3: {
-      auto text = reader->ReadString();
-      if (!text.ok()) {
-        return text.status();
-      }
-      return facts::SemanticCellValue{std::string(*text)};
+    return facts::SemanticCellValue{static_cast<std::int64_t>(*value)};
+  }
+  case 2: {
+    auto value = reader->ReadU64();
+    if (!value.ok()) {
+      return value.status();
     }
+    return facts::SemanticCellValue{*value};
+  }
+  case 3: {
+    auto text = reader->ReadString();
+    if (!text.ok()) {
+      return text.status();
+    }
+    return facts::SemanticCellValue{std::string(*text)};
+  }
+  case 4:
+  case 5:
+  case 6:
+  case 7: {
+    auto value = reader->ReadU64();
+    if (!value.ok()) {
+      return value.status();
+    }
+    const auto ordinal = static_cast<std::uint8_t>(*value);
+    switch (*tag) {
     case 4:
+      return facts::SemanticCellValue{static_cast<sem::DispatchKind>(ordinal)};
     case 5:
+      return facts::SemanticCellValue{static_cast<sem::AliasKind>(ordinal)};
     case 6:
-    case 7: {
-      auto value = reader->ReadU64();
-      if (!value.ok()) {
-        return value.status();
-      }
-      const auto ordinal = static_cast<std::uint8_t>(*value);
-      switch (*tag) {
-        case 4:
-          return facts::SemanticCellValue{
-              static_cast<sem::DispatchKind>(ordinal)};
-        case 5:
-          return facts::SemanticCellValue{
-              static_cast<sem::AliasKind>(ordinal)};
-        case 6:
-          return facts::SemanticCellValue{
-              static_cast<sem::ByteRangeKind>(ordinal)};
-        default:
-          return facts::SemanticCellValue{
-              static_cast<sem::EpistemicState>(ordinal)};
-      }
-    }
+      return facts::SemanticCellValue{static_cast<sem::ByteRangeKind>(ordinal)};
     default:
-      return Status::InvalidArgument("result cache cell has an unknown tag");
+      return facts::SemanticCellValue{
+          static_cast<sem::EpistemicState>(ordinal)};
+    }
+  }
+  default:
+    return Status::InvalidArgument("result cache cell has an unknown tag");
   }
 }
 
-StatusOr<facts::SemanticRow> ReadRow(Reader* reader) {
+StatusOr<facts::SemanticRow> ReadRow(Reader *reader) {
   auto relation = reader->ReadU32();
   if (!relation.ok()) {
     return relation.status();
@@ -264,7 +261,7 @@ StatusOr<facts::SemanticRow> ReadRow(Reader* reader) {
   return row;
 }
 
-StatusOr<facts::AnalysisFact> ReadFact(Reader* reader) {
+StatusOr<facts::AnalysisFact> ReadFact(Reader *reader) {
   auto id_text = reader->ReadString();
   if (!id_text.ok()) {
     return id_text.status();
@@ -283,7 +280,7 @@ StatusOr<facts::AnalysisFact> ReadFact(Reader* reader) {
   return fact;
 }
 
-StatusOr<facts::WitnessEdge> ReadWitness(Reader* reader) {
+StatusOr<facts::WitnessEdge> ReadWitness(Reader *reader) {
   auto result = ReadRow(reader);
   if (!result.ok()) {
     return result.status();
@@ -394,7 +391,7 @@ std::vector<std::byte> ToBytes(std::string_view text) {
   return bytes;
 }
 
-}  // namespace
+} // namespace
 
 namespace {
 
@@ -402,7 +399,7 @@ namespace {
 // and including its VALUES keyword plus the column count `BulkInsertBatcher`
 // appends value tuples for. The conflict rule is part of each statement, so a
 // batched commit resolves a duplicate exactly as a per-component commit did.
-constexpr const char* kComponentCacheInsertPrefix =
+constexpr const char *kComponentCacheInsertPrefix =
     "INSERT OR IGNORE INTO wpa_component_result_cache_v2 "
     "(result_cache_key, logical_input_hash, engine_toolchain_identity, "
     " relation_schema_version, rule_bundle_version, model_bundle_version, "
@@ -410,17 +407,17 @@ constexpr const char* kComponentCacheInsertPrefix =
     "VALUES";
 constexpr std::size_t kComponentCacheColumns = 9;
 
-constexpr const char* kComponentStateInsertPrefix =
+constexpr const char *kComponentStateInsertPrefix =
     "INSERT OR REPLACE INTO wpa_component_states_v2 "
     "(run_id, scc_id, component_kind, logical_input_hash, fixpoint_hash, "
     " external_hash, result_cache_key, result_object_key, status, diagnostics) "
     "VALUES";
 constexpr std::size_t kComponentStateColumns = 10;
 
-}  // namespace
+} // namespace
 
 std::string ResultCacheDescriptor::Encode() const {
-  auto append_field = [](std::string* out, std::string_view value) {
+  auto append_field = [](std::string *out, std::string_view value) {
     out->append(std::to_string(value.size()));
     out->push_back(':');
     out->append(value);
@@ -446,9 +443,10 @@ std::string ResultCacheDescriptor::Key() const {
       std::as_bytes(std::span(encoded.data(), encoded.size()))));
 }
 
-ResultCacheDescriptor MakeResultCacheDescriptor(
-    const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
-    std::string_view logical_input_hash) {
+ResultCacheDescriptor
+MakeResultCacheDescriptor(const facts::AnalysisRunManifest &run,
+                          const WpaComponentKey &key,
+                          std::string_view logical_input_hash) {
   ResultCacheDescriptor descriptor;
   descriptor.engine = run.engine;
   descriptor.engine_toolchain_identity = run.engine_toolchain_identity;
@@ -470,17 +468,16 @@ WpaRunRepository::WpaRunRepository(
     : metadata_store_(std::move(store)),
       component_results_(std::move(results)) {}
 
-WpaRunRepository::WpaRunRepository(WpaRunRepository&&) noexcept = default;
-WpaRunRepository& WpaRunRepository::operator=(WpaRunRepository&&) noexcept =
-    default;
+WpaRunRepository::WpaRunRepository(WpaRunRepository &&) noexcept = default;
+WpaRunRepository &
+WpaRunRepository::operator=(WpaRunRepository &&) noexcept = default;
 
-StatusOr<WpaRunRepository> WpaRunRepository::Open(
-    const std::filesystem::path& db_path) {
+StatusOr<WpaRunRepository>
+WpaRunRepository::Open(const std::filesystem::path &db_path) {
   std::error_code ec;
   std::filesystem::create_directories(db_path, ec);
   if (ec) {
-    return Status::Internal("cannot create WPA run directory: " +
-                            ec.message());
+    return Status::Internal("cannot create WPA run directory: " + ec.message());
   }
   auto store = summarydb::MetadataStore::Open(db_path / "metadata.db");
   if (!store.ok()) {
@@ -498,7 +495,7 @@ StatusOr<WpaRunRepository> WpaRunRepository::Open(
   return WpaRunRepository(std::move(*store), std::move(*results));
 }
 
-Status WpaRunRepository::BeginRun(const facts::AnalysisRunManifest& run) {
+Status WpaRunRepository::BeginRun(const facts::AnalysisRunManifest &run) {
   const std::string run_id = core::ToString(run.run_id);
   const std::string revision_id = core::ToString(run.revision_id);
   const std::string build_variant_id = core::ToString(run.build_variant_id);
@@ -512,17 +509,18 @@ Status WpaRunRepository::BeginRun(const facts::AnalysisRunManifest& run) {
       {run_id, revision_id, build_variant_id, run.summary_schema_version,
        run.relation_schema_version, run.rule_bundle_version,
        run.model_bundle_version, run.svf_configuration_hash,
-       run.wpa_configuration_hash,
-       std::to_string(static_cast<int>(run.engine)),
+       run.wpa_configuration_hash, std::to_string(static_cast<int>(run.engine)),
        run.engine_toolchain_identity,
        std::to_string(static_cast<int>(WpaRunStatus::kInProgress))});
 }
 
-StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableComponent(
-    const ResultCacheDescriptor& descriptor) {
+StatusOr<std::optional<WpaComponentResult>>
+WpaRunRepository::LoadReusableComponent(
+    const ResultCacheDescriptor &descriptor) {
   const std::string cache_key = descriptor.Key();
   auto rows = metadata_store_.Query(
-      "SELECT result_object_key, logical_input_hash, engine_toolchain_identity, "
+      "SELECT result_object_key, logical_input_hash, "
+      "engine_toolchain_identity, "
       "relation_schema_version, rule_bundle_version, model_bundle_version, "
       "fixpoint_hash, external_hash "
       "FROM wpa_component_result_cache_v2 WHERE result_cache_key = ?",
@@ -533,7 +531,7 @@ StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableCompon
   if (rows->empty()) {
     return std::optional<WpaComponentResult>{};
   }
-  const auto& row = (*rows)[0];
+  const auto &row = (*rows)[0];
   if (row.size() != 8) {
     return Status::Internal("result cache row has an unexpected shape");
   }
@@ -549,14 +547,13 @@ StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableCompon
         "result cache metadata does not match the requested component");
   }
 
-  const std::string& object_key = row[0];
+  const std::string &object_key = row[0];
   auto bytes = component_results_->Get(object_key);
   if (!bytes.ok()) {
     return bytes.status();
   }
-  auto result = DeserializeResult(
-      std::string_view(reinterpret_cast<const char*>(bytes->data()),
-                       bytes->size()));
+  auto result = DeserializeResult(std::string_view(
+      reinterpret_cast<const char *>(bytes->data()), bytes->size()));
   if (!result.ok()) {
     return result.status();
   }
@@ -569,15 +566,15 @@ StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableCompon
     return Status::FailedPrecondition(
         "cached result does not match the requested component");
   }
-  for (const auto& fact : result->facts) {
+  for (const auto &fact : result->facts) {
     auto derived = facts::MakeFact(fact.row);
     if (!derived.ok() || derived->fact_id != fact.fact_id) {
       return Status::FailedPrecondition(
           "cached fact identity does not match its row");
     }
   }
-  const auto hashes = facts::ComputeCanonicalResultHashes(result->facts,
-                                                          result->witnesses);
+  const auto hashes =
+      facts::ComputeCanonicalResultHashes(result->facts, result->witnesses);
   if (hashes.fixpoint_hash != result->fixpoint_hash ||
       hashes.external_hash != result->external_hash) {
     return Status::FailedPrecondition(
@@ -587,7 +584,7 @@ StatusOr<std::optional<WpaComponentResult>> WpaRunRepository::LoadReusableCompon
 }
 
 StatusOr<WpaComponentCompletion> WpaRunRepository::StoreSuccessfulComponent(
-    const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
+    const facts::AnalysisRunManifest &run, const WpaComponentKey &key,
     WpaComponentResult result) {
   const std::string cache_key =
       MakeResultCacheDescriptor(run, key, result.logical_input_hash).Key();
@@ -617,9 +614,10 @@ StatusOr<WpaComponentCompletion> WpaRunRepository::StoreSuccessfulComponent(
   return completion;
 }
 
-void WpaRunRepository::QueueComponentRows(
-    const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
-    const std::string& cache_key, const WpaComponentResult& result) {
+void WpaRunRepository::QueueComponentRows(const facts::AnalysisRunManifest &run,
+                                          const WpaComponentKey &key,
+                                          const std::string &cache_key,
+                                          const WpaComponentResult &result) {
   pending_cache_rows_.push_back(
       {cache_key, result.logical_input_hash, run.engine_toolchain_identity,
        run.relation_schema_version, run.rule_bundle_version,
@@ -671,10 +669,9 @@ Status WpaRunRepository::FlushComponentCache() {
   // win is the commit count — 13,716 commits to about 54 — not the statement
   // count. The transaction is already open, so even a batch that did fill the
   // budget would write inside it rather than committing ahead of it.
-  summarydb::BulkInsertBatcher cache_rows(metadata_store_,
-                                          kComponentCacheInsertPrefix,
-                                          kComponentCacheColumns);
-  for (std::vector<std::string>& row : pending_cache_rows_) {
+  summarydb::BulkInsertBatcher cache_rows(
+      metadata_store_, kComponentCacheInsertPrefix, kComponentCacheColumns);
+  for (std::vector<std::string> &row : pending_cache_rows_) {
     Status added = cache_rows.Add(std::move(row));
     if (!added.ok()) {
       return abandon(added);
@@ -685,10 +682,9 @@ Status WpaRunRepository::FlushComponentCache() {
     return abandon(cache_flush);
   }
 
-  summarydb::BulkInsertBatcher state_rows(metadata_store_,
-                                          kComponentStateInsertPrefix,
-                                          kComponentStateColumns);
-  for (std::vector<std::string>& row : pending_state_rows_) {
+  summarydb::BulkInsertBatcher state_rows(
+      metadata_store_, kComponentStateInsertPrefix, kComponentStateColumns);
+  for (std::vector<std::string> &row : pending_state_rows_) {
     Status added = state_rows.Add(std::move(row));
     if (!added.ok()) {
       return abandon(added);
@@ -708,13 +704,15 @@ Status WpaRunRepository::FlushComponentCache() {
   return Status::Ok();
 }
 
-Status WpaRunRepository::RecordComponentFailure(
-    const facts::AnalysisRunManifest& run, const WpaComponentKey& key,
-    std::string diagnostics) {
+Status
+WpaRunRepository::RecordComponentFailure(const facts::AnalysisRunManifest &run,
+                                         const WpaComponentKey &key,
+                                         std::string diagnostics) {
   return metadata_store_.Execute(
       "INSERT OR REPLACE INTO wpa_component_states_v2 "
       "(run_id, scc_id, component_kind, logical_input_hash, fixpoint_hash, "
-      " external_hash, result_cache_key, result_object_key, status, diagnostics) "
+      " external_hash, result_cache_key, result_object_key, status, "
+      "diagnostics) "
       "VALUES (?, ?, ?, '', '', '', '', '', ?, ?)",
       {core::ToString(run.run_id), core::ToString(key.scc_id),
        std::to_string(static_cast<int>(key.component)),
@@ -722,7 +720,7 @@ Status WpaRunRepository::RecordComponentFailure(
        diagnostics});
 }
 
-Status WpaRunRepository::CompleteRun(const facts::AnalysisRunManifest& run) {
+Status WpaRunRepository::CompleteRun(const facts::AnalysisRunManifest &run) {
   // The run's last batch is committed here, before the run is marked complete
   // and before `Run` returns, so the next run's `LoadReusableComponent` sees
   // every component of a completed run: a completed run leaves a consistent
@@ -738,7 +736,7 @@ Status WpaRunRepository::CompleteRun(const facts::AnalysisRunManifest& run) {
        core::ToString(run.run_id)});
 }
 
-Status WpaRunRepository::MarkIncomplete(const facts::AnalysisRunManifest& run) {
+Status WpaRunRepository::MarkIncomplete(const facts::AnalysisRunManifest &run) {
   // Whatever the failed run had queued is discarded rather than flushed: it is
   // cache and run state only, so the next run recomputes those components and
   // loses nothing else. Clearing both queues is what makes that true — leaving
@@ -762,7 +760,7 @@ StatusOr<WpaRunStatus> WpaRunRepository::RunStatus(core::StableId run_id) {
   if (rows->empty()) {
     return Status::NotFound("no WPA run with the given id");
   }
-  const std::string& text = (*rows)[0][0];
+  const std::string &text = (*rows)[0][0];
   int value = 0;
   for (const char digit : text) {
     value = value * 10 + static_cast<int>(digit - '0');
@@ -770,8 +768,9 @@ StatusOr<WpaRunStatus> WpaRunRepository::RunStatus(core::StableId run_id) {
   return static_cast<WpaRunStatus>(value);
 }
 
-StatusOr<std::optional<std::string>> WpaRunRepository::ResultObjectKey(
-    core::StableId run_id, const WpaComponentKey& key) {
+StatusOr<std::optional<std::string>>
+WpaRunRepository::ResultObjectKey(core::StableId run_id,
+                                  const WpaComponentKey &key) {
   auto rows = metadata_store_.Query(
       "SELECT result_object_key FROM wpa_component_states_v2 "
       "WHERE run_id = ? AND scc_id = ? AND component_kind = ?",
@@ -786,4 +785,4 @@ StatusOr<std::optional<std::string>> WpaRunRepository::ResultObjectKey(
   return std::optional<std::string>((*rows)[0][0]);
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

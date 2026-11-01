@@ -86,5 +86,5 @@ TEST(WorklistSchedulerTest, PopOnEmptyReturnsNullopt) {
   EXPECT_FALSE(scheduler.PopNext().has_value());
 }
 
-}  // namespace
-}  // namespace veritas::runtime
+} // namespace
+} // namespace veritas::runtime

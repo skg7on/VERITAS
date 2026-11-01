@@ -263,7 +263,7 @@ struct SourceSpan {
   std::size_t line = 0;
   std::size_t column = 0;
 
-  auto operator<=>(const SourceSpan&) const = default;
+  auto operator<=>(const SourceSpan &) const = default;
 };
 
 // --- Expressions ------------------------------------------------------------
@@ -321,8 +321,8 @@ struct Expression {
   // where the default is defined, so the default is implicitly deleted and with
   // it every containing record's. Both operators are therefore compared
   // field by field in the implementation, in this declaration's field order.
-  bool operator==(const Expression& other) const;
-  std::strong_ordering operator<=>(const Expression& other) const;
+  bool operator==(const Expression &other) const;
+  std::strong_ordering operator<=>(const Expression &other) const;
 };
 
 // --- Program identity -------------------------------------------------------
@@ -333,7 +333,7 @@ struct AnalyzerVersion {
   std::string version;
   std::string configuration;
 
-  auto operator<=>(const AnalyzerVersion&) const = default;
+  auto operator<=>(const AnalyzerVersion &) const = default;
 };
 
 // The program context every case is bound to. It is a projection of the M10B
@@ -352,7 +352,7 @@ struct ProgramBinding {
   std::optional<core::StableId> analysis_run_id;
   std::vector<AnalyzerVersion> analyzer_versions;
 
-  auto operator<=>(const ProgramBinding&) const = default;
+  auto operator<=>(const ProgramBinding &) const = default;
 };
 
 // --- Graph members ----------------------------------------------------------
@@ -367,7 +367,7 @@ struct Entity {
   std::optional<core::StableId> stable_id;
   std::map<std::string, Expression> properties;
 
-  auto operator<=>(const Entity&) const = default;
+  auto operator<=>(const Entity &) const = default;
 };
 
 // A typed relation between two entities. `summarized_by` names the
@@ -383,7 +383,7 @@ struct Edge {
   std::string summarized_by;
   bool expandable = false;
 
-  auto operator<=>(const Edge&) const = default;
+  auto operator<=>(const Edge &) const = default;
 };
 
 // An ordered path. `entity_ids` is a semantically ordered list: its sequence is
@@ -397,7 +397,7 @@ struct Path {
   Feasibility feasibility = Feasibility::kUnspecified;
   std::string provenance_id;
 
-  auto operator<=>(const Path&) const = default;
+  auto operator<=>(const Path &) const = default;
 };
 
 // --- Claims and evidence members --------------------------------------------
@@ -413,7 +413,7 @@ struct Claim {
   Severity severity = Severity::kUnspecified;
   std::string description;
 
-  auto operator<=>(const Claim&) const = default;
+  auto operator<=>(const Claim &) const = default;
 };
 
 // One evidence fact. `derived` marks a fact the analysis derived rather than
@@ -434,7 +434,7 @@ struct Fact {
   std::string provenance_id;
   bool derived = false;
 
-  auto operator<=>(const Fact&) const = default;
+  auto operator<=>(const Fact &) const = default;
 };
 
 // An explicitly assumed premise and where it came from.
@@ -444,7 +444,7 @@ struct Assumption {
   std::string source;
   std::string scope;
 
-  auto operator<=>(const Assumption&) const = default;
+  auto operator<=>(const Assumption &) const = default;
 };
 
 // A candidate explanation that is not evidence: it stays outside the
@@ -456,7 +456,7 @@ struct Hypothesis {
   std::string reason;
   Confidence confidence = Confidence::kUnspecified;
 
-  auto operator<=>(const Hypothesis&) const = default;
+  auto operator<=>(const Hypothesis &) const = default;
 };
 
 // A property the analysis could not establish. Absence of a fact is never
@@ -475,7 +475,7 @@ struct Unknown {
   std::vector<std::string> blocking_ids;
   std::string suggested_resolution;
 
-  auto operator<=>(const Unknown&) const = default;
+  auto operator<=>(const Unknown &) const = default;
 };
 
 // A predicate the case requires to hold over its scope.
@@ -486,7 +486,7 @@ struct Constraint {
   EpistemicState epistemic = EpistemicState::kUnspecified;
   std::string provenance_id;
 
-  auto operator<=>(const Constraint&) const = default;
+  auto operator<=>(const Constraint &) const = default;
 };
 
 // How one member came to be. `input_fact_ids` names the case-local facts that
@@ -503,7 +503,7 @@ struct Provenance {
   std::string version;
   std::string configuration;
 
-  auto operator<=>(const Provenance&) const = default;
+  auto operator<=>(const Provenance &) const = default;
 };
 
 // A typed goal requested of a verifier. `budget` is an `Expression`: kInteger
@@ -521,7 +521,7 @@ struct ProofObligation {
   std::string result_id;
   std::string verification_producer;
 
-  auto operator<=>(const ProofObligation&) const = default;
+  auto operator<=>(const ProofObligation &) const = default;
 };
 
 // A reference to the immutable `FunctionSummaryID` of `function_id`, plus the
@@ -532,7 +532,7 @@ struct SummaryReference {
   core::StableId summary_id;
   std::vector<std::string> components;
 
-  auto operator<=>(const SummaryReference&) const = default;
+  auto operator<=>(const SummaryReference &) const = default;
 };
 
 // One semantic input the case consumed, identified by kind and stable ID.
@@ -541,7 +541,7 @@ struct Dependency {
   DependencyKind kind = DependencyKind::kUnspecified;
   core::StableId stable_id;
 
-  auto operator<=>(const Dependency&) const = default;
+  auto operator<=>(const Dependency &) const = default;
 };
 
 // A member deliberately withheld at the declared level. A withheld member is
@@ -555,7 +555,7 @@ struct Omission {
   std::string reason;
   bool expandable = false;
 
-  auto operator<=>(const Omission&) const = default;
+  auto operator<=>(const Omission &) const = default;
 };
 
 // --- The case ---------------------------------------------------------------
@@ -584,7 +584,7 @@ struct EvidenceCase {
   VerificationState verification_state = VerificationState::kUnspecified;
   std::vector<Omission> omissions;
 
-  auto operator<=>(const EvidenceCase&) const = default;
+  auto operator<=>(const EvidenceCase &) const = default;
 };
 
 // The only accepted semantic schema version.
@@ -620,10 +620,10 @@ struct EvidenceBuildRequest {
 
   // Deliberately no comparison operator: the request is a handoff, not a
   // canonical artifact. Neither `build::ProgramContext` (a checkout path) nor
-  // the M10B `EvidenceBuildInput` declares ordering, and the case built from the
-  // request is what comparisons are taken on.
+  // the M10B `EvidenceBuildInput` declares ordering, and the case built from
+  // the request is what comparisons are taken on.
 };
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EVIDENCE_CASE_H_
+#endif // VERITAS_EVIDENCE_EVIDENCE_CASE_H_

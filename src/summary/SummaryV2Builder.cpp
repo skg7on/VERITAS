@@ -34,15 +34,15 @@ using veritas::analysis::semantic::EpistemicState;
 
 // Sort a vector of proto messages by serialized bytes so equivalent input
 // produces byte-identical summaries regardless of insertion order.
-template <typename Message>
-void SortBySerialized(std::vector<Message>* items) {
-  std::sort(items->begin(), items->end(), [](const Message& a, const Message& b) {
-    return a.SerializeAsString() < b.SerializeAsString();
-  });
+template <typename Message> void SortBySerialized(std::vector<Message> *items) {
+  std::sort(items->begin(), items->end(),
+            [](const Message &a, const Message &b) {
+              return a.SerializeAsString() < b.SerializeAsString();
+            });
 }
 
 // Reject a stable ID whose kind does not match the expected kind.
-Status ValidateStableIdKind(const core::StableId& id, core::IdKind expected,
+Status ValidateStableIdKind(const core::StableId &id, core::IdKind expected,
                             std::string_view field) {
   if (id.kind != expected) {
     return Status::InvalidArgument(std::string(field) +
@@ -101,8 +101,8 @@ v2::DispatchKind ToProto(DispatchKind kind) {
   return v2::DISPATCH_KIND_UNSPECIFIED;
 }
 
-v2::AbstractObjectKind ToProto(
-    veritas::analysis::semantic::AbstractObjectKind kind) {
+v2::AbstractObjectKind
+ToProto(veritas::analysis::semantic::AbstractObjectKind kind) {
   switch (kind) {
   case veritas::analysis::semantic::AbstractObjectKind::kGlobal:
     return v2::ABSTRACT_OBJECT_KIND_GLOBAL;
@@ -138,8 +138,8 @@ v2::AccessPathSegment::Kind ToProto(AccessPathSegment::Kind kind) {
   return v2::AccessPathSegment::KIND_UNSPECIFIED;
 }
 
-StatusOr<v2::ByteRange> ToProto(
-    const veritas::analysis::semantic::ByteRange& range) {
+StatusOr<v2::ByteRange>
+ToProto(const veritas::analysis::semantic::ByteRange &range) {
   if (Status status = veritas::analysis::semantic::Validate(range);
       !status.ok()) {
     return status;
@@ -156,8 +156,8 @@ StatusOr<v2::ByteRange> ToProto(
   return out;
 }
 
-StatusOr<v2::AbstractObject> ToProto(
-    const veritas::analysis::semantic::AbstractObject& object) {
+StatusOr<v2::AbstractObject>
+ToProto(const veritas::analysis::semantic::AbstractObject &object) {
   if (Status status = veritas::analysis::semantic::Validate(object);
       !status.ok()) {
     return status;
@@ -173,8 +173,8 @@ StatusOr<v2::AbstractObject> ToProto(
   return out;
 }
 
-StatusOr<v2::MemoryLocation> ToProto(
-    const veritas::analysis::semantic::MemoryLocation& location) {
+StatusOr<v2::MemoryLocation>
+ToProto(const veritas::analysis::semantic::MemoryLocation &location) {
   if (Status status = veritas::analysis::semantic::Validate(location);
       !status.ok()) {
     return status;
@@ -188,7 +188,7 @@ StatusOr<v2::MemoryLocation> ToProto(
     }
     *out.mutable_object() = std::move(*object);
   }
-  for (const auto& segment : location.access_path) {
+  for (const auto &segment : location.access_path) {
     v2::AccessPathSegment proto_segment;
     proto_segment.set_kind(ToProto(segment.kind));
     proto_segment.set_first(segment.first);
@@ -205,10 +205,9 @@ StatusOr<v2::MemoryLocation> ToProto(
   return out;
 }
 
-StatusOr<v2::Call> ToProto(const CallFactV2& call) {
-  if (Status status =
-          ValidateStableIdKind(call.call_site_id, core::IdKind::kCallSite,
-                               "call_site_id");
+StatusOr<v2::Call> ToProto(const CallFactV2 &call) {
+  if (Status status = ValidateStableIdKind(
+          call.call_site_id, core::IdKind::kCallSite, "call_site_id");
       !status.ok()) {
     return status;
   }
@@ -223,7 +222,7 @@ StatusOr<v2::Call> ToProto(const CallFactV2& call) {
   return out;
 }
 
-StatusOr<v2::MemoryEffect> ToProto(const MemoryEffectFactV2& effect) {
+StatusOr<v2::MemoryEffect> ToProto(const MemoryEffectFactV2 &effect) {
   auto location = ToProto(effect.location);
   if (!location.ok()) {
     return location.status();
@@ -236,16 +235,15 @@ StatusOr<v2::MemoryEffect> ToProto(const MemoryEffectFactV2& effect) {
   return out;
 }
 
-StatusOr<v2::ValueFlow> ToProto(const ValueFlowFactV2& flow) {
-  if (Status status =
-          ValidateStableIdKind(flow.source_value_id, core::IdKind::kValueRef,
-                               "source_value_id");
+StatusOr<v2::ValueFlow> ToProto(const ValueFlowFactV2 &flow) {
+  if (Status status = ValidateStableIdKind(
+          flow.source_value_id, core::IdKind::kValueRef, "source_value_id");
       !status.ok()) {
     return status;
   }
-  if (Status status = ValidateStableIdKind(flow.destination_value_id,
-                                           core::IdKind::kValueRef,
-                                           "destination_value_id");
+  if (Status status =
+          ValidateStableIdKind(flow.destination_value_id,
+                               core::IdKind::kValueRef, "destination_value_id");
       !status.ok()) {
     return status;
   }
@@ -257,22 +255,19 @@ StatusOr<v2::ValueFlow> ToProto(const ValueFlowFactV2& flow) {
   return out;
 }
 
-StatusOr<v2::ParameterFlow> ToProto(const ParameterFlowFactV2& flow) {
-  if (Status status = ValidateStableIdKind(flow.call_site_id,
-                                           core::IdKind::kCallSite,
-                                           "call_site_id");
+StatusOr<v2::ParameterFlow> ToProto(const ParameterFlowFactV2 &flow) {
+  if (Status status = ValidateStableIdKind(
+          flow.call_site_id, core::IdKind::kCallSite, "call_site_id");
       !status.ok()) {
     return status;
   }
-  if (Status status = ValidateStableIdKind(flow.actual_id,
-                                           core::IdKind::kValueRef,
-                                           "actual_id");
+  if (Status status = ValidateStableIdKind(
+          flow.actual_id, core::IdKind::kValueRef, "actual_id");
       !status.ok()) {
     return status;
   }
-  if (Status status = ValidateStableIdKind(flow.formal_id,
-                                           core::IdKind::kValueRef,
-                                           "formal_id");
+  if (Status status = ValidateStableIdKind(
+          flow.formal_id, core::IdKind::kValueRef, "formal_id");
       !status.ok()) {
     return status;
   }
@@ -285,22 +280,19 @@ StatusOr<v2::ParameterFlow> ToProto(const ParameterFlowFactV2& flow) {
   return out;
 }
 
-StatusOr<v2::ReturnFlow> ToProto(const ReturnFlowFactV2& flow) {
-  if (Status status = ValidateStableIdKind(flow.call_site_id,
-                                           core::IdKind::kCallSite,
-                                           "call_site_id");
+StatusOr<v2::ReturnFlow> ToProto(const ReturnFlowFactV2 &flow) {
+  if (Status status = ValidateStableIdKind(
+          flow.call_site_id, core::IdKind::kCallSite, "call_site_id");
       !status.ok()) {
     return status;
   }
-  if (Status status = ValidateStableIdKind(flow.return_id,
-                                           core::IdKind::kValueRef,
-                                           "return_id");
+  if (Status status = ValidateStableIdKind(
+          flow.return_id, core::IdKind::kValueRef, "return_id");
       !status.ok()) {
     return status;
   }
-  if (Status status = ValidateStableIdKind(flow.result_id,
-                                           core::IdKind::kValueRef,
-                                           "result_id");
+  if (Status status = ValidateStableIdKind(
+          flow.result_id, core::IdKind::kValueRef, "result_id");
       !status.ok()) {
     return status;
   }
@@ -313,7 +305,7 @@ StatusOr<v2::ReturnFlow> ToProto(const ReturnFlowFactV2& flow) {
   return out;
 }
 
-StatusOr<v2::AliasFact> ToProto(const AliasFactV2& alias) {
+StatusOr<v2::AliasFact> ToProto(const AliasFactV2 &alias) {
   auto left = ToProto(alias.left);
   if (!left.ok()) {
     return left.status();
@@ -332,33 +324,33 @@ StatusOr<v2::AliasFact> ToProto(const AliasFactV2& alias) {
 }
 
 // Convert a component digest to its v1::ComponentDigest proto form.
-void AppendComponentDigest(const ComponentDigestInfo& digest,
-                           v2::FunctionSummary* summary) {
-  auto* proto = summary->add_component_digests();
+void AppendComponentDigest(const ComponentDigestInfo &digest,
+                           v2::FunctionSummary *summary) {
+  auto *proto = summary->add_component_digests();
   proto->set_kind(digest.kind);
   proto->set_semantic_hash(
-      std::string(reinterpret_cast<const char*>(digest.semantic_hash.data()),
+      std::string(reinterpret_cast<const char *>(digest.semantic_hash.data()),
                   digest.semantic_hash.size()));
   proto->set_evidence_hash(
-      std::string(reinterpret_cast<const char*>(digest.evidence_hash.data()),
+      std::string(reinterpret_cast<const char *>(digest.evidence_hash.data()),
                   digest.evidence_hash.size()));
   proto->set_item_count(digest.item_count);
   proto->set_payload_offset(digest.payload_offset);
   proto->set_payload_length(digest.payload_length);
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
-    const FunctionLocalFactsV2& facts,
-    const build::ProgramContext& context) {
+StatusOr<v2::FunctionSummary>
+BuildLocalSummaryV2(const FunctionLocalFactsV2 &facts,
+                    const build::ProgramContext &context) {
   v2::FunctionSummary summary;
 
-  auto* header = summary.mutable_header();
+  auto *header = summary.mutable_header();
   header->set_schema_version("summary.v2");
-  header->set_creation_epoch_ms(0);  // pinned to keep FunctionSummaryID stable
+  header->set_creation_epoch_ms(0); // pinned to keep FunctionSummaryID stable
 
-  auto* identity = summary.mutable_identity();
+  auto *identity = summary.mutable_identity();
   identity->set_repository_id(context.repository_id);
   identity->set_revision_id(context.revision_id);
   identity->set_build_variant_id(context.build_variant_id);
@@ -366,7 +358,7 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
 
   // Refined components: convert to proto (validating), sort, then append.
   std::vector<v2::Call> calls;
-  for (const auto& call : facts.calls) {
+  for (const auto &call : facts.calls) {
     auto proto = ToProto(call);
     if (!proto.ok()) {
       return proto.status();
@@ -374,12 +366,12 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
     calls.push_back(std::move(*proto));
   }
   SortBySerialized(&calls);
-  for (const auto& call : calls) {
+  for (const auto &call : calls) {
     *summary.add_calls() = call;
   }
 
   std::vector<v2::MemoryEffect> memory_effects;
-  for (const auto& effect : facts.memory_effects) {
+  for (const auto &effect : facts.memory_effects) {
     auto proto = ToProto(effect);
     if (!proto.ok()) {
       return proto.status();
@@ -387,12 +379,12 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
     memory_effects.push_back(std::move(*proto));
   }
   SortBySerialized(&memory_effects);
-  for (const auto& effect : memory_effects) {
+  for (const auto &effect : memory_effects) {
     *summary.add_memory_effects() = effect;
   }
 
   std::vector<v2::ValueFlow> value_flows;
-  for (const auto& flow : facts.value_flows) {
+  for (const auto &flow : facts.value_flows) {
     auto proto = ToProto(flow);
     if (!proto.ok()) {
       return proto.status();
@@ -400,12 +392,12 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
     value_flows.push_back(std::move(*proto));
   }
   SortBySerialized(&value_flows);
-  for (const auto& flow : value_flows) {
+  for (const auto &flow : value_flows) {
     *summary.add_value_flows() = flow;
   }
 
   std::vector<v2::ParameterFlow> parameter_flows;
-  for (const auto& flow : facts.parameter_flows) {
+  for (const auto &flow : facts.parameter_flows) {
     auto proto = ToProto(flow);
     if (!proto.ok()) {
       return proto.status();
@@ -413,12 +405,12 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
     parameter_flows.push_back(std::move(*proto));
   }
   SortBySerialized(&parameter_flows);
-  for (const auto& flow : parameter_flows) {
+  for (const auto &flow : parameter_flows) {
     *summary.add_parameter_flows() = flow;
   }
 
   std::vector<v2::ReturnFlow> return_flows;
-  for (const auto& flow : facts.return_flows) {
+  for (const auto &flow : facts.return_flows) {
     auto proto = ToProto(flow);
     if (!proto.ok()) {
       return proto.status();
@@ -426,12 +418,12 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
     return_flows.push_back(std::move(*proto));
   }
   SortBySerialized(&return_flows);
-  for (const auto& flow : return_flows) {
+  for (const auto &flow : return_flows) {
     *summary.add_return_flows() = flow;
   }
 
   std::vector<v2::AliasFact> alias_facts;
-  for (const auto& alias : facts.aliases) {
+  for (const auto &alias : facts.aliases) {
     auto proto = ToProto(alias);
     if (!proto.ok()) {
       return proto.status();
@@ -439,7 +431,7 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
     alias_facts.push_back(std::move(*proto));
   }
   SortBySerialized(&alias_facts);
-  for (const auto& alias : alias_facts) {
+  for (const auto &alias : alias_facts) {
     *summary.add_alias_facts() = alias;
   }
 
@@ -463,42 +455,42 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
   SortBySerialized(&dependencies);
   SortBySerialized(&provenance_refs);
 
-  for (const auto& range : range_facts) {
+  for (const auto &range : range_facts) {
     *summary.add_range_facts() = range;
   }
-  for (const auto& taint : taint_transfers) {
+  for (const auto &taint : taint_transfers) {
     *summary.add_taint_transfers() = taint;
   }
-  for (const auto& ownership : ownership_effects) {
+  for (const auto &ownership : ownership_effects) {
     *summary.add_ownership_effects() = ownership;
   }
-  for (const auto& lock : lock_effects) {
+  for (const auto &lock : lock_effects) {
     *summary.add_lock_effects() = lock;
   }
-  for (const auto& state : state_transitions) {
+  for (const auto &state : state_transitions) {
     *summary.add_state_transitions() = state;
   }
-  for (const auto& unknown : unknowns) {
+  for (const auto &unknown : unknowns) {
     *summary.add_unknowns() = unknown;
   }
-  for (const auto& assumption : assumptions) {
+  for (const auto &assumption : assumptions) {
     *summary.add_assumptions() = assumption;
   }
-  for (const auto& dependency : dependencies) {
+  for (const auto &dependency : dependencies) {
     *summary.add_dependencies() = dependency;
   }
-  for (const auto& provenance : provenance_refs) {
+  for (const auto &provenance : provenance_refs) {
     *summary.add_provenance_refs() = provenance;
   }
 
   // Basic-block summaries map one-to-one into control-flow entries; dominator
   // facts are grouped into a single trailing control-flow entry.
-  for (const auto& block : facts.basic_block_summaries) {
+  for (const auto &block : facts.basic_block_summaries) {
     summary.add_control_flow()->mutable_block()->CopyFrom(block);
   }
   if (!facts.dominator_summaries.empty()) {
-    auto* control_flow = summary.add_control_flow();
-    for (const auto& dominator : facts.dominator_summaries) {
+    auto *control_flow = summary.add_control_flow();
+    for (const auto &dominator : facts.dominator_summaries) {
       control_flow->add_dominators()->CopyFrom(dominator);
     }
   }
@@ -506,11 +498,11 @@ StatusOr<v2::FunctionSummary> BuildLocalSummaryV2(
   // Compute component digests with the same semantic/evidence split as V1 and
   // attach them so downstream consumers can invalidate per-component.
   auto digests = ComputeComponentDigests(summary);
-  for (const auto& digest : digests) {
+  for (const auto &digest : digests) {
     AppendComponentDigest(digest, &summary);
   }
 
   return summary;
 }
 
-}  // namespace veritas::summary
+} // namespace veritas::summary

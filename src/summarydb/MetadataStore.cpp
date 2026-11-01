@@ -569,14 +569,12 @@ std::string ValueTuples(std::size_t rows, std::size_t columns) {
   return sql;
 }
 
-}  // namespace
+} // namespace
 
 BulkInsertBatcher::BulkInsertBatcher(MetadataStore &store,
                                      std::string sql_prefix,
                                      std::size_t columns)
-    : store_(store),
-      columns_(columns),
-      max_rows_(1) {
+    : store_(store), columns_(columns), max_rows_(1) {
   const int limit = store_.MaxBindParameters();
   if (limit > 0 && columns_ > 0) {
     const auto rows = static_cast<std::size_t>(limit) / columns_;

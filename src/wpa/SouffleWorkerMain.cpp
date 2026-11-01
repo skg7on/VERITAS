@@ -29,15 +29,15 @@
 
 namespace {
 
-void PrintUsage(std::ostream& os) {
+void PrintUsage(std::ostream &os) {
   os << "usage: veritas-souffle-worker"
         " --component=<reachability|memory-effects>"
         " -F <input-dir> -D <output-dir> [--jobs N]\n";
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   std::string component;
   std::string input_dir;
   std::string output_dir;

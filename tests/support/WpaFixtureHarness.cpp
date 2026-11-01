@@ -14,26 +14,26 @@
 
 #include "WpaFixtureHarness.h"
 
-#include <system_error>
 #include <map>
 #include <string>
+#include <system_error>
 #include <utility>
 
 #include "ProjectFixture.h"
 #include "analysis/pipeline/LocalAnalysisStage.h"
 #include "analysis/pipeline/ProgramIr.h"
 #include "analysis/svf/SvfAnalysisStage.h"
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Module.h>
 #include "veritas/analysis/ProjectAnalysisRequest.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/build/ProjectManifestLoader.h"
 #include "veritas/summarydb/SummaryRepository.h"
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Module.h>
 
 namespace veritas::testing {
 
 class FixtureRootOwner {
- public:
+public:
   explicit FixtureRootOwner(std::filesystem::path project_root)
       : project_root_(std::move(project_root)) {}
 
@@ -42,16 +42,16 @@ class FixtureRootOwner {
     std::filesystem::remove_all(project_root_, error);
   }
 
-  const std::filesystem::path& project_root() const { return project_root_; }
+  const std::filesystem::path &project_root() const { return project_root_; }
 
- private:
+private:
   std::filesystem::path project_root_;
 };
 
 namespace {
 
-StatusOr<build::AnalysisManifest> LoadFixtureManifest(
-    const std::filesystem::path& project_root) {
+StatusOr<build::AnalysisManifest>
+LoadFixtureManifest(const std::filesystem::path &project_root) {
   const analysis::ProjectAnalysisRequest request{
       .project_root = project_root,
       .output_root = {},
@@ -67,14 +67,14 @@ bool HasPrefix(std::string_view value, std::string_view prefix) {
   return value.starts_with(prefix);
 }
 
-StatusOr<std::map<std::string, std::string>> FunctionVariantIdsBySymbol(
-    const analysis::pipeline::ProgramIr& program_ir) {
-  const ::llvm::Module* module = program_ir.GetModule();
+StatusOr<std::map<std::string, std::string>>
+FunctionVariantIdsBySymbol(const analysis::pipeline::ProgramIr &program_ir) {
+  const ::llvm::Module *module = program_ir.GetModule();
   if (module == nullptr) {
     return Status::Internal("fixture local analysis produced no module");
   }
   std::map<std::string, std::string> function_variant_ids_by_symbol;
-  for (const auto& function : *module) {
+  for (const auto &function : *module) {
     if (function.isDeclaration()) {
       continue;
     }
@@ -87,23 +87,22 @@ StatusOr<std::map<std::string, std::string>> FunctionVariantIdsBySymbol(
   return function_variant_ids_by_symbol;
 }
 
-}  // namespace
+} // namespace
 
 SvfFixtureSnapshot::SvfFixtureSnapshot(
     std::unique_ptr<FixtureRootOwner> fixture_root,
     std::filesystem::path project_root, analysis::svf::SvfMappingResult mapping,
     std::map<std::string, std::string> function_variant_ids_by_symbol)
     : fixture_root_(std::move(fixture_root)),
-      project_root(std::move(project_root)),
-      mapping(std::move(mapping)),
+      project_root(std::move(project_root)), mapping(std::move(mapping)),
       function_variant_ids_by_symbol(
           std::move(function_variant_ids_by_symbol)) {}
 
-SvfFixtureSnapshot::SvfFixtureSnapshot(SvfFixtureSnapshot&&) noexcept =
+SvfFixtureSnapshot::SvfFixtureSnapshot(SvfFixtureSnapshot &&) noexcept =
     default;
 
-SvfFixtureSnapshot& SvfFixtureSnapshot::operator=(
-    SvfFixtureSnapshot&&) noexcept = default;
+SvfFixtureSnapshot &
+SvfFixtureSnapshot::operator=(SvfFixtureSnapshot &&) noexcept = default;
 
 SvfFixtureSnapshot::~SvfFixtureSnapshot() = default;
 
@@ -113,16 +112,15 @@ LocalFixtureSnapshot::LocalFixtureSnapshot(
     std::vector<summary::v2::FunctionSummary> summaries,
     std::map<std::string, std::string> function_variant_ids_by_symbol)
     : fixture_root_(std::move(fixture_root)),
-      project_root(std::move(project_root)),
-      summaries(std::move(summaries)),
+      project_root(std::move(project_root)), summaries(std::move(summaries)),
       function_variant_ids_by_symbol(
           std::move(function_variant_ids_by_symbol)) {}
 
-LocalFixtureSnapshot::LocalFixtureSnapshot(LocalFixtureSnapshot&&) noexcept =
+LocalFixtureSnapshot::LocalFixtureSnapshot(LocalFixtureSnapshot &&) noexcept =
     default;
 
-LocalFixtureSnapshot& LocalFixtureSnapshot::operator=(
-    LocalFixtureSnapshot&&) noexcept = default;
+LocalFixtureSnapshot &
+LocalFixtureSnapshot::operator=(LocalFixtureSnapshot &&) noexcept = default;
 
 LocalFixtureSnapshot::~LocalFixtureSnapshot() = default;
 
@@ -134,22 +132,21 @@ AnalyzedFixtureSnapshot::AnalyzedFixtureSnapshot(
     std::map<std::string, std::string> function_variant_ids_by_symbol)
     : fixture_root_(std::move(fixture_root)),
       project_root(std::move(project_root)),
-      output_root(std::move(output_root)),
-      analysis(std::move(analysis)),
-      summaries(std::move(summaries)),
-      function_variant_ids_by_symbol(
-          std::move(function_variant_ids_by_symbol)) {}
+      output_root(std::move(output_root)), analysis(std::move(analysis)),
+      summaries(std::move(summaries)), function_variant_ids_by_symbol(std::move(
+                                           function_variant_ids_by_symbol)) {}
 
 AnalyzedFixtureSnapshot::AnalyzedFixtureSnapshot(
-    AnalyzedFixtureSnapshot&&) noexcept = default;
+    AnalyzedFixtureSnapshot &&) noexcept = default;
 
-AnalyzedFixtureSnapshot& AnalyzedFixtureSnapshot::operator=(
-    AnalyzedFixtureSnapshot&&) noexcept = default;
+AnalyzedFixtureSnapshot &AnalyzedFixtureSnapshot::operator=(
+    AnalyzedFixtureSnapshot &&) noexcept = default;
 
 AnalyzedFixtureSnapshot::~AnalyzedFixtureSnapshot() = default;
 
-StatusOr<SvfFixtureSnapshot> MapFixtureWithSvf(
-    std::string_view name, const analysis::svf::SvfConfig& config) {
+StatusOr<SvfFixtureSnapshot>
+MapFixtureWithSvf(std::string_view name,
+                  const analysis::svf::SvfConfig &config) {
   auto fixture_root = std::make_unique<FixtureRootOwner>(FixtureProject(name));
   const auto project_root = fixture_root->project_root();
   auto manifest = LoadFixtureManifest(project_root);
@@ -204,8 +201,9 @@ StatusOr<LocalFixtureSnapshot> AnalyzeLocalFixture(std::string_view name) {
                               std::move(*function_variant_ids_by_symbol));
 }
 
-StatusOr<AnalyzedFixtureSnapshot> AnalyzeAndLoadFixture(
-    std::string_view name, const analysis::AnalysisConfig& config) {
+StatusOr<AnalyzedFixtureSnapshot>
+AnalyzeAndLoadFixture(std::string_view name,
+                      const analysis::AnalysisConfig &config) {
   auto fixture_root = std::make_unique<FixtureRootOwner>(FixtureProject(name));
   const auto project_root = fixture_root->project_root();
   const auto output_root = project_root / ".veritas";
@@ -236,23 +234,21 @@ StatusOr<AnalyzedFixtureSnapshot> AnalyzeAndLoadFixture(
   if (!repository.ok()) {
     return repository.status();
   }
-  auto summaries = (*repository)->ListCurrentSummaryArtifacts(
-      result->revision_id, result->build_variant_id);
+  auto summaries = (*repository)
+                       ->ListCurrentSummaryArtifacts(result->revision_id,
+                                                     result->build_variant_id);
   if (!summaries.ok()) {
     return summaries.status();
   }
 
-  return AnalyzedFixtureSnapshot(std::move(fixture_root), project_root,
-                                 output_root, std::move(*result),
-                                 std::move(*summaries),
-                                 std::move(*function_variant_ids_by_symbol));
+  return AnalyzedFixtureSnapshot(
+      std::move(fixture_root), project_root, output_root, std::move(*result),
+      std::move(*summaries), std::move(*function_variant_ids_by_symbol));
 }
 
-bool AllArtifactsAreV2(
-    std::span<const summary::SummaryArtifact> artifacts) {
-  for (const auto& artifact : artifacts) {
-    const auto* function =
-        std::get_if<summary::v2::FunctionSummary>(&artifact);
+bool AllArtifactsAreV2(std::span<const summary::SummaryArtifact> artifacts) {
+  for (const auto &artifact : artifacts) {
+    const auto *function = std::get_if<summary::v2::FunctionSummary>(&artifact);
     if (function == nullptr ||
         !HasPrefix(function->header().schema_version(), "summary.v2")) {
       return false;
@@ -261,17 +257,16 @@ bool AllArtifactsAreV2(
   return true;
 }
 
-std::vector<const summary::v2::Call*> CallsWithDispatch(
-    std::span<const summary::SummaryArtifact> artifacts,
-    summary::v2::DispatchKind dispatch) {
-  std::vector<const summary::v2::Call*> matches;
-  for (const auto& artifact : artifacts) {
-    const auto* function =
-        std::get_if<summary::v2::FunctionSummary>(&artifact);
+std::vector<const summary::v2::Call *>
+CallsWithDispatch(std::span<const summary::SummaryArtifact> artifacts,
+                  summary::v2::DispatchKind dispatch) {
+  std::vector<const summary::v2::Call *> matches;
+  for (const auto &artifact : artifacts) {
+    const auto *function = std::get_if<summary::v2::FunctionSummary>(&artifact);
     if (function == nullptr) {
       continue;
     }
-    for (const auto& call : function->calls()) {
+    for (const auto &call : function->calls()) {
       if (call.dispatch() == dispatch &&
           HasPrefix(call.call_site_id(), "callsite:sha256:")) {
         matches.push_back(&call);
@@ -281,20 +276,18 @@ std::vector<const summary::v2::Call*> CallsWithDispatch(
   return matches;
 }
 
-std::vector<const summary::v2::MemoryEffect*> MemoryEffectsWithObjectKind(
-    std::span<const summary::SummaryArtifact> artifacts,
-    summary::v2::AbstractObjectKind kind) {
-  std::vector<const summary::v2::MemoryEffect*> matches;
-  for (const auto& artifact : artifacts) {
-    const auto* function =
-        std::get_if<summary::v2::FunctionSummary>(&artifact);
+std::vector<const summary::v2::MemoryEffect *>
+MemoryEffectsWithObjectKind(std::span<const summary::SummaryArtifact> artifacts,
+                            summary::v2::AbstractObjectKind kind) {
+  std::vector<const summary::v2::MemoryEffect *> matches;
+  for (const auto &artifact : artifacts) {
+    const auto *function = std::get_if<summary::v2::FunctionSummary>(&artifact);
     if (function == nullptr) {
       continue;
     }
-    for (const auto& effect : function->memory_effects()) {
+    for (const auto &effect : function->memory_effects()) {
       if (effect.location().object().kind() == kind &&
-          HasPrefix(effect.location().memory_location_id(),
-                    "memref:sha256:")) {
+          HasPrefix(effect.location().memory_location_id(), "memref:sha256:")) {
         matches.push_back(&effect);
       }
     }
@@ -302,4 +295,4 @@ std::vector<const summary::v2::MemoryEffect*> MemoryEffectsWithObjectKind(
   return matches;
 }
 
-}  // namespace veritas::testing
+} // namespace veritas::testing

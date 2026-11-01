@@ -30,30 +30,30 @@ enum class TypeTag : uint8_t {
   kPath = 6,
 };
 
-void AppendU8(std::vector<std::byte>& out, uint8_t val) {
+void AppendU8(std::vector<std::byte> &out, uint8_t val) {
   out.push_back(static_cast<std::byte>(val));
 }
 
-void AppendU64(std::vector<std::byte>& out, uint64_t val) {
+void AppendU64(std::vector<std::byte> &out, uint64_t val) {
   for (int i = 7; i >= 0; --i) {
     out.push_back(static_cast<std::byte>((val >> (i * 8)) & 0xFF));
   }
 }
 
-void AppendI64(std::vector<std::byte>& out, int64_t val) {
+void AppendI64(std::vector<std::byte> &out, int64_t val) {
   uint64_t uval;
   std::memcpy(&uval, &val, sizeof(val));
   AppendU64(out, uval);
 }
 
-void AppendString(std::vector<std::byte>& out, const std::string& str) {
+void AppendString(std::vector<std::byte> &out, const std::string &str) {
   AppendU64(out, str.size());
   for (char c : str) {
     out.push_back(static_cast<std::byte>(static_cast<uint8_t>(c)));
   }
 }
 
-StatusOr<std::vector<std::byte>> EncodeValue(const CanonicalValue& value);
+StatusOr<std::vector<std::byte>> EncodeValue(const CanonicalValue &value);
 
 StatusOr<std::vector<std::byte>> EncodeNull() {
   std::vector<std::byte> result;
@@ -75,18 +75,18 @@ StatusOr<std::vector<std::byte>> EncodeInt(int64_t val) {
   return result;
 }
 
-StatusOr<std::vector<std::byte>> EncodeString(const std::string& val) {
+StatusOr<std::vector<std::byte>> EncodeString(const std::string &val) {
   std::vector<std::byte> result;
   AppendU8(result, static_cast<uint8_t>(TypeTag::kString));
   AppendString(result, val);
   return result;
 }
 
-StatusOr<std::vector<std::byte>> EncodeArray(const CanonicalArray& arr) {
+StatusOr<std::vector<std::byte>> EncodeArray(const CanonicalArray &arr) {
   std::vector<std::byte> result;
   AppendU8(result, static_cast<uint8_t>(TypeTag::kArray));
   AppendU64(result, arr.size());
-  for (const auto& item : arr) {
+  for (const auto &item : arr) {
     auto encoded = EncodeValue(item);
     if (!encoded.ok()) {
       return encoded.status();
@@ -96,11 +96,11 @@ StatusOr<std::vector<std::byte>> EncodeArray(const CanonicalArray& arr) {
   return result;
 }
 
-StatusOr<std::vector<std::byte>> EncodeObject(const CanonicalObject& obj) {
+StatusOr<std::vector<std::byte>> EncodeObject(const CanonicalObject &obj) {
   std::vector<std::byte> result;
   AppendU8(result, static_cast<uint8_t>(TypeTag::kObject));
   AppendU64(result, obj.size());
-  for (const auto& [key, val] : obj) {
+  for (const auto &[key, val] : obj) {
     AppendString(result, key);
     auto encoded = EncodeValue(val);
     if (!encoded.ok()) {
@@ -111,7 +111,7 @@ StatusOr<std::vector<std::byte>> EncodeObject(const CanonicalObject& obj) {
   return result;
 }
 
-StatusOr<std::vector<std::byte>> EncodePath(const TaggedPath& path) {
+StatusOr<std::vector<std::byte>> EncodePath(const TaggedPath &path) {
   std::vector<std::byte> result;
   AppendU8(result, static_cast<uint8_t>(TypeTag::kPath));
   AppendU8(result, static_cast<uint8_t>(path.root_kind));
@@ -120,9 +120,9 @@ StatusOr<std::vector<std::byte>> EncodePath(const TaggedPath& path) {
   return result;
 }
 
-StatusOr<std::vector<std::byte>> EncodeValue(const CanonicalValue& value) {
+StatusOr<std::vector<std::byte>> EncodeValue(const CanonicalValue &value) {
   return std::visit(
-      [](const auto& v) -> StatusOr<std::vector<std::byte>> {
+      [](const auto &v) -> StatusOr<std::vector<std::byte>> {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, CanonicalNull>) {
           return EncodeNull();
@@ -143,10 +143,10 @@ StatusOr<std::vector<std::byte>> EncodeValue(const CanonicalValue& value) {
       value.value);
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<std::vector<std::byte>> CanonicalEncode(const CanonicalValue& value) {
+StatusOr<std::vector<std::byte>> CanonicalEncode(const CanonicalValue &value) {
   return EncodeValue(value);
 }
 
-}  // namespace veritas::core
+} // namespace veritas::core

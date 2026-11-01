@@ -33,14 +33,13 @@ constexpr std::size_t kRuleCount = 20;
 
 using RuleTable = std::array<RuleSpec, kRuleCount>;
 
-const RuleTable& Table() {
+const RuleTable &Table() {
   static const RuleTable table = {
-      RuleSpec{"wpa.reachability.direct.v2", 10, RelationId::kReachableCall,
-               1},
+      RuleSpec{"wpa.reachability.direct.v2", 10, RelationId::kReachableCall, 1},
       RuleSpec{"wpa.reachability.support.v2", 20, RelationId::kReachableCall,
                2},
-      RuleSpec{"wpa.reachability.transitive.v2", 30,
-               RelationId::kReachableCall, 2},
+      RuleSpec{"wpa.reachability.transitive.v2", 30, RelationId::kReachableCall,
+               2},
       RuleSpec{"wpa.memory.may_write.direct.v2", 10, RelationId::kMayWrite, 1},
       RuleSpec{"wpa.memory.may_write.support.v2", 20, RelationId::kMayWrite, 2},
       RuleSpec{"wpa.memory.may_write.transitive.v2", 30, RelationId::kMayWrite,
@@ -69,11 +68,11 @@ const RuleTable& Table() {
   return table;
 }
 
-}  // namespace
+} // namespace
 
-const RuleSpec* RuleRegistry::Find(std::string_view rule_id) const {
+const RuleSpec *RuleRegistry::Find(std::string_view rule_id) const {
   const auto it = std::ranges::find_if(
-      Table(), [&](const RuleSpec& rule) { return rule.id == rule_id; });
+      Table(), [&](const RuleSpec &rule) { return rule.id == rule_id; });
   return it == Table().end() ? nullptr : &*it;
 }
 
@@ -81,9 +80,9 @@ std::span<const RuleSpec> RuleRegistry::Rules() const { return Table(); }
 
 std::string_view RuleBundleVersionV2() { return "rules.v2"; }
 
-const RuleRegistry& RulesV2() {
+const RuleRegistry &RulesV2() {
   static const RuleRegistry registry;
   return registry;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts

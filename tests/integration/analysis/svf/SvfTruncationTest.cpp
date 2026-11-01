@@ -31,22 +31,20 @@ namespace {
 std::unique_ptr<pipeline::ProgramIr> BuildLargeProgramIr() {
   auto program_ir = std::make_unique<pipeline::ProgramIr>();
 
-  auto module = std::make_unique<::llvm::Module>(
-      "large_fixture", program_ir->GetContext());
+  auto module = std::make_unique<::llvm::Module>("large_fixture",
+                                                 program_ir->GetContext());
 
-  auto* i32_ty = ::llvm::Type::getInt32Ty(program_ir->GetContext());
+  auto *i32_ty = ::llvm::Type::getInt32Ty(program_ir->GetContext());
 
   // Create multiple functions to exceed fact limits
   for (int i = 0; i < 10; ++i) {
-    auto* func_type = ::llvm::FunctionType::get(i32_ty, {i32_ty}, false);
-    auto* func = ::llvm::Function::Create(
-        func_type,
-        ::llvm::Function::ExternalLinkage,
-        "func_" + std::to_string(i),
-        module.get());
+    auto *func_type = ::llvm::FunctionType::get(i32_ty, {i32_ty}, false);
+    auto *func =
+        ::llvm::Function::Create(func_type, ::llvm::Function::ExternalLinkage,
+                                 "func_" + std::to_string(i), module.get());
 
-    auto* entry = ::llvm::BasicBlock::Create(
-        program_ir->GetContext(), "entry", func);
+    auto *entry =
+        ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry", func);
     ::llvm::IRBuilder<> builder(entry);
     builder.CreateRet(func->getArg(0));
   }
@@ -69,11 +67,9 @@ TEST(SvfTruncationTest, TruncatedMappingReturnsCompleteWithUnknowns) {
   };
 
   SvfMappingResult result;
-  auto status = RunWithSvfSession(
-      *program_ir, config,
-      [&](const SvfSessionView& view) {
-        return MapSvfFacts(
-            *program_ir, view, run_context, config, &result);
+  auto status =
+      RunWithSvfSession(*program_ir, config, [&](const SvfSessionView &view) {
+        return MapSvfFacts(*program_ir, view, run_context, config, &result);
       });
 
   EXPECT_TRUE(status.ok());
@@ -84,7 +80,7 @@ TEST(SvfTruncationTest, TruncatedMappingReturnsCompleteWithUnknowns) {
     EXPECT_GT(result.facts.unknowns.size(), 0u);
 
     // Verify unknowns have proper structure
-    for (const auto& unknown : result.facts.unknowns) {
+    for (const auto &unknown : result.facts.unknowns) {
       EXPECT_FALSE(unknown.scope.empty());
       EXPECT_FALSE(unknown.reason.empty());
       EXPECT_FALSE(unknown.provenance_ref.empty());
@@ -105,46 +101,38 @@ TEST(SvfTruncationTest, ValidPartialFactsPreservedAtTruncation) {
   };
 
   SvfMappingResult result;
-  auto status = RunWithSvfSession(
-      *program_ir, config,
-      [&](const SvfSessionView& view) {
-        return MapSvfFacts(
-            *program_ir, view, run_context, config, &result);
+  auto status =
+      RunWithSvfSession(*program_ir, config, [&](const SvfSessionView &view) {
+        return MapSvfFacts(*program_ir, view, run_context, config, &result);
       });
 
   EXPECT_TRUE(status.ok());
 
   // All emitted facts should be valid (deduplicated, with provenance)
-  for (const auto& fact : result.facts.value_flows) {
+  for (const auto &fact : result.facts.value_flows) {
     EXPECT_FALSE(fact.provenance_ref.empty());
   }
 
   // Should not exceed the configured limit
-  EXPECT_LE(result.facts.value_flows.size() +
-            result.facts.aliases.size() +
-            result.facts.memory_effects.size() +
-            result.facts.calls.size(),
+  EXPECT_LE(result.facts.value_flows.size() + result.facts.aliases.size() +
+                result.facts.memory_effects.size() + result.facts.calls.size(),
             config.max_emitted_facts);
 }
 
 TEST(SvfTruncationTest, NoBudgetLimitProducesComplete) {
   auto program_ir = std::make_unique<pipeline::ProgramIr>();
 
-  auto module = std::make_unique<::llvm::Module>(
-      "small_fixture", program_ir->GetContext());
+  auto module = std::make_unique<::llvm::Module>("small_fixture",
+                                                 program_ir->GetContext());
 
-  auto* func_type = ::llvm::FunctionType::get(
+  auto *func_type = ::llvm::FunctionType::get(
       ::llvm::Type::getInt32Ty(program_ir->GetContext()),
-      {::llvm::Type::getInt32Ty(program_ir->GetContext())},
-      false);
-  auto* func = ::llvm::Function::Create(
-      func_type,
-      ::llvm::Function::ExternalLinkage,
-      "simple",
-      module.get());
+      {::llvm::Type::getInt32Ty(program_ir->GetContext())}, false);
+  auto *func = ::llvm::Function::Create(
+      func_type, ::llvm::Function::ExternalLinkage, "simple", module.get());
 
-  auto* entry = ::llvm::BasicBlock::Create(
-      program_ir->GetContext(), "entry", func);
+  auto *entry =
+      ::llvm::BasicBlock::Create(program_ir->GetContext(), "entry", func);
   ::llvm::IRBuilder<> builder(entry);
   builder.CreateRet(func->getArg(0));
 
@@ -158,10 +146,9 @@ TEST(SvfTruncationTest, NoBudgetLimitProducesComplete) {
 
   SvfMappingResult result;
   auto status = RunWithSvfSession(
-      *program_ir, SvfConfig::Default(),
-      [&](const SvfSessionView& view) {
-        return MapSvfFacts(
-            *program_ir, view, run_context, SvfConfig::Default(), &result);
+      *program_ir, SvfConfig::Default(), [&](const SvfSessionView &view) {
+        return MapSvfFacts(*program_ir, view, run_context, SvfConfig::Default(),
+                           &result);
       });
 
   EXPECT_TRUE(status.ok());
@@ -170,5 +157,5 @@ TEST(SvfTruncationTest, NoBudgetLimitProducesComplete) {
   // (or with unknowns only due to unmapped nodes, not budget)
 }
 
-}  // namespace
-}  // namespace veritas::analysis::svf
+} // namespace
+} // namespace veritas::analysis::svf

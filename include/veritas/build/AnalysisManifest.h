@@ -83,13 +83,13 @@ struct AnalysisManifest {
 // Byte-oriented canonical encoding: length-prefixed key/value records with
 // integers in network byte order. Suitable for hashing and equality checks.
 // Callers must not inspect the structure; treat the return value as opaque.
-std::string ToCanonicalBytes(const AnalysisManifest& manifest);
-std::string ToCanonicalBytes(const TranslationUnitCommand& unit);
+std::string ToCanonicalBytes(const AnalysisManifest &manifest);
+std::string ToCanonicalBytes(const TranslationUnitCommand &unit);
 
 // Human-inspectable JSON with sorted keys, sorted translation units, and no
 // checkout- or output-specific paths. Byte-identical for equivalent input.
-std::string ToDiagnosticJson(const AnalysisManifest& manifest);
+std::string ToDiagnosticJson(const AnalysisManifest &manifest);
 
-}  // namespace veritas::build
+} // namespace veritas::build
 
-#endif  // VERITAS_BUILD_ANALYSISMANIFEST_H_
+#endif // VERITAS_BUILD_ANALYSISMANIFEST_H_

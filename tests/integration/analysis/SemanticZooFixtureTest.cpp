@@ -23,14 +23,15 @@
 namespace veritas::analysis {
 namespace {
 
-StatusOr<build::AnalysisManifest> LoadFixtureManifest(
-    const std::filesystem::path& root) {
+StatusOr<build::AnalysisManifest>
+LoadFixtureManifest(const std::filesystem::path &root) {
   const ProjectAnalysisRequest request{
       .project_root = root,
       .output_root = {},
   };
   auto input = build::ResolveProjectInput(request);
-  if (!input.ok()) return input.status();
+  if (!input.ok())
+    return input.status();
   return build::LoadProjectManifest(*input);
 }
 
@@ -47,5 +48,5 @@ TEST(SemanticZooFixtureTest, LinksTwoCAndFourCppTranslationUnits) {
   EXPECT_NE(local->program_ir.GetFunction("zoo_recursive_entry"), nullptr);
 }
 
-}  // namespace
-}  // namespace veritas::analysis
+} // namespace
+} // namespace veritas::analysis

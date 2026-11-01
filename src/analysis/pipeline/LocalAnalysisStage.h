@@ -35,9 +35,9 @@ struct LocalAnalysisResult {
 // RunLocalAnalysis builds the linked whole-program IR from an M1 manifest,
 // extracts local facts, and produces unpublished summary drafts. It does not
 // publish; M5 owns merge and publication.
-StatusOr<LocalAnalysisResult> RunLocalAnalysis(
-    const build::AnalysisManifest& manifest);
+StatusOr<LocalAnalysisResult>
+RunLocalAnalysis(const build::AnalysisManifest &manifest);
 
-}  // namespace veritas::analysis::pipeline
+} // namespace veritas::analysis::pipeline
 
-#endif  // VERITAS_ANALYSIS_PIPELINE_LOCALANALYSISSTAGE_H_
+#endif // VERITAS_ANALYSIS_PIPELINE_LOCALANALYSISSTAGE_H_

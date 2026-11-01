@@ -79,8 +79,8 @@
 #include <cassert>
 #include <charconv>
 #include <cstddef>
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -129,9 +129,16 @@ ev::EvidenceQueryBudget Budget() {
 }
 
 std::vector<std::string> BudgetFlags() {
-  return {"--max-depth",    "8", "--max-nodes", "256",
-          "--max-paths",    "5", "--max-facts", "64",
-          "--max-provenance-depth", "8"};
+  return {"--max-depth",
+          "8",
+          "--max-nodes",
+          "256",
+          "--max-paths",
+          "5",
+          "--max-facts",
+          "64",
+          "--max-provenance-depth",
+          "8"};
 }
 
 std::string ShellQuote(std::string_view value) {
@@ -154,16 +161,16 @@ struct CliResult {
   std::string stdout_text;
 };
 
-CliResult RunVeritasQuery(const std::vector<std::string>& arguments) {
+CliResult RunVeritasQuery(const std::vector<std::string> &arguments) {
   std::string command = ShellQuote(VERITAS_QUERY_BINARY);
-  for (const auto& argument : arguments) {
+  for (const auto &argument : arguments) {
     command.push_back(' ');
     command.append(ShellQuote(argument));
   }
   command.append(" 2>&1");
 
   CliResult result;
-  FILE* pipe = ::popen(command.c_str(), "r");
+  FILE *pipe = ::popen(command.c_str(), "r");
   if (pipe == nullptr) {
     return result;
   }
@@ -176,9 +183,10 @@ CliResult RunVeritasQuery(const std::vector<std::string>& arguments) {
   return result;
 }
 
-CliResult RunEvidenceOverflow(const std::filesystem::path& db_dir) {
-  std::vector<std::string> arguments{"evidence", "overflow", "--sink", "memcpy",
-                                     "--format", "json", "--db", db_dir.string()};
+CliResult RunEvidenceOverflow(const std::filesystem::path &db_dir) {
+  std::vector<std::string> arguments{"evidence", "overflow",     "--sink",
+                                     "memcpy",   "--format",     "json",
+                                     "--db",     db_dir.string()};
   const auto budget = BudgetFlags();
   arguments.insert(arguments.end(), budget.begin(), budget.end());
   return RunVeritasQuery(arguments);
@@ -226,9 +234,10 @@ StatusOr<Oracle> BuildOracle(std::string_view fixture) {
 }
 
 // Typed assertions on the oracle before any byte comparison.
-void ExpectTypedSliceContent(const ev::EvidenceBuildInput& input,
-                             const cpg::ThinCpg& cpg) {
-  // Claim seed: a buffer-overflow finding with a resolvable subject/source/sink.
+void ExpectTypedSliceContent(const ev::EvidenceBuildInput &input,
+                             const cpg::ThinCpg &cpg) {
+  // Claim seed: a buffer-overflow finding with a resolvable
+  // subject/source/sink.
   EXPECT_EQ(input.claim_seed.kind, ev::ClaimKind::kBufferOverflow);
   EXPECT_EQ(input.claim_seed.severity, ev::Severity::kHigh);
   EXPECT_EQ(input.claim_seed.finding_id.kind, core::IdKind::kFact);
@@ -245,17 +254,17 @@ void ExpectTypedSliceContent(const ev::EvidenceBuildInput& input,
   EXPECT_FALSE(input.flow_slice.nodes.empty());
   EXPECT_FALSE(input.flow_slice.edges.empty());
   std::set<core::StableId> cpg_nodes;
-  for (const auto& node : cpg.nodes()) {
+  for (const auto &node : cpg.nodes()) {
     cpg_nodes.insert(node.node_id);
   }
   std::set<core::StableId> cpg_edges;
-  for (const auto& edge : cpg.edges()) {
+  for (const auto &edge : cpg.edges()) {
     cpg_edges.insert(edge.edge_id);
   }
-  for (const auto& node : input.flow_slice.nodes) {
+  for (const auto &node : input.flow_slice.nodes) {
     EXPECT_EQ(cpg_nodes.count(node.node_id), 1u) << node.label;
   }
-  for (const auto& edge : input.flow_slice.edges) {
+  for (const auto &edge : input.flow_slice.edges) {
     EXPECT_EQ(cpg_edges.count(edge.edge_id), 1u);
   }
   // The seed's endpoints are the ends of the published path.
@@ -308,7 +317,7 @@ void ExpectTypedSliceContent(const ev::EvidenceBuildInput& input,
 // it is therefore a regression guard: if a store change ever makes physical row
 // order visible, this comparison fails instead of silently reordering the
 // published slice.
-void ReverseFactBindingInsertionOrder(const std::filesystem::path& db_dir) {
+void ReverseFactBindingInsertionOrder(const std::filesystem::path &db_dir) {
   auto store = veritas::summarydb::MetadataStore::Open(db_dir / "metadata.db");
   ASSERT_TRUE(store.ok()) << store.status().message();
 
@@ -328,15 +337,17 @@ void ReverseFactBindingInsertionOrder(const std::filesystem::path& db_dir) {
   // binding_id is the table's rowid and is excluded, so the re-inserted rows
   // are assigned fresh, ascending rowids in the reversed sequence.
   static constexpr std::string_view kBindingColumns =
-      "run_id, fact_id, confidence, producer_kind, analyzer_run_id, scope_kind, "
+      "run_id, fact_id, confidence, producer_kind, analyzer_run_id, "
+      "scope_kind, "
       "scope_id, selected_witness_id, is_current";
   const std::string create =
       "CREATE TABLE veritas_reversed_bindings AS SELECT " +
-      std::string(kBindingColumns) + " FROM run_fact_bindings ORDER BY rowid DESC";
+      std::string(kBindingColumns) +
+      " FROM run_fact_bindings ORDER BY rowid DESC";
   const std::string insert = "INSERT INTO run_fact_bindings (" +
                              std::string(kBindingColumns) +
                              ") SELECT * FROM veritas_reversed_bindings";
-  for (const std::string& statement :
+  for (const std::string &statement :
        {create, std::string("DELETE FROM run_fact_bindings"), insert,
         std::string("DROP TABLE veritas_reversed_bindings")}) {
     const Status status = store->Execute(statement, {});
@@ -351,7 +362,7 @@ void ReverseFactBindingInsertionOrder(const std::filesystem::path& db_dir) {
   EXPECT_EQ(first_fact(""), before_index);
 }
 
-std::string ReadFile(const std::filesystem::path& path) {
+std::string ReadFile(const std::filesystem::path &path) {
   std::ifstream file(path, std::ios::binary);
   std::ostringstream contents;
   contents << file.rdbuf();
@@ -382,11 +393,11 @@ struct JsonNode {
 
   Kind kind = Kind::kNull;
   bool boolean = false;
-  std::string text;  // string body, number literal, or "true"/"false"/"null"
-  std::vector<JsonNode> items;  // array elements
-  std::vector<Field> members;   // object members
+  std::string text; // string body, number literal, or "true"/"false"/"null"
+  std::vector<JsonNode> items; // array elements
+  std::vector<Field> members;  // object members
 
-  const JsonNode* Member(std::string_view name) const;
+  const JsonNode *Member(std::string_view name) const;
 };
 
 struct JsonNode::Field {
@@ -394,8 +405,8 @@ struct JsonNode::Field {
   JsonNode value;
 };
 
-const JsonNode* JsonNode::Member(std::string_view name) const {
-  for (const auto& entry : members) {
+const JsonNode *JsonNode::Member(std::string_view name) const {
+  for (const auto &entry : members) {
     if (entry.name == name) {
       return &entry.value;
     }
@@ -404,10 +415,10 @@ const JsonNode* JsonNode::Member(std::string_view name) const {
 }
 
 class JsonReader {
- public:
+public:
   explicit JsonReader(std::string_view text) : text_(text) {}
 
-  bool Parse(JsonNode* out) {
+  bool Parse(JsonNode *out) {
     SkipSpace();
     if (!ParseValue(out)) {
       return false;
@@ -416,33 +427,33 @@ class JsonReader {
     return pos_ == text_.size();
   }
 
- private:
-  bool ParseValue(JsonNode* out) {
+private:
+  bool ParseValue(JsonNode *out) {
     if (pos_ >= text_.size()) {
       return false;
     }
     switch (text_[pos_]) {
-      case '{':
-        return ParseObject(out);
-      case '[':
-        return ParseArray(out);
-      case '"':
-        out->kind = JsonNode::Kind::kString;
-        return ParseString(&out->text);
-      case 't':
-        return ParseLiteral("true", JsonNode::Kind::kBool, true, out);
-      case 'f':
-        return ParseLiteral("false", JsonNode::Kind::kBool, false, out);
-      case 'n':
-        return ParseLiteral("null", JsonNode::Kind::kNull, false, out);
-      default:
-        out->kind = JsonNode::Kind::kNumber;
-        return ParseNumber(&out->text);
+    case '{':
+      return ParseObject(out);
+    case '[':
+      return ParseArray(out);
+    case '"':
+      out->kind = JsonNode::Kind::kString;
+      return ParseString(&out->text);
+    case 't':
+      return ParseLiteral("true", JsonNode::Kind::kBool, true, out);
+    case 'f':
+      return ParseLiteral("false", JsonNode::Kind::kBool, false, out);
+    case 'n':
+      return ParseLiteral("null", JsonNode::Kind::kNull, false, out);
+    default:
+      out->kind = JsonNode::Kind::kNumber;
+      return ParseNumber(&out->text);
     }
   }
 
   bool ParseLiteral(std::string_view literal, JsonNode::Kind kind, bool boolean,
-                    JsonNode* out) {
+                    JsonNode *out) {
     if (text_.compare(pos_, literal.size(), literal) != 0) {
       return false;
     }
@@ -453,9 +464,9 @@ class JsonReader {
     return true;
   }
 
-  bool ParseObject(JsonNode* out) {
+  bool ParseObject(JsonNode *out) {
     out->kind = JsonNode::Kind::kObject;
-    ++pos_;  // '{'
+    ++pos_; // '{'
     SkipSpace();
     if (pos_ < text_.size() && text_[pos_] == '}') {
       ++pos_;
@@ -494,9 +505,9 @@ class JsonReader {
     }
   }
 
-  bool ParseArray(JsonNode* out) {
+  bool ParseArray(JsonNode *out) {
     out->kind = JsonNode::Kind::kArray;
-    ++pos_;  // '['
+    ++pos_; // '['
     SkipSpace();
     if (pos_ < text_.size() && text_[pos_] == ']') {
       ++pos_;
@@ -525,7 +536,7 @@ class JsonReader {
     }
   }
 
-  bool ParseString(std::string* out) {
+  bool ParseString(std::string *out) {
     if (pos_ >= text_.size() || text_[pos_] != '"') {
       return false;
     }
@@ -545,43 +556,43 @@ class JsonReader {
       }
       const char escape = text_[pos_++];
       switch (escape) {
-        case '"':
-        case '\\':
-        case '/':
-          out->push_back(escape);
-          break;
-        case 'b':
-          out->push_back('\b');
-          break;
-        case 'f':
-          out->push_back('\f');
-          break;
-        case 'n':
-          out->push_back('\n');
-          break;
-        case 'r':
-          out->push_back('\r');
-          break;
-        case 't':
-          out->push_back('\t');
-          break;
-        case 'u':
-          // The slice document carries only ASCII (ids, symbol names, enums),
-          // so the four hex digits are consumed and dropped.
-          if (pos_ + 4 > text_.size()) {
-            return false;
-          }
-          pos_ += 4;
-          out->push_back('?');
-          break;
-        default:
+      case '"':
+      case '\\':
+      case '/':
+        out->push_back(escape);
+        break;
+      case 'b':
+        out->push_back('\b');
+        break;
+      case 'f':
+        out->push_back('\f');
+        break;
+      case 'n':
+        out->push_back('\n');
+        break;
+      case 'r':
+        out->push_back('\r');
+        break;
+      case 't':
+        out->push_back('\t');
+        break;
+      case 'u':
+        // The slice document carries only ASCII (ids, symbol names, enums),
+        // so the four hex digits are consumed and dropped.
+        if (pos_ + 4 > text_.size()) {
           return false;
+        }
+        pos_ += 4;
+        out->push_back('?');
+        break;
+      default:
+        return false;
       }
     }
     return false;
   }
 
-  bool ParseNumber(std::string* out) {
+  bool ParseNumber(std::string *out) {
     const std::size_t start = pos_;
     while (pos_ < text_.size()) {
       const char c = text_[pos_];
@@ -614,15 +625,15 @@ class JsonReader {
   std::size_t pos_ = 0;
 };
 
-Status ParseJson(std::string_view text, JsonNode* out) {
+Status ParseJson(std::string_view text, JsonNode *out) {
   if (!JsonReader(text).Parse(out)) {
     return Status::InvalidArgument("malformed slice JSON");
   }
   return Status::Ok();
 }
 
-const JsonNode& RequireMember(const JsonNode& node, std::string_view name) {
-  const JsonNode* member = node.Member(name);
+const JsonNode &RequireMember(const JsonNode &node, std::string_view name) {
+  const JsonNode *member = node.Member(name);
   // Every call site checks presence first and reports a Status, so reaching
   // here without the member is a bug in this file, not bad input.
   assert(member != nullptr);
@@ -639,9 +650,9 @@ struct FactRowView {
   std::vector<std::string> cells;
 };
 
-std::string RenderFactRow(const FactRowView& row) {
+std::string RenderFactRow(const FactRowView &row) {
   std::string out = core::ToString(row.fact_id) + " [" + row.relation + "]";
-  for (const std::string& cell : row.cells) {
+  for (const std::string &cell : row.cells) {
     out += " | " + cell;
   }
   return out;
@@ -723,21 +734,20 @@ struct SemanticSlice {
   FactSetView unknowns;
 };
 
-StatusOr<std::size_t> ReadCount(const JsonNode& node) {
+StatusOr<std::size_t> ReadCount(const JsonNode &node) {
   if (node.kind != JsonNode::Kind::kNumber) {
     return Status::InvalidArgument("expected a JSON number");
   }
   std::size_t value = 0;
-  const auto [ptr, ec] =
-      std::from_chars(node.text.data(), node.text.data() + node.text.size(),
-                      value);
+  const auto [ptr, ec] = std::from_chars(
+      node.text.data(), node.text.data() + node.text.size(), value);
   if (ec != std::errc() || ptr != node.text.data() + node.text.size()) {
     return Status::InvalidArgument("malformed JSON number '" + node.text + "'");
   }
   return value;
 }
 
-StatusOr<core::StableId> ReadStableId(const JsonNode& node) {
+StatusOr<core::StableId> ReadStableId(const JsonNode &node) {
   if (node.kind != JsonNode::Kind::kString) {
     return Status::InvalidArgument("expected a JSON string id");
   }
@@ -746,7 +756,7 @@ StatusOr<core::StableId> ReadStableId(const JsonNode& node) {
 
 // Reads the `QueryResultMetadata` members that a clean rebuild cannot change.
 // `analysis_run_id` and `query_provenance_id` are deliberately not read.
-StatusOr<FactSetView> ReadMetadataView(const JsonNode& metadata) {
+StatusOr<FactSetView> ReadMetadataView(const JsonNode &metadata) {
   if (metadata.kind != JsonNode::Kind::kObject) {
     return Status::InvalidArgument("metadata is not an object");
   }
@@ -764,11 +774,11 @@ StatusOr<FactSetView> ReadMetadataView(const JsonNode& metadata) {
     return completeness.status();
   }
   view.completeness = *completeness;
-  const JsonNode& reasons = RequireMember(metadata, "truncation_reasons");
+  const JsonNode &reasons = RequireMember(metadata, "truncation_reasons");
   if (reasons.kind != JsonNode::Kind::kArray) {
     return Status::InvalidArgument("truncation_reasons is not an array");
   }
-  for (const JsonNode& reason : reasons.items) {
+  for (const JsonNode &reason : reasons.items) {
     auto parsed = ev::ParseTruncationReason(reason.text);
     if (!parsed.ok()) {
       return parsed.status();
@@ -784,19 +794,19 @@ StatusOr<FactSetView> ReadMetadataView(const JsonNode& metadata) {
 }
 
 // One serialized fact row: `fact_id`, `relation`, and the ordered `cells`.
-StatusOr<FactRowView> ReadFactRow(const JsonNode& fact) {
+StatusOr<FactRowView> ReadFactRow(const JsonNode &fact) {
   if (fact.kind != JsonNode::Kind::kObject) {
     return Status::InvalidArgument("expected a JSON fact object");
   }
-  const JsonNode* id = fact.Member("fact_id");
+  const JsonNode *id = fact.Member("fact_id");
   if (id == nullptr) {
     return Status::InvalidArgument("fact is missing fact_id");
   }
-  const JsonNode* relation = fact.Member("relation");
+  const JsonNode *relation = fact.Member("relation");
   if (relation == nullptr || relation->kind != JsonNode::Kind::kString) {
     return Status::InvalidArgument("fact is missing a string relation");
   }
-  const JsonNode* cells = fact.Member("cells");
+  const JsonNode *cells = fact.Member("cells");
   if (cells == nullptr || cells->kind != JsonNode::Kind::kArray) {
     return Status::InvalidArgument("fact is missing a cells array");
   }
@@ -808,28 +818,28 @@ StatusOr<FactRowView> ReadFactRow(const JsonNode& fact) {
   row.fact_id = *parsed_id;
   row.relation = relation->text;
   row.cells.reserve(cells->items.size());
-  for (const JsonNode& cell : cells->items) {
+  for (const JsonNode &cell : cells->items) {
     switch (cell.kind) {
-      case JsonNode::Kind::kString:
-        row.cells.push_back("s:" + cell.text);
-        break;
-      case JsonNode::Kind::kNumber:
-        row.cells.push_back("n:" + cell.text);
-        break;
-      case JsonNode::Kind::kBool:
-        row.cells.push_back("b:" + cell.text);
-        break;
-      default:
-        return Status::InvalidArgument("unsupported fact cell encoding");
+    case JsonNode::Kind::kString:
+      row.cells.push_back("s:" + cell.text);
+      break;
+    case JsonNode::Kind::kNumber:
+      row.cells.push_back("n:" + cell.text);
+      break;
+    case JsonNode::Kind::kBool:
+      row.cells.push_back("b:" + cell.text);
+      break;
+    default:
+      return Status::InvalidArgument("unsupported fact cell encoding");
     }
   }
   return row;
 }
 
 // The fact rows of the array member `name` of `node`.
-StatusOr<std::vector<FactRowView>> ReadFactRows(const JsonNode& node,
+StatusOr<std::vector<FactRowView>> ReadFactRows(const JsonNode &node,
                                                 std::string_view name) {
-  const JsonNode* member = node.Member(name);
+  const JsonNode *member = node.Member(name);
   if (member == nullptr) {
     return Status::InvalidArgument("missing JSON member '" + std::string(name) +
                                    "'");
@@ -840,7 +850,7 @@ StatusOr<std::vector<FactRowView>> ReadFactRows(const JsonNode& node,
   }
   std::vector<FactRowView> rows;
   rows.reserve(member->items.size());
-  for (const JsonNode& item : member->items) {
+  for (const JsonNode &item : member->items) {
     auto row = ReadFactRow(item);
     if (!row.ok()) {
       return row.status();
@@ -850,10 +860,11 @@ StatusOr<std::vector<FactRowView>> ReadFactRows(const JsonNode& node,
   return rows;
 }
 
-// The ids of an array of bare ID strings (`provenance_refs`), in document order.
-StatusOr<std::vector<core::StableId>> ReadPlainIdArray(const JsonNode& node,
+// The ids of an array of bare ID strings (`provenance_refs`), in document
+// order.
+StatusOr<std::vector<core::StableId>> ReadPlainIdArray(const JsonNode &node,
                                                        std::string_view name) {
-  const JsonNode* member = node.Member(name);
+  const JsonNode *member = node.Member(name);
   if (member == nullptr) {
     return Status::InvalidArgument("missing JSON member '" + std::string(name) +
                                    "'");
@@ -864,7 +875,7 @@ StatusOr<std::vector<core::StableId>> ReadPlainIdArray(const JsonNode& node,
   }
   std::vector<core::StableId> ids;
   ids.reserve(member->items.size());
-  for (const JsonNode& item : member->items) {
+  for (const JsonNode &item : member->items) {
     auto parsed = ReadStableId(item);
     if (!parsed.ok()) {
       return parsed.status();
@@ -874,7 +885,7 @@ StatusOr<std::vector<core::StableId>> ReadPlainIdArray(const JsonNode& node,
   return ids;
 }
 
-StatusOr<FactSetView> ReadFactSet(const JsonNode& node) {
+StatusOr<FactSetView> ReadFactSet(const JsonNode &node) {
   if (node.kind != JsonNode::Kind::kObject) {
     return Status::InvalidArgument("expected a JSON fact set object");
   }
@@ -894,10 +905,10 @@ StatusOr<FactSetView> ReadFactSet(const JsonNode& node) {
 }
 
 // The ids of the array member `name` of `node`, in document order.
-StatusOr<std::vector<core::StableId>> ReadIdArray(const JsonNode& node,
+StatusOr<std::vector<core::StableId>> ReadIdArray(const JsonNode &node,
                                                   std::string_view name,
                                                   std::string_view id_key) {
-  const JsonNode* member = node.Member(name);
+  const JsonNode *member = node.Member(name);
   if (member == nullptr) {
     return Status::InvalidArgument("missing JSON member '" + std::string(name) +
                                    "'");
@@ -908,8 +919,8 @@ StatusOr<std::vector<core::StableId>> ReadIdArray(const JsonNode& node,
   }
   std::vector<core::StableId> ids;
   ids.reserve(member->items.size());
-  for (const JsonNode& item : member->items) {
-    const JsonNode* id = item.Member(id_key);
+  for (const JsonNode &item : member->items) {
+    const JsonNode *id = item.Member(id_key);
     if (id == nullptr) {
       return Status::InvalidArgument("'" + std::string(name) +
                                      "' entry is missing '" +
@@ -947,7 +958,7 @@ StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
   }
 
   SemanticSlice slice;
-  const JsonNode& seed = RequireMember(root, "claim_seed");
+  const JsonNode &seed = RequireMember(root, "claim_seed");
   for (const std::string_view name :
        {"finding_id", "kind", "severity", "subject_ref", "source_ref",
         "sink_ref"}) {
@@ -979,7 +990,7 @@ StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
     slice.claim_seed.callsite_ref = *parsed;
   }
 
-  const JsonNode& flow = RequireMember(root, "flow_slice");
+  const JsonNode &flow = RequireMember(root, "flow_slice");
   for (const std::string_view name :
        {"nodes", "edges", "supporting_facts", "contradicting_facts", "unknowns",
         "provenance_refs", "metadata"}) {
@@ -995,9 +1006,8 @@ StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
   auto flow_unknowns = ReadFactRows(flow, "unknowns");
   auto provenance_refs = ReadPlainIdArray(flow, "provenance_refs");
   auto flow_metadata = ReadMetadataView(RequireMember(flow, "metadata"));
-  if (!nodes.ok() || !edges.ok() || !supporting.ok() ||
-      !contradicting.ok() || !flow_unknowns.ok() || !provenance_refs.ok() ||
-      !flow_metadata.ok()) {
+  if (!nodes.ok() || !edges.ok() || !supporting.ok() || !contradicting.ok() ||
+      !flow_unknowns.ok() || !provenance_refs.ok() || !flow_metadata.ok()) {
     return Status::InvalidArgument("flow slice is malformed");
   }
   slice.flow_nodes = std::move(*nodes);
@@ -1008,8 +1018,7 @@ StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
   slice.flow_provenance_refs = std::move(*provenance_refs);
   slice.flow = std::move(*flow_metadata);
 
-  const auto read_set = [&](std::string_view name,
-                            FactSetView* out) -> Status {
+  const auto read_set = [&](std::string_view name, FactSetView *out) -> Status {
     auto parsed = ReadFactSet(RequireMember(root, name));
     if (!parsed.ok()) {
       return parsed.status();
@@ -1040,15 +1049,16 @@ StatusOr<SemanticSlice> ParseSemanticSlice(std::string_view json) {
 // Comparing the toolchain-stable projections
 // ---------------------------------------------------------------------------
 
-std::string RenderId(const core::StableId& id) { return core::ToString(id); }
+std::string RenderId(const core::StableId &id) { return core::ToString(id); }
 
 // Both comparators below reduce their operands through `render` and mask the
 // content-addressed digests before comparing, so `SameStableSlice` compares the
 // toolchain-stable projection of two documents rather than their identity
 // digests. See `StabilizeDigests`.
 template <typename T, typename Render>
-bool SameList(std::string_view name, const std::vector<T>& left,
-              const std::vector<T>& right, Render render, std::string* mismatch) {
+bool SameList(std::string_view name, const std::vector<T> &left,
+              const std::vector<T> &right, Render render,
+              std::string *mismatch) {
   if (left.size() != right.size()) {
     *mismatch = std::string(name) + ": " + std::to_string(left.size()) +
                 " entries vs " + std::to_string(right.size());
@@ -1057,8 +1067,8 @@ bool SameList(std::string_view name, const std::vector<T>& left,
   for (std::size_t i = 0; i < left.size(); ++i) {
     if (StabilizeDigests(render(left[i])) !=
         StabilizeDigests(render(right[i]))) {
-      *mismatch = std::string(name) + "[" + std::to_string(i) + "]: " +
-                  render(left[i]) + " vs " + render(right[i]);
+      *mismatch = std::string(name) + "[" + std::to_string(i) +
+                  "]: " + render(left[i]) + " vs " + render(right[i]);
       return false;
     }
   }
@@ -1066,8 +1076,8 @@ bool SameList(std::string_view name, const std::vector<T>& left,
 }
 
 template <typename T, typename Render>
-bool SameValue(std::string_view name, const T& left, const T& right,
-               Render render, std::string* mismatch) {
+bool SameValue(std::string_view name, const T &left, const T &right,
+               Render render, std::string *mismatch) {
   if (StabilizeDigests(render(left)) == StabilizeDigests(render(right))) {
     return true;
   }
@@ -1075,8 +1085,8 @@ bool SameValue(std::string_view name, const T& left, const T& right,
   return false;
 }
 
-bool SameFactSet(std::string_view name, const FactSetView& left,
-                 const FactSetView& right, std::string* mismatch) {
+bool SameFactSet(std::string_view name, const FactSetView &left,
+                 const FactSetView &right, std::string *mismatch) {
   // Native hash ordering can change across the already documented host-bound
   // identities. Compare a semantic multiset after normalization: preserve all
   // row cells, relation/kind tags and multiplicity, not incidental hash order.
@@ -1093,26 +1103,28 @@ bool SameFactSet(std::string_view name, const FactSetView& left,
           mismatch)) {
     return false;
   }
-  if (!SameValue(std::string(name) + ".completeness", left.completeness,
-                 right.completeness,
-                 [](ev::QueryCompleteness value) {
-                   return std::string(ev::ToString(value));
-                 },
-                 mismatch)) {
+  if (!SameValue(
+          std::string(name) + ".completeness", left.completeness,
+          right.completeness,
+          [](ev::QueryCompleteness value) {
+            return std::string(ev::ToString(value));
+          },
+          mismatch)) {
     return false;
   }
-  if (!SameList(std::string(name) + ".truncation_reasons",
-                left.truncation_reasons, right.truncation_reasons,
-                [](ev::TruncationReason value) {
-                  return std::string(ev::ToString(value));
-                },
-                mismatch)) {
+  if (!SameList(
+          std::string(name) + ".truncation_reasons", left.truncation_reasons,
+          right.truncation_reasons,
+          [](ev::TruncationReason value) {
+            return std::string(ev::ToString(value));
+          },
+          mismatch)) {
     return false;
   }
-  return SameValue(std::string(name) + ".examined_items", left.examined_items,
-                   right.examined_items,
-                   [](std::size_t value) { return std::to_string(value); },
-                   mismatch);
+  return SameValue(
+      std::string(name) + ".examined_items", left.examined_items,
+      right.examined_items,
+      [](std::size_t value) { return std::to_string(value); }, mismatch);
 }
 
 // True when two slices agree on every field an independent clean build of the
@@ -1121,25 +1133,23 @@ bool SameFactSet(std::string_view name, const FactSetView& left,
 // state. The reference digests themselves are masked, because a content
 // address is scoped to the toolchain that produced it (see
 // `StabilizeDigests`). The first disagreement is written to `mismatch`.
-bool SameStableSlice(const SemanticSlice& left, const SemanticSlice& right,
-                     std::string* mismatch) {
+bool SameStableSlice(const SemanticSlice &left, const SemanticSlice &right,
+                     std::string *mismatch) {
   if (!SameValue("claim_seed.finding_id", left.claim_seed.finding_id,
                  right.claim_seed.finding_id, RenderId, mismatch)) {
     return false;
   }
-  if (!SameValue("claim_seed.kind", left.claim_seed.kind, right.claim_seed.kind,
-                 [](ev::ClaimKind value) {
-                   return std::string(ev::ToString(value));
-                 },
-                 mismatch)) {
+  if (!SameValue(
+          "claim_seed.kind", left.claim_seed.kind, right.claim_seed.kind,
+          [](ev::ClaimKind value) { return std::string(ev::ToString(value)); },
+          mismatch)) {
     return false;
   }
-  if (!SameValue("claim_seed.severity", left.claim_seed.severity,
-                 right.claim_seed.severity,
-                 [](ev::Severity value) {
-                   return std::string(ev::ToString(value));
-                 },
-                 mismatch)) {
+  if (!SameValue(
+          "claim_seed.severity", left.claim_seed.severity,
+          right.claim_seed.severity,
+          [](ev::Severity value) { return std::string(ev::ToString(value)); },
+          mismatch)) {
     return false;
   }
   if (!SameValue("claim_seed.subject_ref", left.claim_seed.subject_ref,
@@ -1176,9 +1186,8 @@ bool SameStableSlice(const SemanticSlice& left, const SemanticSlice& right,
                 right.flow_supporting_facts, RenderFactRow, mismatch)) {
     return false;
   }
-  if (!SameList("flow_slice.contradicting_facts",
-                left.flow_contradicting_facts, right.flow_contradicting_facts,
-                RenderFactRow, mismatch)) {
+  if (!SameList("flow_slice.contradicting_facts", left.flow_contradicting_facts,
+                right.flow_contradicting_facts, RenderFactRow, mismatch)) {
     return false;
   }
   if (!SameList("flow_slice.unknowns", left.flow_unknowns, right.flow_unknowns,
@@ -1511,8 +1520,10 @@ TEST(VeritasQueryEvidenceTest, RejectsInvalidOptionSurface) {
       {"unknown format",
        {"evidence", "overflow", "--sink", "memcpy", "--format", "sarif", "--db",
         db}},
-      {"missing format", {"evidence", "overflow", "--sink", "memcpy", "--db", db}},
-      {"missing sink", {"evidence", "overflow", "--format", "json", "--db", db}},
+      {"missing format",
+       {"evidence", "overflow", "--sink", "memcpy", "--db", db}},
+      {"missing sink",
+       {"evidence", "overflow", "--format", "json", "--db", db}},
       {"unsupported sink",
        {"evidence", "overflow", "--sink", "strcpy", "--format", "json", "--db",
         db}},
@@ -1525,7 +1536,8 @@ TEST(VeritasQueryEvidenceTest, RejectsInvalidOptionSurface) {
        {"evidence", "overflow", "--sink", "memcpy", "--format", "json", "--db",
         db, "--bogus", "1"}},
       {"missing option value",
-       {"evidence", "overflow", "--sink", "memcpy", "--format", "json", "--db"}},
+       {"evidence", "overflow", "--sink", "memcpy", "--format", "json",
+        "--db"}},
       {"zero budget",
        {"evidence", "overflow", "--sink", "memcpy", "--format", "json", "--db",
         db, "--max-nodes", "0"}},
@@ -1537,7 +1549,7 @@ TEST(VeritasQueryEvidenceTest, RejectsInvalidOptionSurface) {
         db, "--max-depth", "eight"}},
   };
 
-  for (const auto& [name, arguments] : cases) {
+  for (const auto &[name, arguments] : cases) {
     const CliResult result = RunVeritasQuery(arguments);
     EXPECT_NE(result.exit_code, 0) << name << ": " << result.stdout_text;
     EXPECT_EQ(result.stdout_text.find('{'), std::string::npos)
@@ -1556,5 +1568,5 @@ TEST(VeritasQueryEvidenceTest, MissingStoreFailsBeforeEmittingJson) {
       << result.stdout_text;
 }
 
-}  // namespace
-}  // namespace veritas::testing
+} // namespace
+} // namespace veritas::testing

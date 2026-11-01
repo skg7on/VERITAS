@@ -51,6 +51,6 @@ StatusOr<std::int64_t> ParseSigned(std::string_view text);
 // semantic validation.
 StatusOr<facts::SemanticRow> RowFromKey(std::string_view key);
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_WITNESS_KEY_H_
+#endif // VERITAS_WPA_WITNESS_KEY_H_

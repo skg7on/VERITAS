@@ -181,7 +181,8 @@ public:
   void Finish() {
     std::vector<std::uint32_t> order(keys_.size());
     std::iota(order.begin(), order.end(), std::uint32_t{0});
-    std::ranges::sort(order, {}, [this](std::uint32_t id) { return keys_[id]; });
+    std::ranges::sort(order, {},
+                      [this](std::uint32_t id) { return keys_[id]; });
     ranks_.assign(keys_.size(), 0);
     std::uint32_t rank = 0;
     for (std::size_t i = 0; i < order.size(); ++i) {
@@ -480,10 +481,12 @@ Status AnalysisFactBus::Validate(const AnalysisFactBatch &batch) const {
   const std::set<core::StableId> roots(batch.rooted_input_fact_ids.begin(),
                                        batch.rooted_input_fact_ids.end());
   constexpr std::size_t kNoFact = std::numeric_limits<std::size_t>::max();
+
   struct WitnessEndpoints {
     std::size_t result = kNoFact;
     std::size_t input = kNoFact;
   };
+
   std::vector<WitnessEndpoints> endpoints;
   endpoints.reserve(batch.witnesses.size());
   std::vector<bool> witnessed(batch.facts.size(), false);

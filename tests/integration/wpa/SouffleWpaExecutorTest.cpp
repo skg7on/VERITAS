@@ -87,5 +87,5 @@ TEST(SouffleWpaExecutorTest, RejectsUnsupportedThreadCount) {
   EXPECT_EQ(result.status().code(), StatusCode::kInvalidArgument);
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

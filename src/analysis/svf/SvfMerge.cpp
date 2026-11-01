@@ -42,34 +42,36 @@ using veritas::core::ToString;
 // semantic::EpistemicState -> v1 proto epistemic state.
 v1::EpistemicState ToV1Epistemic(semantic::EpistemicState state) {
   switch (state) {
-    case semantic::EpistemicState::kMust:
-      return v1::EPISTEMIC_STATE_MUST;
-    case semantic::EpistemicState::kMay:
-      return v1::EPISTEMIC_STATE_MAY;
-    case semantic::EpistemicState::kMustNot:
-      return v1::EPISTEMIC_STATE_MUST_NOT;
-    case semantic::EpistemicState::kInferred:
-      return v1::EPISTEMIC_STATE_INFERRED;
-    case semantic::EpistemicState::kAssumed:
-      return v1::EPISTEMIC_STATE_ASSUMED;
-    case semantic::EpistemicState::kUnknown:
-      return v1::EPISTEMIC_STATE_UNKNOWN;
+  case semantic::EpistemicState::kMust:
+    return v1::EPISTEMIC_STATE_MUST;
+  case semantic::EpistemicState::kMay:
+    return v1::EPISTEMIC_STATE_MAY;
+  case semantic::EpistemicState::kMustNot:
+    return v1::EPISTEMIC_STATE_MUST_NOT;
+  case semantic::EpistemicState::kInferred:
+    return v1::EPISTEMIC_STATE_INFERRED;
+  case semantic::EpistemicState::kAssumed:
+    return v1::EPISTEMIC_STATE_ASSUMED;
+  case semantic::EpistemicState::kUnknown:
+    return v1::EPISTEMIC_STATE_UNKNOWN;
   }
   return v1::EPISTEMIC_STATE_UNKNOWN;
 }
 
-std::optional<std::string> OwningFunctionVariant(
-    std::string_view value_name,
-    const ::veritas::analysis::llvm::OriginMap& origin_map) {
+std::optional<std::string>
+OwningFunctionVariant(std::string_view value_name,
+                      const ::veritas::analysis::llvm::OriginMap &origin_map) {
   const auto delimiter = value_name.find(':');
-  if (delimiter == std::string_view::npos) return std::nullopt;
+  if (delimiter == std::string_view::npos)
+    return std::nullopt;
   return origin_map.GetSymbolIdByLlvmName(value_name.substr(0, delimiter));
 }
 
 bool IsOwnedBy(std::string_view value_name, std::string_view function_id,
-               const ::veritas::analysis::llvm::OriginMap& origin_map) {
+               const ::veritas::analysis::llvm::OriginMap &origin_map) {
   auto owner = OwningFunctionVariant(value_name, origin_map);
-  if (owner.has_value()) return *owner == function_id;
+  if (owner.has_value())
+    return *owner == function_id;
   // A bare caller name resolves through the origin map by exact LLVM name.
   if (auto id = origin_map.GetSymbolIdByLlvmName(value_name)) {
     return *id == function_id;
@@ -79,12 +81,12 @@ bool IsOwnedBy(std::string_view value_name, std::string_view function_id,
   return value_name.find(function_id) != std::string_view::npos;
 }
 
-}  // namespace
+} // namespace
 
-std::vector<v1::FunctionSummary> MergeSvfFacts(
-    std::vector<v1::FunctionSummary> drafts,
-    const semantic::NormalizedAnalysisFacts& facts,
-    const ::veritas::analysis::llvm::OriginMap& origin_map) {
+std::vector<v1::FunctionSummary>
+MergeSvfFacts(std::vector<v1::FunctionSummary> drafts,
+              const semantic::NormalizedAnalysisFacts &facts,
+              const ::veritas::analysis::llvm::OriginMap &origin_map) {
   // Only facts with a recoverable per-function owner may enter a per-function
   // summary.v1 draft. Calls carry their caller's diagnostic name, so they are
   // attributed to the caller's draft. Value-flow, alias, and memory-effect
@@ -96,14 +98,14 @@ std::vector<v1::FunctionSummary> MergeSvfFacts(
   // against summary.v2. Scoped unknowns are run-level diagnostics (never
   // per-function facts) and are attached to every draft, matching the
   // pre-normalization behavior.
-  for (auto& draft : drafts) {
-    const std::string& function_id = draft.identity().function_variant_id();
+  for (auto &draft : drafts) {
+    const std::string &function_id = draft.identity().function_variant_id();
 
-    for (const auto& call : facts.calls) {
+    for (const auto &call : facts.calls) {
       if (!IsOwnedBy(call.diagnostic_symbol, function_id, origin_map)) {
         continue;
       }
-      auto* out = draft.add_calls();
+      auto *out = draft.add_calls();
       out->set_callee_symbol(call.callee ? ToString(*call.callee)
                                          : std::string{});
       out->set_call_site_anchor_id(ToString(call.call_site));
@@ -111,8 +113,8 @@ std::vector<v1::FunctionSummary> MergeSvfFacts(
       out->set_provenance_ref(call.provenance_ref);
     }
 
-    for (const auto& unknown : facts.unknowns) {
-      auto* out = draft.add_unknowns();
+    for (const auto &unknown : facts.unknowns) {
+      auto *out = draft.add_unknowns();
       out->set_kind("svf");
       out->set_reason(unknown.reason);
       out->set_scope(unknown.scope);
@@ -222,8 +224,8 @@ v2::AbstractObjectKind ToV2ObjectKind(semantic::AbstractObjectKind kind) {
   return v2::ABSTRACT_OBJECT_KIND_UNSPECIFIED;
 }
 
-v2::AccessPathSegment::Kind ToV2SegmentKind(
-    semantic::AccessPathSegment::Kind kind) {
+v2::AccessPathSegment::Kind
+ToV2SegmentKind(semantic::AccessPathSegment::Kind kind) {
   switch (kind) {
   case semantic::AccessPathSegment::Kind::kField:
     return v2::AccessPathSegment::KIND_FIELD;
@@ -237,14 +239,14 @@ v2::AccessPathSegment::Kind ToV2SegmentKind(
   return v2::AccessPathSegment::KIND_UNSPECIFIED;
 }
 
-StatusOr<v2::MemoryLocation> ToProtoLocation(
-    const semantic::MemoryLocation& location) {
+StatusOr<v2::MemoryLocation>
+ToProtoLocation(const semantic::MemoryLocation &location) {
   if (Status status = semantic::Validate(location); !status.ok()) {
     return status;
   }
   v2::MemoryLocation out;
   out.set_memory_location_id(core::ToString(location.id));
-  auto* object = out.mutable_object();
+  auto *object = out.mutable_object();
   object->set_abstract_object_id(core::ToString(location.object.id));
   object->set_kind(ToV2ObjectKind(location.object.kind));
   if (location.object.owner_function.has_value()) {
@@ -253,13 +255,13 @@ StatusOr<v2::MemoryLocation> ToProtoLocation(
   }
   object->set_semantic_anchor_id(location.object.semantic_anchor);
   object->set_diagnostic_name(location.object.diagnostic_name);
-  for (const auto& segment : location.access_path) {
-    auto* proto_segment = out.add_access_path();
+  for (const auto &segment : location.access_path) {
+    auto *proto_segment = out.add_access_path();
     proto_segment->set_kind(ToV2SegmentKind(segment.kind));
     proto_segment->set_first(segment.first);
     proto_segment->set_last(segment.last);
   }
-  auto* byte_range = out.mutable_byte_range();
+  auto *byte_range = out.mutable_byte_range();
   if (location.byte_range.offset.has_value()) {
     byte_range->set_offset_known(true);
     byte_range->set_offset(*location.byte_range.offset);
@@ -289,16 +291,16 @@ std::string_view ModelEffectKindToken(semantic::ModelEffectKind kind) {
 
 // Reattach component digests over the merged summary so the content hash and
 // per-component hashes reflect the post-merge semantic content.
-void ReplaceComponentDigests(v2::FunctionSummary* summary) {
+void ReplaceComponentDigests(v2::FunctionSummary *summary) {
   summary->clear_component_digests();
-  for (const auto& digest : summary::ComputeComponentDigests(*summary)) {
-    auto* proto = summary->add_component_digests();
+  for (const auto &digest : summary::ComputeComponentDigests(*summary)) {
+    auto *proto = summary->add_component_digests();
     proto->set_kind(digest.kind);
     proto->set_semantic_hash(
-        std::string(reinterpret_cast<const char*>(digest.semantic_hash.data()),
+        std::string(reinterpret_cast<const char *>(digest.semantic_hash.data()),
                     digest.semantic_hash.size()));
     proto->set_evidence_hash(
-        std::string(reinterpret_cast<const char*>(digest.evidence_hash.data()),
+        std::string(reinterpret_cast<const char *>(digest.evidence_hash.data()),
                     digest.evidence_hash.size()));
     proto->set_item_count(digest.item_count);
     proto->set_payload_offset(digest.payload_offset);
@@ -306,10 +308,9 @@ void ReplaceComponentDigests(v2::FunctionSummary* summary) {
   }
 }
 
-template <typename Message>
-void SortBySerialized(std::vector<Message>* items) {
+template <typename Message> void SortBySerialized(std::vector<Message> *items) {
   std::sort(items->begin(), items->end(),
-            [](const Message& a, const Message& b) {
+            [](const Message &a, const Message &b) {
               return a.SerializeAsString() < b.SerializeAsString();
             });
 }
@@ -317,28 +318,28 @@ void SortBySerialized(std::vector<Message>* items) {
 // Sort a proto repeated field in place by serialized bytes so merged facts
 // interleave deterministically with the local facts already present.
 template <typename Message>
-void SortRepeated(::google::protobuf::RepeatedPtrField<Message>* field) {
+void SortRepeated(::google::protobuf::RepeatedPtrField<Message> *field) {
   std::vector<Message> items(field->begin(), field->end());
   SortBySerialized(&items);
   field->Clear();
-  for (auto& item : items) {
+  for (auto &item : items) {
     *field->Add() = std::move(item);
   }
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
-    std::vector<v2::FunctionSummary> drafts,
-    const semantic::NormalizedAnalysisFacts& facts,
-    const semantic::ModelBundle& model_bundle) {
+StatusOr<std::vector<v2::FunctionSummary>>
+MergeSvfFactsV2(std::vector<v2::FunctionSummary> drafts,
+                const semantic::NormalizedAnalysisFacts &facts,
+                const semantic::ModelBundle &model_bundle) {
   // Function value ref -> function-variant ID. Built once from the drafts so
   // indirect-call callees can be resolved to their function-variant identity
   // (a callee kValueRef is a hash, so it must be recomputed from a known
   // function-variant ID and looked up).
   std::map<StableId, std::string> ref_to_variant;
-  for (const auto& draft : drafts) {
-    const std::string& owner = draft.identity().function_variant_id();
+  for (const auto &draft : drafts) {
+    const std::string &owner = draft.identity().function_variant_id();
     ref_to_variant.emplace(
         ::veritas::analysis::llvm::StableValueMapper::FunctionValueRef(owner),
         owner);
@@ -353,27 +354,27 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
   // The owner key is the canonical function-variant string. It must equal the
   // draft's function_variant_id() exactly -- the same comparison the previous
   // scan performed via core::ToString(...) != owner.
-  std::map<StableId, std::vector<const semantic::NormalizedCallTarget*>>
+  std::map<StableId, std::vector<const semantic::NormalizedCallTarget *>>
       calls_by_caller;
-  for (const auto& call : facts.calls) {
+  for (const auto &call : facts.calls) {
     calls_by_caller[call.caller].push_back(&call);
   }
 
-  std::map<std::string, std::vector<const semantic::NormalizedMemoryEffect*>>
+  std::map<std::string, std::vector<const semantic::NormalizedMemoryEffect *>>
       effects_by_owner;
-  for (const auto& effect : facts.memory_effects) {
-    const auto& owner_fn = effect.location.object.owner_function;
+  for (const auto &effect : facts.memory_effects) {
+    const auto &owner_fn = effect.location.object.owner_function;
     if (!owner_fn.has_value()) {
       continue;
     }
     effects_by_owner[core::ToString(*owner_fn)].push_back(&effect);
   }
 
-  std::map<std::string, std::vector<const semantic::NormalizedAlias*>>
+  std::map<std::string, std::vector<const semantic::NormalizedAlias *>>
       aliases_by_owner;
-  for (const auto& alias : facts.aliases) {
-    const auto& left_owner = alias.left.object.owner_function;
-    const auto& right_owner = alias.right.object.owner_function;
+  for (const auto &alias : facts.aliases) {
+    const auto &left_owner = alias.left.object.owner_function;
+    const auto &right_owner = alias.right.object.owner_function;
     if (!left_owner.has_value() || !right_owner.has_value()) {
       continue;
     }
@@ -386,16 +387,16 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
     aliases_by_owner[std::move(left)].push_back(&alias);
   }
 
-  for (auto& draft : drafts) {
-    const std::string& owner = draft.identity().function_variant_id();
+  for (auto &draft : drafts) {
+    const std::string &owner = draft.identity().function_variant_id();
     const StableId owner_ref =
         ::veritas::analysis::llvm::StableValueMapper::FunctionValueRef(owner);
 
     // Calls: attribute via the caller's function value ref.
     auto calls_it = calls_by_caller.find(owner_ref);
     if (calls_it != calls_by_caller.end()) {
-      for (const auto* call : calls_it->second) {
-        auto* out = draft.add_calls();
+      for (const auto *call : calls_it->second) {
+        auto *out = draft.add_calls();
         out->set_call_site_id(core::ToString(call->call_site));
         if (call->callee.has_value()) {
           const auto it = ref_to_variant.find(*call->callee);
@@ -426,19 +427,19 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
     // and is always kept.
     std::map<std::pair<v1::EffectKind, std::string>, v1::EpistemicState>
         local_effects;
-    for (const auto& existing : draft.memory_effects()) {
-      const auto key = std::make_pair(
-          existing.kind(), existing.location().memory_location_id());
+    for (const auto &existing : draft.memory_effects()) {
+      const auto key = std::make_pair(existing.kind(),
+                                      existing.location().memory_location_id());
       auto [it, inserted] = local_effects.emplace(key, existing.epistemic());
-      if (!inserted && StrengthRank(existing.epistemic()) <
-                           StrengthRank(it->second)) {
+      if (!inserted &&
+          StrengthRank(existing.epistemic()) < StrengthRank(it->second)) {
         it->second = existing.epistemic();
       }
     }
 
     auto effects_it = effects_by_owner.find(owner);
     if (effects_it != effects_by_owner.end()) {
-      for (const auto* effect : effects_it->second) {
+      for (const auto *effect : effects_it->second) {
         auto location = ToProtoLocation(effect->location);
         if (!location.ok()) {
           return location.status();
@@ -451,7 +452,7 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
             StrengthRank(stated->second) <= StrengthRank(epistemic)) {
           continue;
         }
-        auto* out = draft.add_memory_effects();
+        auto *out = draft.add_memory_effects();
         out->set_kind(ToV1EffectKind(effect->kind));
         *out->mutable_location() = std::move(*location);
         out->set_epistemic(ToV1Epistemic(effect->epistemic));
@@ -465,7 +466,7 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
     // so each draft retrieves exactly its own aliases.
     auto aliases_it = aliases_by_owner.find(owner);
     if (aliases_it != aliases_by_owner.end()) {
-      for (const auto* alias : aliases_it->second) {
+      for (const auto *alias : aliases_it->second) {
         auto left = ToProtoLocation(alias->left);
         auto right = ToProtoLocation(alias->right);
         if (!left.ok()) {
@@ -474,7 +475,7 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
         if (!right.ok()) {
           return right.status();
         }
-        auto* out = draft.add_alias_facts();
+        auto *out = draft.add_alias_facts();
         *out->mutable_left() = std::move(*left);
         *out->mutable_right() = std::move(*right);
         out->set_kind(ToV2AliasKind(alias->kind));
@@ -484,8 +485,8 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
     }
 
     // Run-level unknowns attach to every draft, matching the V1 merge.
-    for (const auto& unknown : facts.unknowns) {
-      auto* out = draft.add_unknowns();
+    for (const auto &unknown : facts.unknowns) {
+      auto *out = draft.add_unknowns();
       out->set_kind("svf");
       out->set_reason(unknown.reason);
       out->set_scope(unknown.scope);
@@ -501,8 +502,8 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
     // therefore never fires for external models (whose functions have no local
     // summary); it only exists so that, should a model ever name a *local*
     // function, the effect is recorded as a dependency rather than dropped.
-    for (const auto& model : model_bundle.Lookup(owner)) {
-      auto* out = draft.add_dependencies();
+    for (const auto &model : model_bundle.Lookup(owner)) {
+      auto *out = draft.add_dependencies();
       out->set_symbol(model.symbol);
       out->set_kind(std::string("model:") +
                     std::string(ModelEffectKindToken(model.effect)));
@@ -521,4 +522,4 @@ StatusOr<std::vector<v2::FunctionSummary>> MergeSvfFactsV2(
   return drafts;
 }
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf

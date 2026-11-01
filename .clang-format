@@ -1,3 +1,12 @@
 ---
+# VERITAS C++ formatting. LLVM style, with one deliberate deviation: adjacent
+# definition blocks (functions, classes, structs) are always separated by one
+# blank line. LLVM's default, `Leave`, silently preserves whatever spacing the
+# author happened to leave, which is how src/review ended up with back-to-back
+# function definitions.
+#
+# Keep this file platform-neutral. It is read by `--style=file` from the
+# pre-commit hook and must resolve identically on every host.
 BasedOnStyle: LLVM
+SeparateDefinitionBlocks: Always
 ...

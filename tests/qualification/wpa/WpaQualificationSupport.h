@@ -109,9 +109,9 @@ inline v2::FunctionSummary V2Summary(std::string_view name) {
   return summary;
 }
 
-inline void AddDirectCall(v2::FunctionSummary* summary, std::string_view from,
+inline void AddDirectCall(v2::FunctionSummary *summary, std::string_view from,
                           std::string_view to) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(
       core::ToString(CallSiteId(std::string(from) + "->" + std::string(to))));
   call->set_callee_symbol(std::string(to));
@@ -124,9 +124,9 @@ inline void AddDirectCall(v2::FunctionSummary* summary, std::string_view from,
 // An indirect (MAY) call to a resolved target: the same call site admits
 // several targets, each a distinct direct-call row with dispatch=indirect and
 // epistemic=may, matching how SVF normalization emits resolved MAY edges.
-inline void AddIndirectCall(v2::FunctionSummary* summary, std::string_view from,
+inline void AddIndirectCall(v2::FunctionSummary *summary, std::string_view from,
                             std::string_view to) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(
       core::ToString(CallSiteId(std::string(from) + "->fp")));
   call->set_callee_symbol(std::string(to));
@@ -140,9 +140,9 @@ inline void AddIndirectCall(v2::FunctionSummary* summary, std::string_view from,
 // overrides, each a distinct direct-call row with dispatch=virtual and
 // epistemic=may, matching how SVF normalization emits resolved MAY targets for
 // a virtual method (single or multiple inheritance).
-inline void AddVirtualCall(v2::FunctionSummary* summary, std::string_view from,
+inline void AddVirtualCall(v2::FunctionSummary *summary, std::string_view from,
                            std::string_view to) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(
       core::ToString(CallSiteId(std::string(from) + "->vcall")));
   call->set_callee_symbol(std::string(to));
@@ -155,9 +155,9 @@ inline void AddVirtualCall(v2::FunctionSummary* summary, std::string_view from,
 // A callback-dispatch call: a function-pointer formal parameter, a global
 // function pointer, or a table selection invokes a target at one call site.
 // Resolved MAY targets share the call site and carry dispatch=callback.
-inline void AddCallbackCall(v2::FunctionSummary* summary, std::string_view from,
+inline void AddCallbackCall(v2::FunctionSummary *summary, std::string_view from,
                             std::string_view to) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(
       core::ToString(CallSiteId(std::string(from) + "->cb")));
   call->set_callee_symbol(std::string(to));
@@ -167,13 +167,13 @@ inline void AddCallbackCall(v2::FunctionSummary* summary, std::string_view from,
   call->set_provenance_ref("test:callback");
 }
 
-inline void AddMemoryWrite(v2::FunctionSummary* summary,
+inline void AddMemoryWrite(v2::FunctionSummary *summary,
                            std::string_view memory, bool known_range) {
-  auto* effect = summary->add_memory_effects();
+  auto *effect = summary->add_memory_effects();
   effect->set_kind(v1::EFFECT_KIND_WRITE);
   effect->mutable_location()->set_memory_location_id(
       core::ToString(MemoryId(memory)));
-  auto* range = effect->mutable_location()->mutable_byte_range();
+  auto *range = effect->mutable_location()->mutable_byte_range();
   range->set_offset_known(known_range);
   range->set_offset(known_range ? 0 : 0);
   range->set_size_known(known_range);
@@ -182,13 +182,13 @@ inline void AddMemoryWrite(v2::FunctionSummary* summary,
   effect->set_provenance_ref("test:write");
 }
 
-inline void AddMemoryRead(v2::FunctionSummary* summary,
-                          std::string_view memory, bool known_range) {
-  auto* effect = summary->add_memory_effects();
+inline void AddMemoryRead(v2::FunctionSummary *summary, std::string_view memory,
+                          bool known_range) {
+  auto *effect = summary->add_memory_effects();
   effect->set_kind(v1::EFFECT_KIND_READ);
   effect->mutable_location()->set_memory_location_id(
       core::ToString(MemoryId(memory)));
-  auto* range = effect->mutable_location()->mutable_byte_range();
+  auto *range = effect->mutable_location()->mutable_byte_range();
   range->set_offset_known(known_range);
   range->set_offset(known_range ? 0 : 0);
   range->set_size_known(known_range);
@@ -197,19 +197,19 @@ inline void AddMemoryRead(v2::FunctionSummary* summary,
   effect->set_provenance_ref("test:read");
 }
 
-inline void AddLocalFlow(v2::FunctionSummary* summary, std::string_view from,
+inline void AddLocalFlow(v2::FunctionSummary *summary, std::string_view from,
                          std::string_view to) {
-  auto* flow = summary->add_value_flows();
+  auto *flow = summary->add_value_flows();
   flow->set_source_value_id(core::ToString(ValueId(from)));
   flow->set_destination_value_id(core::ToString(ValueId(to)));
   flow->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   flow->set_provenance_ref("test:local");
 }
 
-inline void AddParameterFlow(v2::FunctionSummary* summary,
-                             std::string_view call_site, std::string_view actual,
-                             std::string_view formal) {
-  auto* flow = summary->add_parameter_flows();
+inline void AddParameterFlow(v2::FunctionSummary *summary,
+                             std::string_view call_site,
+                             std::string_view actual, std::string_view formal) {
+  auto *flow = summary->add_parameter_flows();
   flow->set_call_site_id(core::ToString(CallSiteId(call_site)));
   flow->set_actual_id(core::ToString(ValueId(actual)));
   flow->set_formal_id(core::ToString(ValueId(formal)));
@@ -219,9 +219,9 @@ inline void AddParameterFlow(v2::FunctionSummary* summary,
 
 // An unresolved call: no resolved callee, so the materializer projects it as
 // an UnknownCall rather than a DirectCall.
-inline void AddUnknownCall(v2::FunctionSummary* summary, std::string_view from,
+inline void AddUnknownCall(v2::FunctionSummary *summary, std::string_view from,
                            std::string_view reason) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(
       core::ToString(CallSiteId(std::string(from) + "->unknown")));
   call->set_callee_symbol(std::string(reason));
@@ -231,17 +231,17 @@ inline void AddUnknownCall(v2::FunctionSummary* summary, std::string_view from,
 }
 
 // An unknown recorded on a summary (an unsupported construct).
-inline void AddUnknown(v2::FunctionSummary* summary, std::string_view kind) {
-  auto* unknown = summary->add_unknowns();
+inline void AddUnknown(v2::FunctionSummary *summary, std::string_view kind) {
+  auto *unknown = summary->add_unknowns();
   unknown->set_kind(std::string(kind));
   unknown->set_reason("test");
   unknown->set_scope("test");
 }
 
 // Materializes the logical input for one component rooted at `root`.
-inline StatusOr<WpaLogicalComponentInput> InputFor(
-    const std::vector<summary::SummaryArtifact>& artifacts,
-    WpaComponentKind component, std::string_view root) {
+inline StatusOr<WpaLogicalComponentInput>
+InputFor(const std::vector<summary::SummaryArtifact> &artifacts,
+         WpaComponentKind component, std::string_view root) {
   auto graph = CallGraph::FromSummaries(artifacts);
   if (!graph.ok())
     return graph.status();
@@ -260,9 +260,9 @@ inline StatusOr<WpaLogicalComponentInput> InputFor(
   return WpaInputMaterializer::Build(request);
 }
 
-inline StatusOr<facts::CanonicalizedResult> Canonicalize(
-    const WpaLogicalComponentInput& logical,
-    const facts::RawWpaEvaluation& raw) {
+inline StatusOr<facts::CanonicalizedResult>
+Canonicalize(const WpaLogicalComponentInput &logical,
+             const facts::RawWpaEvaluation &raw) {
   facts::CanonicalizationRequest request;
   request.local_roots = logical.local_roots;
   request.successor_roots = logical.successor_roots;
@@ -278,12 +278,12 @@ struct CanonicalPair {
   facts::CanonicalizedResult cpp;
 };
 
-inline StatusOr<CanonicalPair> RunBothEngines(
-    const WpaLogicalComponentInput& logical) {
+inline StatusOr<CanonicalPair>
+RunBothEngines(const WpaLogicalComponentInput &logical) {
   const auto souffle_manifest =
       MakeManifest(facts::EngineIdentity::kSouffle, "souffle-toolchain");
-  const auto cpp_manifest = MakeManifest(facts::EngineIdentity::kCppConformance,
-                                         "cpp-toolchain");
+  const auto cpp_manifest =
+      MakeManifest(facts::EngineIdentity::kCppConformance, "cpp-toolchain");
 
   WpaExecutionEnvelope souffle_envelope{souffle_manifest, logical};
   WpaExecutionEnvelope cpp_envelope{cpp_manifest, logical};
@@ -314,11 +314,11 @@ inline StatusOr<CanonicalPair> RunBothEngines(
 }
 
 // True when any EDB row carries a ByteRangeKind cell of the requested kind.
-inline bool ContainsRangeKind(const WpaLogicalComponentInput& logical,
+inline bool ContainsRangeKind(const WpaLogicalComponentInput &logical,
                               sem::ByteRangeKind kind) {
-  for (const auto& row : logical.edb) {
-    for (const auto& cell : row.cells) {
-      if (const auto* range = std::get_if<sem::ByteRangeKind>(&cell)) {
+  for (const auto &row : logical.edb) {
+    for (const auto &cell : row.cells) {
+      if (const auto *range = std::get_if<sem::ByteRangeKind>(&cell)) {
         if (*range == kind)
           return true;
       }
@@ -327,6 +327,6 @@ inline bool ContainsRangeKind(const WpaLogicalComponentInput& logical,
   return false;
 }
 
-}  // namespace veritas::wpa::qualification
+} // namespace veritas::wpa::qualification
 
-#endif  // VERITAS_TESTS_QUALIFICATION_WPA_WPA_QUALIFICATION_SUPPORT_H_
+#endif // VERITAS_TESTS_QUALIFICATION_WPA_WPA_QUALIFICATION_SUPPORT_H_

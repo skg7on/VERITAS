@@ -17,6 +17,7 @@
 #include "veritas/review/ProgramScope.h"
 #include <filesystem>
 #include <memory>
+
 namespace veritas::review {
 // Trusted native invocation API. The public capture wire request accepts only
 // operator selection keys; host adapters must resolve those before calling
@@ -35,11 +36,13 @@ struct SnapshotRequest {
   std::vector<ProviderVersion> provider_versions;
   uint64_t max_files = 10000, max_bytes = 64 * 1024 * 1024;
 };
+
 struct CapturedCompileCommand {
   std::string directory, file;
   std::vector<std::string> arguments;
 };
 struct SnapshotData;
+
 class ReviewSnapshot {
 public:
   const ReviewBinding &binding() const;
@@ -48,7 +51,7 @@ public:
   // Lexical resolution against the captured root; never consults live files.
   // Root itself is returned as "." for include-directory operands.
   StatusOr<std::string> CompilerPath(std::string_view directory,
-                                    std::string_view path) const;
+                                     std::string_view path) const;
   const ProgramScope &program_scope() const;
   const Coverage &compiler_coverage() const;
   const std::vector<std::string> &excluded() const;
@@ -70,10 +73,12 @@ public:
 private:
   explicit ReviewSnapshot(std::shared_ptr<const SnapshotData> data)
       : data_(std::move(data)) {}
+
   std::shared_ptr<const SnapshotData> data_;
   friend StatusOr<ReviewSnapshot>
   CaptureReviewSnapshot(const SnapshotRequest &);
 };
+
 // Failure-atomic in-memory publication. Capture is bounded and refuses with
 // FailedPrecondition (retryable) if index/base/selected bytes or directory
 // membership change during capture. Symlinks and traversal are InvalidArgument.

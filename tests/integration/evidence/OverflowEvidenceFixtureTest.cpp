@@ -42,12 +42,12 @@
 
 #include <gtest/gtest.h>
 
-#include "veritas/evidence/FactStoreEvidenceBackend.h"
 #include "evidence/RealEvidencePipeline.h"
 #include "veritas/analysis/semantic/SemanticTypes.h"
 #include "veritas/core/Ids.h"
 #include "veritas/cpg/CpgTypes.h"
 #include "veritas/evidence/EvidenceQueryService.h"
+#include "veritas/evidence/FactStoreEvidenceBackend.h"
 #include "veritas/evidence/SliceTypes.h"
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/RelationSchema.h"
@@ -64,21 +64,23 @@ ev::EvidenceQueryBudget Budget() {
                                  /*max_provenance_depth=*/16};
 }
 
-const std::string* StringCell(const facts::SemanticRow& row, std::size_t index) {
+const std::string *StringCell(const facts::SemanticRow &row,
+                              std::size_t index) {
   return index < row.cells.size() ? std::get_if<std::string>(&row.cells[index])
                                   : nullptr;
 }
 
-const core::StableId* IdCell(const facts::SemanticRow& row, std::size_t index) {
+const core::StableId *IdCell(const facts::SemanticRow &row, std::size_t index) {
   return index < row.cells.size()
              ? std::get_if<core::StableId>(&row.cells[index])
              : nullptr;
 }
 
-std::vector<facts::AnalysisFact> FactsOfRelation(
-    const std::vector<facts::AnalysisFact>& facts, facts::RelationId relation) {
+std::vector<facts::AnalysisFact>
+FactsOfRelation(const std::vector<facts::AnalysisFact> &facts,
+                facts::RelationId relation) {
   std::vector<facts::AnalysisFact> matches;
-  for (const auto& fact : facts) {
+  for (const auto &fact : facts) {
     if (fact.row.relation == relation) {
       matches.push_back(fact);
     }
@@ -87,8 +89,8 @@ std::vector<facts::AnalysisFact> FactsOfRelation(
 }
 
 // The single function-variant node in a single-function fixture.
-StatusOr<core::StableId> FunctionNode(const cpg::ThinCpg& cpg) {
-  for (const auto& node : cpg.nodes()) {
+StatusOr<core::StableId> FunctionNode(const cpg::ThinCpg &cpg) {
+  for (const auto &node : cpg.nodes()) {
     if (node.kind == cpg::NodeKind::kFunction) {
       return node.node_id;
     }
@@ -98,8 +100,8 @@ StatusOr<core::StableId> FunctionNode(const cpg::ThinCpg& cpg) {
 
 // The memcpy sink: the CPG models the unmodeled memcpy as an "unknown" node
 // labeled with Clang's lowered intrinsic name (llvm.memcpy.p0.p0.i64).
-StatusOr<core::StableId> MemcpySinkNode(const cpg::ThinCpg& cpg) {
-  for (const auto& node : cpg.nodes()) {
+StatusOr<core::StableId> MemcpySinkNode(const cpg::ThinCpg &cpg) {
+  for (const auto &node : cpg.nodes()) {
     if (node.kind == cpg::NodeKind::kUnknown &&
         node.label.find("memcpy") != std::string::npos) {
       return node.node_id;
@@ -111,22 +113,22 @@ StatusOr<core::StableId> MemcpySinkNode(const cpg::ThinCpg& cpg) {
 // The set of CPG node IDs. A value that is the sink of a GlobalFlow fact but is
 // NOT a CPG node is a flow that left the function into an unmodeled external's
 // formal parameter (the external has no CPG parameter node).
-std::set<core::StableId> CpgNodeIds(const cpg::ThinCpg& cpg) {
+std::set<core::StableId> CpgNodeIds(const cpg::ThinCpg &cpg) {
   std::set<core::StableId> ids;
-  for (const auto& node : cpg.nodes()) {
+  for (const auto &node : cpg.nodes()) {
     ids.insert(node.node_id);
   }
   return ids;
 }
 
-bool HasUnknownWithReason(const std::vector<facts::AnalysisFact>& facts,
+bool HasUnknownWithReason(const std::vector<facts::AnalysisFact> &facts,
                           std::string_view reason) {
-  for (const auto& fact : facts) {
+  for (const auto &fact : facts) {
     if (fact.row.relation != facts::RelationId::kUnknownEffect &&
         fact.row.relation != facts::RelationId::kSupportUnknownEffect) {
       continue;
     }
-    const std::string* cell = StringCell(fact.row, 2);
+    const std::string *cell = StringCell(fact.row, 2);
     if (cell != nullptr && *cell == reason) {
       return true;
     }
@@ -141,20 +143,20 @@ bool HasUnknownWithReason(const std::vector<facts::AnalysisFact>& facts,
 // of this fact, not by a 1 here. A regression that stopped emitting the
 // certificate — or dropped the completeness cell — fails these assertions.
 void ExpectDominatingCheckAbsenceCertificate(
-    const std::vector<facts::AnalysisFact>& facts,
+    const std::vector<facts::AnalysisFact> &facts,
     std::string_view fixture = {}) {
   const auto coverage =
       FactsOfRelation(facts, facts::RelationId::kSoundnessCoverage);
   EXPECT_FALSE(coverage.empty()) << fixture << ": no SoundnessCoverage emitted";
   bool saw_absence = false;
   bool saw_gapped_complete = false;
-  for (const auto& fact : coverage) {
-    const std::string* kind = StringCell(fact.row, 1);
+  for (const auto &fact : coverage) {
+    const std::string *kind = StringCell(fact.row, 1);
     if (kind == nullptr || *kind != "dominating_check_absence") {
       continue;
     }
     saw_absence = true;
-    const auto* complete = std::get_if<std::uint64_t>(&fact.row.cells[2]);
+    const auto *complete = std::get_if<std::uint64_t>(&fact.row.cells[2]);
     if (complete != nullptr && *complete == 0) {
       saw_gapped_complete = true;
     }
@@ -168,11 +170,11 @@ void ExpectDominatingCheckAbsenceCertificate(
 // unknown/absent check into a positive "dominating_check" fact. Every fixture
 // the demo materializes goes through both this and the certificate assertion.
 void ExpectNoFabricatedPositiveCheck(
-    const std::vector<facts::AnalysisFact>& facts, std::string_view fixture) {
+    const std::vector<facts::AnalysisFact> &facts, std::string_view fixture) {
   const auto coverage =
       FactsOfRelation(facts, facts::RelationId::kSoundnessCoverage);
-  for (const auto& fact : coverage) {
-    const std::string* kind = StringCell(fact.row, 1);
+  for (const auto &fact : coverage) {
+    const std::string *kind = StringCell(fact.row, 1);
     ASSERT_NE(kind, nullptr) << fixture;
     EXPECT_NE(*kind, "dominating_check")
         << fixture << " fabricated a positive check fact";
@@ -201,8 +203,8 @@ TEST(OverflowEvidenceFixtureTest, UnsafeFixtureProducesFlowAndUnknownFacts) {
   // "dominating_check_absence" certificate.
   const auto coverage =
       FactsOfRelation(*facts, facts::RelationId::kSoundnessCoverage);
-  for (const auto& fact : coverage) {
-    const std::string* kind = StringCell(fact.row, 1);
+  for (const auto &fact : coverage) {
+    const std::string *kind = StringCell(fact.row, 1);
     ASSERT_NE(kind, nullptr);
     EXPECT_NE(*kind, "dominating_check") << "fabricated positive check fact";
   }
@@ -226,8 +228,8 @@ TEST(OverflowEvidenceFixtureTest, OpaqueValidatorRemainsUnknown) {
   // dominating check (positive) or a MUST_NOT/negative fact.
   const auto coverage =
       FactsOfRelation(*facts, facts::RelationId::kSoundnessCoverage);
-  for (const auto& fact : coverage) {
-    const std::string* kind = StringCell(fact.row, 1);
+  for (const auto &fact : coverage) {
+    const std::string *kind = StringCell(fact.row, 1);
     ASSERT_NE(kind, nullptr);
     EXPECT_NE(*kind, "dominating_check");
   }
@@ -255,7 +257,8 @@ TEST(OverflowEvidenceFixtureTest, UnknownsQuerySurfacesRealFacts) {
   auto function = FunctionNode(snapshot->cpg);
   ASSERT_TRUE(function.ok()) << function.status().message();
 
-  evidence::FactStoreEvidenceBackend backend(snapshot->fact_store, snapshot->descriptor);
+  evidence::FactStoreEvidenceBackend backend(snapshot->fact_store,
+                                             snapshot->descriptor);
   ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
 
   auto unknowns = service.GetUnknowns(*function, Budget());
@@ -263,14 +266,16 @@ TEST(OverflowEvidenceFixtureTest, UnknownsQuerySurfacesRealFacts) {
   EXPECT_EQ(unknowns->metadata.completeness, ev::QueryCompleteness::kComplete);
   EXPECT_FALSE(unknowns->facts.empty());
   bool saw_vendor = false;
-  for (const auto& fact : unknowns->facts) {
-    const std::string* reason = StringCell(fact.row, 2);
-    saw_vendor = saw_vendor || (reason != nullptr && *reason == "vendor_validate");
+  for (const auto &fact : unknowns->facts) {
+    const std::string *reason = StringCell(fact.row, 2);
+    saw_vendor =
+        saw_vendor || (reason != nullptr && *reason == "vendor_validate");
   }
   EXPECT_TRUE(saw_vendor) << "vendor_validate unknown not surfaced";
 }
 
-TEST(OverflowEvidenceFixtureTest, NoRangeCapacityAliasOrCheckFactIsManufactured) {
+TEST(OverflowEvidenceFixtureTest,
+     NoRangeCapacityAliasOrCheckFactIsManufactured) {
   // Forbidden-output guarantees for the not-yet-materialized relations: the
   // query service must return a complete empty result (open world) rather than
   // fabricating range, capacity, alias, or positive-check facts.
@@ -280,7 +285,8 @@ TEST(OverflowEvidenceFixtureTest, NoRangeCapacityAliasOrCheckFactIsManufactured)
   auto function = FunctionNode(snapshot->cpg);
   ASSERT_TRUE(function.ok()) << function.status().message();
 
-  evidence::FactStoreEvidenceBackend backend(snapshot->fact_store, snapshot->descriptor);
+  evidence::FactStoreEvidenceBackend backend(snapshot->fact_store,
+                                             snapshot->descriptor);
   ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
 
   const core::StableId ref = *function;
@@ -292,15 +298,16 @@ TEST(OverflowEvidenceFixtureTest, NoRangeCapacityAliasOrCheckFactIsManufactured)
 
   auto capacities = service.GetCapacities(ref, Budget());
   ASSERT_TRUE(capacities.ok()) << capacities.status().message();
-  EXPECT_EQ(capacities->metadata.completeness, ev::QueryCompleteness::kComplete);
+  EXPECT_EQ(capacities->metadata.completeness,
+            ev::QueryCompleteness::kComplete);
   EXPECT_TRUE(capacities->facts.empty());
 
   auto aliases = service.GetAliases(ref, Budget());
   ASSERT_TRUE(aliases.ok()) << aliases.status().message();
   EXPECT_EQ(aliases->metadata.completeness, ev::QueryCompleteness::kComplete);
   EXPECT_TRUE(aliases->facts.empty());
-  for (const auto& fact : aliases->facts) {
-    const auto* kind = std::get_if<sem::AliasKind>(&fact.row.cells[2]);
+  for (const auto &fact : aliases->facts) {
+    const auto *kind = std::get_if<sem::AliasKind>(&fact.row.cells[2]);
     ASSERT_NE(kind, nullptr);
     EXPECT_NE(*kind, sem::AliasKind::kMustAlias)
         << "fabricated MUST_ALIAS fact";
@@ -346,9 +353,10 @@ TEST(OverflowEvidenceFixtureTest, UnsafeFixtureFlowReachesMemcpySink) {
   // Observed (content-addressed, deterministic): the memcpy size operand is the
   // 3rd actual at callsite:sha256:18f4820b…, whose formal is
   // valref:sha256:8ede4cb4…. The value chain is
-  //   valref:6e095ff2… → 008ebf57… → b047b26a… → d90129fc… → c0e87f82… → 8ede4cb4…
-  // and GlobalFlow contains the fact 6e095ff2… → 8ede4cb4… (the p-derived length
-  // reaches the memcpy size formal).
+  //   valref:6e095ff2… → 008ebf57… → b047b26a… → d90129fc… → c0e87f82… →
+  //   8ede4cb4…
+  // and GlobalFlow contains the fact 6e095ff2… → 8ede4cb4… (the p-derived
+  // length reaches the memcpy size formal).
   auto snapshot = AnalyzeRealFixture("evidence_overflow_unsafe");
   ASSERT_TRUE(snapshot.ok()) << snapshot.status().message();
 
@@ -356,7 +364,7 @@ TEST(OverflowEvidenceFixtureTest, UnsafeFixtureFlowReachesMemcpySink) {
   ASSERT_TRUE(sink.ok()) << sink.status().message();
 
   bool called = false;
-  for (const auto& edge : snapshot->cpg.edges()) {
+  for (const auto &edge : snapshot->cpg.edges()) {
     const bool call_edge = edge.kind == cpg::EdgeKind::kCalls ||
                            edge.kind == cpg::EdgeKind::kMayCall;
     if (call_edge && edge.target_node_id == *sink) {
@@ -367,7 +375,7 @@ TEST(OverflowEvidenceFixtureTest, UnsafeFixtureFlowReachesMemcpySink) {
   EXPECT_TRUE(called) << "no call edge reaches the memcpy sink";
 
   bool has_flow_edges = false;
-  for (const auto& edge : snapshot->cpg.edges()) {
+  for (const auto &edge : snapshot->cpg.edges()) {
     if (edge.kind == cpg::EdgeKind::kFlowsTo) {
       has_flow_edges = true;
       break;
@@ -379,11 +387,11 @@ TEST(OverflowEvidenceFixtureTest, UnsafeFixtureFlowReachesMemcpySink) {
   ASSERT_TRUE(facts.ok()) << facts.status().message();
   const auto ids = CpgNodeIds(snapshot->cpg);
   bool reaches_external_formal = false;
-  for (const auto& fact : *facts) {
+  for (const auto &fact : *facts) {
     if (fact.row.relation != facts::RelationId::kGlobalFlow) {
       continue;
     }
-    const core::StableId* sink_id = IdCell(fact.row, 1);
+    const core::StableId *sink_id = IdCell(fact.row, 1);
     if (sink_id != nullptr && ids.count(*sink_id) == 0) {
       reaches_external_formal = true;
       break;
@@ -402,7 +410,7 @@ TEST(OverflowEvidenceFixtureTest,
   // disambiguation (safe dominates vs sibling/mixed-path non-dominance) is
   // deferred to a later milestone because M10A does not derive a positive
   // dominating-check fact.
-  for (const char* fixture :
+  for (const char *fixture :
        {"evidence_overflow_safe", "evidence_overflow_non_dominating",
         "evidence_overflow_mixed_paths"}) {
     auto snapshot = AnalyzeRealFixture(fixture);
@@ -410,7 +418,8 @@ TEST(OverflowEvidenceFixtureTest,
 
     auto facts = snapshot->fact_store.GetCurrentFacts(snapshot->run_id);
     ASSERT_TRUE(facts.ok()) << facts.status().message();
-    EXPECT_FALSE(FactsOfRelation(*facts, facts::RelationId::kGlobalFlow).empty())
+    EXPECT_FALSE(
+        FactsOfRelation(*facts, facts::RelationId::kGlobalFlow).empty())
         << fixture;
 
     // Positive: the completeness-qualified check output is actually emitted for
@@ -420,7 +429,8 @@ TEST(OverflowEvidenceFixtureTest,
 
     auto function = FunctionNode(snapshot->cpg);
     ASSERT_TRUE(function.ok()) << function.status().message();
-    evidence::FactStoreEvidenceBackend backend(snapshot->fact_store, snapshot->descriptor);
+    evidence::FactStoreEvidenceBackend backend(snapshot->fact_store,
+                                               snapshot->descriptor);
     ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
     auto checks = service.GetDominatingChecks(*function, Budget());
     ASSERT_TRUE(checks.ok()) << fixture << ": " << checks.status().message();
@@ -433,20 +443,23 @@ TEST(OverflowEvidenceFixtureTest,
 TEST(OverflowEvidenceFixtureTest,
      AliasUncertainAndSummaryFixturesDoNotFabricateChecks) {
   // T3m1/T3m5: the remaining two demo fixtures must go through the same
-  // real-pipeline surface as the shapes above. evidence_overflow_alias_uncertain
-  // exists to keep capacity/alias reasoning unstrengthened under may-alias, and
-  // evidence_overflow_summary crosses a translation unit — both emit the
-  // SoundnessCoverage surface, so both must carry a real flow closure, a
-  // complete-empty dominating-check query (no fabricated positive check), and
-  // the negative "dominating_check_absence" certificate.
-  for (const char* fixture :
+  // real-pipeline surface as the shapes above.
+  // evidence_overflow_alias_uncertain exists to keep capacity/alias reasoning
+  // unstrengthened under may-alias, and evidence_overflow_summary crosses a
+  // translation unit — both emit the SoundnessCoverage surface, so both must
+  // carry a real flow closure, a complete-empty dominating-check query (no
+  // fabricated positive check), and the negative "dominating_check_absence"
+  // certificate.
+  for (const char *fixture :
        {"evidence_overflow_alias_uncertain", "evidence_overflow_summary"}) {
     auto snapshot = AnalyzeRealFixture(fixture);
-    ASSERT_TRUE(snapshot.ok()) << fixture << ": " << snapshot.status().message();
+    ASSERT_TRUE(snapshot.ok())
+        << fixture << ": " << snapshot.status().message();
 
     auto facts = snapshot->fact_store.GetCurrentFacts(snapshot->run_id);
     ASSERT_TRUE(facts.ok()) << fixture << ": " << facts.status().message();
-    EXPECT_FALSE(FactsOfRelation(*facts, facts::RelationId::kGlobalFlow).empty())
+    EXPECT_FALSE(
+        FactsOfRelation(*facts, facts::RelationId::kGlobalFlow).empty())
         << fixture;
 
     // Positive: the completeness-qualified check output is actually emitted.
@@ -456,7 +469,8 @@ TEST(OverflowEvidenceFixtureTest,
     ExpectNoFabricatedPositiveCheck(*facts, fixture);
 
     auto function = FunctionNode(snapshot->cpg);
-    ASSERT_TRUE(function.ok()) << fixture << ": " << function.status().message();
+    ASSERT_TRUE(function.ok())
+        << fixture << ": " << function.status().message();
     evidence::FactStoreEvidenceBackend backend(snapshot->fact_store,
                                                snapshot->descriptor);
     ev::EvidenceQueryService service(snapshot->cpg, backend, snapshot->run_id);
@@ -469,5 +483,5 @@ TEST(OverflowEvidenceFixtureTest,
   }
 }
 
-}  // namespace
-}  // namespace veritas::testing
+} // namespace
+} // namespace veritas::testing

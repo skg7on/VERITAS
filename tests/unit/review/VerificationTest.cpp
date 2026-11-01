@@ -15,12 +15,15 @@
 #include "veritas/review/Verification.h"
 #include <fstream>
 #include <gtest/gtest.h>
+
 namespace veritas::review {
 namespace {
 Json::Object &Mutable(Json &v) { return std::get<Json::Object>(v.data); }
+
 struct Fixture {
   Json request, result;
   VerificationPolicy policy;
+
   Fixture() {
     std::ifstream in(std::string(VERITAS_SOURCE_DIR) +
                      "/tests/fixtures/review/verification/authority.json");
@@ -36,6 +39,7 @@ struct Fixture {
     policy.artifacts["witness"] = "witness";
     Resign();
   }
+
   void Resign() {
     Mutable(result)["verification_id"] = *VerificationResultId(result);
     policy.authorized_results.clear();
@@ -44,6 +48,7 @@ struct Fixture {
   }
 };
 } // namespace
+
 TEST(VerificationTest, ExactRegisteredCertificateAloneMayDecide) {
   Fixture f;
   EXPECT_EQ(*VerificationObligationId(f.request),
@@ -59,6 +64,7 @@ TEST(VerificationTest, ExactRegisteredCertificateAloneMayDecide) {
                                f.result, f.policy),
             *outcome);
 }
+
 TEST(VerificationTest,
      WrongBindingPredicateOperandProducerAndInputAreRejected) {
   for (auto key : {"binding", "predicate_kind", "typed_operands", "producer",
@@ -85,6 +91,7 @@ TEST(VerificationTest,
         << key;
   }
 }
+
 TEST(VerificationTest, CopiedAndCircularProofCannotPromote) {
   Fixture f;
   f.policy.authorized_results.clear();
@@ -96,6 +103,7 @@ TEST(VerificationTest, CopiedAndCircularProofCannotPromote) {
   f.Resign();
   EXPECT_FALSE(ValidateVerificationResult(f.request, f.result, f.policy).ok());
 }
+
 TEST(VerificationTest, TimeoutUnsupportedAndIncompleteCannotPromote) {
   for (auto pair :
        {std::pair{"UNKNOWN", "TIMEOUT"}, std::pair{"INCOMPLETE", "UNSUPPORTED"},
@@ -115,6 +123,7 @@ TEST(VerificationTest, TimeoutUnsupportedAndIncompleteCannotPromote) {
   f.Resign();
   EXPECT_FALSE(ValidateVerificationResult(f.request, f.result, f.policy).ok());
 }
+
 TEST(VerificationTest, UndefinedDomainAndUniversalSafetyAreRejected) {
   Fixture f;
   auto &q = Mutable(f.request);
@@ -122,6 +131,7 @@ TEST(VerificationTest, UndefinedDomainAndUniversalSafetyAreRejected) {
       Json::Object{{"kind", "FORMAL"}, {"domain", Json::Array{}}};
   EXPECT_FALSE(ValidateVerificationResult(f.request, f.result, f.policy).ok());
 }
+
 TEST(VerificationTest, ConcreteProofNeverProducesUniversalSafety) {
   Fixture f;
   auto &q = Mutable(f.request);
@@ -141,6 +151,7 @@ TEST(VerificationTest, ConcreteProofNeverProducesUniversalSafety) {
   ASSERT_TRUE(outcome.ok());
   EXPECT_EQ(*outcome, ReviewDisposition::NoDefectObserved);
 }
+
 TEST(VerificationTest, ObligationIdentityDoesNotHashItself) {
   Fixture f;
   auto id = VerificationObligationId(f.request);

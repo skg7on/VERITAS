@@ -34,7 +34,7 @@
 namespace veritas::wpa {
 
 class SouffleWpaExecutor final : public WpaExecutor {
- public:
+public:
   // The `worker` path is accepted for API compatibility but unused: the engine
   // is linked in-process, not spawned as a subprocess.
   SouffleWpaExecutor(std::filesystem::path worker,
@@ -42,14 +42,14 @@ class SouffleWpaExecutor final : public WpaExecutor {
 
   facts::EngineIdentity identity() const override;
   std::string_view toolchain_identity() const override;
-  StatusOr<facts::RawWpaEvaluation> Execute(
-      const WpaExecutionEnvelope& input,
-      const WpaExecutionLimits& limits) const override;
+  StatusOr<facts::RawWpaEvaluation>
+  Execute(const WpaExecutionEnvelope &input,
+          const WpaExecutionLimits &limits) const override;
 
- private:
+private:
   std::string toolchain_identity_;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_SOUFFLE_WPA_EXECUTOR_H_
+#endif // VERITAS_WPA_SOUFFLE_WPA_EXECUTOR_H_

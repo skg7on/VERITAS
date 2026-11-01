@@ -32,24 +32,24 @@ namespace fp = fact_proto;
 
 fp::ProducerKind ToProtoProducer(ProducerKind kind) {
   switch (kind) {
-    case ProducerKind::kWpaSouffle:
-      return fp::PRODUCER_WPA_SOUFFLE;
-    case ProducerKind::kWpaCppConformance:
-      return fp::PRODUCER_WPA_CPP_CONFORMANCE;
-    case ProducerKind::kWpaCppEmergency:
-      return fp::PRODUCER_WPA_CPP_EMERGENCY;
-    case ProducerKind::kExternal:
-      return fp::PRODUCER_EXTERNAL;
+  case ProducerKind::kWpaSouffle:
+    return fp::PRODUCER_WPA_SOUFFLE;
+  case ProducerKind::kWpaCppConformance:
+    return fp::PRODUCER_WPA_CPP_CONFORMANCE;
+  case ProducerKind::kWpaCppEmergency:
+    return fp::PRODUCER_WPA_CPP_EMERGENCY;
+  case ProducerKind::kExternal:
+    return fp::PRODUCER_EXTERNAL;
   }
   return fp::PRODUCER_UNSPECIFIED;
 }
 
-}  // namespace
+} // namespace
 
-ProvenanceStore::ProvenanceStore(summarydb::MetadataStore& store)
+ProvenanceStore::ProvenanceStore(summarydb::MetadataStore &store)
     : store_(store) {}
 
-Status ProvenanceStore::AddNode(const FactWitness& node) {
+Status ProvenanceStore::AddNode(const FactWitness &node) {
   if (node_batcher_ == nullptr) {
     node_batcher_ = std::make_unique<summarydb::BulkInsertBatcher>(
         store_,
@@ -67,7 +67,7 @@ Status ProvenanceStore::AddNode(const FactWitness& node) {
        node.source_anchor_id, node.summary_id, node.description});
 }
 
-Status ProvenanceStore::AddEdge(const FactWitnessEdge& edge) {
+Status ProvenanceStore::AddEdge(const FactWitnessEdge &edge) {
   if (edge_batcher_ == nullptr) {
     edge_batcher_ = std::make_unique<summarydb::BulkInsertBatcher>(
         store_,
@@ -75,10 +75,10 @@ Status ProvenanceStore::AddEdge(const FactWitnessEdge& edge) {
         " witness_id, input_kind, input_id, input_ordinal) VALUES",
         6);
   }
-  return edge_batcher_->Add(
-      {core::ToString(edge.run_id), core::ToString(edge.output_fact_id),
-       edge.witness_id, edge.input_kind, edge.input_id,
-       std::to_string(edge.input_ordinal)});
+  return edge_batcher_->Add({core::ToString(edge.run_id),
+                             core::ToString(edge.output_fact_id),
+                             edge.witness_id, edge.input_kind, edge.input_id,
+                             std::to_string(edge.input_ordinal)});
 }
 
 Status ProvenanceStore::Flush() {
@@ -94,8 +94,9 @@ Status ProvenanceStore::Flush() {
   return Status::Ok();
 }
 
-StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
-    core::StableId run_id, core::StableId fact_id, const ExplainBudget& budget) {
+StatusOr<fact_proto::ProvenanceGraph>
+ProvenanceStore::Explain(core::StableId run_id, core::StableId fact_id,
+                         const ExplainBudget &budget) {
   const std::string run = core::ToString(run_id);
   const std::string target = core::ToString(fact_id);
 
@@ -134,8 +135,8 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
   if (binding_rows->empty()) {
     return Status::NotFound("binding not found");
   }
-  const auto& br = (*binding_rows)[0];
-  auto* binding = graph.mutable_binding();
+  const auto &br = (*binding_rows)[0];
+  auto *binding = graph.mutable_binding();
   binding->set_analysis_run_id(run);
   binding->set_fact_id(target);
   if (!br[0].empty()) {
@@ -156,6 +157,7 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
     std::string fact_id;
     std::uint32_t distance;
   };
+
   std::vector<Task> queue;
   queue.push_back(Task{target, 0});
   std::set<std::string> enqueued{target};
@@ -186,7 +188,7 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
       return node_rows.status();
     }
     if (node_rows->empty()) {
-      continue;  // rooted input: a leaf, no witness to expand
+      continue; // rooted input: a leaf, no witness to expand
     }
     auto selected_binding = store_.Query(
         "SELECT selected_witness_id FROM run_fact_bindings WHERE run_id = ?"
@@ -201,14 +203,14 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
 
     // Emit the selected witness first, then any retained alternatives, in
     // deterministic witness-id order.
-    for (const auto& nr : *node_rows) {
+    for (const auto &nr : *node_rows) {
       if (node_count >= budget.max_nodes) {
         truncated = true;
         truncation_reason = "max_nodes";
         graph.add_frontier_fact_ids(task.fact_id);
         break;
       }
-      auto* node = graph.add_nodes();
+      auto *node = graph.add_nodes();
       node->set_analysis_run_id(run);
       node->set_output_fact_id(task.fact_id);
       node->set_witness_id(nr[0]);
@@ -254,14 +256,14 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
     if (!edge_rows.ok()) {
       return edge_rows.status();
     }
-    for (const auto& er : *edge_rows) {
+    for (const auto &er : *edge_rows) {
       if (static_cast<std::uint32_t>(graph.edges_size()) >= budget.max_edges) {
         truncated = true;
         truncation_reason = "max_edges";
         graph.add_frontier_fact_ids(task.fact_id);
         break;
       }
-      auto* edge = graph.add_edges();
+      auto *edge = graph.add_edges();
       edge->set_analysis_run_id(run);
       edge->set_output_fact_id(task.fact_id);
       edge->set_witness_id(er[0]);
@@ -286,4 +288,4 @@ StatusOr<fact_proto::ProvenanceGraph> ProvenanceStore::Explain(
   return graph;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts

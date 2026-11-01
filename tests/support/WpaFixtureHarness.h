@@ -33,77 +33,78 @@ namespace veritas::testing {
 class FixtureRootOwner;
 
 struct SvfFixtureSnapshot {
-  SvfFixtureSnapshot(const SvfFixtureSnapshot&) = delete;
-  SvfFixtureSnapshot& operator=(const SvfFixtureSnapshot&) = delete;
-  SvfFixtureSnapshot(SvfFixtureSnapshot&&) noexcept;
-  SvfFixtureSnapshot& operator=(SvfFixtureSnapshot&&) noexcept;
+  SvfFixtureSnapshot(const SvfFixtureSnapshot &) = delete;
+  SvfFixtureSnapshot &operator=(const SvfFixtureSnapshot &) = delete;
+  SvfFixtureSnapshot(SvfFixtureSnapshot &&) noexcept;
+  SvfFixtureSnapshot &operator=(SvfFixtureSnapshot &&) noexcept;
   ~SvfFixtureSnapshot();
 
- private:
-  SvfFixtureSnapshot(std::unique_ptr<FixtureRootOwner> fixture_root,
-                     std::filesystem::path project_root,
-                     analysis::svf::SvfMappingResult mapping,
-                     std::map<std::string, std::string>
-                         function_variant_ids_by_symbol);
+private:
+  SvfFixtureSnapshot(
+      std::unique_ptr<FixtureRootOwner> fixture_root,
+      std::filesystem::path project_root,
+      analysis::svf::SvfMappingResult mapping,
+      std::map<std::string, std::string> function_variant_ids_by_symbol);
 
   std::unique_ptr<FixtureRootOwner> fixture_root_;
 
-  friend StatusOr<SvfFixtureSnapshot> MapFixtureWithSvf(
-      std::string_view name, const analysis::svf::SvfConfig& config);
+  friend StatusOr<SvfFixtureSnapshot>
+  MapFixtureWithSvf(std::string_view name,
+                    const analysis::svf::SvfConfig &config);
 
- public:
+public:
   std::filesystem::path project_root;
   analysis::svf::SvfMappingResult mapping;
   std::map<std::string, std::string> function_variant_ids_by_symbol;
 };
 
 struct LocalFixtureSnapshot {
-  LocalFixtureSnapshot(const LocalFixtureSnapshot&) = delete;
-  LocalFixtureSnapshot& operator=(const LocalFixtureSnapshot&) = delete;
-  LocalFixtureSnapshot(LocalFixtureSnapshot&&) noexcept;
-  LocalFixtureSnapshot& operator=(LocalFixtureSnapshot&&) noexcept;
+  LocalFixtureSnapshot(const LocalFixtureSnapshot &) = delete;
+  LocalFixtureSnapshot &operator=(const LocalFixtureSnapshot &) = delete;
+  LocalFixtureSnapshot(LocalFixtureSnapshot &&) noexcept;
+  LocalFixtureSnapshot &operator=(LocalFixtureSnapshot &&) noexcept;
   ~LocalFixtureSnapshot();
 
- private:
-  LocalFixtureSnapshot(std::unique_ptr<FixtureRootOwner> fixture_root,
-                       std::filesystem::path project_root,
-                       std::vector<summary::v2::FunctionSummary> summaries,
-                       std::map<std::string, std::string>
-                           function_variant_ids_by_symbol);
+private:
+  LocalFixtureSnapshot(
+      std::unique_ptr<FixtureRootOwner> fixture_root,
+      std::filesystem::path project_root,
+      std::vector<summary::v2::FunctionSummary> summaries,
+      std::map<std::string, std::string> function_variant_ids_by_symbol);
 
   std::unique_ptr<FixtureRootOwner> fixture_root_;
 
-  friend StatusOr<LocalFixtureSnapshot> AnalyzeLocalFixture(
-      std::string_view name);
+  friend StatusOr<LocalFixtureSnapshot>
+  AnalyzeLocalFixture(std::string_view name);
 
- public:
+public:
   std::filesystem::path project_root;
   std::vector<summary::v2::FunctionSummary> summaries;
   std::map<std::string, std::string> function_variant_ids_by_symbol;
 };
 
 struct AnalyzedFixtureSnapshot {
-  AnalyzedFixtureSnapshot(const AnalyzedFixtureSnapshot&) = delete;
-  AnalyzedFixtureSnapshot& operator=(const AnalyzedFixtureSnapshot&) = delete;
-  AnalyzedFixtureSnapshot(AnalyzedFixtureSnapshot&&) noexcept;
-  AnalyzedFixtureSnapshot& operator=(AnalyzedFixtureSnapshot&&) noexcept;
+  AnalyzedFixtureSnapshot(const AnalyzedFixtureSnapshot &) = delete;
+  AnalyzedFixtureSnapshot &operator=(const AnalyzedFixtureSnapshot &) = delete;
+  AnalyzedFixtureSnapshot(AnalyzedFixtureSnapshot &&) noexcept;
+  AnalyzedFixtureSnapshot &operator=(AnalyzedFixtureSnapshot &&) noexcept;
   ~AnalyzedFixtureSnapshot();
 
- private:
-  AnalyzedFixtureSnapshot(std::unique_ptr<FixtureRootOwner> fixture_root,
-                          std::filesystem::path project_root,
-                          std::filesystem::path output_root,
-                          analysis::ProjectAnalysisResult analysis,
-                          std::vector<summary::SummaryArtifact> summaries,
-                          std::map<std::string, std::string>
-                              function_variant_ids_by_symbol);
+private:
+  AnalyzedFixtureSnapshot(
+      std::unique_ptr<FixtureRootOwner> fixture_root,
+      std::filesystem::path project_root, std::filesystem::path output_root,
+      analysis::ProjectAnalysisResult analysis,
+      std::vector<summary::SummaryArtifact> summaries,
+      std::map<std::string, std::string> function_variant_ids_by_symbol);
 
   std::unique_ptr<FixtureRootOwner> fixture_root_;
 
-  friend StatusOr<AnalyzedFixtureSnapshot> AnalyzeAndLoadFixture(
-      std::string_view name, const analysis::AnalysisConfig& config);
+  friend StatusOr<AnalyzedFixtureSnapshot>
+  AnalyzeAndLoadFixture(std::string_view name,
+                        const analysis::AnalysisConfig &config);
 
- public:
+public:
   std::filesystem::path project_root;
   std::filesystem::path output_root;
   analysis::ProjectAnalysisResult analysis;
@@ -111,24 +112,25 @@ struct AnalyzedFixtureSnapshot {
   std::map<std::string, std::string> function_variant_ids_by_symbol;
 };
 
-StatusOr<SvfFixtureSnapshot> MapFixtureWithSvf(
-    std::string_view name,
-    const analysis::svf::SvfConfig& config =
-        analysis::svf::SvfConfig::Default());
+StatusOr<SvfFixtureSnapshot>
+MapFixtureWithSvf(std::string_view name,
+                  const analysis::svf::SvfConfig &config =
+                      analysis::svf::SvfConfig::Default());
 
 StatusOr<LocalFixtureSnapshot> AnalyzeLocalFixture(std::string_view name);
 
-StatusOr<AnalyzedFixtureSnapshot> AnalyzeAndLoadFixture(
-    std::string_view name, const analysis::AnalysisConfig& config);
+StatusOr<AnalyzedFixtureSnapshot>
+AnalyzeAndLoadFixture(std::string_view name,
+                      const analysis::AnalysisConfig &config);
 
 bool AllArtifactsAreV2(std::span<const summary::SummaryArtifact> artifacts);
-std::vector<const summary::v2::Call*> CallsWithDispatch(
-    std::span<const summary::SummaryArtifact> artifacts,
-    summary::v2::DispatchKind dispatch);
-std::vector<const summary::v2::MemoryEffect*> MemoryEffectsWithObjectKind(
-    std::span<const summary::SummaryArtifact> artifacts,
-    summary::v2::AbstractObjectKind kind);
+std::vector<const summary::v2::Call *>
+CallsWithDispatch(std::span<const summary::SummaryArtifact> artifacts,
+                  summary::v2::DispatchKind dispatch);
+std::vector<const summary::v2::MemoryEffect *>
+MemoryEffectsWithObjectKind(std::span<const summary::SummaryArtifact> artifacts,
+                            summary::v2::AbstractObjectKind kind);
 
-}  // namespace veritas::testing
+} // namespace veritas::testing
 
-#endif  // VERITAS_TESTS_SUPPORT_WPAFIXTUREHARNESS_H_
+#endif // VERITAS_TESTS_SUPPORT_WPAFIXTUREHARNESS_H_

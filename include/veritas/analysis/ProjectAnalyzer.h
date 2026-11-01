@@ -30,9 +30,10 @@ namespace veritas::analysis {
 // Forward declarations to avoid exposing implementation types
 namespace internal {
 class ProjectAnalyzerTestFactory;
-}  // namespace internal
+} // namespace internal
 
-// AnalysisCompletion indicates whether analysis completed fully or with unknowns
+// AnalysisCompletion indicates whether analysis completed fully or with
+// unknowns
 enum class AnalysisCompletion {
   kComplete,
   kCompleteWithUnknowns,
@@ -146,17 +147,18 @@ struct ProjectAnalysisResult {
 // 4. M5: Run the required SVF analysis and merge results conservatively
 // 5. M3: Publish the completed summaries atomically
 //
-// SVF is a required stage. If SVF construction fails, no summaries are published.
+// SVF is a required stage. If SVF construction fails, no summaries are
+// published.
 class ProjectAnalyzer {
- public:
+public:
   ProjectAnalyzer();
   ~ProjectAnalyzer();
 
   // Non-copyable, movable
-  ProjectAnalyzer(const ProjectAnalyzer&) = delete;
-  ProjectAnalyzer& operator=(const ProjectAnalyzer&) = delete;
-  ProjectAnalyzer(ProjectAnalyzer&&) noexcept;
-  ProjectAnalyzer& operator=(ProjectAnalyzer&&) noexcept;
+  ProjectAnalyzer(const ProjectAnalyzer &) = delete;
+  ProjectAnalyzer &operator=(const ProjectAnalyzer &) = delete;
+  ProjectAnalyzer(ProjectAnalyzer &&) noexcept;
+  ProjectAnalyzer &operator=(ProjectAnalyzer &&) noexcept;
 
   // AnalyzeProject runs the full pipeline on the specified project.
   //
@@ -172,11 +174,12 @@ class ProjectAnalyzer {
   // The recorder is caller-owned so that a run which fails part-way still
   // yields its partial timeline. Metrics are non-semantic: they never enter
   // any content-addressed identity (design section 5.2).
-  StatusOr<ProjectAnalysisResult> AnalyzeProject(
-      const ProjectAnalysisRequest& request, const AnalysisConfig& config,
-      core::RunMetrics* metrics = nullptr);
+  StatusOr<ProjectAnalysisResult>
+  AnalyzeProject(const ProjectAnalysisRequest &request,
+                 const AnalysisConfig &config,
+                 core::RunMetrics *metrics = nullptr);
 
- private:
+private:
   class Impl;
   explicit ProjectAnalyzer(std::unique_ptr<Impl> impl);
   std::unique_ptr<Impl> impl_;
@@ -184,6 +187,6 @@ class ProjectAnalyzer {
   friend class internal::ProjectAnalyzerTestFactory;
 };
 
-}  // namespace veritas::analysis
+} // namespace veritas::analysis
 
-#endif  // VERITAS_ANALYSIS_PROJECTANALYZER_H_
+#endif // VERITAS_ANALYSIS_PROJECTANALYZER_H_

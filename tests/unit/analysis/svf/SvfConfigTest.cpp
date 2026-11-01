@@ -49,5 +49,5 @@ TEST(SvfConfigTest, CanonicalConfigContainsAllFields) {
   EXPECT_NE(canonical.find("field_sensitive="), std::string::npos);
 }
 
-}  // namespace
-}  // namespace veritas::analysis::svf
+} // namespace
+} // namespace veritas::analysis::svf

@@ -23,14 +23,15 @@
 //
 // COORDINATES
 //
-// `offset` is a zero-based **byte** offset into the source. `line` is one-based.
-// `column` is one-based and counts **bytes** as well: it is the number of bytes
-// between the start of the reported line and the reported position, plus one.
-// A line holding multi-byte UTF-8 therefore reports byte columns, not
-// code-point or grapheme columns. That is deliberate — it is the same
-// coordinate system `offset` already uses, so a caller can always recover the
-// byte range of a diagnostic by adding `column - 1` to the line's start offset,
-// and no caller has to know which of three "column" definitions applies.
+// `offset` is a zero-based **byte** offset into the source. `line` is
+// one-based. `column` is one-based and counts **bytes** as well: it is the
+// number of bytes between the start of the reported line and the reported
+// position, plus one. A line holding multi-byte UTF-8 therefore reports byte
+// columns, not code-point or grapheme columns. That is deliberate — it is the
+// same coordinate system `offset` already uses, so a caller can always recover
+// the byte range of a diagnostic by adding `column - 1` to the line's start
+// offset, and no caller has to know which of three "column" definitions
+// applies.
 //
 // A line ends at `"\n"`. A bare `"\r"` is whitespace, not a line terminator, so
 // a `"\r\n"` source counts each line break exactly once.
@@ -168,7 +169,8 @@ enum class EirTextStyle {
 // finalized (`FinalizeEvidenceIdentity` has not run) is refused rather than
 // written, so a caller cannot serialize a case whose identity is not yet its
 // own. Every failure leaves `value` unchanged — the writer never mutates it.
-StatusOr<std::string> WriteEirText(const EvidenceCase& value, EirTextStyle style);
+StatusOr<std::string> WriteEirText(const EvidenceCase &value,
+                                   EirTextStyle style);
 
 // Reads one EIR-T document and lowers it to a validated, identity-bearing
 // `eir.v1` case.
@@ -176,9 +178,10 @@ StatusOr<std::string> WriteEirText(const EvidenceCase& value, EirTextStyle style
 // The three stages run in order and the later ones never run on an earlier
 // one's failure: tokenize, parse, then validate and finalize. A document that
 // tokenizes and parses but is not well-formed is refused here rather than
-// returned half-built — `RequireValidEvidenceCase` and `FinalizeEvidenceIdentity`
-// are the same gates every other M10C representation boundary runs through, so
-// a caller never receives a case it would have to re-check.
+// returned half-built — `RequireValidEvidenceCase` and
+// `FinalizeEvidenceIdentity` are the same gates every other M10C representation
+// boundary runs through, so a caller never receives a case it would have to
+// re-check.
 //
 // On success `evidence_id` is the computed content address. The case-level
 // display label is accepted and discarded: it is not part of the model and
@@ -208,8 +211,9 @@ StatusOr<std::string> WriteEirText(const EvidenceCase& value, EirTextStyle style
 // for a well-formedness rejection, which is about the case as a whole and names
 // its own member rather than a token. `error` may be null when only the
 // `Status` is needed.
-StatusOr<EvidenceCase> ParseEirText(std::string_view source, EirParseError* error);
+StatusOr<EvidenceCase> ParseEirText(std::string_view source,
+                                    EirParseError *error);
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EIR_TEXT_H_
+#endif // VERITAS_EVIDENCE_EIR_TEXT_H_

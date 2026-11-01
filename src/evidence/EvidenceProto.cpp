@@ -67,7 +67,8 @@ namespace v1 = veritas::evidence::v1;
 // --- Diagnostic paths -------------------------------------------------------
 
 // "owner.member", so a rejection names where in the case it happened. The owner
-// is the member's path through the message ("entity 'E_memcpy'", "entities[3]").
+// is the member's path through the message ("entity 'E_memcpy'",
+// "entities[3]").
 std::string At(std::string_view owner, std::string_view member) {
   std::string out;
   out.reserve(owner.size() + member.size() + 1);
@@ -80,7 +81,7 @@ std::string At(std::string_view owner, std::string_view member) {
 }
 
 // A named member's own owner string: "entity 'E_memcpy'".
-std::string Owned(std::string_view kind, const std::string& id) {
+std::string Owned(std::string_view kind, const std::string &id) {
   std::string out;
   out.reserve(kind.size() + id.size() + 3);
   out.append(kind);
@@ -106,8 +107,7 @@ std::string Indexed(std::string_view collection, int index) {
 // written out rather than derived, so a domain enumerator inserted into the
 // middle of a family cannot shift a wire value, and a wire value cannot be
 // renumbered without an edit here.
-template <typename DomainEnum, typename ProtoEnum>
-struct EnumMapping {
+template <typename DomainEnum, typename ProtoEnum> struct EnumMapping {
   DomainEnum domain;
   ProtoEnum proto;
 };
@@ -118,9 +118,10 @@ struct EnumMapping {
 // carried it; an unrecognized non-zero value is rejected too rather than
 // coerced to the invalid default.
 template <typename DomainEnum, typename ProtoEnum, std::size_t N>
-StatusOr<DomainEnum> DecodeEnum(
-    ProtoEnum value, const EnumMapping<DomainEnum, ProtoEnum> (&table)[N],
-    const std::string& field) {
+StatusOr<DomainEnum>
+DecodeEnum(ProtoEnum value,
+           const EnumMapping<DomainEnum, ProtoEnum> (&table)[N],
+           const std::string &field) {
   if (static_cast<int>(value) == 0) {
     return Status::InvalidArgument(field + " is unspecified");
   }
@@ -136,9 +137,10 @@ StatusOr<DomainEnum> DecodeEnum(
 // no wire value: a serializer never emits it, so reaching this with one is a
 // contract violation rather than an encoding decision.
 template <typename DomainEnum, typename ProtoEnum, std::size_t N>
-StatusOr<ProtoEnum> EncodeEnum(
-    DomainEnum value, const EnumMapping<DomainEnum, ProtoEnum> (&table)[N],
-    const std::string& field) {
+StatusOr<ProtoEnum>
+EncodeEnum(DomainEnum value,
+           const EnumMapping<DomainEnum, ProtoEnum> (&table)[N],
+           const std::string &field) {
   for (std::size_t index = 0; index < N; ++index) {
     if (table[index].domain == value) {
       return table[index].proto;
@@ -158,12 +160,14 @@ constexpr EnumMapping<VerificationState, v1::VerificationState>
         {VerificationState::kUnreviewed, v1::VERIFICATION_STATE_UNREVIEWED},
         {VerificationState::kPossibleDefect,
          v1::VERIFICATION_STATE_POSSIBLE_DEFECT},
-        {VerificationState::kLikelyDefect, v1::VERIFICATION_STATE_LIKELY_DEFECT},
+        {VerificationState::kLikelyDefect,
+         v1::VERIFICATION_STATE_LIKELY_DEFECT},
         {VerificationState::kVerifiedDefect,
          v1::VERIFICATION_STATE_VERIFIED_DEFECT},
         {VerificationState::kLikelyFalsePositive,
          v1::VERIFICATION_STATE_LIKELY_FALSE_POSITIVE},
-        {VerificationState::kVerifiedSafe, v1::VERIFICATION_STATE_VERIFIED_SAFE},
+        {VerificationState::kVerifiedSafe,
+         v1::VERIFICATION_STATE_VERIFIED_SAFE},
         {VerificationState::kInconclusive, v1::VERIFICATION_STATE_INCONCLUSIVE},
 };
 
@@ -296,29 +300,29 @@ constexpr EnumMapping<Expression::Kind, v1::ExpressionKind> kExpressionKinds[] =
 // --- Stable IDs -------------------------------------------------------------
 
 // Parses a canonical stable-ID string that must be present and canonical.
-StatusOr<core::StableId> RequiredStableId(const std::string& field,
-                                          const std::string& text) {
+StatusOr<core::StableId> RequiredStableId(const std::string &field,
+                                          const std::string &text) {
   if (text.empty()) {
     return Status::InvalidArgument(field + " is absent");
   }
   auto id = core::ParseStableId(text);
   if (!id.ok()) {
-    return Status::InvalidArgument(
-        field + " is not a canonical stable ID: '" + text + "'");
+    return Status::InvalidArgument(field + " is not a canonical stable ID: '" +
+                                   text + "'");
   }
   return *id;
 }
 
 // Parses a canonical stable-ID string where the empty string is absence.
-StatusOr<std::optional<core::StableId>> OptionalStableId(
-    const std::string& field, const std::string& text) {
+StatusOr<std::optional<core::StableId>>
+OptionalStableId(const std::string &field, const std::string &text) {
   if (text.empty()) {
     return std::optional<core::StableId>();
   }
   auto id = core::ParseStableId(text);
   if (!id.ok()) {
-    return Status::InvalidArgument(
-        field + " is not a canonical stable ID: '" + text + "'");
+    return Status::InvalidArgument(field + " is not a canonical stable ID: '" +
+                                   text + "'");
   }
   return std::optional<core::StableId>(*id);
 }
@@ -328,8 +332,8 @@ StatusOr<std::optional<core::StableId>> OptionalStableId(
 // The model's only recursive record. Wire nesting is bounded by the parser's
 // recursion limit, and a domain expression is bounded by the validator's depth
 // limit, which every encode path runs before this one.
-Status DecodeExpression(const v1::Expression& value, const std::string& field,
-                        Expression* out) {
+Status DecodeExpression(const v1::Expression &value, const std::string &field,
+                        Expression *out) {
   auto kind = DecodeEnum(value.kind(), kExpressionKinds, At(field, "kind"));
   if (!kind.ok()) {
     return kind.status();
@@ -341,8 +345,7 @@ Status DecodeExpression(const v1::Expression& value, const std::string& field,
   out->boolean = value.boolean();
   for (int index = 0; index < value.operands_size(); ++index) {
     Expression operand;
-    const std::string position =
-        "operands[" + std::to_string(index) + "]";
+    const std::string position = "operands[" + std::to_string(index) + "]";
     if (Status status = DecodeExpression(value.operands(index),
                                          At(field, position), &operand);
         !status.ok()) {
@@ -353,9 +356,9 @@ Status DecodeExpression(const v1::Expression& value, const std::string& field,
   return Status::Ok();
 }
 
-v1::Expression EncodeExpression(const Expression& value) {
+v1::Expression EncodeExpression(const Expression &value) {
   v1::Expression out;
-  for (const auto& entry : kExpressionKinds) {
+  for (const auto &entry : kExpressionKinds) {
     if (entry.domain == value.kind) {
       out.set_kind(entry.proto);
       break;
@@ -364,7 +367,7 @@ v1::Expression EncodeExpression(const Expression& value) {
   out.set_text(value.text);
   out.set_integer(value.integer);
   out.set_boolean(value.boolean);
-  for (const Expression& operand : value.operands) {
+  for (const Expression &operand : value.operands) {
     *out.add_operands() = EncodeExpression(operand);
   }
   return out;
@@ -375,14 +378,14 @@ v1::Expression EncodeExpression(const Expression& value) {
 // residual content with an unspecified kind is still carried, because the
 // canonical encoding distinguishes the two and identity must not depend on
 // which representation a case travelled through.
-bool IsPresent(const Expression& value) {
+bool IsPresent(const Expression &value) {
   return value.kind != Expression::Kind::kUnspecified || !value.text.empty() ||
          value.integer != 0 || value.boolean || !value.operands.empty();
 }
 
 // --- Program identity -------------------------------------------------------
 
-StatusOr<ProgramBinding> DecodeProgramBinding(const v1::ProgramBinding& value) {
+StatusOr<ProgramBinding> DecodeProgramBinding(const v1::ProgramBinding &value) {
   ProgramBinding out;
   out.repository_id = value.repository_id();
   out.revision_id = value.revision_id();
@@ -396,7 +399,7 @@ StatusOr<ProgramBinding> DecodeProgramBinding(const v1::ProgramBinding& value) {
     return run_id.status();
   }
   out.analysis_run_id = std::move(*run_id);
-  for (const v1::AnalyzerVersion& version : value.analyzer_versions()) {
+  for (const v1::AnalyzerVersion &version : value.analyzer_versions()) {
     AnalyzerVersion analyzer;
     analyzer.producer = version.producer();
     analyzer.version = version.version();
@@ -406,8 +409,8 @@ StatusOr<ProgramBinding> DecodeProgramBinding(const v1::ProgramBinding& value) {
   return out;
 }
 
-Status EncodeProgramBinding(const ProgramBinding& value,
-                            v1::ProgramBinding* out) {
+Status EncodeProgramBinding(const ProgramBinding &value,
+                            v1::ProgramBinding *out) {
   out->set_repository_id(value.repository_id);
   out->set_revision_id(value.revision_id);
   out->set_build_variant_id(value.build_variant_id);
@@ -417,8 +420,8 @@ Status EncodeProgramBinding(const ProgramBinding& value,
   if (value.analysis_run_id.has_value()) {
     out->set_analysis_run_id(core::ToString(*value.analysis_run_id));
   }
-  for (const AnalyzerVersion& version : value.analyzer_versions) {
-    v1::AnalyzerVersion* analyzer = out->add_analyzer_versions();
+  for (const AnalyzerVersion &version : value.analyzer_versions) {
+    v1::AnalyzerVersion *analyzer = out->add_analyzer_versions();
     analyzer->set_producer(version.producer);
     analyzer->set_version(version.version);
     analyzer->set_configuration(version.configuration);
@@ -428,8 +431,8 @@ Status EncodeProgramBinding(const ProgramBinding& value,
 
 // --- Graph members ----------------------------------------------------------
 
-StatusOr<Entity> DecodeEntity(const v1::Entity& value,
-                              const std::string& owner) {
+StatusOr<Entity> DecodeEntity(const v1::Entity &value,
+                              const std::string &owner) {
   Entity out;
   out.id = value.id();
   auto kind = DecodeEnum(value.kind(), kEntityKinds, At(owner, "kind"));
@@ -442,12 +445,11 @@ StatusOr<Entity> DecodeEntity(const v1::Entity& value,
     return stable_id.status();
   }
   out.stable_id = std::move(*stable_id);
-  for (const auto& property : value.properties()) {
+  for (const auto &property : value.properties()) {
     Expression decoded;
-    if (Status status =
-            DecodeExpression(property.second,
-                             At(At(owner, "properties"), property.first),
-                             &decoded);
+    if (Status status = DecodeExpression(
+            property.second, At(At(owner, "properties"), property.first),
+            &decoded);
         !status.ok()) {
       return status;
     }
@@ -456,7 +458,7 @@ StatusOr<Entity> DecodeEntity(const v1::Entity& value,
   return out;
 }
 
-Status EncodeEntity(const Entity& value, v1::Entity* out) {
+Status EncodeEntity(const Entity &value, v1::Entity *out) {
   const std::string owner = Owned("entity", value.id);
   out->set_id(value.id);
   auto kind = EncodeEnum(value.kind, kEntityKinds, At(owner, "kind"));
@@ -467,13 +469,14 @@ Status EncodeEntity(const Entity& value, v1::Entity* out) {
   if (value.stable_id.has_value()) {
     out->set_stable_id(core::ToString(*value.stable_id));
   }
-  for (const auto& property : value.properties) {
-    (*out->mutable_properties())[property.first] = EncodeExpression(property.second);
+  for (const auto &property : value.properties) {
+    (*out->mutable_properties())[property.first] =
+        EncodeExpression(property.second);
   }
   return Status::Ok();
 }
 
-StatusOr<Edge> DecodeEdge(const v1::Edge& value, const std::string& owner) {
+StatusOr<Edge> DecodeEdge(const v1::Edge &value, const std::string &owner) {
   Edge out;
   out.id = value.id();
   auto kind = DecodeEnum(value.kind(), kRelationKinds, At(owner, "kind"));
@@ -495,7 +498,7 @@ StatusOr<Edge> DecodeEdge(const v1::Edge& value, const std::string& owner) {
   return out;
 }
 
-Status EncodeEdge(const Edge& value, v1::Edge* out) {
+Status EncodeEdge(const Edge &value, v1::Edge *out) {
   const std::string owner = Owned("edge", value.id);
   out->set_id(value.id);
   out->set_from(value.from);
@@ -517,7 +520,7 @@ Status EncodeEdge(const Edge& value, v1::Edge* out) {
   return Status::Ok();
 }
 
-StatusOr<Path> DecodePath(const v1::Path& value, const std::string& owner) {
+StatusOr<Path> DecodePath(const v1::Path &value, const std::string &owner) {
   Path out;
   out.id = value.id();
   auto kind = DecodeEnum(value.kind(), kPathKinds, At(owner, "kind"));
@@ -531,13 +534,12 @@ StatusOr<Path> DecodePath(const v1::Path& value, const std::string& owner) {
     return feasibility.status();
   }
   out.feasibility = *feasibility;
-  for (const std::string& segment : value.entity_ids()) {
+  for (const std::string &segment : value.entity_ids()) {
     out.entity_ids.push_back(segment);
   }
   for (int index = 0; index < value.conditions_size(); ++index) {
     Expression condition;
-    const std::string position =
-        "conditions[" + std::to_string(index) + "]";
+    const std::string position = "conditions[" + std::to_string(index) + "]";
     if (Status status = DecodeExpression(value.conditions(index),
                                          At(owner, position), &condition);
         !status.ok()) {
@@ -549,7 +551,7 @@ StatusOr<Path> DecodePath(const v1::Path& value, const std::string& owner) {
   return out;
 }
 
-Status EncodePath(const Path& value, v1::Path* out) {
+Status EncodePath(const Path &value, v1::Path *out) {
   const std::string owner = Owned("path", value.id);
   out->set_id(value.id);
   auto kind = EncodeEnum(value.kind, kPathKinds, At(owner, "kind"));
@@ -557,10 +559,10 @@ Status EncodePath(const Path& value, v1::Path* out) {
     return kind.status();
   }
   out->set_kind(*kind);
-  for (const std::string& segment : value.entity_ids) {
+  for (const std::string &segment : value.entity_ids) {
     out->add_entity_ids(segment);
   }
-  for (const Expression& condition : value.conditions) {
+  for (const Expression &condition : value.conditions) {
     *out->add_conditions() = EncodeExpression(condition);
   }
   auto feasibility =
@@ -575,7 +577,7 @@ Status EncodePath(const Path& value, v1::Path* out) {
 
 // --- Claims and evidence members --------------------------------------------
 
-StatusOr<Claim> DecodeClaim(const v1::Claim& value, const std::string& owner) {
+StatusOr<Claim> DecodeClaim(const v1::Claim &value, const std::string &owner) {
   Claim out;
   out.id = value.id();
   auto kind = DecodeEnum(value.kind(), kClaimKinds, At(owner, "kind"));
@@ -583,7 +585,8 @@ StatusOr<Claim> DecodeClaim(const v1::Claim& value, const std::string& owner) {
     return kind.status();
   }
   out.kind = *kind;
-  auto severity = DecodeEnum(value.severity(), kSeverities, At(owner, "severity"));
+  auto severity =
+      DecodeEnum(value.severity(), kSeverities, At(owner, "severity"));
   if (!severity.ok()) {
     return severity.status();
   }
@@ -591,9 +594,8 @@ StatusOr<Claim> DecodeClaim(const v1::Claim& value, const std::string& owner) {
   out.subject = value.subject();
   out.description = value.description();
   if (value.has_predicate()) {
-    if (Status status = DecodeExpression(value.predicate(),
-                                         At(owner, "predicate"),
-                                         &out.predicate);
+    if (Status status = DecodeExpression(
+            value.predicate(), At(owner, "predicate"), &out.predicate);
         !status.ok()) {
       return status;
     }
@@ -601,7 +603,7 @@ StatusOr<Claim> DecodeClaim(const v1::Claim& value, const std::string& owner) {
   return out;
 }
 
-Status EncodeClaim(const Claim& value, v1::Claim* out) {
+Status EncodeClaim(const Claim &value, v1::Claim *out) {
   const std::string owner = Owned("claim", value.id);
   out->set_id(value.id);
   auto kind = EncodeEnum(value.kind, kClaimKinds, At(owner, "kind"));
@@ -609,7 +611,8 @@ Status EncodeClaim(const Claim& value, v1::Claim* out) {
     return kind.status();
   }
   out->set_kind(*kind);
-  auto severity = EncodeEnum(value.severity, kSeverities, At(owner, "severity"));
+  auto severity =
+      EncodeEnum(value.severity, kSeverities, At(owner, "severity"));
   if (!severity.ok()) {
     return severity.status();
   }
@@ -623,7 +626,7 @@ Status EncodeClaim(const Claim& value, v1::Claim* out) {
   return Status::Ok();
 }
 
-StatusOr<Fact> DecodeFact(const v1::Fact& value, const std::string& owner) {
+StatusOr<Fact> DecodeFact(const v1::Fact &value, const std::string &owner) {
   Fact out;
   out.id = value.id();
   auto stable_id = OptionalStableId(At(owner, "stable_id"), value.stable_id());
@@ -644,8 +647,7 @@ StatusOr<Fact> DecodeFact(const v1::Fact& value, const std::string& owner) {
   }
   out.confidence = *confidence;
   if (Status status = DecodeExpression(value.predicate(),
-                                       At(owner, "predicate"),
-                                       &out.predicate);
+                                       At(owner, "predicate"), &out.predicate);
       !status.ok()) {
     return status;
   }
@@ -655,7 +657,7 @@ StatusOr<Fact> DecodeFact(const v1::Fact& value, const std::string& owner) {
   return out;
 }
 
-Status EncodeFact(const Fact& value, v1::Fact* out) {
+Status EncodeFact(const Fact &value, v1::Fact *out) {
   const std::string owner = Owned("fact", value.id);
   out->set_id(value.id);
   if (value.stable_id.has_value()) {
@@ -680,7 +682,7 @@ Status EncodeFact(const Fact& value, v1::Fact* out) {
   return Status::Ok();
 }
 
-StatusOr<Assumption> DecodeAssumption(const v1::Assumption& value) {
+StatusOr<Assumption> DecodeAssumption(const v1::Assumption &value) {
   Assumption out;
   out.id = value.id();
   if (Status status = DecodeExpression(
@@ -694,7 +696,7 @@ StatusOr<Assumption> DecodeAssumption(const v1::Assumption& value) {
   return out;
 }
 
-Status EncodeAssumption(const Assumption& value, v1::Assumption* out) {
+Status EncodeAssumption(const Assumption &value, v1::Assumption *out) {
   out->set_id(value.id);
   *out->mutable_predicate() = EncodeExpression(value.predicate);
   out->set_source(value.source);
@@ -702,13 +704,12 @@ Status EncodeAssumption(const Assumption& value, v1::Assumption* out) {
   return Status::Ok();
 }
 
-StatusOr<Hypothesis> DecodeHypothesis(const v1::Hypothesis& value,
-                                      const std::string& owner) {
+StatusOr<Hypothesis> DecodeHypothesis(const v1::Hypothesis &value,
+                                      const std::string &owner) {
   Hypothesis out;
   out.id = value.id();
   if (Status status = DecodeExpression(value.predicate(),
-                                       At(owner, "predicate"),
-                                       &out.predicate);
+                                       At(owner, "predicate"), &out.predicate);
       !status.ok()) {
     return status;
   }
@@ -727,7 +728,7 @@ StatusOr<Hypothesis> DecodeHypothesis(const v1::Hypothesis& value,
   return out;
 }
 
-Status EncodeHypothesis(const Hypothesis& value, v1::Hypothesis* out) {
+Status EncodeHypothesis(const Hypothesis &value, v1::Hypothesis *out) {
   const std::string owner = Owned("hypothesis", value.id);
   out->set_id(value.id);
   *out->mutable_predicate() = EncodeExpression(value.predicate);
@@ -744,12 +745,12 @@ Status EncodeHypothesis(const Hypothesis& value, v1::Hypothesis* out) {
   return Status::Ok();
 }
 
-StatusOr<Unknown> DecodeUnknown(const v1::Unknown& value,
-                                const std::string& owner) {
+StatusOr<Unknown> DecodeUnknown(const v1::Unknown &value,
+                                const std::string &owner) {
   Unknown out;
   out.id = value.id();
-  if (Status status = DecodeExpression(value.property(),
-                                       At(owner, "property"), &out.property);
+  if (Status status = DecodeExpression(value.property(), At(owner, "property"),
+                                       &out.property);
       !status.ok()) {
     return status;
   }
@@ -760,14 +761,14 @@ StatusOr<Unknown> DecodeUnknown(const v1::Unknown& value,
   }
   out.reason_code = *reason_code;
   out.reason = value.reason();
-  for (const std::string& blocker : value.blocking_ids()) {
+  for (const std::string &blocker : value.blocking_ids()) {
     out.blocking_ids.push_back(blocker);
   }
   out.suggested_resolution = value.suggested_resolution();
   return out;
 }
 
-Status EncodeUnknown(const Unknown& value, v1::Unknown* out) {
+Status EncodeUnknown(const Unknown &value, v1::Unknown *out) {
   const std::string owner = Owned("unknown", value.id);
   out->set_id(value.id);
   *out->mutable_property() = EncodeExpression(value.property);
@@ -778,20 +779,19 @@ Status EncodeUnknown(const Unknown& value, v1::Unknown* out) {
   }
   out->set_reason_code(*reason_code);
   out->set_reason(value.reason);
-  for (const std::string& blocker : value.blocking_ids) {
+  for (const std::string &blocker : value.blocking_ids) {
     out->add_blocking_ids(blocker);
   }
   out->set_suggested_resolution(value.suggested_resolution);
   return Status::Ok();
 }
 
-StatusOr<Constraint> DecodeConstraint(const v1::Constraint& value,
-                                      const std::string& owner) {
+StatusOr<Constraint> DecodeConstraint(const v1::Constraint &value,
+                                      const std::string &owner) {
   Constraint out;
   out.id = value.id();
-  if (Status status = DecodeExpression(value.expression(),
-                                       At(owner, "expression"),
-                                       &out.expression);
+  if (Status status = DecodeExpression(
+          value.expression(), At(owner, "expression"), &out.expression);
       !status.ok()) {
     return status;
   }
@@ -806,7 +806,7 @@ StatusOr<Constraint> DecodeConstraint(const v1::Constraint& value,
   return out;
 }
 
-Status EncodeConstraint(const Constraint& value, v1::Constraint* out) {
+Status EncodeConstraint(const Constraint &value, v1::Constraint *out) {
   const std::string owner = Owned("constraint", value.id);
   out->set_id(value.id);
   *out->mutable_expression() = EncodeExpression(value.expression);
@@ -821,18 +821,18 @@ Status EncodeConstraint(const Constraint& value, v1::Constraint* out) {
   return Status::Ok();
 }
 
-StatusOr<Provenance> DecodeProvenance(const v1::Provenance& value,
-                                      const std::string& owner) {
+StatusOr<Provenance> DecodeProvenance(const v1::Provenance &value,
+                                      const std::string &owner) {
   Provenance out;
   out.id = value.id();
   out.producer = value.producer();
   out.rule = value.rule();
-  for (const std::string& input : value.input_fact_ids()) {
+  for (const std::string &input : value.input_fact_ids()) {
     out.input_fact_ids.push_back(input);
   }
   out.source_anchor_id = value.source_anchor_id();
-  auto run_id = OptionalStableId(At(owner, "analysis_run_id"),
-                                 value.analysis_run_id());
+  auto run_id =
+      OptionalStableId(At(owner, "analysis_run_id"), value.analysis_run_id());
   if (!run_id.ok()) {
     return run_id.status();
   }
@@ -842,11 +842,11 @@ StatusOr<Provenance> DecodeProvenance(const v1::Provenance& value,
   return out;
 }
 
-Status EncodeProvenance(const Provenance& value, v1::Provenance* out) {
+Status EncodeProvenance(const Provenance &value, v1::Provenance *out) {
   out->set_id(value.id);
   out->set_producer(value.producer);
   out->set_rule(value.rule);
-  for (const std::string& input : value.input_fact_ids) {
+  for (const std::string &input : value.input_fact_ids) {
     out->add_input_fact_ids(input);
   }
   out->set_source_anchor_id(value.source_anchor_id);
@@ -858,8 +858,9 @@ Status EncodeProvenance(const Provenance& value, v1::Provenance* out) {
   return Status::Ok();
 }
 
-StatusOr<ProofObligation> DecodeProofObligation(const v1::ProofObligation& value,
-                                                const std::string& owner) {
+StatusOr<ProofObligation>
+DecodeProofObligation(const v1::ProofObligation &value,
+                      const std::string &owner) {
   ProofObligation out;
   out.id = value.id();
   auto goal_kind =
@@ -873,20 +874,19 @@ StatusOr<ProofObligation> DecodeProofObligation(const v1::ProofObligation& value
       !expression_status.ok()) {
     return expression_status;
   }
-  for (const std::string& verifier : value.verifier_kinds()) {
+  for (const std::string &verifier : value.verifier_kinds()) {
     out.verifier_kinds.push_back(verifier);
   }
   // An absent budget decodes to the model's absent-budget expression. A
   // present budget must carry a recognized non-zero expression kind.
   if (value.has_budget()) {
-    if (Status expression_status = DecodeExpression(
-            value.budget(), At(owner, "budget"), &out.budget);
+    if (Status expression_status =
+            DecodeExpression(value.budget(), At(owner, "budget"), &out.budget);
         !expression_status.ok()) {
       return expression_status;
     }
   }
-  auto status =
-      DecodeEnum(value.status(), kProofStatuses, At(owner, "status"));
+  auto status = DecodeEnum(value.status(), kProofStatuses, At(owner, "status"));
   if (!status.ok()) {
     return status.status();
   }
@@ -896,8 +896,8 @@ StatusOr<ProofObligation> DecodeProofObligation(const v1::ProofObligation& value
   return out;
 }
 
-Status EncodeProofObligation(const ProofObligation& value,
-                             v1::ProofObligation* out) {
+Status EncodeProofObligation(const ProofObligation &value,
+                             v1::ProofObligation *out) {
   const std::string owner = Owned("proof obligation", value.id);
   out->set_id(value.id);
   auto goal_kind =
@@ -907,7 +907,7 @@ Status EncodeProofObligation(const ProofObligation& value,
   }
   out->set_goal_kind(*goal_kind);
   *out->mutable_predicate() = EncodeExpression(value.predicate);
-  for (const std::string& verifier : value.verifier_kinds) {
+  for (const std::string &verifier : value.verifier_kinds) {
     out->add_verifier_kinds(verifier);
   }
   // The grammar's budget is optional; an absent one stays absent on the wire.
@@ -924,8 +924,9 @@ Status EncodeProofObligation(const ProofObligation& value,
   return Status::Ok();
 }
 
-StatusOr<SummaryReference> DecodeSummaryReference(
-    const v1::SummaryReference& value, const std::string& owner) {
+StatusOr<SummaryReference>
+DecodeSummaryReference(const v1::SummaryReference &value,
+                       const std::string &owner) {
   SummaryReference out;
   out.id = value.id();
   out.function_id = value.function_id();
@@ -935,25 +936,25 @@ StatusOr<SummaryReference> DecodeSummaryReference(
     return summary_id.status();
   }
   out.summary_id = *summary_id;
-  for (const std::string& component : value.components()) {
+  for (const std::string &component : value.components()) {
     out.components.push_back(component);
   }
   return out;
 }
 
-Status EncodeSummaryReference(const SummaryReference& value,
-                              v1::SummaryReference* out) {
+Status EncodeSummaryReference(const SummaryReference &value,
+                              v1::SummaryReference *out) {
   out->set_id(value.id);
   out->set_function_id(value.function_id);
   out->set_summary_id(core::ToString(value.summary_id));
-  for (const std::string& component : value.components) {
+  for (const std::string &component : value.components) {
     out->add_components(component);
   }
   return Status::Ok();
 }
 
-StatusOr<Dependency> DecodeDependency(const v1::Dependency& value,
-                                      const std::string& owner) {
+StatusOr<Dependency> DecodeDependency(const v1::Dependency &value,
+                                      const std::string &owner) {
   Dependency out;
   out.id = value.id();
   auto kind = DecodeEnum(value.kind(), kDependencyKinds, At(owner, "kind"));
@@ -969,7 +970,7 @@ StatusOr<Dependency> DecodeDependency(const v1::Dependency& value,
   return out;
 }
 
-Status EncodeDependency(const Dependency& value, v1::Dependency* out) {
+Status EncodeDependency(const Dependency &value, v1::Dependency *out) {
   const std::string owner = Owned("dependency", value.id);
   out->set_id(value.id);
   auto kind = EncodeEnum(value.kind, kDependencyKinds, At(owner, "kind"));
@@ -981,7 +982,7 @@ Status EncodeDependency(const Dependency& value, v1::Dependency* out) {
   return Status::Ok();
 }
 
-StatusOr<Omission> DecodeOmission(const v1::Omission& value) {
+StatusOr<Omission> DecodeOmission(const v1::Omission &value) {
   Omission out;
   out.id = value.id();
   out.kind = value.kind();
@@ -991,7 +992,7 @@ StatusOr<Omission> DecodeOmission(const v1::Omission& value) {
   return out;
 }
 
-Status EncodeOmission(const Omission& value, v1::Omission* out) {
+Status EncodeOmission(const Omission &value, v1::Omission *out) {
   out->set_id(value.id);
   out->set_kind(value.kind);
   out->set_subject(value.subject);
@@ -1002,7 +1003,7 @@ Status EncodeOmission(const Omission& value, v1::Omission* out) {
 
 // --- The case ---------------------------------------------------------------
 
-Status EncodeCase(const EvidenceCase& value, v1::EvidenceCase* out) {
+Status EncodeCase(const EvidenceCase &value, v1::EvidenceCase *out) {
   if (value.evidence_id.has_value()) {
     out->set_evidence_id(core::ToString(*value.evidence_id));
   }
@@ -1020,86 +1021,85 @@ Status EncodeCase(const EvidenceCase& value, v1::EvidenceCase* out) {
   if (!status.ok()) {
     return status;
   }
-  for (const Entity& entity : value.entities) {
+  for (const Entity &entity : value.entities) {
     status = EncodeEntity(entity, out->add_entities());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const Edge& edge : value.edges) {
+  for (const Edge &edge : value.edges) {
     status = EncodeEdge(edge, out->add_edges());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const Path& path : value.paths) {
+  for (const Path &path : value.paths) {
     status = EncodePath(path, out->add_paths());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const Fact& fact : value.facts) {
+  for (const Fact &fact : value.facts) {
     status = EncodeFact(fact, out->add_facts());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const Assumption& assumption : value.assumptions) {
+  for (const Assumption &assumption : value.assumptions) {
     status = EncodeAssumption(assumption, out->add_assumptions());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const Hypothesis& hypothesis : value.hypotheses) {
+  for (const Hypothesis &hypothesis : value.hypotheses) {
     status = EncodeHypothesis(hypothesis, out->add_hypotheses());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const Unknown& unknown : value.unknowns) {
+  for (const Unknown &unknown : value.unknowns) {
     status = EncodeUnknown(unknown, out->add_unknowns());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const Constraint& constraint : value.constraints) {
+  for (const Constraint &constraint : value.constraints) {
     status = EncodeConstraint(constraint, out->add_constraints());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const Provenance& record : value.provenance) {
+  for (const Provenance &record : value.provenance) {
     status = EncodeProvenance(record, out->add_provenance());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const ProofObligation& obligation : value.proof_obligations) {
+  for (const ProofObligation &obligation : value.proof_obligations) {
     status = EncodeProofObligation(obligation, out->add_proof_obligations());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const SummaryReference& summary : value.summaries) {
+  for (const SummaryReference &summary : value.summaries) {
     status = EncodeSummaryReference(summary, out->add_summaries());
     if (!status.ok()) {
       return status;
     }
   }
-  for (const Dependency& dependency : value.dependencies) {
+  for (const Dependency &dependency : value.dependencies) {
     status = EncodeDependency(dependency, out->add_dependencies());
     if (!status.ok()) {
       return status;
     }
   }
-  auto verification_state = EncodeEnum(value.verification_state,
-                                       kVerificationStates,
-                                       "verification_state");
+  auto verification_state = EncodeEnum(
+      value.verification_state, kVerificationStates, "verification_state");
   if (!verification_state.ok()) {
     return verification_state.status();
   }
   out->set_verification_state(*verification_state);
-  for (const Omission& omission : value.omissions) {
+  for (const Omission &omission : value.omissions) {
     status = EncodeOmission(omission, out->add_omissions());
     if (!status.ok()) {
       return status;
@@ -1108,7 +1108,7 @@ Status EncodeCase(const EvidenceCase& value, v1::EvidenceCase* out) {
   return Status::Ok();
 }
 
-StatusOr<EvidenceCase> DecodeCase(const v1::EvidenceCase& value) {
+StatusOr<EvidenceCase> DecodeCase(const v1::EvidenceCase &value) {
   EvidenceCase out;
   out.schema_version = value.schema_version();
   auto level = DecodeEnum(value.level(), kEvidenceLevels, "level");
@@ -1127,7 +1127,8 @@ StatusOr<EvidenceCase> DecodeCase(const v1::EvidenceCase& value) {
   }
   out.primary_claim = std::move(*claim);
   for (int index = 0; index < value.entities_size(); ++index) {
-    auto entity = DecodeEntity(value.entities(index), Indexed("entities", index));
+    auto entity =
+        DecodeEntity(value.entities(index), Indexed("entities", index));
     if (!entity.ok()) {
       return entity.status();
     }
@@ -1170,15 +1171,16 @@ StatusOr<EvidenceCase> DecodeCase(const v1::EvidenceCase& value) {
     out.hypotheses.push_back(std::move(*hypothesis));
   }
   for (int index = 0; index < value.unknowns_size(); ++index) {
-    auto unknown = DecodeUnknown(value.unknowns(index), Indexed("unknowns", index));
+    auto unknown =
+        DecodeUnknown(value.unknowns(index), Indexed("unknowns", index));
     if (!unknown.ok()) {
       return unknown.status();
     }
     out.unknowns.push_back(std::move(*unknown));
   }
   for (int index = 0; index < value.constraints_size(); ++index) {
-    auto constraint =
-        DecodeConstraint(value.constraints(index), Indexed("constraints", index));
+    auto constraint = DecodeConstraint(value.constraints(index),
+                                       Indexed("constraints", index));
     if (!constraint.ok()) {
       return constraint.status();
     }
@@ -1193,32 +1195,31 @@ StatusOr<EvidenceCase> DecodeCase(const v1::EvidenceCase& value) {
     out.provenance.push_back(std::move(*record));
   }
   for (int index = 0; index < value.proof_obligations_size(); ++index) {
-    auto obligation = DecodeProofObligation(value.proof_obligations(index),
-                                            Indexed("proof_obligations", index));
+    auto obligation = DecodeProofObligation(
+        value.proof_obligations(index), Indexed("proof_obligations", index));
     if (!obligation.ok()) {
       return obligation.status();
     }
     out.proof_obligations.push_back(std::move(*obligation));
   }
   for (int index = 0; index < value.summaries_size(); ++index) {
-    auto summary =
-        DecodeSummaryReference(value.summaries(index), Indexed("summaries", index));
+    auto summary = DecodeSummaryReference(value.summaries(index),
+                                          Indexed("summaries", index));
     if (!summary.ok()) {
       return summary.status();
     }
     out.summaries.push_back(std::move(*summary));
   }
   for (int index = 0; index < value.dependencies_size(); ++index) {
-    auto dependency =
-        DecodeDependency(value.dependencies(index), Indexed("dependencies", index));
+    auto dependency = DecodeDependency(value.dependencies(index),
+                                       Indexed("dependencies", index));
     if (!dependency.ok()) {
       return dependency.status();
     }
     out.dependencies.push_back(std::move(*dependency));
   }
-  auto verification_state = DecodeEnum(value.verification_state(),
-                                       kVerificationStates,
-                                       "verification_state");
+  auto verification_state = DecodeEnum(
+      value.verification_state(), kVerificationStates, "verification_state");
   if (!verification_state.ok()) {
     return verification_state.status();
   }
@@ -1242,12 +1243,12 @@ StatusOr<EvidenceCase> DecodeCase(const v1::EvidenceCase& value) {
   return out;
 }
 
-}  // namespace
+} // namespace
 
 // --- Public entry points ----------------------------------------------------
 
-StatusOr<veritas::evidence::v1::EvidenceCase> ToEvidenceProto(
-    const EvidenceCase& value) {
+StatusOr<veritas::evidence::v1::EvidenceCase>
+ToEvidenceProto(const EvidenceCase &value) {
   // A case that is not well-formed has no wire form: serializing one would
   // manufacture a representation the validator refuses to accept back.
   Status status = RequireValidEvidenceCase(value);
@@ -1276,8 +1277,8 @@ StatusOr<veritas::evidence::v1::EvidenceCase> ToEvidenceProto(
   return out;
 }
 
-StatusOr<EvidenceCase> FromEvidenceProto(
-    const veritas::evidence::v1::EvidenceCase& value) {
+StatusOr<EvidenceCase>
+FromEvidenceProto(const veritas::evidence::v1::EvidenceCase &value) {
   auto decoded = DecodeCase(value);
   if (!decoded.ok()) {
     return decoded.status();
@@ -1305,20 +1306,22 @@ StatusOr<EvidenceCase> FromEvidenceProto(
   return out;
 }
 
-StatusOr<std::string> EncodeEvidenceProto(const EvidenceCase& value) {
+StatusOr<std::string> EncodeEvidenceProto(const EvidenceCase &value) {
   auto proto = ToEvidenceProto(value);
   if (!proto.ok()) {
     return proto.status();
   }
   std::string bytes;
   if (!proto->SerializeToString(&bytes)) {
-    return Status::Internal("the Evidence Case Protobuf message did not serialize");
+    return Status::Internal(
+        "the Evidence Case Protobuf message did not serialize");
   }
   return bytes;
 }
 
 StatusOr<EvidenceCase> DecodeEvidenceProto(std::string_view bytes) {
-  if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+  if (bytes.size() >
+      static_cast<std::size_t>(std::numeric_limits<int>::max())) {
     return Status::InvalidArgument(
         "the encoded Evidence Case is too large to parse");
   }
@@ -1326,7 +1329,7 @@ StatusOr<EvidenceCase> DecodeEvidenceProto(std::string_view bytes) {
   // accepts a zero-length buffer, so the empty literal keeps that path free of
   // a null pointer, and the conversion then refuses the case the empty buffer
   // decodes to rather than returning it.
-  const char* data = bytes.empty() ? "" : bytes.data();
+  const char *data = bytes.empty() ? "" : bytes.data();
   v1::EvidenceCase value;
   if (!value.ParseFromArray(data, static_cast<int>(bytes.size()))) {
     return Status::InvalidArgument(
@@ -1335,4 +1338,4 @@ StatusOr<EvidenceCase> DecodeEvidenceProto(std::string_view bytes) {
   return FromEvidenceProto(value);
 }
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence

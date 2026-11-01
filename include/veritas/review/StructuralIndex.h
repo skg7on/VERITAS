@@ -16,6 +16,7 @@
 #define VERITAS_REVIEW_STRUCTURAL_INDEX_H_
 #include "veritas/review/SnapshotCapture.h"
 #include <memory>
+
 namespace veritas::review {
 struct StructuralBudget {
   uint64_t max_tus = 16, max_entities = 10000,
@@ -23,10 +24,12 @@ struct StructuralBudget {
   uint64_t wall_ms = 60000, output_bytes = 4 * 1024 * 1024;
   uint64_t child_rss_bytes = 1024 * 1024 * 1024;
 };
+
 struct StructuralMetrics {
   uint64_t compiler_invocations = 0, svf_invocations = 0,
            wpa_components_executed = 0;
 };
+
 struct StructuralEntity {
   uint32_t ordinal;
   std::string kind, name, path, type;
@@ -39,6 +42,7 @@ struct StructuralEntity {
 struct StructuralIndexData;
 struct LocalRequest;
 struct LocalEvidence;
+
 class StructuralIndex {
 public:
   const StructuralIndexId &id() const;
@@ -55,11 +59,13 @@ public:
 private:
   explicit StructuralIndex(std::shared_ptr<const StructuralIndexData> data)
       : data_(std::move(data)) {}
+
   std::shared_ptr<const StructuralIndexData> data_;
   friend StatusOr<StructuralIndex>
   BuildStructuralIndex(const ReviewSnapshot &, const StructuralBudget &);
   friend StatusOr<LocalEvidence> InvestigateLocal(const LocalRequest &);
 };
+
 // Invalid/unsafe commands and nonpositive limits are refused. Compiler errors
 // yield an explicitly partial index; budget exhaustion never certifies absence.
 StatusOr<StructuralIndex> BuildStructuralIndex(const ReviewSnapshot &,

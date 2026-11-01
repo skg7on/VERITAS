@@ -24,14 +24,14 @@ namespace {
 
 // Serialize the deduplication key. Component values and the target ID string
 // are domain-separated by '\x1f' so no two distinct tuples collide.
-std::string WorkItemKey(const WorkItem& item) {
+std::string WorkItemKey(const WorkItem &item) {
   return std::to_string(static_cast<int>(item.kind)) + '\x1f' +
          core::ToString(item.target_id) + '\x1f' + item.revision_id + '\x1f' +
          item.build_variant_id + '\x1f' +
          std::to_string(static_cast<int>(item.consumer_component));
 }
 
-}  // namespace
+} // namespace
 
 void WorklistScheduler::Enqueue(WorkItem item) {
   const std::string key = WorkItemKey(item);
@@ -44,8 +44,8 @@ void WorklistScheduler::Enqueue(WorkItem item) {
   // Duplicate invalidation: collapse into the existing item, merging the
   // triggering delta ids so the merged work item carries every reason it was
   // scheduled.
-  WorkItem& existing = it->second;
-  for (const auto& delta_id : item.triggering_delta_ids) {
+  WorkItem &existing = it->second;
+  for (const auto &delta_id : item.triggering_delta_ids) {
     if (std::find(existing.triggering_delta_ids.begin(),
                   existing.triggering_delta_ids.end(),
                   delta_id) == existing.triggering_delta_ids.end()) {
@@ -76,4 +76,4 @@ std::optional<WorkItem> WorklistScheduler::PopNext() {
   return result;
 }
 
-}  // namespace veritas::runtime
+} // namespace veritas::runtime

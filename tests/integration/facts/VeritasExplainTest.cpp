@@ -59,8 +59,8 @@ SemanticRow DirectCall(std::string_view from, std::string_view to) {
                       EpistemicState::kMay}};
 }
 
-WitnessEdge Edge(const SemanticRow& result, std::string_view rule,
-                 const SemanticRow& input, std::uint32_t ordinal) {
+WitnessEdge Edge(const SemanticRow &result, std::string_view rule,
+                 const SemanticRow &input, std::uint32_t ordinal) {
   return WitnessEdge{.result = SemanticKey{result},
                      .rule_id = std::string(rule),
                      .input = SemanticKey{input},
@@ -104,16 +104,16 @@ struct CliResult {
   std::string stdout_text;
 };
 
-CliResult RunVeritasExplain(const std::vector<std::string>& arguments) {
+CliResult RunVeritasExplain(const std::vector<std::string> &arguments) {
   std::string command = ShellQuote(VERITAS_EXPLAIN_BINARY);
-  for (const auto& argument : arguments) {
+  for (const auto &argument : arguments) {
     command.push_back(' ');
     command.append(ShellQuote(argument));
   }
   command.append(" 2>&1");
 
   CliResult result;
-  FILE* pipe = ::popen(command.c_str(), "r");
+  FILE *pipe = ::popen(command.c_str(), "r");
   if (pipe == nullptr) {
     return result;
   }
@@ -127,7 +127,7 @@ CliResult RunVeritasExplain(const std::vector<std::string>& arguments) {
 }
 
 class VeritasExplainTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     db_dir_ = fs::temp_directory_path() /
               ("veritas_explain_" + std::to_string(::getpid()) + "_" +
@@ -147,7 +147,7 @@ struct Fixture {
   core::StableId fact_id;
 };
 
-Fixture PublishFixture(const fs::path& db_dir) {
+Fixture PublishFixture(const fs::path &db_dir) {
   const auto root = MakeFact(DirectCall("f", "g")).value();
   const auto derived = MakeFact(Reachable("f", "g")).value();
 
@@ -157,7 +157,8 @@ Fixture PublishFixture(const fs::path& db_dir) {
       core::IdKind::kFact, std::as_bytes(std::span("explain-batch", 13)));
   batch.rooted_input_fact_ids = {root.fact_id};
   batch.facts = {derived};
-  batch.witnesses = {Edge(Reachable("f", "g"), "direct", DirectCall("f", "g"), 0)};
+  batch.witnesses = {
+      Edge(Reachable("f", "g"), "direct", DirectCall("f", "g"), 0)};
 
   auto store = FactStore::Open(db_dir);
   const bool ok = store.ok() && store->Publish(batch).ok();
@@ -166,7 +167,7 @@ Fixture PublishFixture(const fs::path& db_dir) {
   return Fixture{batch.run, derived.fact_id};
 }
 
-}  // namespace
+} // namespace
 
 TEST_F(VeritasExplainTest, PrintsExplanationSections) {
   const auto fixture = PublishFixture(db_dir_);
@@ -177,8 +178,8 @@ TEST_F(VeritasExplainTest, PrintsExplanationSections) {
   EXPECT_EQ(result.exit_code, 0) << result.stdout_text;
 
   for (std::string_view section :
-       {"Fact:", "Epistemic:", "Producer:", "Rule:", "Inputs:",
-        "Assumptions:", "Unknowns:", "Source anchors:", "Truncated:"}) {
+       {"Fact:", "Epistemic:", "Producer:", "Rule:", "Inputs:", "Assumptions:",
+        "Unknowns:", "Source anchors:", "Truncated:"}) {
     EXPECT_NE(result.stdout_text.find(section), std::string::npos)
         << "missing section " << section << " in:\n"
         << result.stdout_text;

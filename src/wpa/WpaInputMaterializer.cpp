@@ -42,13 +42,13 @@ namespace sem = analysis::semantic;
 
 // Canonical, injective, length-prefixed field encoding. Every field is
 // self-delimiting so concatenation cannot be ambiguous.
-void AppendField(std::string* out, std::string_view value) {
+void AppendField(std::string *out, std::string_view value) {
   out->append(std::to_string(value.size()));
   out->push_back(':');
   out->append(value);
 }
 
-void AppendUInt(std::string* out, std::uint64_t value) {
+void AppendUInt(std::string *out, std::uint64_t value) {
   out->append(std::to_string(value));
   out->push_back(';');
 }
@@ -220,8 +220,9 @@ std::string_view IntrinsicBaseName(std::string_view symbol) {
 
 // Models applicable to a callee, matched on the symbol the bundle records and
 // falling back to the intrinsic base name.
-std::span<const sem::FunctionModel> ModelsForCallee(
-    const sem::ModelBundle &models, std::string_view callee_symbol) {
+std::span<const sem::FunctionModel>
+ModelsForCallee(const sem::ModelBundle &models,
+                std::string_view callee_symbol) {
   auto direct = models.Lookup(callee_symbol);
   if (!direct.empty())
     return direct;
@@ -295,12 +296,12 @@ std::vector<ComponentDomain> ComponentDomains(WpaComponentKind component) {
           {facts::RelationId::kMayRead, facts::RelationId::kSupportMayRead}};
 }
 
-StatusOr<WpaSummaryIndex> WpaSummaryIndex::Build(
-    std::span<const summary::SummaryArtifact> summaries) {
+StatusOr<WpaSummaryIndex>
+WpaSummaryIndex::Build(std::span<const summary::SummaryArtifact> summaries) {
   WpaSummaryIndex index;
   index.source_data_ = summaries.data();
   index.source_size_ = summaries.size();
-  for (const auto& artifact : summaries) {
+  for (const auto &artifact : summaries) {
     auto function_id =
         core::ParseStableId(summary::Identity(artifact).function_variant_id());
     if (!function_id.ok() ||
@@ -323,8 +324,8 @@ bool WpaSummaryIndex::Covers(
   return source_data_ == summaries.data() && source_size_ == summaries.size();
 }
 
-const summary::SummaryArtifact* WpaSummaryIndex::Lookup(
-    core::StableId function_id) const {
+const summary::SummaryArtifact *
+WpaSummaryIndex::Lookup(core::StableId function_id) const {
   const auto it = by_function_.find(function_id);
   return it == by_function_.end() ? nullptr : it->second;
 }
@@ -347,9 +348,9 @@ WpaInputMaterializer::Build(const WpaMaterializationRequest &request) {
   return Build(request, *summaries);
 }
 
-StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
-    const WpaMaterializationRequest& request,
-    const WpaSummaryIndex& summaries) {
+StatusOr<WpaLogicalComponentInput>
+WpaInputMaterializer::Build(const WpaMaterializationRequest &request,
+                            const WpaSummaryIndex &summaries) {
   if (!summaries.Covers(request.summaries)) {
     return Status::InvalidArgument(
         "summary index does not cover request summaries");
@@ -358,7 +359,7 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
   // 1. Recover SCC membership. The orchestrator supplies the pre-built SCC
   // decomposition so it is not rebuilt for every component; standalone callers
   // fall back to deriving it from the summaries.
-  const SccGraph* scc_graph = request.scc_graph;
+  const SccGraph *scc_graph = request.scc_graph;
   std::optional<SccGraph> owned_scc_graph;
   if (scc_graph == nullptr) {
     auto call_graph = CallGraph::FromSummaries(request.summaries);
@@ -384,6 +385,7 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
   const bool effects_component =
       request.component == WpaComponentKind::kEffects;
   std::vector<facts::SemanticRow> semantic_edb;
+
   // Base facts owned by this SCC's members. They root every witness chain a
   // locally derived result can produce, so they are collected as they are
   // emitted. Identity map relations are plumbing, not facts, and never appear
@@ -392,6 +394,7 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
     facts::SemanticRow row;
     core::StableId owner;
   };
+
   std::vector<LocalBaseFact> local_base_rows;
   std::vector<core::StableId> function_ids(members->begin(), members->end());
   std::vector<core::StableId> call_site_ids;
@@ -399,7 +402,7 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
   std::vector<core::StableId> value_ids;
 
   for (const auto &member : *members) {
-    const auto* artifact = summaries.Lookup(member);
+    const auto *artifact = summaries.Lookup(member);
     if (artifact == nullptr)
       return Status::NotFound("SCC member has no summary");
 
@@ -499,7 +502,7 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
     if (flow_component) {
       const auto *current = std::get_if<v2::FunctionSummary>(artifact);
       if (current == nullptr)
-        continue;  // a tagged V1 projection supplies no flow rows
+        continue; // a tagged V1 projection supplies no flow rows
       for (const auto &flow : current->value_flows()) {
         auto src = core::ParseStableId(flow.source_value_id());
         if (!src.ok() || src->kind != core::IdKind::kValueRef)
@@ -625,9 +628,8 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
   auto values = facts::ValueDenseMap::Build(std::move(value_ids));
   if (!values.ok())
     return values.status();
-  auto fact_map =
-      facts::DenseIdMap<facts::FactId, core::IdKind::kFact>::Build(
-          std::move(fact_ids));
+  auto fact_map = facts::DenseIdMap<facts::FactId, core::IdKind::kFact>::Build(
+      std::move(fact_ids));
   if (!fact_map.ok())
     return fact_map.status();
 
@@ -650,8 +652,8 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
         facts::RelationId::kCallSiteMap, {stable, core::ToString(stable)}});
   }
   for (const auto &stable : fact_map->StableIds()) {
-    semantic_edb.push_back(facts::SemanticRow{facts::RelationId::kFactMap,
-                                              {stable, core::ToString(stable)}});
+    semantic_edb.push_back(facts::SemanticRow{
+        facts::RelationId::kFactMap, {stable, core::ToString(stable)}});
   }
 
   // 6. Canonically order the semantic EDB. Ordering uses the same encoding as
@@ -661,7 +663,8 @@ StatusOr<WpaLogicalComponentInput> WpaInputMaterializer::Build(
   for (const auto &row : semantic_edb) {
     encoded.emplace_back(EncodeSemanticRow(row), &row);
   }
-  std::ranges::sort(encoded, {}, &std::pair<std::string, const facts::SemanticRow *>::first);
+  std::ranges::sort(encoded, {},
+                    &std::pair<std::string, const facts::SemanticRow *>::first);
 
   // 7. Convert canonical semantic rows to execution rows through the maps.
   WpaLogicalComponentInput input;

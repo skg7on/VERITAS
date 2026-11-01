@@ -48,19 +48,17 @@ core::StableId CallSiteId(std::string_view name) {
 }
 
 class RelationIoTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
-    directory_ = std::filesystem::temp_directory_path() /
-                 ("veritas_relation_io_" +
-                  std::to_string(
-                      ::testing::UnitTest::GetInstance()->random_seed()) +
-                  "_" +
-                  ::testing::UnitTest::GetInstance()
-                      ->current_test_info()
-                      ->name());
+    directory_ =
+        std::filesystem::temp_directory_path() /
+        ("veritas_relation_io_" +
+         std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
+         "_" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
     std::filesystem::remove_all(directory_);
     std::filesystem::create_directories(directory_);
   }
+
   void TearDown() override { std::filesystem::remove_all(directory_); }
 
   std::filesystem::path directory_;
@@ -74,9 +72,9 @@ v2::FunctionSummary V2Summary(std::string_view name) {
   return summary;
 }
 
-void AddCall(v2::FunctionSummary* summary, std::string_view from,
+void AddCall(v2::FunctionSummary *summary, std::string_view from,
              std::string_view to) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(
       core::ToString(CallSiteId(std::string(from) + "->" + std::string(to))));
   call->set_callee_symbol(std::string(to));
@@ -151,7 +149,7 @@ TEST_F(RelationIoTest, RoundTripsResultsAndWitnesses) {
   // Emit the evaluation the way a generated program would.
   {
     std::ofstream results(directory_ / "ReachableCall.csv");
-    for (const auto& row : raw->results) {
+    for (const auto &row : raw->results) {
       auto source = input->mappings.functions.ToDense(
           std::get<core::StableId>(row.cells[0]));
       auto target = input->mappings.functions.ToDense(
@@ -159,15 +157,13 @@ TEST_F(RelationIoTest, RoundTripsResultsAndWitnesses) {
       ASSERT_TRUE(source.ok());
       ASSERT_TRUE(target.ok());
       results << source->value << '\t' << target->value << '\t'
-              << static_cast<int>(
-                     std::get<sem::EpistemicState>(row.cells[2]))
+              << static_cast<int>(std::get<sem::EpistemicState>(row.cells[2]))
               << '\n';
     }
     std::ofstream witnesses(directory_ / "Witness.csv");
-    for (const auto& edge : raw->witnesses) {
+    for (const auto &edge : raw->witnesses) {
       witnesses << facts::EncodeSemanticKey(edge.result.row) << '\t'
-                << edge.rule_id << '\t'
-                << edge.derivation_key << '\t'
+                << edge.rule_id << '\t' << edge.derivation_key << '\t'
                 << facts::EncodeSemanticKey(edge.input.row) << '\t'
                 << edge.input_ordinal << '\n';
     }
@@ -255,5 +251,5 @@ TEST_F(RelationIoTest, RejectsSymbolCellContainingDelimiter) {
   EXPECT_FALSE(RelationIo::WriteInput(directory_, mutated).ok());
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

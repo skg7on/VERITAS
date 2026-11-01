@@ -67,6 +67,6 @@ struct AnalysisRunManifest : AnalysisRunDescriptor {
 // run ID. Returns InvalidArgument on any validation failure.
 StatusOr<AnalysisRunManifest> MakeAnalysisRun(AnalysisRunDescriptor descriptor);
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_ANALYSIS_RUN_H_
+#endif // VERITAS_FACTS_ANALYSIS_RUN_H_

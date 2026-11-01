@@ -40,11 +40,12 @@ struct ParsedModule {
   std::unique_ptr<::llvm::LLVMContext> context;
   std::unique_ptr<::llvm::Module> module;
 
-  ::llvm::Module& operator*() { return *module; }
-  ::llvm::Module* operator->() { return module.get(); }
+  ::llvm::Module &operator*() { return *module; }
+
+  ::llvm::Module *operator->() { return module.get(); }
 };
 
-ParsedModule ParseIr(const char* ir) {
+ParsedModule ParseIr(const char *ir) {
   auto context = std::make_unique<::llvm::LLVMContext>();
   ::llvm::SMDiagnostic error;
   auto module = ::llvm::parseAssemblyString(ir, error, *context);
@@ -58,26 +59,26 @@ ParsedModule ParseIr(const char* ir) {
   return parsed;
 }
 
-OriginMap OriginMapFor(const ::llvm::Module& module) {
+OriginMap OriginMapFor(const ::llvm::Module &module) {
   OriginMap origin_map;
-  for (const auto& function : module) {
+  for (const auto &function : module) {
     if (function.isDeclaration())
       continue;
     const std::string name = function.getName().str();
-    const auto id = core::MakeStableId(
-        core::IdKind::kFunctionVariant,
-        std::as_bytes(std::span(name.data(), name.size())));
-    origin_map.RecordOrigin(const_cast<::llvm::Function*>(&function),
+    const auto id =
+        core::MakeStableId(core::IdKind::kFunctionVariant,
+                           std::as_bytes(std::span(name.data(), name.size())));
+    origin_map.RecordOrigin(const_cast<::llvm::Function *>(&function),
                             core::ToString(id));
   }
   return origin_map;
 }
 
-std::vector<const ::llvm::Value*> InstructionsNamedByOrdinal(
-    const ::llvm::Function& function) {
-  std::vector<const ::llvm::Value*> values;
-  for (const auto& block : function) {
-    for (const auto& inst : block) {
+std::vector<const ::llvm::Value *>
+InstructionsNamedByOrdinal(const ::llvm::Function &function) {
+  std::vector<const ::llvm::Value *> values;
+  for (const auto &block : function) {
+    for (const auto &inst : block) {
       values.push_back(&inst);
     }
   }
@@ -96,5 +97,5 @@ TEST(StableValueMapperTest, DistinguishesUnnamedInstructions) {
   EXPECT_NE(*mapper.IdFor(*values[0]), *mapper.IdFor(*values[1]));
 }
 
-}  // namespace
-}  // namespace veritas::analysis::llvm
+} // namespace
+} // namespace veritas::analysis::llvm

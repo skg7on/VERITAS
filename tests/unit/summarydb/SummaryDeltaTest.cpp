@@ -27,18 +27,18 @@ using summary::v1::ComponentKind;
 summary::v1::FunctionSummary MakeRangeSummary(int64_t max_value) {
   summary::v1::FunctionSummary summary;
 
-  auto* header = summary.mutable_header();
+  auto *header = summary.mutable_header();
   header->set_schema_version("summary.v1");
   header->set_creation_epoch_ms(0);
 
-  auto* identity = summary.mutable_identity();
+  auto *identity = summary.mutable_identity();
   identity->set_repository_id("repo:sha256:abc");
   identity->set_revision_id("rev:sha256:def");
   identity->set_build_variant_id("variant:sha256:ghi");
   identity->set_function_variant_id("funcvar:sha256:jkl");
   identity->set_function_body_id("funcbody:sha256:mno");
 
-  auto* range = summary.add_range_facts();
+  auto *range = summary.add_range_facts();
   range->set_variable("buffer_size");
   range->set_min_value(0);
   range->set_max_value(max_value);
@@ -49,10 +49,10 @@ summary::v1::FunctionSummary MakeRangeSummary(int64_t max_value) {
 
 // Build a synthetic summary with a single top-level provenance ref, whose
 // display text can be varied. Semantic content (range fact) is fixed.
-summary::v1::FunctionSummary MakeProvenanceSummary(const std::string& display) {
+summary::v1::FunctionSummary MakeProvenanceSummary(const std::string &display) {
   summary::v1::FunctionSummary summary = MakeRangeSummary(1024);
 
-  auto* prov = summary.add_provenance_refs();
+  auto *prov = summary.add_provenance_refs();
   prov->set_id("prov:sha256:001");
   prov->set_display_text(display);
 
@@ -60,7 +60,7 @@ summary::v1::FunctionSummary MakeProvenanceSummary(const std::string& display) {
 }
 
 // Assert the delta reports exactly one changed component, of the given kind.
-void ExpectChangedOnly(const SummaryDelta& delta, ComponentKind kind) {
+void ExpectChangedOnly(const SummaryDelta &delta, ComponentKind kind) {
   ASSERT_EQ(delta.changed_components.size(), 1u);
   EXPECT_EQ(delta.changed_components[0].component_kind, kind);
   EXPECT_TRUE(delta.changed_components[0].SemanticChanged());
@@ -104,5 +104,5 @@ TEST(SummaryDeltaTest, RangeOnlyChangeDoesNotTouchCallGraphComponent) {
   EXPECT_FALSE(delta->HasChanged(ComponentKind::COMPONENT_KIND_VALUE_FLOW));
 }
 
-}  // namespace
-}  // namespace veritas::summarydb
+} // namespace
+} // namespace veritas::summarydb

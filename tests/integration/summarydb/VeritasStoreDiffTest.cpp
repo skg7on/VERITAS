@@ -77,16 +77,16 @@ std::string ShellQuote(std::string_view value) {
   return out;
 }
 
-CliResult RunStoreDiff(const std::vector<std::string>& arguments) {
+CliResult RunStoreDiff(const std::vector<std::string> &arguments) {
   std::string command = ShellQuote(VERITAS_STORE_DIFF_BINARY);
-  for (const auto& argument : arguments) {
+  for (const auto &argument : arguments) {
     command.push_back(' ');
     command.append(ShellQuote(argument));
   }
   command.append(" 2>&1");
 
   CliResult result;
-  FILE* pipe = ::popen(command.c_str(), "r");
+  FILE *pipe = ::popen(command.c_str(), "r");
   if (pipe == nullptr) {
     return result;
   }
@@ -113,7 +113,7 @@ fs::path TempDirectory() {
   return path;
 }
 
-void RemoveAll(const fs::path& path) {
+void RemoveAll(const fs::path &path) {
   std::error_code error;
   fs::remove_all(path, error);
   EXPECT_FALSE(error) << "cannot remove " << path.string() << ": "
@@ -133,7 +133,7 @@ std::string ProcessToken() {
 // wall-clock column: this file tests the tool's exit-code contract, not the
 // projection, and a store with a moving column in it would make the equivalence
 // case depend on the projection instead of on the code path under test.
-veritas::Status CreateStore(const fs::path& root, std::string_view payload) {
+veritas::Status CreateStore(const fs::path &root, std::string_view payload) {
   // `sqlite3_open` creates the database file but not the directory above it.
   std::error_code error;
   fs::create_directories(root, error);
@@ -143,27 +143,30 @@ veritas::Status CreateStore(const fs::path& root, std::string_view payload) {
   }
 
   auto store = MetadataStore::Open(root / "metadata.db");
-  if (!store.ok()) return store.status();
+  if (!store.ok())
+    return store.status();
   auto created =
       store->Execute("CREATE TABLE alpha (id TEXT, payload TEXT)", {});
-  if (!created.ok()) return created;
+  if (!created.ok())
+    return created;
   return store->Execute("INSERT INTO alpha (id, payload) VALUES ('a1', ?)",
                         {std::string(payload)});
 }
 
 // Changes the single cell, so the two stores differ in content and in nothing
 // else — same tables, same row count, same schema.
-veritas::Status ChangePayload(const fs::path& root, std::string_view payload) {
+veritas::Status ChangePayload(const fs::path &root, std::string_view payload) {
   auto store = MetadataStore::Open(root / "metadata.db");
-  if (!store.ok()) return store.status();
+  if (!store.ok())
+    return store.status();
   return store->Execute("UPDATE alpha SET payload = ? WHERE id = 'a1'",
                         {std::string(payload)});
 }
 
 class VeritasStoreDiffTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
-    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    const auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
     root_ = TempDirectory() /
             ("veritas_store_diff_" + ProcessToken() + "_" + info->name());
     RemoveAll(root_);
@@ -172,6 +175,7 @@ class VeritasStoreDiffTest : public ::testing::Test {
   void TearDown() override { RemoveAll(root_); }
 
   fs::path Left() const { return root_ / "left"; }
+
   fs::path Right() const { return root_ / "right"; }
 
   fs::path root_;
@@ -186,8 +190,7 @@ TEST_F(VeritasStoreDiffTest, IdenticalStoresExitZero) {
 
   const auto result = RunStoreDiff({Left().string(), Right().string()});
   EXPECT_EQ(result.exit_code, 0) << result.stdout_text;
-  EXPECT_NE(result.stdout_text.find("stores are equivalent"),
-            std::string::npos)
+  EXPECT_NE(result.stdout_text.find("stores are equivalent"), std::string::npos)
       << result.stdout_text;
   // The count is asserted with the code, because it is what makes the pass
   // falsifiable: a tool that compared nothing at all also prints "equivalent".
@@ -223,8 +226,7 @@ TEST_F(VeritasStoreDiffTest, AMissingStoreRootExitsTwo) {
 
   const auto result = RunStoreDiff({Left().string(), Right().string()});
   EXPECT_EQ(result.exit_code, 2) << result.stdout_text;
-  EXPECT_EQ(result.stdout_text.find("stores are equivalent"),
-            std::string::npos)
+  EXPECT_EQ(result.stdout_text.find("stores are equivalent"), std::string::npos)
       << result.stdout_text;
   EXPECT_NE(result.stdout_text.find("no metadata store at"), std::string::npos)
       << result.stdout_text;
@@ -270,4 +272,4 @@ TEST_F(VeritasStoreDiffTest, VersionFlagExitsZero) {
       << result.stdout_text;
 }
 
-}  // namespace
+} // namespace

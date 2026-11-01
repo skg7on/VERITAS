@@ -72,21 +72,20 @@ v2::FunctionSummary V2Summary(std::string_view name) {
   return summary;
 }
 
-void AddCall(v2::FunctionSummary* summary, std::string_view from,
+void AddCall(v2::FunctionSummary *summary, std::string_view from,
              std::string_view to, v1::EpistemicState epistemic) {
-  auto* call = summary->add_calls();
+  auto *call = summary->add_calls();
   call->set_call_site_id(
       core::ToString(CallSiteId(std::string(from) + "->" + std::string(to))));
   call->set_callee_symbol(std::string(to));
-  call->set_resolved_callee_function_variant_id(
-      core::ToString(FunctionId(to)));
+  call->set_resolved_callee_function_variant_id(core::ToString(FunctionId(to)));
   call->set_dispatch(v2::DISPATCH_KIND_DIRECT);
   call->set_epistemic(epistemic);
   call->set_provenance_ref("test:call");
 }
 
-void AddWrite(v2::FunctionSummary* summary, std::string_view memory) {
-  auto* effect = summary->add_memory_effects();
+void AddWrite(v2::FunctionSummary *summary, std::string_view memory) {
+  auto *effect = summary->add_memory_effects();
   effect->set_kind(v1::EFFECT_KIND_WRITE);
   effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
   effect->set_provenance_ref("test:write");
@@ -96,37 +95,36 @@ void AddWrite(v2::FunctionSummary* summary, std::string_view memory) {
 
 facts::SemanticRow Reachable(std::string_view from, std::string_view to,
                              sem::EpistemicState epistemic) {
-  return facts::SemanticRow{
-      facts::RelationId::kReachableCall,
-      {FunctionId(from), FunctionId(to), epistemic}};
+  return facts::SemanticRow{facts::RelationId::kReachableCall,
+                            {FunctionId(from), FunctionId(to), epistemic}};
 }
 
 facts::SemanticRow MayWriteRow(std::string_view function,
                                std::string_view memory,
                                sem::EpistemicState epistemic) {
-  return facts::SemanticRow{facts::RelationId::kMayWrite,
-                            {FunctionId(function), MemoryId(memory),
-                             epistemic}};
+  return facts::SemanticRow{
+      facts::RelationId::kMayWrite,
+      {FunctionId(function), MemoryId(memory), epistemic}};
 }
 
-bool ContainsSemantic(const std::vector<facts::SemanticRow>& rows,
-                      const facts::SemanticRow& wanted) {
+bool ContainsSemantic(const std::vector<facts::SemanticRow> &rows,
+                      const facts::SemanticRow &wanted) {
   return std::ranges::find(rows, wanted) != rows.end();
 }
 
-bool ContainsWitness(const facts::RawWpaEvaluation& raw,
-                     const facts::SemanticRow& result, std::string_view rule,
+bool ContainsWitness(const facts::RawWpaEvaluation &raw,
+                     const facts::SemanticRow &result, std::string_view rule,
                      std::uint32_t ordinal) {
-  return std::ranges::any_of(raw.witnesses, [&](const facts::WitnessEdge& e) {
+  return std::ranges::any_of(raw.witnesses, [&](const facts::WitnessEdge &e) {
     return e.result.row == result && e.rule_id == rule &&
            e.input_ordinal == ordinal;
   });
 }
 
-StatusOr<WpaLogicalComponentInput> InputFor(
-    const std::vector<summary::SummaryArtifact>& artifacts,
-    WpaComponentKind component, std::string_view root,
-    std::span<const facts::AnalysisFact> support = {}) {
+StatusOr<WpaLogicalComponentInput>
+InputFor(const std::vector<summary::SummaryArtifact> &artifacts,
+         WpaComponentKind component, std::string_view root,
+         std::span<const facts::AnalysisFact> support = {}) {
   auto graph = CallGraph::FromSummaries(artifacts);
   if (!graph.ok())
     return graph.status();
@@ -166,8 +164,8 @@ TEST(CppRuleEvaluatorTest, DerivesReachabilityAndImmediateWitnesses) {
   auto raw = CppRuleEvaluator().Evaluate(*input);
   ASSERT_TRUE(raw.ok());
 
-  EXPECT_TRUE(ContainsSemantic(raw->results,
-                               Reachable("f", "h", sem::EpistemicState::kMust)));
+  EXPECT_TRUE(ContainsSemantic(
+      raw->results, Reachable("f", "h", sem::EpistemicState::kMust)));
   // A two-input join emits one witness per argument position, so the proof
   // cannot be mistaken for two alternative single-input derivations.
   EXPECT_TRUE(ContainsWitness(*raw,
@@ -275,5 +273,5 @@ TEST(CppRuleEvaluatorTest, EvaluationIsDeterministic) {
   EXPECT_EQ(first->witnesses, second->witnesses);
 }
 
-}  // namespace
-}  // namespace veritas::wpa
+} // namespace
+} // namespace veritas::wpa

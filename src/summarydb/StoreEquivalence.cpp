@@ -38,8 +38,8 @@ namespace {
 //   * wall-clock columns (`created_at`, `updated_at`, `started_at`,
 //     `completed_at`, `publication_epoch`), determined by comparing two runs of
 //     one input column by column. Every one of them is a SQLite
-//     `DEFAULT (strftime('%s', 'now'))` or an equivalent, so it records when the
-//     row was written and not what was written.
+//     `DEFAULT (strftime('%s', 'now'))` or an equivalent, so it records when
+//     the row was written and not what was written.
 //   * toolchain-bound identities (`run_id` and what is derived from it,
 //     `engine_toolchain_identity`), determined by reproducing round 3 section
 //     9.1's recorded digests. These do NOT move between two runs of one input
@@ -99,28 +99,31 @@ std::string Sha256Hex(std::string_view bytes) {
 }
 
 // Every user table, in stable name order, plus SQLite's own bookkeeping.
-StatusOr<std::vector<std::string>> ListTables(MetadataStore* store) {
+StatusOr<std::vector<std::string>> ListTables(MetadataStore *store) {
   auto rows = store->Query(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name", {});
-  if (!rows.ok()) return rows.status();
+  if (!rows.ok())
+    return rows.status();
   std::vector<std::string> tables;
   tables.reserve(rows->size());
-  for (const auto& row : *rows) {
-    if (!row.empty()) tables.push_back(row[0]);
+  for (const auto &row : *rows) {
+    if (!row.empty())
+      tables.push_back(row[0]);
   }
   return tables;
 }
 
 // The column names of `table`, in declaration order.
-StatusOr<std::vector<std::string>> ListColumns(MetadataStore* store,
-                                              const std::string& table) {
+StatusOr<std::vector<std::string>> ListColumns(MetadataStore *store,
+                                               const std::string &table) {
   // PRAGMA table_info returns (cid, name, type, notnull, dflt_value, pk);
   // column 1 is the name.
   auto rows = store->Query("PRAGMA table_info(\"" + table + "\")", {});
-  if (!rows.ok()) return rows.status();
+  if (!rows.ok())
+    return rows.status();
   std::vector<std::string> columns;
   columns.reserve(rows->size());
-  for (const auto& row : *rows) {
+  for (const auto &row : *rows) {
     if (row.size() < 2) {
       return Status::Internal("PRAGMA table_info returned a short row for " +
                               table);
@@ -138,45 +141,45 @@ StatusOr<std::vector<std::string>> ListColumns(MetadataStore* store,
 // the transform is a prefix-free escape, so column and row boundaries are
 // unambiguous by construction and nothing has to be refused.
 //
-// An earlier design did refuse such values. Real stores carry them — the round-3
-// baseline stores hold newlines in `cpg_edge_support.provenance_ref` (17,963
-// rows) and in two `cpg_projections` columns — so refusal made the dump partial
-// and a whole-store sweep impossible.
+// An earlier design did refuse such values. Real stores carry them — the
+// round-3 baseline stores hold newlines in `cpg_edge_support.provenance_ref`
+// (17,963 rows) and in two `cpg_projections` columns — so refusal made the dump
+// partial and a whole-store sweep impossible.
 std::string EscapeValue(std::string_view value) {
   std::string escaped;
   escaped.reserve(value.size());
   for (const char byte : value) {
     switch (byte) {
-      case '\\':
-        escaped += "\\\\";
-        break;
-      case '|':
-        escaped += "\\|";
-        break;
-      case '\n':
-        escaped += "\\n";
-        break;
-      default:
-        escaped.push_back(byte);
-        break;
+    case '\\':
+      escaped += "\\\\";
+      break;
+    case '|':
+      escaped += "\\|";
+      break;
+    case '\n':
+      escaped += "\\n";
+      break;
+    default:
+      escaped.push_back(byte);
+      break;
     }
   }
   return escaped;
 }
 
-}  // namespace
+} // namespace
 
 std::vector<std::string> RecordedProjectionTables() {
   std::vector<std::string> tables;
   tables.reserve(std::size(kRecorded));
-  for (const auto& recorded : kRecorded) {
+  for (const auto &recorded : kRecorded) {
     tables.emplace_back(recorded.table);
   }
   return tables;
 }
 
 TableProjection ResolveTableProjection(std::string_view table) {
-  for (const auto& recorded : kRecorded) {
+  for (const auto &recorded : kRecorded) {
     if (recorded.table == table) {
       TableProjection projection;
       projection.order_by = std::string(recorded.order_by);
@@ -188,25 +191,29 @@ TableProjection ResolveTableProjection(std::string_view table) {
   return TableProjection{.order_by = "rowid", .excluded_columns = {}};
 }
 
-StatusOr<StoreDump> DumpStore(const std::filesystem::path& metadata_db_path) {
+StatusOr<StoreDump> DumpStore(const std::filesystem::path &metadata_db_path) {
   auto store = MetadataStore::OpenReadOnly(metadata_db_path);
-  if (!store.ok()) return store.status();
+  if (!store.ok())
+    return store.status();
 
   auto tables = ListTables(&*store);
-  if (!tables.ok()) return tables.status();
+  if (!tables.ok())
+    return tables.status();
 
   StoreDump dump;
   std::string combined;
-  for (const auto& table : *tables) {
+  for (const auto &table : *tables) {
     auto columns = ListColumns(&*store, table);
-    if (!columns.ok()) return columns.status();
+    if (!columns.ok())
+      return columns.status();
     const auto projection = ResolveTableProjection(table);
 
     // Reject a stale exclusion rather than letting it silently widen the
     // comparison. This is the check that would have caught a hand-written
     // exclusion list drifting away from the schema.
-    for (const auto& excluded : projection.excluded_columns) {
-      if (std::find(columns->begin(), columns->end(), excluded) == columns->end()) {
+    for (const auto &excluded : projection.excluded_columns) {
+      if (std::find(columns->begin(), columns->end(), excluded) ==
+          columns->end()) {
         return Status::FailedPrecondition(
             "table " + table + " has no column " + excluded +
             ", but its recorded projection excludes it");
@@ -215,34 +222,37 @@ StatusOr<StoreDump> DumpStore(const std::filesystem::path& metadata_db_path) {
 
     std::vector<std::string> retained;
     std::string select = "SELECT ";
-    for (const auto& column : *columns) {
+    for (const auto &column : *columns) {
       if (std::find(projection.excluded_columns.begin(),
                     projection.excluded_columns.end(),
                     column) != projection.excluded_columns.end()) {
         continue;
       }
-      if (!retained.empty()) select += ", ";
+      if (!retained.empty())
+        select += ", ";
       select += "\"" + column + "\"";
       retained.push_back(column);
     }
     if (retained.empty()) {
       return Status::FailedPrecondition("every column of " + table +
-                                       " is excluded from its projection");
+                                        " is excluded from its projection");
     }
     select += " FROM \"" + table + "\" ORDER BY " + projection.order_by;
 
     auto rows = store->Query(select, {});
-    if (!rows.ok()) return rows.status();
+    if (!rows.ok())
+      return rows.status();
 
     std::string stream;
-    for (const auto& row : *rows) {
+    for (const auto &row : *rows) {
       if (row.size() != retained.size()) {
         return Status::Internal("query for " + table + " returned " +
                                 std::to_string(row.size()) + " of " +
                                 std::to_string(retained.size()) + " columns");
       }
       for (std::size_t i = 0; i < row.size(); ++i) {
-        if (i != 0) stream.push_back('|');
+        if (i != 0)
+          stream.push_back('|');
         stream.append(EscapeValue(row[i]));
       }
       stream.push_back('\n');
@@ -263,29 +273,33 @@ StatusOr<StoreDump> DumpStore(const std::filesystem::path& metadata_db_path) {
   return dump;
 }
 
-StoreComparison CompareDumps(const StoreDump& left, const StoreDump& right) {
-  // Keyed by name rather than walked in order: `StoreDump::tables` is documented
-  // as sorted, but this is also called on dumps a caller assembled, and a
-  // comparison that silently mis-paired tables would be worse than a slow one.
-  // The std::map also makes the three output vectors come out in name order.
+StoreComparison CompareDumps(const StoreDump &left, const StoreDump &right) {
+  // Keyed by name rather than walked in order: `StoreDump::tables` is
+  // documented as sorted, but this is also called on dumps a caller assembled,
+  // and a comparison that silently mis-paired tables would be worse than a slow
+  // one. The std::map also makes the three output vectors come out in name
+  // order.
   //
-  // `tables_compared` counts the names present on both sides, which is the count
-  // the loop below digests. It is incremented before the digest comparison, not
-  // after, so a table that differs is still counted as compared.
-  std::map<std::string, const TableDump*> left_tables;
-  std::map<std::string, const TableDump*> right_tables;
-  for (const auto& table : left.tables) left_tables[table.table] = &table;
-  for (const auto& table : right.tables) right_tables[table.table] = &table;
+  // `tables_compared` counts the names present on both sides, which is the
+  // count the loop below digests. It is incremented before the digest
+  // comparison, not after, so a table that differs is still counted as
+  // compared.
+  std::map<std::string, const TableDump *> left_tables;
+  std::map<std::string, const TableDump *> right_tables;
+  for (const auto &table : left.tables)
+    left_tables[table.table] = &table;
+  for (const auto &table : right.tables)
+    right_tables[table.table] = &table;
 
   StoreComparison comparison;
-  for (const auto& [name, left_table] : left_tables) {
+  for (const auto &[name, left_table] : left_tables) {
     const auto found = right_tables.find(name);
     if (found == right_tables.end()) {
       comparison.left_only.push_back(name);
       continue;
     }
     ++comparison.tables_compared;
-    const TableDump& right_table = *found->second;
+    const TableDump &right_table = *found->second;
     if (left_table->sha256 == right_table.sha256 &&
         left_table->row_count == right_table.row_count) {
       continue;
@@ -298,9 +312,9 @@ StoreComparison CompareDumps(const StoreDump& left, const StoreDump& right) {
     comparison.differing.push_back(std::move(differing));
   }
   // A table only on the right is not "differing": it has no counterpart to
-  // disagree with, and folding it in would hide a schema change inside a list of
-  // content changes.
-  for (const auto& entry : right_tables) {
+  // disagree with, and folding it in would hide a schema change inside a list
+  // of content changes.
+  for (const auto &entry : right_tables) {
     if (left_tables.find(entry.first) == left_tables.end()) {
       comparison.right_only.push_back(entry.first);
     }
@@ -312,13 +326,16 @@ StoreComparison CompareDumps(const StoreDump& left, const StoreDump& right) {
   return comparison;
 }
 
-StatusOr<StoreComparison> CompareStoreFiles(const std::filesystem::path& left,
-                                            const std::filesystem::path& right) {
+StatusOr<StoreComparison>
+CompareStoreFiles(const std::filesystem::path &left,
+                  const std::filesystem::path &right) {
   auto left_dump = DumpStore(left);
-  if (!left_dump.ok()) return left_dump.status();
+  if (!left_dump.ok())
+    return left_dump.status();
   auto right_dump = DumpStore(right);
-  if (!right_dump.ok()) return right_dump.status();
+  if (!right_dump.ok())
+    return right_dump.status();
   return CompareDumps(*left_dump, *right_dump);
 }
 
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb

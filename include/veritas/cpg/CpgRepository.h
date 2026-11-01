@@ -21,33 +21,33 @@
 
 namespace veritas::summarydb {
 class MetadataStore;
-}  // namespace veritas::summarydb
+} // namespace veritas::summarydb
 
 namespace veritas::cpg {
 
 // CpgRepository persists validated CPG projections and their current bindings
-// in SQLite. It shares a MetadataStore with SummaryRepository so the publication
-// coordinator can stage summaries and the graph in one transaction.
+// in SQLite. It shares a MetadataStore with SummaryRepository so the
+// publication coordinator can stage summaries and the graph in one transaction.
 class CpgRepository {
- public:
-  explicit CpgRepository(summarydb::MetadataStore& metadata_store);
+public:
+  explicit CpgRepository(summarydb::MetadataStore &metadata_store);
 
   // Stage a validated projection within the current transaction. Assumes
   // BeginTransaction has already been called on the shared MetadataStore.
-  Status StageProjection(const ThinCpg& graph);
+  Status StageProjection(const ThinCpg &graph);
 
   // Load a historical projection by its ProjectionID.
-  StatusOr<ThinCpg> LoadProjection(const core::StableId& projection_id) const;
+  StatusOr<ThinCpg> LoadProjection(const core::StableId &projection_id) const;
 
   // Resolve the current projection ID for (revision, build variant).
-  StatusOr<core::StableId> OpenCurrent(
-      const core::StableId& revision_id,
-      const core::StableId& build_variant_id) const;
+  StatusOr<core::StableId>
+  OpenCurrent(const core::StableId &revision_id,
+              const core::StableId &build_variant_id) const;
 
- private:
-  summarydb::MetadataStore& metadata_store_;
+private:
+  summarydb::MetadataStore &metadata_store_;
 };
 
-}  // namespace veritas::cpg
+} // namespace veritas::cpg
 
-#endif  // VERITAS_CPG_CPGREPOSITORY_H_
+#endif // VERITAS_CPG_CPGREPOSITORY_H_

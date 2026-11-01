@@ -55,42 +55,42 @@ struct SemanticRow {
   RelationId relation;
   std::vector<SemanticCellValue> cells;
 
-  auto operator<=>(const SemanticRow&) const = default;
-  bool operator==(const SemanticRow&) const = default;
+  auto operator<=>(const SemanticRow &) const = default;
+  bool operator==(const SemanticRow &) const = default;
 };
 
 struct ExecutionRow {
   RelationId relation;
   std::vector<ExecutionCellValue> cells;
 
-  auto operator<=>(const ExecutionRow&) const = default;
-  bool operator==(const ExecutionRow&) const = default;
+  auto operator<=>(const ExecutionRow &) const = default;
+  bool operator==(const ExecutionRow &) const = default;
 };
 
 struct AnalysisFact {
   core::StableId fact_id;
   SemanticRow row;
 
-  auto operator<=>(const AnalysisFact&) const = default;
-  bool operator==(const AnalysisFact&) const = default;
+  auto operator<=>(const AnalysisFact &) const = default;
+  bool operator==(const AnalysisFact &) const = default;
 };
 
 // Validates a semantic row against its relation schema: cell count, per-cell
 // domain, stable-ID kind, and canonical unknown-range payloads.
-Status ValidateSemanticRow(const SemanticRow& row);
+Status ValidateSemanticRow(const SemanticRow &row);
 
 // Validates an execution row against its relation schema: cell count, per-cell
 // dense-ID domain, and canonical unknown-range payloads.
-Status ValidateExecutionRow(const ExecutionRow& row);
+Status ValidateExecutionRow(const ExecutionRow &row);
 
 // Validates a semantic row and derives its witness-independent fact ID without
 // materializing the row. `MakeFact` is this plus a copy of the row, so a caller
 // that only needs the identity -- validation and persistence both do -- does
 // not pay for a row copy per fact.
-StatusOr<core::StableId> DeriveFactId(const SemanticRow& row);
+StatusOr<core::StableId> DeriveFactId(const SemanticRow &row);
 
 // Validates a semantic row and derives its witness-independent fact ID.
-StatusOr<AnalysisFact> MakeFact(const SemanticRow& row);
+StatusOr<AnalysisFact> MakeFact(const SemanticRow &row);
 
 // A pass-scoped memo of row identity.
 //
@@ -110,13 +110,13 @@ class FactIdentityMemo {
 public:
   // Fallible exactly as `DeriveFactId` is: an invalid row returns its
   // validation status and is not memoized.
-  StatusOr<core::StableId> Identify(const SemanticRow& row);
+  StatusOr<core::StableId> Identify(const SemanticRow &row);
 
 private:
   std::unordered_map<std::string, core::StableId> ids_;
   std::string key_;
 };
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_ANALYSIS_FACT_H_
+#endif // VERITAS_FACTS_ANALYSIS_FACT_H_

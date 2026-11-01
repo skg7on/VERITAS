@@ -26,8 +26,8 @@
 
 namespace veritas::core {
 
-Status WriteFileAtomically(const std::string& destination,
-                           const std::string& bytes) {
+Status WriteFileAtomically(const std::string &destination,
+                           const std::string &bytes) {
   namespace fs = std::filesystem;
   std::error_code ignored;
 
@@ -51,8 +51,8 @@ Status WriteFileAtomically(const std::string& destination,
   // kernel applies the caller's umask to 0666, matching ordinary file-output
   // semantics. If another process wins the short gap, open fails safely rather
   // than following or replacing what it created.
-  const int descriptor = ::open(temporary.c_str(),
-                                O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
+  const int descriptor =
+      ::open(temporary.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
   if (descriptor < 0) {
     return Status::Internal("cannot create the temporary file beside '" +
                             destination + "'");
@@ -89,4 +89,4 @@ Status WriteFileAtomically(const std::string& destination,
   return Status::Ok();
 }
 
-}  // namespace veritas::core
+} // namespace veritas::core

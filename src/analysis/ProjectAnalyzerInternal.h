@@ -21,17 +21,17 @@
 
 namespace veritas::analysis::svf {
 class SvfAnalysisStage;
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf
 
 namespace veritas::analysis::internal {
 
 // ProjectAnalyzerTestFactory is the private test seam for injecting a recording
 // or failing SVF stage. It is not installed as a public header.
 class ProjectAnalyzerTestFactory {
- public:
+public:
   static ProjectAnalyzer Create(std::unique_ptr<svf::SvfAnalysisStage> stage);
 };
 
-}  // namespace veritas::analysis::internal
+} // namespace veritas::analysis::internal
 
-#endif  // VERITAS_ANALYSIS_PROJECTANALYZERINTERNAL_H_
+#endif // VERITAS_ANALYSIS_PROJECTANALYZERINTERNAL_H_

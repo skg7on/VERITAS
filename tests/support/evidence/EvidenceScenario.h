@@ -23,7 +23,8 @@
 // test starts from, so no test invents a look-alike case:
 //
 //   * `MakeValidMinimalEvidenceCase()` — the smallest valid initial L0 case.
-//   * `MakeOverflowEvidenceCase()` — the fully populated L1 buffer-overflow case
+//   * `MakeOverflowEvidenceCase()` — the fully populated L1 buffer-overflow
+//   case
 //     of the DEM-001 fixture, with the truncated dominating-check query visible
 //     as an unknown plus an expandable omission.
 //
@@ -58,23 +59,23 @@ namespace veritas::testing {
 // and may depend on public VERITAS types; production headers never depend on
 // it.
 class EvidenceScenarioBuilder {
- public:
+public:
   EvidenceScenarioBuilder() = default;
 
   // A deterministic stable ID of `kind` derived from a symbolic name.
   core::StableId Id(core::IdKind kind, std::string_view name) const;
 
   // Typed fact factories. Each returns a valid, deterministic AnalysisFact.
-  facts::AnalysisFact MakeAliasFact(
-      std::string_view name, analysis::semantic::AliasKind alias,
-      analysis::semantic::EpistemicState epistemic) const;
+  facts::AnalysisFact
+  MakeAliasFact(std::string_view name, analysis::semantic::AliasKind alias,
+                analysis::semantic::EpistemicState epistemic) const;
   // An alias fact over two explicit memory references: the demo's
   // "the source buffer may alias the destination buffer" premise, which the
   // name-derived factory above cannot express.
-  facts::AnalysisFact MakeAliasFact(
-      core::StableId left, core::StableId right,
-      analysis::semantic::AliasKind alias,
-      analysis::semantic::EpistemicState epistemic) const;
+  facts::AnalysisFact
+  MakeAliasFact(core::StableId left, core::StableId right,
+                analysis::semantic::AliasKind alias,
+                analysis::semantic::EpistemicState epistemic) const;
   facts::AnalysisFact MakeRangeFact(std::string_view name, std::int64_t offset,
                                     std::uint64_t size) const;
   facts::AnalysisFact MakeCapacityFact(std::string_view name,
@@ -85,14 +86,13 @@ class EvidenceScenarioBuilder {
 
   // Builds a completion fact through the public M10B path.
   StatusOr<facts::AnalysisFact> MakeCompletionFact(
-      const evidence::QueryCompletionDescriptor& descriptor) const;
+      const evidence::QueryCompletionDescriptor &descriptor) const;
 
   // A run binding and its selected witness for one completion fact.
   facts::RunFactBinding MakeBinding(core::StableId run_id,
                                     core::StableId fact_id,
                                     std::string_view witness_id) const;
-  facts::FactWitness MakeWitness(core::StableId run_id,
-                                 core::StableId fact_id,
+  facts::FactWitness MakeWitness(core::StableId run_id, core::StableId fact_id,
                                  std::string_view witness_id) const;
 
   // Flow members.
@@ -102,16 +102,15 @@ class EvidenceScenarioBuilder {
 
   // A complete or truncated metadata record bound to named run and provenance
   // references.
-  evidence::QueryResultMetadata MakeMetadata(
-      std::string_view run_name, std::string_view provenance_name,
-      evidence::QueryCompleteness completeness,
-      std::vector<evidence::TruncationReason> reasons,
-      std::size_t examined_items) const;
+  evidence::QueryResultMetadata
+  MakeMetadata(std::string_view run_name, std::string_view provenance_name,
+               evidence::QueryCompleteness completeness,
+               std::vector<evidence::TruncationReason> reasons,
+               std::size_t examined_items) const;
 
   // Reverses a vector in place; the determinism-mutation helper for tests that
   // assert insertion-order independence.
-  template <typename T>
-  static void Reverse(std::vector<T>& values) {
+  template <typename T> static void Reverse(std::vector<T> &values) {
     std::reverse(values.begin(), values.end());
   }
 
@@ -122,17 +121,17 @@ class EvidenceScenarioBuilder {
   // case's truncation unknown and omission are created together, so the request
   // never carries a truncated result without visible provenance for it. A
   // truncated result is never converted into negative evidence.
-  EvidenceScenarioBuilder& WithTruncatedDominatingChecks(
-      evidence::TruncationReason reason);
+  EvidenceScenarioBuilder &
+  WithTruncatedDominatingChecks(evidence::TruncationReason reason);
 
   // Overrides the ordered scope-ref list the dominating-check query is issued
-  // over. The default is the claim's sink alone, which is what the M10B producer
-  // records; a caller supplies a list whose leading member is an enclosing
-  // entity when it needs the derived `dominates_bounds_check(scope, sink)` to
-  // name two distinct handles. The sink must still be among the refs, or the
-  // builder's BLD-003 scope check refuses to derive an absence over it.
-  EvidenceScenarioBuilder& WithDominatingCheckScope(
-      std::vector<core::StableId> refs);
+  // over. The default is the claim's sink alone, which is what the M10B
+  // producer records; a caller supplies a list whose leading member is an
+  // enclosing entity when it needs the derived `dominates_bounds_check(scope,
+  // sink)` to name two distinct handles. The sink must still be among the refs,
+  // or the builder's BLD-003 scope check refuses to derive an absence over it.
+  EvidenceScenarioBuilder &
+  WithDominatingCheckScope(std::vector<core::StableId> refs);
 
   // Makes the dominating-check query return a check rather than an empty
   // result. The demo's question is open — the query finds nothing — which is
@@ -140,14 +139,14 @@ class EvidenceScenarioBuilder {
   // BLD-002's counterevidence path (a check *was* found, so the case records it
   // and concludes nothing) asks for this instead; the returned fact is a
   // `kSoundnessCoverage` row, the relation the builder reads as coverage.
-  EvidenceScenarioBuilder& WithDominatingCheckFound();
+  EvidenceScenarioBuilder &WithDominatingCheckFound();
 
   // The complete typed M10C assembly request at `level`: one M10B
   // `EvidenceBuildInput` whose six query results each carry a validating
   // completion certificate and run binding, plus the program context the input
   // was taken from.
-  evidence::EvidenceBuildRequest BuildRequest(
-      evidence::EvidenceLevel level) const;
+  evidence::EvidenceBuildRequest
+  BuildRequest(evidence::EvidenceLevel level) const;
 
   // The smallest valid initial L0 case: one buffer-overflow claim whose subject
   // resolves to a declared entity, one supporting fact that carries resolvable
@@ -164,11 +163,12 @@ class EvidenceScenarioBuilder {
   // dominating-check request, so the missing check stays visible.
   evidence::EvidenceCase MakeOverflowEvidenceCase() const;
 
- private:
+private:
   // The shared request builder behind `BuildRequest` and the case factories.
-  evidence::EvidenceBuildRequest BuildRequestFor(
-      evidence::EvidenceLevel level, bool truncated_dominating_checks,
-      evidence::TruncationReason reason) const;
+  evidence::EvidenceBuildRequest
+  BuildRequestFor(evidence::EvidenceLevel level,
+                  bool truncated_dominating_checks,
+                  evidence::TruncationReason reason) const;
 
   bool truncated_dominating_checks_ = false;
   bool dominating_check_found_ = false;
@@ -182,6 +182,6 @@ class EvidenceScenarioBuilder {
 evidence::EvidenceCase MakeValidMinimalEvidenceCase();
 evidence::EvidenceCase MakeOverflowEvidenceCase();
 
-}  // namespace veritas::testing
+} // namespace veritas::testing
 
-#endif  // VERITAS_TESTING_EVIDENCE_SCENARIO_H_
+#endif // VERITAS_TESTING_EVIDENCE_SCENARIO_H_

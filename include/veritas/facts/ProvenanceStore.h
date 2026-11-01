@@ -57,7 +57,7 @@ struct FactWitnessEdge {
   core::StableId run_id;
   core::StableId output_fact_id;
   std::string witness_id;
-  std::string input_kind;  // "rooted" | "derived"
+  std::string input_kind; // "rooted" | "derived"
   std::string input_id;
   std::uint32_t input_ordinal = 0;
 };
@@ -80,28 +80,28 @@ struct ExplainBudget {
 // even this object's destruction -- writes the queue. Inserts deduplicate under
 // their primary keys and preserve queue order.
 class ProvenanceStore {
- public:
-  explicit ProvenanceStore(summarydb::MetadataStore& store);
+public:
+  explicit ProvenanceStore(summarydb::MetadataStore &store);
 
-  Status AddNode(const FactWitness& node);
-  Status AddEdge(const FactWitnessEdge& edge);
+  Status AddNode(const FactWitness &node);
+  Status AddEdge(const FactWitnessEdge &edge);
   Status Flush();
 
   // Bounded explanation. Returns NotFound if the fact or its current binding
   // is absent. The returned graph carries truncated=true and a reason when the
   // traversal hit max_depth or max_nodes.
-  StatusOr<fact_proto::ProvenanceGraph> Explain(
-      core::StableId run_id, core::StableId fact_id,
-      const ExplainBudget& budget);
+  StatusOr<fact_proto::ProvenanceGraph> Explain(core::StableId run_id,
+                                                core::StableId fact_id,
+                                                const ExplainBudget &budget);
 
- private:
-  summarydb::MetadataStore& store_;
+private:
+  summarydb::MetadataStore &store_;
   // Constructed on first queued write, so a store used only for single-row
   // inserts or for Explain never builds the batched statement text.
   std::unique_ptr<summarydb::BulkInsertBatcher> node_batcher_;
   std::unique_ptr<summarydb::BulkInsertBatcher> edge_batcher_;
 };
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_PROVENANCE_STORE_H_
+#endif // VERITAS_FACTS_PROVENANCE_STORE_H_

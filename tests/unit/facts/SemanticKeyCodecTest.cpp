@@ -24,17 +24,17 @@
 namespace veritas::facts {
 namespace {
 
-std::string Join(const std::vector<std::string>& parts) {
+std::string Join(const std::vector<std::string> &parts) {
   std::string out;
-  for (const auto& part : parts) {
+  for (const auto &part : parts) {
     out += part;
   }
   return out;
 }
 
-std::string SymbolFields(const std::vector<std::string>& values) {
+std::string SymbolFields(const std::vector<std::string> &values) {
   std::vector<std::string> parts;
-  for (const auto& value : values) {
+  for (const auto &value : values) {
     parts.push_back(EncodeSymbolField(value));
   }
   return Join(parts);
@@ -64,7 +64,7 @@ TEST(SemanticKeyCodecTest, RoundTripsUnicodeEmptyAndDigitPrefixedFields) {
   EXPECT_EQ((*decoded)[0].value, "\xCE\xBB");
   EXPECT_EQ((*decoded)[1].value, "01");
   EXPECT_EQ((*decoded)[2].value, "");
-  for (const auto& field : *decoded) {
+  for (const auto &field : *decoded) {
     EXPECT_EQ(field.tag, KeyFieldTag::kSymbol);
   }
 }
@@ -94,7 +94,8 @@ TEST(SemanticKeyCodecTest, RoundTripsSignedBounds) {
 
 TEST(SemanticKeyCodecTest, RoundTripsUnsignedBounds) {
   const std::uint64_t max = std::numeric_limits<std::uint64_t>::max();
-  auto decoded = DecodeFields(EncodeUnsignedField(max) + EncodeUnsignedField(0));
+  auto decoded =
+      DecodeFields(EncodeUnsignedField(max) + EncodeUnsignedField(0));
   ASSERT_TRUE(decoded.ok());
   ASSERT_EQ(decoded->size(), 2u);
   EXPECT_EQ((*decoded)[0].value, std::to_string(max));
@@ -140,15 +141,15 @@ TEST(SemanticKeyCodecTest, RoundTripsAWholeKey) {
 // A key whose declared arity disagrees with its cell count is malformed. If it
 // decoded anyway, a truncated key could impersonate a shorter valid fact.
 TEST(SemanticKeyCodecTest, RejectsArityMismatch) {
-  const std::string key = EncodeKeyHeader("ReachableCall", 3) +
-                          EncodeIdField("func:sha256:aa");
+  const std::string key =
+      EncodeKeyHeader("ReachableCall", 3) + EncodeIdField("func:sha256:aa");
   EXPECT_FALSE(DecodeKey(key).ok());
 }
 
 TEST(SemanticKeyCodecTest, RejectsKeyWithoutVersionPrefix) {
-  EXPECT_FALSE(DecodeKey(EncodeSymbolField("ReachableCall") +
-                         EncodeUnsignedField(0))
-                   .ok());
+  EXPECT_FALSE(
+      DecodeKey(EncodeSymbolField("ReachableCall") + EncodeUnsignedField(0))
+          .ok());
 }
 
 // The append primitives exist so a hot caller can encode without allocating per
@@ -165,7 +166,7 @@ TEST(SemanticKeyCodecTest, AppendFieldMatchesReturnedEncoding) {
       {KeyFieldTag::kUnsigned, "18446744073709551615"},
       {KeyFieldTag::kEnum, "0"},
   };
-  for (const auto& [tag, value] : cases) {
+  for (const auto &[tag, value] : cases) {
     std::string appended;
     AppendField(&appended, tag, value);
     EXPECT_EQ(appended, EncodeField(tag, value)) << "value=" << value;
@@ -184,5 +185,5 @@ TEST(SemanticKeyCodecTest, AppendKeyHeaderMatchesReturnedEncoding) {
   EXPECT_EQ(extended, "sentinel" + EncodeKeyHeader("ReachableCall", 3));
 }
 
-}  // namespace
-}  // namespace veritas::facts
+} // namespace
+} // namespace veritas::facts

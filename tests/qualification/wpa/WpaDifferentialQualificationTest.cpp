@@ -38,7 +38,7 @@ struct Program {
   std::string root;
 };
 
-Program ProgramFor(const QualificationCase& c) {
+Program ProgramFor(const QualificationCase &c) {
   if (c.name == "direct") {
     auto a = V2Summary("a");
     AddDirectCall(&a, "a", "b");
@@ -186,7 +186,8 @@ class WpaDifferentialQualificationTest
 
 TEST_P(WpaDifferentialQualificationTest, SouffleEqualsCppOracle) {
   const auto program = ProgramFor(GetParam());
-  auto logical = InputFor(program.artifacts, GetParam().component, program.root);
+  auto logical =
+      InputFor(program.artifacts, GetParam().component, program.root);
   ASSERT_TRUE(logical.ok()) << logical.status().message();
 
   auto pair = RunBothEngines(*logical);
@@ -229,8 +230,7 @@ INSTANTIATE_TEST_SUITE_P(
                           "invoke"},
         QualificationCase{"callback", WpaComponentKind::kReachability,
                           "dispatch"},
-        QualificationCase{"memory", WpaComponentKind::kMemoryEffects,
-                          "writer"},
+        QualificationCase{"memory", WpaComponentKind::kMemoryEffects, "writer"},
         QualificationCase{"memory_read", WpaComponentKind::kMemoryEffects,
                           "reader"},
         QualificationCase{"flow", WpaComponentKind::kFlow, "f"},
@@ -244,10 +244,12 @@ INSTANTIATE_TEST_SUITE_P(
         QualificationCase{"semantic_zoo_callback",
                           WpaComponentKind::kReachability,
                           "zoo_callback_parameter"},
-        QualificationCase{"semantic_zoo_virtual", WpaComponentKind::kReachability,
+        QualificationCase{"semantic_zoo_virtual",
+                          WpaComponentKind::kReachability,
                           "zoo_virtual_select"},
-        QualificationCase{"semantic_zoo_memory", WpaComponentKind::kMemoryEffects,
+        QualificationCase{"semantic_zoo_memory",
+                          WpaComponentKind::kMemoryEffects,
                           "zoo_memory_shapes"}));
 
-}  // namespace
-}  // namespace veritas::wpa::qualification
+} // namespace
+} // namespace veritas::wpa::qualification

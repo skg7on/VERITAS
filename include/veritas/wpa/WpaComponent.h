@@ -124,10 +124,10 @@ struct WpaMaterializationRequest {
   WpaComponentKind component = WpaComponentKind::kReachability;
   std::span<const summary::SummaryArtifact> summaries;
   std::span<const facts::AnalysisFact> successor_support;
-  const analysis::semantic::ModelBundle* models = nullptr;
-  const SccGraph* scc_graph = nullptr;
+  const analysis::semantic::ModelBundle *models = nullptr;
+  const SccGraph *scc_graph = nullptr;
 };
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa
 
-#endif  // VERITAS_WPA_WPA_COMPONENT_H_
+#endif // VERITAS_WPA_WPA_COMPONENT_H_

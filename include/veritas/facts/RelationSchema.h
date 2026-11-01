@@ -35,10 +35,9 @@ namespace veritas::facts {
 
 // Run-local typed dense ID. Dense IDs are meaningful only within one
 // AnalysisRun and never escape it.
-template <typename Tag>
-struct DenseId {
+template <typename Tag> struct DenseId {
   std::uint32_t value;
-  auto operator<=>(const DenseId&) const = default;
+  auto operator<=>(const DenseId &) const = default;
 };
 
 using FunctionId = DenseId<struct FunctionTag>;
@@ -123,7 +122,7 @@ struct ColumnSpec {
   std::string name;
   ColumnDomain domain;
 
-  auto operator<=>(const ColumnSpec&) const = default;
+  auto operator<=>(const ColumnSpec &) const = default;
 };
 
 struct RelationSchema {
@@ -140,8 +139,8 @@ struct RelationSchema {
 };
 
 class RelationRegistry {
- public:
-  const RelationSchema& Get(RelationId id) const;
+public:
+  const RelationSchema &Get(RelationId id) const;
 
   // Returns the relation id carrying `name`, or std::nullopt when unknown.
   // Relation names are the durable identity (fact IDs hash the name), so this
@@ -150,8 +149,8 @@ class RelationRegistry {
 };
 
 // Returns the immutable relations.v2 registry.
-const RelationRegistry& RelationsV2();
+const RelationRegistry &RelationsV2();
 
-}  // namespace veritas::facts
+} // namespace veritas::facts
 
-#endif  // VERITAS_FACTS_RELATION_SCHEMA_H_
+#endif // VERITAS_FACTS_RELATION_SCHEMA_H_

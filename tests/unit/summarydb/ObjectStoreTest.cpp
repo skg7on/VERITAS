@@ -26,7 +26,7 @@
 namespace veritas::summarydb {
 namespace {
 
-std::vector<std::byte> MakeBytes(const std::string& str) {
+std::vector<std::byte> MakeBytes(const std::string &str) {
   std::vector<std::byte> bytes(str.size());
   std::memcpy(bytes.data(), str.data(), str.size());
   return bytes;
@@ -84,8 +84,8 @@ TEST(ObjectStoreTest, ExistsReturnsTrueForStoredKey) {
 }
 
 TEST(ObjectStoreTest, RocksDbPutAndGet) {
-  std::filesystem::path temp_dir = std::filesystem::temp_directory_path() /
-                                   "veritas_test_rocksdb";
+  std::filesystem::path temp_dir =
+      std::filesystem::temp_directory_path() / "veritas_test_rocksdb";
   std::filesystem::remove_all(temp_dir);
 
   auto store_result = CreateObjectStore(temp_dir.string());
@@ -118,5 +118,5 @@ TEST(ObjectStoreTest, RocksDbIdempotentPut) {
   std::filesystem::remove_all(temp_dir);
 }
 
-}  // namespace
-}  // namespace veritas::summarydb
+} // namespace
+} // namespace veritas::summarydb

@@ -60,33 +60,31 @@ namespace fs = std::filesystem;
 TEST(StoreEquivalenceEndToEndTest, TwoRunsOfOneFixtureAreEquivalent) {
   std::error_code temp_error;
   const fs::path temp_root = fs::temp_directory_path(temp_error);
-  ASSERT_FALSE(temp_error)
-      << "cannot resolve the temporary directory: " << temp_error.message();
+  ASSERT_FALSE(temp_error) << "cannot resolve the temporary directory: "
+                           << temp_error.message();
 
   // The names are per-process. A fixed name in the shared temporary directory
   // is not safe here: this repository runs several worktrees at once, and two
-  // suites running this binary would otherwise clear each other's stores — which
-  // the reset below turns from a stale file into one process deleting another's
-  // store mid-analysis.
+  // suites running this binary would otherwise clear each other's stores —
+  // which the reset below turns from a stale file into one process deleting
+  // another's store mid-analysis.
   //
   // The reset itself is still asserted rather than hoped for: a run that left a
   // store behind must be measured against a fresh one, or the comparison is
-  // against stale content. Each call gets its own error code, because one shared
-  // code would let the second call erase the first's.
+  // against stale content. Each call gets its own error code, because one
+  // shared code would let the second call erase the first's.
   const std::string token =
       std::to_string(static_cast<unsigned long long>(::getpid()));
   const fs::path first_root = temp_root / ("veritas_m13_e2e_first_" + token);
   const fs::path second_root = temp_root / ("veritas_m13_e2e_second_" + token);
   std::error_code first_clean_error;
   fs::remove_all(first_root, first_clean_error);
-  ASSERT_FALSE(first_clean_error)
-      << "cannot clear " << first_root.string() << ": "
-      << first_clean_error.message();
+  ASSERT_FALSE(first_clean_error) << "cannot clear " << first_root.string()
+                                  << ": " << first_clean_error.message();
   std::error_code second_clean_error;
   fs::remove_all(second_root, second_clean_error);
-  ASSERT_FALSE(second_clean_error)
-      << "cannot clear " << second_root.string() << ": "
-      << second_clean_error.message();
+  ASSERT_FALSE(second_clean_error) << "cannot clear " << second_root.string()
+                                   << ": " << second_clean_error.message();
 
   const fs::path project = testing::FixtureProject("semantic_zoo");
 
@@ -112,8 +110,8 @@ TEST(StoreEquivalenceEndToEndTest, TwoRunsOfOneFixtureAreEquivalent) {
   // The row counts are the fixture's, not literals, because what this test
   // pins is that both runs published the same non-empty content — pinning the
   // exact numbers would make it fail on an unrelated fixture edit and say
-  // nothing extra about equivalence. That the two stores carry the same *set* of
-  // tables is already asserted by the comparison's `left_only`/`right_only`
+  // nothing extra about equivalence. That the two stores carry the same *set*
+  // of tables is already asserted by the comparison's `left_only`/`right_only`
   // being empty below.
   const auto first_dump = summarydb::DumpStore(first_root / "metadata.db");
   ASSERT_TRUE(first_dump.ok()) << first_dump.status().message();
@@ -124,9 +122,11 @@ TEST(StoreEquivalenceEndToEndTest, TwoRunsOfOneFixtureAreEquivalent) {
 
   std::size_t fact_rows = 0;
   std::size_t edge_rows = 0;
-  for (const auto& table : first_dump->tables) {
-    if (table.table == "analysis_facts") fact_rows = table.row_count;
-    if (table.table == "provenance_edges") edge_rows = table.row_count;
+  for (const auto &table : first_dump->tables) {
+    if (table.table == "analysis_facts")
+      fact_rows = table.row_count;
+    if (table.table == "provenance_edges")
+      edge_rows = table.row_count;
   }
   EXPECT_GT(fact_rows, 0u)
       << "the first run published no facts, so the comparison below is vacuous";
@@ -134,25 +134,24 @@ TEST(StoreEquivalenceEndToEndTest, TwoRunsOfOneFixtureAreEquivalent) {
       << "the first run published no provenance, so the comparison below is "
          "vacuous";
 
-  const auto comparison =
-      summarydb::CompareStoreFiles(first_root / "metadata.db",
-                                   second_root / "metadata.db");
+  const auto comparison = summarydb::CompareStoreFiles(
+      first_root / "metadata.db", second_root / "metadata.db");
   ASSERT_TRUE(comparison.ok()) << comparison.status().message();
 
-  // Name every differing table rather than only counting them. The projection in
-  // `StoreEquivalence.cpp` is what decides equivalence, so when this fails the
-  // useful output is which table moved — that is the name a reader takes back to
-  // the projection table in the M13 acceptance record.
+  // Name every differing table rather than only counting them. The projection
+  // in `StoreEquivalence.cpp` is what decides equivalence, so when this fails
+  // the useful output is which table moved — that is the name a reader takes
+  // back to the projection table in the M13 acceptance record.
   std::string differences;
-  for (const auto& table : comparison->differing) {
+  for (const auto &table : comparison->differing) {
     differences += "\n  differs: " + table.table + " (left " +
                    std::to_string(table.left_rows) + " rows, right " +
                    std::to_string(table.right_rows) + " rows)";
   }
-  for (const auto& table : comparison->left_only) {
+  for (const auto &table : comparison->left_only) {
     differences += "\n  left only: " + table;
   }
-  for (const auto& table : comparison->right_only) {
+  for (const auto &table : comparison->right_only) {
     differences += "\n  right only: " + table;
   }
   EXPECT_TRUE(comparison->equal)
@@ -165,15 +164,13 @@ TEST(StoreEquivalenceEndToEndTest, TwoRunsOfOneFixtureAreEquivalent) {
   // given above.
   std::error_code first_remove_error;
   fs::remove_all(first_root, first_remove_error);
-  EXPECT_FALSE(first_remove_error)
-      << "cannot remove " << first_root.string() << ": "
-      << first_remove_error.message();
+  EXPECT_FALSE(first_remove_error) << "cannot remove " << first_root.string()
+                                   << ": " << first_remove_error.message();
   std::error_code second_remove_error;
   fs::remove_all(second_root, second_remove_error);
-  EXPECT_FALSE(second_remove_error)
-      << "cannot remove " << second_root.string() << ": "
-      << second_remove_error.message();
+  EXPECT_FALSE(second_remove_error) << "cannot remove " << second_root.string()
+                                    << ": " << second_remove_error.message();
 }
 
-}  // namespace
-}  // namespace veritas
+} // namespace
+} // namespace veritas

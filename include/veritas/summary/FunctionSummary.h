@@ -24,13 +24,13 @@ namespace veritas::summary {
 
 // Compute the FunctionSummaryID from canonical summary bytes.
 // The ID is derived from the entire summary's serialized form.
-veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
-    const v1::FunctionSummary& summary);
+veritas::StatusOr<core::StableId>
+ComputeFunctionSummaryId(const v1::FunctionSummary &summary);
 
 // V2 overload: compute the FunctionSummaryID from a summary.v2 message.
-veritas::StatusOr<core::StableId> ComputeFunctionSummaryId(
-    const v2::FunctionSummary& summary);
+veritas::StatusOr<core::StableId>
+ComputeFunctionSummaryId(const v2::FunctionSummary &summary);
 
-}  // namespace veritas::summary
+} // namespace veritas::summary
 
-#endif  // VERITAS_SUMMARY_FUNCTION_SUMMARY_H_
+#endif // VERITAS_SUMMARY_FUNCTION_SUMMARY_H_

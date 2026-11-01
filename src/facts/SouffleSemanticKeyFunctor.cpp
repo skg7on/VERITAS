@@ -28,7 +28,8 @@
 //
 // Signature convention (Souffle 2.5 stateful functor ABI):
 //   souffle::RamDomain name(souffle::SymbolTable*, souffle::RecordTable*, ...)
-// Each is exported with C linkage as the exact name declared by semantic_key.dl.
+// Each is exported with C linkage as the exact name declared by
+// semantic_key.dl.
 //
 // RamDomain is int32 in this build (SOUFFLE_DOMAIN_64BIT=OFF), while the codec
 // encodes `number`/`unsigned`/`enum` as 64-bit decimal strings. The Datalog
@@ -47,66 +48,70 @@ namespace {
 
 // Decodes a symbol RamDomain to its string, copying the reference the symbol
 // table hands back (the table may reuse its storage across encode calls).
-std::string DecodeSymbol(souffle::SymbolTable* sym_table,
+std::string DecodeSymbol(souffle::SymbolTable *sym_table,
                          souffle::RamDomain symbol) {
   return sym_table->decode(symbol);
 }
 
 // Encodes a key string as a symbol RamDomain.
-souffle::RamDomain EncodeSymbol(souffle::SymbolTable* sym_table,
+souffle::RamDomain EncodeSymbol(souffle::SymbolTable *sym_table,
                                 std::string key) {
   return sym_table->encode(key);
 }
 
-}  // namespace
+} // namespace
 
 extern "C" {
 
-souffle::RamDomain veritas_key_header_v1(souffle::SymbolTable* sym_table,
-                                         souffle::RecordTable* /*record_table*/,
-                                         souffle::RamDomain relation,
-                                         souffle::RamDomain arity) {
+souffle::RamDomain
+veritas_key_header_v1(souffle::SymbolTable *sym_table,
+                      souffle::RecordTable * /*record_table*/,
+                      souffle::RamDomain relation, souffle::RamDomain arity) {
   const std::string key = veritas::facts::EncodeKeyHeader(
       DecodeSymbol(sym_table, relation),
       static_cast<std::size_t>(static_cast<std::uint32_t>(arity)));
   return EncodeSymbol(sym_table, key);
 }
 
-souffle::RamDomain veritas_key_id_v1(souffle::SymbolTable* sym_table,
-                                     souffle::RecordTable* /*record_table*/,
+souffle::RamDomain veritas_key_id_v1(souffle::SymbolTable *sym_table,
+                                     souffle::RecordTable * /*record_table*/,
                                      souffle::RamDomain value) {
-  return EncodeSymbol(sym_table,
-                      veritas::facts::EncodeIdField(DecodeSymbol(sym_table, value)));
+  return EncodeSymbol(
+      sym_table, veritas::facts::EncodeIdField(DecodeSymbol(sym_table, value)));
 }
 
-souffle::RamDomain veritas_key_field_symbol_v1(
-    souffle::SymbolTable* sym_table, souffle::RecordTable* /*record_table*/,
-    souffle::RamDomain value) {
+souffle::RamDomain
+veritas_key_field_symbol_v1(souffle::SymbolTable *sym_table,
+                            souffle::RecordTable * /*record_table*/,
+                            souffle::RamDomain value) {
   return EncodeSymbol(sym_table, veritas::facts::EncodeSymbolField(
                                      DecodeSymbol(sym_table, value)));
 }
 
-souffle::RamDomain veritas_key_field_number_v1(
-    souffle::SymbolTable* sym_table, souffle::RecordTable* /*record_table*/,
-    souffle::RamDomain value) {
+souffle::RamDomain
+veritas_key_field_number_v1(souffle::SymbolTable *sym_table,
+                            souffle::RecordTable * /*record_table*/,
+                            souffle::RamDomain value) {
   return EncodeSymbol(sym_table, veritas::facts::EncodeNumberField(
                                      static_cast<std::int64_t>(value)));
 }
 
-souffle::RamDomain veritas_key_field_unsigned_v1(
-    souffle::SymbolTable* sym_table, souffle::RecordTable* /*record_table*/,
-    souffle::RamDomain value) {
-  return EncodeSymbol(sym_table,
-                      veritas::facts::EncodeUnsignedField(static_cast<std::uint64_t>(
-                          static_cast<std::uint32_t>(value))));
+souffle::RamDomain
+veritas_key_field_unsigned_v1(souffle::SymbolTable *sym_table,
+                              souffle::RecordTable * /*record_table*/,
+                              souffle::RamDomain value) {
+  return EncodeSymbol(
+      sym_table, veritas::facts::EncodeUnsignedField(static_cast<std::uint64_t>(
+                     static_cast<std::uint32_t>(value))));
 }
 
-souffle::RamDomain veritas_key_field_enum_v1(
-    souffle::SymbolTable* sym_table, souffle::RecordTable* /*record_table*/,
-    souffle::RamDomain value) {
-  return EncodeSymbol(sym_table, veritas::facts::EncodeEnumField(
-                                     static_cast<std::uint64_t>(
-                                         static_cast<std::uint32_t>(value))));
+souffle::RamDomain
+veritas_key_field_enum_v1(souffle::SymbolTable *sym_table,
+                          souffle::RecordTable * /*record_table*/,
+                          souffle::RamDomain value) {
+  return EncodeSymbol(
+      sym_table, veritas::facts::EncodeEnumField(static_cast<std::uint64_t>(
+                     static_cast<std::uint32_t>(value))));
 }
 
-}  // extern "C"
+} // extern "C"

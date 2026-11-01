@@ -33,7 +33,7 @@ enum class BudgetReason {
 };
 
 // BudgetReasonName converts BudgetReason to a string for provenance
-const char* BudgetReasonName(BudgetReason reason);
+const char *BudgetReasonName(BudgetReason reason);
 
 // SvfBudgetState tracks observed resource usage and limit status
 struct SvfBudgetState {
@@ -54,7 +54,7 @@ struct SvfBudgetState {
 // Soft limits never interrupt SVF mid-operation; they return false at the
 // next checkpoint or emission attempt.
 class SvfBudget {
- public:
+public:
   using Now = std::function<std::chrono::steady_clock::time_point()>;
 
   // Construct with config limits and a clock function (for testing)
@@ -76,15 +76,15 @@ class SvfBudget {
   bool TryAliasQuery();
 
   // state returns the current budget state (reason, counts, elapsed)
-  const SvfBudgetState& state() const { return state_; }
+  const SvfBudgetState &state() const { return state_; }
 
- private:
+private:
   SvfConfig config_;
   Now now_;
   std::chrono::steady_clock::time_point started_;
   SvfBudgetState state_;
 };
 
-}  // namespace veritas::analysis::svf
+} // namespace veritas::analysis::svf
 
-#endif  // VERITAS_ANALYSIS_SVF_SVFBUDGET_H_
+#endif // VERITAS_ANALYSIS_SVF_SVFBUDGET_H_

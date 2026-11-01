@@ -46,14 +46,14 @@ constexpr std::string_view kUsage =
     "each table is digested. Exits 0 when the stores are equivalent, 1 when\n"
     "they differ, and 2 on error.\n";
 
-int ReportError(const veritas::Status& status) {
+int ReportError(const veritas::Status &status) {
   std::cerr << "veritas-store-diff: " << status.message() << '\n';
   return 2;
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   if (argc == 2 && std::strcmp(argv[1], "--version") == 0) {
     std::cout << veritas::FormatVersion(veritas::GetVersion()) << '\n';
     return 0;
@@ -73,7 +73,8 @@ int main(int argc, char* argv[]) {
   // ever opens the right one, so an unreadable left store is named as such
   // rather than reported as a comparison of nothing.
   const auto comparison = veritas::summarydb::CompareStoreFiles(left, right);
-  if (!comparison.ok()) return ReportError(comparison.status());
+  if (!comparison.ok())
+    return ReportError(comparison.status());
 
   if (comparison->equal) {
     // Keep the count: two stores that share no compared table compare equal,
@@ -85,14 +86,14 @@ int main(int argc, char* argv[]) {
   }
 
   std::cout << "stores differ\n";
-  for (const auto& table : comparison->differing) {
+  for (const auto &table : comparison->differing) {
     std::cout << "  differs: " << table.table << " (left " << table.left_rows
               << " rows, right " << table.right_rows << " rows)\n";
   }
-  for (const auto& table : comparison->left_only) {
+  for (const auto &table : comparison->left_only) {
     std::cout << "  left only: " << table << '\n';
   }
-  for (const auto& table : comparison->right_only) {
+  for (const auto &table : comparison->right_only) {
     std::cout << "  right only: " << table << '\n';
   }
   return 1;

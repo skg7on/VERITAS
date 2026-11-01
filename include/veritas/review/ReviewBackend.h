@@ -18,10 +18,12 @@
 #include "veritas/review/LocalEvidence.h"
 #include <optional>
 #include <set>
+
 namespace veritas::review {
 struct ContextSelection {
   std::string path, kind;
 };
+
 struct BackendProject {
   SnapshotRequest snapshot;
   std::map<std::string, ContextSelection> context_selections;
@@ -29,6 +31,7 @@ struct BackendProject {
   // Each key selects both a manifest and a target; no model path is accepted.
   std::map<std::string, std::pair<std::string, std::string>> programs;
 };
+
 struct BackendConfig {
   std::map<std::string, BackendProject> projects;
   StructuralBudget structural;
@@ -39,9 +42,11 @@ struct BackendConfig {
            max_context_bytes = 32768, max_examined = 10000, max_requests = 256,
            wall_ms = 120000;
 };
+
 // Trusted operator configuration, supplied in argv before any model
 // interaction.
 StatusOr<BackendConfig> DecodeBackendConfig(std::string_view);
+
 class ReviewBackend {
 public:
   explicit ReviewBackend(BackendConfig);

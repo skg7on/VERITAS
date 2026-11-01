@@ -84,12 +84,12 @@ std::string Sanitize(std::string_view text) {
   return out;
 }
 
-std::string DigestPrefix(const core::StableId& id) {
-  return id.digest_hex.substr(
-      0, std::min<std::size_t>(8, id.digest_hex.size()));
+std::string DigestPrefix(const core::StableId &id) {
+  return id.digest_hex.substr(0,
+                              std::min<std::size_t>(8, id.digest_hex.size()));
 }
 
-std::string StableText(const core::StableId& id) { return core::ToString(id); }
+std::string StableText(const core::StableId &id) { return core::ToString(id); }
 
 // A case-local `core::StableId` for a purely textual identity. The program
 // bindings `build::ProgramContext` cannot carry are content-addressed here so
@@ -103,7 +103,7 @@ core::StableId ModelId(std::string_view text) {
 // Assigns collision-free handles in call order. The caller drives the order
 // from a sorted stable-ID sequence, so the assignment is deterministic.
 class IdAllocator {
- public:
+public:
   std::string Allocate(std::string base) {
     if (used_.insert(base).second) {
       return base;
@@ -116,13 +116,13 @@ class IdAllocator {
     }
   }
 
- private:
+private:
   std::set<std::string, std::less<>> used_;
 };
 
 // --- Expression builders ----------------------------------------------------
 
-Expression Reference(const std::string& local_id) {
+Expression Reference(const std::string &local_id) {
   Expression expression;
   expression.kind = Expression::Kind::kReference;
   expression.text = local_id;
@@ -162,37 +162,37 @@ Expression ForAll(std::string variable, Expression domain, Expression body) {
   return expression;
 }
 
-Expression ValueOf(const std::string& local_id) {
+Expression ValueOf(const std::string &local_id) {
   return Call("value", {Reference(local_id)});
 }
 
-Expression CapacityOf(const std::string& local_id) {
+Expression CapacityOf(const std::string &local_id) {
   return Call("capacity", {Reference(local_id)});
 }
 
-Expression WithinCapacity(const std::string& value_id,
-                          const std::string& memory_id) {
+Expression WithinCapacity(const std::string &value_id,
+                          const std::string &memory_id) {
   return Compare("<=", ValueOf(value_id), CapacityOf(memory_id));
 }
 
 // Collects every case-local handle an expression references.
-void CollectReferences(const Expression& expression,
-                       std::set<std::string>* out) {
+void CollectReferences(const Expression &expression,
+                       std::set<std::string> *out) {
   if (expression.kind == Expression::Kind::kReference) {
     out->insert(expression.text);
   }
-  for (const Expression& operand : expression.operands) {
+  for (const Expression &operand : expression.operands) {
     CollectReferences(operand, out);
   }
 }
 
 // True when `expression` names `local_id` anywhere inside it.
-bool Mentions(const Expression& expression, const std::string& local_id) {
+bool Mentions(const Expression &expression, const std::string &local_id) {
   if (expression.kind == Expression::Kind::kReference &&
       expression.text == local_id) {
     return true;
   }
-  for (const Expression& operand : expression.operands) {
+  for (const Expression &operand : expression.operands) {
     if (Mentions(operand, local_id)) {
       return true;
     }
@@ -217,7 +217,7 @@ std::vector<std::string> SplitComma(std::string_view text) {
   return parts;
 }
 
-std::string Join(const std::vector<std::string>& parts, std::string_view sep) {
+std::string Join(const std::vector<std::string> &parts, std::string_view sep) {
   std::string out;
   for (std::size_t i = 0; i < parts.size(); ++i) {
     if (i != 0) {
@@ -230,15 +230,15 @@ std::string Join(const std::vector<std::string>& parts, std::string_view sep) {
 
 // --- Cell accessors ---------------------------------------------------------
 
-const std::string* AsString(const facts::SemanticCellValue& cell) {
+const std::string *AsString(const facts::SemanticCellValue &cell) {
   return std::get_if<std::string>(&cell);
 }
 
-const std::uint64_t* AsUint64(const facts::SemanticCellValue& cell) {
+const std::uint64_t *AsUint64(const facts::SemanticCellValue &cell) {
   return std::get_if<std::uint64_t>(&cell);
 }
 
-const sem::EpistemicState* AsEpistemic(const facts::SemanticCellValue& cell) {
+const sem::EpistemicState *AsEpistemic(const facts::SemanticCellValue &cell) {
   return std::get_if<sem::EpistemicState>(&cell);
 }
 
@@ -246,22 +246,22 @@ const sem::EpistemicState* AsEpistemic(const facts::SemanticCellValue& cell) {
 
 std::optional<EntityKind> EntityKindFor(cpg::NodeKind kind) {
   switch (kind) {
-    case cpg::NodeKind::kFunction:
-      return EntityKind::kFunction;
-    case cpg::NodeKind::kParameter:
-      return EntityKind::kValue;
-    case cpg::NodeKind::kGlobal:
-    case cpg::NodeKind::kMemoryObject:
-      return EntityKind::kMemoryObject;
-    case cpg::NodeKind::kCallSite:
-      return EntityKind::kCallSite;
-    case cpg::NodeKind::kBasicBlockSummary:
-      return EntityKind::kBasicBlock;
-    case cpg::NodeKind::kSummary:
-    case cpg::NodeKind::kUnknown:
-      // A summary node and an unknown node are not evidence entities; a caller
-      // that wants one declared must supply a node the model can carry.
-      return std::nullopt;
+  case cpg::NodeKind::kFunction:
+    return EntityKind::kFunction;
+  case cpg::NodeKind::kParameter:
+    return EntityKind::kValue;
+  case cpg::NodeKind::kGlobal:
+  case cpg::NodeKind::kMemoryObject:
+    return EntityKind::kMemoryObject;
+  case cpg::NodeKind::kCallSite:
+    return EntityKind::kCallSite;
+  case cpg::NodeKind::kBasicBlockSummary:
+    return EntityKind::kBasicBlock;
+  case cpg::NodeKind::kSummary:
+  case cpg::NodeKind::kUnknown:
+    // A summary node and an unknown node are not evidence entities; a caller
+    // that wants one declared must supply a node the model can carry.
+    return std::nullopt;
   }
   return std::nullopt;
 }
@@ -270,36 +270,36 @@ std::optional<EntityKind> EntityKindFor(cpg::NodeKind kind) {
 // node for it. The stable-ID kind is the only authority consulted.
 EntityKind EntityKindForRef(core::IdKind kind) {
   switch (kind) {
-    case core::IdKind::kFunctionVariant:
-    case core::IdKind::kFunctionSymbol:
-    case core::IdKind::kFunctionBody:
-    case core::IdKind::kFunctionSummary:
-      return EntityKind::kFunction;
-    case core::IdKind::kCallSite:
-      return EntityKind::kCallSite;
-    case core::IdKind::kMemoryRef:
-      return EntityKind::kMemoryObject;
-    case core::IdKind::kBasicBlockSummary:
-      return EntityKind::kBasicBlock;
-    default:
-      return EntityKind::kValue;
+  case core::IdKind::kFunctionVariant:
+  case core::IdKind::kFunctionSymbol:
+  case core::IdKind::kFunctionBody:
+  case core::IdKind::kFunctionSummary:
+    return EntityKind::kFunction;
+  case core::IdKind::kCallSite:
+    return EntityKind::kCallSite;
+  case core::IdKind::kMemoryRef:
+    return EntityKind::kMemoryObject;
+  case core::IdKind::kBasicBlockSummary:
+    return EntityKind::kBasicBlock;
+  default:
+    return EntityKind::kValue;
   }
 }
 
 std::string_view EntityKindSlug(EntityKind kind) {
   switch (kind) {
-    case EntityKind::kFunction:
-      return "function";
-    case EntityKind::kCallSite:
-      return "call_site";
-    case EntityKind::kValue:
-      return "value";
-    case EntityKind::kMemoryObject:
-      return "memory_object";
-    case EntityKind::kBasicBlock:
-      return "basic_block";
-    case EntityKind::kUnspecified:
-      return "unspecified";
+  case EntityKind::kFunction:
+    return "function";
+  case EntityKind::kCallSite:
+    return "call_site";
+  case EntityKind::kValue:
+    return "value";
+  case EntityKind::kMemoryObject:
+    return "memory_object";
+  case EntityKind::kBasicBlock:
+    return "basic_block";
+  case EntityKind::kUnspecified:
+    return "unspecified";
   }
   return "unspecified";
 }
@@ -309,40 +309,38 @@ struct EdgeProjection {
   EpistemicState epistemic;
 };
 
-std::optional<EdgeProjection> ProjectEdge(const cpg::CpgEdge& edge) {
+std::optional<EdgeProjection> ProjectEdge(const cpg::CpgEdge &edge) {
   switch (edge.kind) {
-    case cpg::EdgeKind::kCalls:
-      return EdgeProjection{RelationKind::kCalls, EpistemicState::kMust};
-    case cpg::EdgeKind::kMayCall:
-      return EdgeProjection{RelationKind::kCalls, EpistemicState::kMay};
-    case cpg::EdgeKind::kReads:
-      return EdgeProjection{RelationKind::kReads, EpistemicState::kMust};
-    case cpg::EdgeKind::kWrites:
-      return EdgeProjection{RelationKind::kWrites, EpistemicState::kMust};
-    case cpg::EdgeKind::kFlowsTo:
-      return EdgeProjection{RelationKind::kFlowsTo, EpistemicState::kMust};
-    case cpg::EdgeKind::kAliases:
-      switch (edge.alias_state.value_or(cpg::AliasState::kUnknownAlias)) {
-        case cpg::AliasState::kMustAlias:
-          return EdgeProjection{RelationKind::kMayAlias, EpistemicState::kMust};
-        case cpg::AliasState::kMayAlias:
-          return EdgeProjection{RelationKind::kMayAlias, EpistemicState::kMay};
-        case cpg::AliasState::kNoAlias:
-          return EdgeProjection{RelationKind::kMayAlias,
-                                EpistemicState::kMustNot};
-        case cpg::AliasState::kUnknownAlias:
-          return EdgeProjection{RelationKind::kMayAlias,
-                                EpistemicState::kUnknown};
-      }
-      return std::nullopt;
-    case cpg::EdgeKind::kContains:
-    case cpg::EdgeKind::kDeclares:
-    case cpg::EdgeKind::kDominatesSummary:
-    case cpg::EdgeKind::kSummarizedBy:
-    case cpg::EdgeKind::kUnknownAt:
-      // The model carries no relation kind for these. The projection refuses
-      // rather than dropping the edge and leaving the graph silently thinner.
-      return std::nullopt;
+  case cpg::EdgeKind::kCalls:
+    return EdgeProjection{RelationKind::kCalls, EpistemicState::kMust};
+  case cpg::EdgeKind::kMayCall:
+    return EdgeProjection{RelationKind::kCalls, EpistemicState::kMay};
+  case cpg::EdgeKind::kReads:
+    return EdgeProjection{RelationKind::kReads, EpistemicState::kMust};
+  case cpg::EdgeKind::kWrites:
+    return EdgeProjection{RelationKind::kWrites, EpistemicState::kMust};
+  case cpg::EdgeKind::kFlowsTo:
+    return EdgeProjection{RelationKind::kFlowsTo, EpistemicState::kMust};
+  case cpg::EdgeKind::kAliases:
+    switch (edge.alias_state.value_or(cpg::AliasState::kUnknownAlias)) {
+    case cpg::AliasState::kMustAlias:
+      return EdgeProjection{RelationKind::kMayAlias, EpistemicState::kMust};
+    case cpg::AliasState::kMayAlias:
+      return EdgeProjection{RelationKind::kMayAlias, EpistemicState::kMay};
+    case cpg::AliasState::kNoAlias:
+      return EdgeProjection{RelationKind::kMayAlias, EpistemicState::kMustNot};
+    case cpg::AliasState::kUnknownAlias:
+      return EdgeProjection{RelationKind::kMayAlias, EpistemicState::kUnknown};
+    }
+    return std::nullopt;
+  case cpg::EdgeKind::kContains:
+  case cpg::EdgeKind::kDeclares:
+  case cpg::EdgeKind::kDominatesSummary:
+  case cpg::EdgeKind::kSummarizedBy:
+  case cpg::EdgeKind::kUnknownAt:
+    // The model carries no relation kind for these. The projection refuses
+    // rather than dropping the edge and leaving the graph silently thinner.
+    return std::nullopt;
   }
   return std::nullopt;
 }
@@ -352,17 +350,22 @@ std::optional<EdgeProjection> ProjectEdge(const cpg::CpgEdge& edge) {
 // case. A sentence the catalog does not name stays an unresolved call, which is
 // the weakest claim the case can make about it — never a stronger one.
 UnknownReasonCode ReasonCodeForText(std::string_view text) {
-  if (text == "EXTERNAL_FUNCTION") return UnknownReasonCode::kExternalFunction;
-  if (text == "UNRESOLVED_CALL") return UnknownReasonCode::kUnresolvedCall;
-  if (text == "UNKNOWN_ALIAS") return UnknownReasonCode::kUnknownAlias;
+  if (text == "EXTERNAL_FUNCTION")
+    return UnknownReasonCode::kExternalFunction;
+  if (text == "UNRESOLVED_CALL")
+    return UnknownReasonCode::kUnresolvedCall;
+  if (text == "UNKNOWN_ALIAS")
+    return UnknownReasonCode::kUnknownAlias;
   if (text == "MISSING_SPECIFICATION") {
     return UnknownReasonCode::kMissingSpecification;
   }
   if (text == "UNSUPPORTED_LANGUAGE_FEATURE") {
     return UnknownReasonCode::kUnsupportedLanguageFeature;
   }
-  if (text == "INLINE_ASSEMBLY") return UnknownReasonCode::kInlineAssembly;
-  if (text == "DYNAMIC_LOADING") return UnknownReasonCode::kDynamicLoading;
+  if (text == "INLINE_ASSEMBLY")
+    return UnknownReasonCode::kInlineAssembly;
+  if (text == "DYNAMIC_LOADING")
+    return UnknownReasonCode::kDynamicLoading;
   if (text == "UNKNOWN_BUILD_CONFIGURATION") {
     return UnknownReasonCode::kUnknownBuildConfiguration;
   }
@@ -375,27 +378,26 @@ UnknownReasonCode ReasonCodeForText(std::string_view text) {
 // descriptor they were written from. Re-deriving the fact from this descriptor
 // is how the builder proves the certificate it was handed was not patched after
 // publication — a task no M10B accessor performs.
-StatusOr<QueryCompletionDescriptor> ReadCompletionDescriptor(
-    const facts::AnalysisFact& fact) {
+StatusOr<QueryCompletionDescriptor>
+ReadCompletionDescriptor(const facts::AnalysisFact &fact) {
   if (fact.row.relation != facts::RelationId::kQueryCompletion) {
-    return Status::InvalidArgument(
-        "a query completion certificate must be an "
-        "evidence.query_completion.v1 row");
+    return Status::InvalidArgument("a query completion certificate must be an "
+                                   "evidence.query_completion.v1 row");
   }
-  const auto& cells = fact.row.cells;
+  const auto &cells = fact.row.cells;
   if (cells.size() != 9) {
     return Status::InvalidArgument(
         "an evidence.query_completion.v1 row carries nine cells");
   }
-  const std::string* query_kind = AsString(cells[0]);
-  const std::string* scope_text = AsString(cells[1]);
-  const std::string* budget_text = AsString(cells[2]);
-  const std::string* version = AsString(cells[3]);
-  const std::string* fingerprint = AsString(cells[4]);
-  const std::string* completeness_text = AsString(cells[5]);
-  const std::string* reasons_text = AsString(cells[6]);
-  const std::uint64_t* examined = AsUint64(cells[7]);
-  const std::string* digest = AsString(cells[8]);
+  const std::string *query_kind = AsString(cells[0]);
+  const std::string *scope_text = AsString(cells[1]);
+  const std::string *budget_text = AsString(cells[2]);
+  const std::string *version = AsString(cells[3]);
+  const std::string *fingerprint = AsString(cells[4]);
+  const std::string *completeness_text = AsString(cells[5]);
+  const std::string *reasons_text = AsString(cells[6]);
+  const std::uint64_t *examined = AsUint64(cells[7]);
+  const std::string *digest = AsString(cells[8]);
   if (query_kind == nullptr || scope_text == nullptr ||
       budget_text == nullptr || version == nullptr || fingerprint == nullptr ||
       completeness_text == nullptr || reasons_text == nullptr ||
@@ -406,7 +408,7 @@ StatusOr<QueryCompletionDescriptor> ReadCompletionDescriptor(
 
   QueryCompletionDescriptor descriptor;
   descriptor.query_kind = *query_kind;
-  for (const std::string& text : SplitComma(*scope_text)) {
+  for (const std::string &text : SplitComma(*scope_text)) {
     auto ref = core::ParseStableId(text);
     if (!ref.ok()) {
       return ref.status();
@@ -418,11 +420,10 @@ StatusOr<QueryCompletionDescriptor> ReadCompletionDescriptor(
     return Status::InvalidArgument(
         "an evidence.query_completion.v1 budget cell carries five limits");
   }
-  std::size_t* limits[5] = {&descriptor.budget.max_depth,
-                            &descriptor.budget.max_nodes,
-                            &descriptor.budget.max_paths,
-                            &descriptor.budget.max_facts_per_query,
-                            &descriptor.budget.max_provenance_depth};
+  std::size_t *limits[5] = {
+      &descriptor.budget.max_depth, &descriptor.budget.max_nodes,
+      &descriptor.budget.max_paths, &descriptor.budget.max_facts_per_query,
+      &descriptor.budget.max_provenance_depth};
   for (std::size_t i = 0; i < 5; ++i) {
     if (budget_parts[i].empty()) {
       return Status::InvalidArgument(
@@ -445,7 +446,7 @@ StatusOr<QueryCompletionDescriptor> ReadCompletionDescriptor(
     return completeness.status();
   }
   descriptor.completeness = completeness.value();
-  for (const std::string& text : SplitComma(*reasons_text)) {
+  for (const std::string &text : SplitComma(*reasons_text)) {
     auto reason = ParseTruncationReason(text);
     if (!reason.ok()) {
       return reason.status();
@@ -471,20 +472,25 @@ struct WitnessView {
 // The whole build. Every member is derived from the request; nothing is carried
 // over from a previous build, so two builds cannot influence one another.
 class Builder {
- public:
-  explicit Builder(const EvidenceBuildRequest& request) : request_(request) {}
+public:
+  explicit Builder(const EvidenceBuildRequest &request) : request_(request) {}
 
   StatusOr<EvidenceCase> Run() {
     Status status = CheckRequest();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     status = ResolveRun();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     status = AssignEntities();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     status = BuildProvenance();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     status = RouteFacts();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     status = LinkProvenance();
     if (!status.ok())
       return status;
@@ -492,13 +498,17 @@ class Builder {
     if (!status.ok())
       return status;
     status = BuildGraph();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     status = BuildDominatingCheck();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     status = BuildClaimSupport();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     status = BuildSummaryExpansions();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
 
     EvidenceCase value;
     value.schema_version = std::string(kEvidenceSchemaVersion);
@@ -519,9 +529,11 @@ class Builder {
     value.verification_state = VerificationState::kPossibleDefect;
 
     status = Project(&value);
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     status = RetargetBlocking(&value);
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
 
     SortCase(&value);
     Status finalized = FinalizeEvidenceIdentity(&value);
@@ -531,7 +543,7 @@ class Builder {
     return value;
   }
 
- private:
+private:
   // --- Request-level checks ------------------------------------------------
 
   Status CheckRequest() const {
@@ -547,8 +559,8 @@ class Builder {
           "M10C constructs only the buffer-overflow claim; the input declares "
           "another claim kind");
     }
-    const build::ProgramContext& context = request_.context;
-    const std::pair<std::string_view, const std::string*> required[] = {
+    const build::ProgramContext &context = request_.context;
+    const std::pair<std::string_view, const std::string *> required[] = {
         {"repository_id", &context.repository_id},
         {"revision_id", &context.revision_id},
         {"build_variant_id", &context.build_variant_id},
@@ -556,7 +568,7 @@ class Builder {
         {"type_layout_hash", &context.type_layout_hash},
         {"analysis_configuration_id", &request_.analysis_configuration_id},
     };
-    for (const auto& [name, value] : required) {
+    for (const auto &[name, value] : required) {
       if (value->empty()) {
         return Status::InvalidArgument(
             "the build request carries an empty " + std::string(name) +
@@ -579,10 +591,10 @@ class Builder {
   // agreement is checkable rather than assumed. A mixed input is rejected,
   // never rebased (spec 4.4, BLD-010).
   Status ResolveRun() {
-    const EvidenceBuildInput& input = request_.input;
+    const EvidenceBuildInput &input = request_.input;
     std::optional<core::StableId> run;
 
-    auto note = [&run](const core::StableId& candidate,
+    auto note = [&run](const core::StableId &candidate,
                        std::string_view carrier) -> Status {
       if (candidate.digest_hex.empty()) {
         return Status::Ok();
@@ -602,28 +614,33 @@ class Builder {
 
     Status status =
         note(input.flow_slice.metadata.analysis_run_id, "the flow slice");
-    if (!status.ok()) return status;
-    const std::pair<const char*, const EvidenceFactSet*> sets[] = {
+    if (!status.ok())
+      return status;
+    const std::pair<const char *, const EvidenceFactSet *> sets[] = {
         {"the range result", &input.ranges},
         {"the capacity result", &input.capacities},
         {"the alias result", &input.aliases},
         {"the dominating-check result", &input.dominating_checks},
         {"the unknown result", &input.unknowns},
     };
-    for (const auto& [name, set] : sets) {
+    for (const auto &[name, set] : sets) {
       status = note(set->metadata.analysis_run_id, name);
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
     if (!input.provenance.run_id().empty()) {
       auto parsed = core::ParseStableId(input.provenance.run_id());
-      if (!parsed.ok()) return parsed.status();
+      if (!parsed.ok())
+        return parsed.status();
       status = note(parsed.value(), "the provenance graph");
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
-    for (const facts::RunFactBinding& binding :
+    for (const facts::RunFactBinding &binding :
          input.query_completion_bindings) {
       status = note(binding.run_id, "a query-completion binding");
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
     if (!run.has_value()) {
       return Status::InvalidArgument(
@@ -636,7 +653,7 @@ class Builder {
 
   // --- Entities ------------------------------------------------------------
 
-  Status NoteStable(const core::StableId& id, std::optional<EntityKind> kind,
+  Status NoteStable(const core::StableId &id, std::optional<EntityKind> kind,
                     std::string_view label) {
     if (id.digest_hex.empty()) {
       return Status::InvalidArgument(
@@ -660,14 +677,15 @@ class Builder {
     return Status::Ok();
   }
 
-  Status NoteFactRefs(const facts::AnalysisFact& fact) {
-    for (const facts::SemanticCellValue& cell : fact.row.cells) {
-      const core::StableId* stable = std::get_if<core::StableId>(&cell);
+  Status NoteFactRefs(const facts::AnalysisFact &fact) {
+    for (const facts::SemanticCellValue &cell : fact.row.cells) {
+      const core::StableId *stable = std::get_if<core::StableId>(&cell);
       if (stable == nullptr) {
         continue;
       }
       Status status = NoteStable(*stable, std::nullopt, {});
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
     return Status::Ok();
   }
@@ -680,46 +698,53 @@ class Builder {
   // function of the sorted reference set, which is what makes the build
   // insertion-order independent.
   Status AssignEntities() {
-    const EvidenceBuildInput& input = request_.input;
+    const EvidenceBuildInput &input = request_.input;
 
-    for (const cpg::CpgNode& node : input.flow_slice.nodes) {
+    for (const cpg::CpgNode &node : input.flow_slice.nodes) {
       std::optional<EntityKind> kind = EntityKindFor(node.kind);
       if (!kind.has_value()) {
         return Status::InvalidArgument(
             "the flow slice carries a node whose kind has no EIR entity kind");
       }
       Status status = NoteStable(node.node_id, kind, node.label);
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
 
-    const core::StableId* claim_refs[] = {&input.claim_seed.subject_ref,
+    const core::StableId *claim_refs[] = {&input.claim_seed.subject_ref,
                                           &input.claim_seed.source_ref,
                                           &input.claim_seed.sink_ref};
-    for (const core::StableId* ref : claim_refs) {
+    for (const core::StableId *ref : claim_refs) {
       Status status = NoteStable(*ref, std::nullopt, {});
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
 
-    const std::vector<const EvidenceFactSet*> sets = {
+    const std::vector<const EvidenceFactSet *> sets = {
         &input.ranges, &input.capacities, &input.aliases, &input.unknowns,
         &input.dominating_checks};
-    for (const EvidenceFactSet* set : sets) {
-      for (const facts::AnalysisFact& fact : set->facts) {
+    for (const EvidenceFactSet *set : sets) {
+      for (const facts::AnalysisFact &fact : set->facts) {
         Status status = NoteFactRefs(fact);
-        if (!status.ok()) return status;
+        if (!status.ok())
+          return status;
       }
     }
-    for (const facts::AnalysisFact& fact : input.flow_slice.supporting_facts) {
+    for (const facts::AnalysisFact &fact : input.flow_slice.supporting_facts) {
       Status status = NoteFactRefs(fact);
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
-    for (const facts::AnalysisFact& fact : input.flow_slice.contradicting_facts) {
+    for (const facts::AnalysisFact &fact :
+         input.flow_slice.contradicting_facts) {
       Status status = NoteFactRefs(fact);
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
-    for (const facts::AnalysisFact& fact : input.flow_slice.unknowns) {
+    for (const facts::AnalysisFact &fact : input.flow_slice.unknowns) {
       Status status = NoteFactRefs(fact);
-      if (!status.ok()) return status;
+      if (!status.ok())
+        return status;
     }
 
     for (const auto &selection : input.summary_selections) {
@@ -729,9 +754,10 @@ class Builder {
         return status;
     }
     IdAllocator allocator;
-    for (const auto& [text, plan] : plans_) {
+    for (const auto &[text, plan] : plans_) {
       auto stable = core::ParseStableId(text);
-      if (!stable.ok()) return stable.status();
+      if (!stable.ok())
+        return stable.status();
       std::string base;
       if (!plan.label.empty()) {
         base = "E_" + Sanitize(plan.label);
@@ -751,7 +777,7 @@ class Builder {
     return Status::Ok();
   }
 
-  const std::string* LocalFor(const core::StableId& id) const {
+  const std::string *LocalFor(const core::StableId &id) const {
     auto it = local_by_stable_.find(StableText(id));
     if (it == local_by_stable_.end()) {
       return nullptr;
@@ -759,9 +785,9 @@ class Builder {
     return &it->second;
   }
 
-  StatusOr<std::string> LocalForOrFail(const core::StableId& id,
+  StatusOr<std::string> LocalForOrFail(const core::StableId &id,
                                        std::string_view role) const {
-    const std::string* local = LocalFor(id);
+    const std::string *local = LocalFor(id);
     if (local == nullptr) {
       return Status::InvalidArgument(
           std::string(role) + " names the stable ID '" + StableText(id) +
@@ -778,13 +804,13 @@ class Builder {
   // translated into EIR's vocabulary (ruling L49) — never a literal, and never
   // a copy of an identifier EIR-T cannot spell.
   Status BuildProvenance() {
-    const EvidenceBuildInput& input = request_.input;
+    const EvidenceBuildInput &input = request_.input;
 
-    for (const facts::RunFactBinding& binding :
+    for (const facts::RunFactBinding &binding :
          input.query_completion_bindings) {
       binding_by_fact_.emplace(StableText(binding.fact_id), &binding);
     }
-    for (const fact::v1::FactWitness& proto : input.provenance.nodes()) {
+    for (const fact::v1::FactWitness &proto : input.provenance.nodes()) {
       if (!proto.selected()) {
         continue;
       }
@@ -796,26 +822,28 @@ class Builder {
       witness_by_fact_.emplace(proto.output_fact_id(), std::move(view));
     }
 
-    std::vector<const facts::AnalysisFact*> certificates;
+    std::vector<const facts::AnalysisFact *> certificates;
     certificates.reserve(input.query_completion_facts.size());
-    for (const facts::AnalysisFact& fact : input.query_completion_facts) {
+    for (const facts::AnalysisFact &fact : input.query_completion_facts) {
       certificates.push_back(&fact);
     }
     std::sort(certificates.begin(), certificates.end(),
-              [](const facts::AnalysisFact* a, const facts::AnalysisFact* b) {
+              [](const facts::AnalysisFact *a, const facts::AnalysisFact *b) {
                 return a->fact_id < b->fact_id;
               });
 
     IdAllocator allocator;
-    for (const facts::AnalysisFact* fact : certificates) {
+    for (const facts::AnalysisFact *fact : certificates) {
       auto descriptor = ReadCompletionDescriptor(*fact);
-      if (!descriptor.ok()) return descriptor.status();
+      if (!descriptor.ok())
+        return descriptor.status();
       // The certificate must re-derive from its own cells: a row whose budget,
       // completeness, or returned-member digest was edited after publication
       // does not, and a case may not rest on a certificate that fails its own
       // identity check.
       auto rederived = MakeQueryCompletionFact(descriptor.value());
-      if (!rederived.ok()) return rederived.status();
+      if (!rederived.ok())
+        return rederived.status();
       if (rederived.value().fact_id != fact->fact_id) {
         return Status::InvalidArgument(
             "the completion certificate '" + StableText(fact->fact_id) +
@@ -934,7 +962,7 @@ class Builder {
     return Status::Ok();
   }
 
-  const std::string* ProvenanceForFact(const core::StableId& fact_id) const {
+  const std::string *ProvenanceForFact(const core::StableId &fact_id) const {
     auto it = provenance_by_fact_.find(StableText(fact_id));
     if (it == provenance_by_fact_.end()) {
       return nullptr;
@@ -949,9 +977,9 @@ class Builder {
   // the certificate that returned it, so the domain fact sets come before the
   // flow slice's aggregate views.
   Status RouteFacts() {
-    const EvidenceBuildInput& input = request_.input;
-    const std::pair<const std::vector<facts::AnalysisFact>*,
-                    const core::StableId*>
+    const EvidenceBuildInput &input = request_.input;
+    const std::pair<const std::vector<facts::AnalysisFact> *,
+                    const core::StableId *>
         buckets[] = {
             {&input.ranges.facts, &input.ranges.metadata.query_provenance_id},
             {&input.capacities.facts,
@@ -969,10 +997,10 @@ class Builder {
              &input.flow_slice.metadata.query_provenance_id},
         };
 
-    std::map<std::string, const facts::AnalysisFact*> routed;
+    std::map<std::string, const facts::AnalysisFact *> routed;
     std::map<std::string, core::StableId> certificate;
-    for (const auto& [facts, provenance_of_set] : buckets) {
-      for (const facts::AnalysisFact& fact : *facts) {
+    for (const auto &[facts, provenance_of_set] : buckets) {
+      for (const facts::AnalysisFact &fact : *facts) {
         const std::string text = StableText(fact.fact_id);
         if (!routed.emplace(text, &fact).second) {
           continue;
@@ -982,7 +1010,7 @@ class Builder {
     }
 
     EvidencePredicateMapper mapper;
-    for (const auto& [text, fact] : routed) {
+    for (const auto &[text, fact] : routed) {
       auto certificate_it = certificate.find(text);
       const std::string *provenance_id = ProvenanceForFact(fact->fact_id);
       if (provenance_id == nullptr && input.provenance_version.empty())
@@ -994,7 +1022,8 @@ class Builder {
 
       if (fact->row.relation == facts::RelationId::kUnknownEffect) {
         Status status = AddUnknown(*fact);
-        if (!status.ok()) return status;
+        if (!status.ok())
+          return status;
         continue;
       }
       if (fact->row.relation == facts::RelationId::kSoundnessCoverage) {
@@ -1087,19 +1116,21 @@ class Builder {
 
   // --- Unknown members -----------------------------------------------------
 
-  Status AddUnknown(const facts::AnalysisFact& fact) {
-    const auto& cells = fact.row.cells;
+  Status AddUnknown(const facts::AnalysisFact &fact) {
+    const auto &cells = fact.row.cells;
     if (cells.size() != 4) {
       return Status::InvalidArgument("an UnknownEffect row carries four cells");
     }
-    const core::StableId* function_id = std::get_if<core::StableId>(&cells[0]);
-    const std::string* subject = AsString(cells[1]);
-    const std::string* reason = AsString(cells[2]);
+    const core::StableId *function_id = std::get_if<core::StableId>(&cells[0]);
+    const std::string *subject = AsString(cells[1]);
+    const std::string *reason = AsString(cells[2]);
     if (function_id == nullptr || subject == nullptr || reason == nullptr) {
-      return Status::InvalidArgument("an UnknownEffect row has the wrong cells");
+      return Status::InvalidArgument(
+          "an UnknownEffect row has the wrong cells");
     }
     auto function_local = LocalForOrFail(*function_id, "an unknown-effect row");
-    if (!function_local.ok()) return function_local.status();
+    if (!function_local.ok())
+      return function_local.status();
 
     const UnknownReasonCode code = ReasonCodeForText(*reason);
     Unknown unknown;
@@ -1108,7 +1139,8 @@ class Builder {
     unknown.property = Call("effect_of", {Reference(function_local.value())});
     unknown.reason_code = code;
     unknown.reason = *reason;
-    unknown.suggested_resolution = "infer_effect(" + function_local.value() + ")";
+    unknown.suggested_resolution =
+        "infer_effect(" + function_local.value() + ")";
     unknowns_.push_back(std::move(unknown));
 
     // The open question and the marker that says a higher level can close it
@@ -1227,26 +1259,27 @@ class Builder {
 
   Status BuildGraph() {
     Status status = BuildEdges();
-    if (!status.ok()) return status;
+    if (!status.ok())
+      return status;
     return BuildPaths();
   }
 
   Status BuildEdges() {
-    const EvidenceBuildInput& input = request_.input;
-    const std::string* flow_provenance =
+    const EvidenceBuildInput &input = request_.input;
+    const std::string *flow_provenance =
         ProvenanceForFact(input.flow_slice.metadata.query_provenance_id);
 
-    std::vector<const cpg::CpgEdge*> edges;
+    std::vector<const cpg::CpgEdge *> edges;
     edges.reserve(input.flow_slice.edges.size());
-    for (const cpg::CpgEdge& edge : input.flow_slice.edges) {
+    for (const cpg::CpgEdge &edge : input.flow_slice.edges) {
       edges.push_back(&edge);
     }
     std::sort(edges.begin(), edges.end(),
-              [](const cpg::CpgEdge* a, const cpg::CpgEdge* b) {
+              [](const cpg::CpgEdge *a, const cpg::CpgEdge *b) {
                 return a->edge_id < b->edge_id;
               });
 
-    for (const cpg::CpgEdge* edge : edges) {
+    for (const cpg::CpgEdge *edge : edges) {
       std::optional<EdgeProjection> projection = ProjectEdge(*edge);
       if (!projection.has_value()) {
         return Status::InvalidArgument(
@@ -1264,9 +1297,11 @@ class Builder {
             "was withheld");
       }
       auto from = LocalForOrFail(edge->source_node_id, "a flow edge");
-      if (!from.ok()) return from.status();
+      if (!from.ok())
+        return from.status();
       auto to = LocalForOrFail(edge->target_node_id, "a flow edge");
-      if (!to.ok()) return to.status();
+      if (!to.ok())
+        return to.status();
 
       Edge value;
       value.id = edge_ids_.Allocate("ED_" + from.value().substr(2) + "_" +
@@ -1287,10 +1322,10 @@ class Builder {
   // The chain's order is semantic and is preserved verbatim: no canonicalizer
   // reorders `entity_ids`.
   Status BuildPaths() {
-    const EvidenceBuildInput& input = request_.input;
+    const EvidenceBuildInput &input = request_.input;
     std::map<std::string, std::set<std::string>> successors;
     std::map<std::string, std::size_t> indegree;
-    for (const Edge& edge : edges_) {
+    for (const Edge &edge : edges_) {
       if (edge.kind != RelationKind::kFlowsTo) {
         continue;
       }
@@ -1301,9 +1336,9 @@ class Builder {
     if (successors.empty()) {
       return Status::Ok();
     }
-    for (const auto& [from, targets] : successors) {
+    for (const auto &[from, targets] : successors) {
       (void)from;
-      for (const std::string& target : targets) {
+      for (const std::string &target : targets) {
         ++indegree[target];
       }
     }
@@ -1313,7 +1348,7 @@ class Builder {
     // malformed cyclic slice is refused rather than followed forever. It also
     // visits branches the representative chain will not take.
     std::vector<std::string> roots;
-    for (const auto& [node, degree] : indegree) {
+    for (const auto &[node, degree] : indegree) {
       if (degree == 0) {
         roots.push_back(node);
       }
@@ -1329,7 +1364,7 @@ class Builder {
       if (outgoing == successors.end()) {
         continue;
       }
-      for (const std::string& target : outgoing->second) {
+      for (const std::string &target : outgoing->second) {
         if (--remaining[target] == 0) {
           ready.push_back(target);
         }
@@ -1343,7 +1378,7 @@ class Builder {
 
     std::vector<std::string> chain;
     bool has_branch = false;
-    for (const auto& [from, targets] : successors) {
+    for (const auto &[from, targets] : successors) {
       (void)from;
       if (targets.size() > 1) {
         has_branch = true;
@@ -1374,7 +1409,7 @@ class Builder {
     // domain; the safety obligation separately requires a complete domain and
     // either a realizable member or a proof that entry is infeasible.
     path.feasibility = Feasibility::kUnknown;
-    const std::string* flow_provenance =
+    const std::string *flow_provenance =
         ProvenanceForFact(input.flow_slice.metadata.query_provenance_id);
     path.provenance_id =
         flow_provenance != nullptr ? *flow_provenance : std::string();
@@ -1383,7 +1418,7 @@ class Builder {
     // a *condition* on the path, never promoted to a supporting premise. The
     // case records the uncertainty where it belongs — on the path that depends
     // on it — instead of strengthening it.
-    for (const AliasLink& link : alias_links_) {
+    for (const AliasLink &link : alias_links_) {
       if (link.epistemic == EpistemicState::kMust) {
         continue;
       }
@@ -1418,16 +1453,17 @@ class Builder {
   // result, a scope that pins the claim's own sink, the case's run, and a
   // selected witness. Everything weaker leaves the question open.
   Status BuildDominatingCheck() {
-    const EvidenceBuildInput& input = request_.input;
-    const core::StableId& sink_ref = input.claim_seed.sink_ref;
+    const EvidenceBuildInput &input = request_.input;
+    const core::StableId &sink_ref = input.claim_seed.sink_ref;
     auto sink_local = LocalForOrFail(sink_ref, "the claim's sink");
-    if (!sink_local.ok()) return sink_local.status();
+    if (!sink_local.ok())
+      return sink_local.status();
     observation_sink_local_ = sink_local.value();
 
     const core::StableId certificate =
         input.dominating_checks.metadata.query_provenance_id;
-    const facts::AnalysisFact* fact = nullptr;
-    for (const facts::AnalysisFact& candidate : input.query_completion_facts) {
+    const facts::AnalysisFact *fact = nullptr;
+    for (const facts::AnalysisFact &candidate : input.query_completion_facts) {
       if (candidate.fact_id == certificate) {
         fact = &candidate;
         break;
@@ -1447,7 +1483,8 @@ class Builder {
     // publication. The re-derivation is validated exactly once, there, and this
     // method relies on that rather than repeating it.
     auto descriptor = ReadCompletionDescriptor(*fact);
-    if (!descriptor.ok()) return descriptor.status();
+    if (!descriptor.ok())
+      return descriptor.status();
 
     // A certificate is authority only for the exact query result it describes.
     // Scope overlap alone is insufficient: the value-flow query also includes
@@ -1477,20 +1514,22 @@ class Builder {
     }
 
     // The scope the absence is claimed over, resolved to the handle the case
-    // declares it under. The descriptor's scope is an *ordered ref list* and the
-    // predicate is binary (`dominates_bounds_check(scope, sink)`, the plan's
-    // Step 6), so the fact names the list's leading member — the query's scope
-    // anchor — as its scope and the claim's sink as its subject. The check
-    // above already established that the sink is among the refs, so a query
-    // scoped to the sink alone still states `(sink, sink)`, while a query scoped
-    // to an enclosing member first states `(enclosing, sink)` — the convention
-    // the hand-authored fixture uses (`dominates(@vendor_validate, @memcpy)`).
-    // Naming the sink twice unconditionally understated what the query actually
-    // covered: the scope is the query's, and the sink is the absence's subject.
-    auto scope_local = LocalForOrFail(
-        descriptor.value().ordered_scope_refs.front(),
-        "the dominating-check query's scope");
-    if (!scope_local.ok()) return scope_local.status();
+    // declares it under. The descriptor's scope is an *ordered ref list* and
+    // the predicate is binary (`dominates_bounds_check(scope, sink)`, the
+    // plan's Step 6), so the fact names the list's leading member — the query's
+    // scope anchor — as its scope and the claim's sink as its subject. The
+    // check above already established that the sink is among the refs, so a
+    // query scoped to the sink alone still states `(sink, sink)`, while a query
+    // scoped to an enclosing member first states `(enclosing, sink)` — the
+    // convention the hand-authored fixture uses (`dominates(@vendor_validate,
+    // @memcpy)`). Naming the sink twice unconditionally understated what the
+    // query actually covered: the scope is the query's, and the sink is the
+    // absence's subject.
+    auto scope_local =
+        LocalForOrFail(descriptor.value().ordered_scope_refs.front(),
+                       "the dominating-check query's scope");
+    if (!scope_local.ok())
+      return scope_local.status();
 
     const std::string certificate_text = StableText(fact->fact_id);
     auto binding = binding_by_fact_.find(certificate_text);
@@ -1509,7 +1548,7 @@ class Builder {
           "OM_dominating_check_witness");
     }
 
-    const std::string* provenance_local =
+    const std::string *provenance_local =
         ProvenanceForFact(input.dominating_checks.metadata.query_provenance_id);
 
     if (IsLegacyEvidenceHandoff(input) &&
@@ -1525,9 +1564,9 @@ class Builder {
       const std::string reason_text =
           "dominating-check query truncated: " + Join(reasons, ",");
       Unknown unknown;
-      unknown.id = unknown_ids_.Allocate(
-          "U_" + Sanitize(sink_local.value().substr(2)) +
-          "_missing_specification");
+      unknown.id =
+          unknown_ids_.Allocate("U_" + Sanitize(sink_local.value().substr(2)) +
+                                "_missing_specification");
       unknown.property =
           Call(std::string(kAbsencePredicate),
                {Reference(sink_local.value()), Reference(sink_local.value())});
@@ -1552,16 +1591,16 @@ class Builder {
       // BLD-002: a check was found. It is counterevidence — the case records it
       // and stops there. It does not conclude the sink is safe, and it does not
       // conclude the check dominates: no verdict follows from presence alone.
-      for (const facts::AnalysisFact* row : coverage_facts_) {
-        const sem::EpistemicState* state = AsEpistemic(row->row.cells.back());
+      for (const facts::AnalysisFact *row : coverage_facts_) {
+        const sem::EpistemicState *state = AsEpistemic(row->row.cells.back());
         const sem::EpistemicState raw =
             state != nullptr ? *state : sem::EpistemicState::kUnknown;
         Fact evidence;
         evidence.id = fact_ids_.Allocate("F_" + std::string(kAbsencePredicate));
         evidence.stable_id = row->fact_id;
-        evidence.predicate =
-            Call(std::string(kAbsencePredicate),
-                 {Reference(scope_local.value()), Reference(sink_local.value())});
+        evidence.predicate = Call(
+            std::string(kAbsencePredicate),
+            {Reference(scope_local.value()), Reference(sink_local.value())});
         evidence.epistemic = CopyEpistemicState(raw);
         evidence.confidence = ConfidenceForState(evidence.epistemic);
         evidence.producer = std::string(kCoverageProducerId);
@@ -1587,17 +1626,17 @@ class Builder {
     }
 
     // BLD-007: the one derivation the builder performs. Complete, empty,
-    // correctly scoped, in this run, with a selected witness — so the absence is
-    // certified, and the certificate is its provenance input.
-    const std::string certificate_local = fact_ids_.Allocate("F_query_completion");
+    // correctly scoped, in this run, with a selected witness — so the absence
+    // is certified, and the certificate is its provenance input.
+    const std::string certificate_local =
+        fact_ids_.Allocate("F_query_completion");
     Fact certificate_fact;
     certificate_fact.id = certificate_local;
     certificate_fact.stable_id = fact->fact_id;
-    certificate_fact.predicate = Call(
-        "query_completion",
-        {StringLiteral(descriptor.value().query_kind),
-         StringLiteral(
-             std::string(ToString(descriptor.value().completeness)))});
+    certificate_fact.predicate =
+        Call("query_completion", {StringLiteral(descriptor.value().query_kind),
+                                  StringLiteral(std::string(ToString(
+                                      descriptor.value().completeness)))});
     certificate_fact.epistemic = EpistemicState::kMust;
     certificate_fact.confidence = Confidence::kExact;
     certificate_fact.producer = std::string(kEvidenceQueryProducerId);
@@ -1618,8 +1657,8 @@ class Builder {
 
     // The absence cites the M9 row it was *derived from* — the same row the
     // certificate above cites — because `stable_id` is a reference to the M9
-    // fact, not a key of the member's own. That shared reference is intended and
-    // not a collision: the two members are told apart by `id`, and they say
+    // fact, not a key of the member's own. That shared reference is intended
+    // and not a collision: the two members are told apart by `id`, and they say
     // opposite things about one row.
     Fact absence;
     absence.id = fact_ids_.Allocate("F_" + std::string(kAbsencePredicate));
@@ -1641,13 +1680,12 @@ class Builder {
   // negative fact, and never an interrupted-query reason code — the case has no
   // query-completion provenance under the M9 producer to pair with one.
   Status OpenCheck(std::string reason, UnknownReasonCode code,
-                   const std::string& sink_local, std::string omission_base) {
+                   const std::string &sink_local, std::string omission_base) {
     Unknown unknown;
     unknown.id = unknown_ids_.Allocate("U_" + Sanitize(sink_local.substr(2)) +
                                        "_" + Sanitize(ToString(code)));
-    unknown.property =
-        Call(std::string(kAbsencePredicate),
-             {Reference(sink_local), Reference(sink_local)});
+    unknown.property = Call(std::string(kAbsencePredicate),
+                            {Reference(sink_local), Reference(sink_local)});
     unknown.reason_code = code;
     unknown.reason = std::move(reason);
     unknown.suggested_resolution =
@@ -1667,15 +1705,18 @@ class Builder {
   // --- Claim, constraint, obligation, dependencies -------------------------
 
   Status BuildClaimSupport() {
-    const EvidenceBuildInput& input = request_.input;
+    const EvidenceBuildInput &input = request_.input;
     auto subject =
         LocalForOrFail(input.claim_seed.subject_ref, "the claim's subject");
-    if (!subject.ok()) return subject.status();
+    if (!subject.ok())
+      return subject.status();
     auto source =
         LocalForOrFail(input.claim_seed.source_ref, "the claim's source");
-    if (!source.ok()) return source.status();
+    if (!source.ok())
+      return source.status();
     auto sink = LocalForOrFail(input.claim_seed.sink_ref, "the claim's sink");
-    if (!sink.ok()) return sink.status();
+    if (!sink.ok())
+      return sink.status();
 
     claim_.id = std::string(kClaimLocalId);
     claim_.kind = input.claim_seed.kind;
@@ -1696,7 +1737,7 @@ class Builder {
     // exactly the predicate the obligation asks a verifier to prove, so it
     // cannot be a MUST.
     constraint.epistemic = EpistemicState::kMay;
-    const std::string* flow_provenance =
+    const std::string *flow_provenance =
         ProvenanceForFact(input.flow_slice.metadata.query_provenance_id);
     constraint.provenance_id =
         flow_provenance != nullptr ? *flow_provenance : std::string();
@@ -1767,7 +1808,7 @@ class Builder {
       available.emplace(*function, &selection);
     }
     IdAllocator ids;
-    for (const Entity& entity : entities_) {
+    for (const Entity &entity : entities_) {
       if (entity.kind != EntityKind::kFunction)
         continue;
       auto selected = available.find(entity.id);
@@ -1836,7 +1877,7 @@ class Builder {
   // a withheld slice is never represented by its absence alone (BLD-008). L1
   // retains the causal slice. L2 retains the detail and adds an explicit
   // expandable marker for every expansion it did not perform (BLD-009).
-  Status Project(EvidenceCase* value) {
+  Status Project(EvidenceCase *value) {
     if (value->level != EvidenceLevel::kL0) {
       return Status::Ok();
     }
@@ -1851,12 +1892,12 @@ class Builder {
       if (const auto *local = LocalFor(selection.function_variant_id))
         retained_entities.insert(*local);
     // The obligation L0 keeps states a goal over the sink the claim is about.
-    const std::string* sink = LocalFor(request_.input.claim_seed.sink_ref);
+    const std::string *sink = LocalFor(request_.input.claim_seed.sink_ref);
     if (sink != nullptr) {
       retained_entities.insert(*sink);
     }
     if (!paths_.empty()) {
-      for (const std::string& entity : paths_.front().entity_ids) {
+      for (const std::string &entity : paths_.front().entity_ids) {
         retained_entities.insert(entity);
       }
     }
@@ -1865,7 +1906,7 @@ class Builder {
     // the source's range and the subject's capacity. Everything else is the
     // surrounding slice, which L0 withholds.
     std::set<std::string> retained_facts;
-    for (const Fact& fact : facts_) {
+    for (const Fact &fact : facts_) {
       if (Mentions(fact.predicate, claim_.subject) ||
           Mentions(fact.predicate, claim_source_local_)) {
         retained_facts.insert(fact.id);
@@ -1874,9 +1915,9 @@ class Builder {
 
     std::set<std::string> retained_edge_ids;
     if (!paths_.empty()) {
-      const std::vector<std::string>& chain = paths_.front().entity_ids;
+      const std::vector<std::string> &chain = paths_.front().entity_ids;
       for (std::size_t i = 0; i + 1 < chain.size(); ++i) {
-        for (const Edge& edge : edges_) {
+        for (const Edge &edge : edges_) {
           if (edge.from == chain[i] && edge.to == chain[i + 1]) {
             retained_edge_ids.insert(edge.id);
           }
@@ -1892,7 +1933,7 @@ class Builder {
           coverage_unknown_ids_.contains(unknown.id))
         CollectReferences(unknown.property, &retained_entities);
     }
-    for (const Fact& fact : facts_) {
+    for (const Fact &fact : facts_) {
       if (retained_facts.count(fact.id) != 0) {
         CollectReferences(fact.predicate, &retained_entities);
       }
@@ -1904,19 +1945,22 @@ class Builder {
     // omission: a subject naming a member the projection removed would be a
     // dangling reference.
     std::vector<std::string> withheld;
-    for (const Entity& entity : entities_) {
-      if (retained_entities.count(entity.id) == 0) withheld.push_back(entity.id);
+    for (const Entity &entity : entities_) {
+      if (retained_entities.count(entity.id) == 0)
+        withheld.push_back(entity.id);
     }
-    for (const Edge& edge : edges_) {
-      if (retained_edge_ids.count(edge.id) == 0) withheld.push_back(edge.id);
+    for (const Edge &edge : edges_) {
+      if (retained_edge_ids.count(edge.id) == 0)
+        withheld.push_back(edge.id);
     }
     if (paths_.size() > 1) {
       for (std::size_t i = 1; i < paths_.size(); ++i) {
         withheld.push_back(paths_[i].id);
       }
     }
-    for (const Fact& fact : facts_) {
-      if (retained_facts.count(fact.id) == 0) withheld.push_back(fact.id);
+    for (const Fact &fact : facts_) {
+      if (retained_facts.count(fact.id) == 0)
+        withheld.push_back(fact.id);
     }
     if (unknowns_.size() > 1) {
       for (std::size_t i = 1; i < unknowns_.size(); ++i) {
@@ -1924,31 +1968,31 @@ class Builder {
           withheld.push_back(unknowns_[i].id);
       }
     }
-    for (const Constraint& constraint : constraints_) {
+    for (const Constraint &constraint : constraints_) {
       withheld.push_back(constraint.id);
     }
 
     value->entities.erase(
         std::remove_if(value->entities.begin(), value->entities.end(),
-                       [&retained_entities](const Entity& entity) {
+                       [&retained_entities](const Entity &entity) {
                          return retained_entities.count(entity.id) == 0;
                        }),
         value->entities.end());
-    value->edges.erase(
-        std::remove_if(value->edges.begin(), value->edges.end(),
-                       [&retained_edge_ids](const Edge& edge) {
-                         return retained_edge_ids.count(edge.id) == 0;
-                       }),
-        value->edges.end());
+    value->edges.erase(std::remove_if(value->edges.begin(), value->edges.end(),
+                                      [&retained_edge_ids](const Edge &edge) {
+                                        return retained_edge_ids.count(
+                                                   edge.id) == 0;
+                                      }),
+                       value->edges.end());
     if (!value->paths.empty()) {
       value->paths.resize(1);
     }
-    value->facts.erase(
-        std::remove_if(value->facts.begin(), value->facts.end(),
-                       [&retained_facts](const Fact& fact) {
-                         return retained_facts.count(fact.id) == 0;
-                       }),
-        value->facts.end());
+    value->facts.erase(std::remove_if(value->facts.begin(), value->facts.end(),
+                                      [&retained_facts](const Fact &fact) {
+                                        return retained_facts.count(fact.id) ==
+                                               0;
+                                      }),
+                       value->facts.end());
     if (!value->unknowns.empty()) {
       const auto first = value->unknowns.front().id;
       std::erase_if(value->unknowns, [&](const auto &unknown) {
@@ -1960,23 +2004,23 @@ class Builder {
 
     // A provenance record is retained when a surviving member still names it.
     std::set<std::string> referenced_provenance;
-    for (const Fact& fact : value->facts) {
+    for (const Fact &fact : value->facts) {
       referenced_provenance.insert(fact.provenance_id);
     }
-    for (const Path& path : value->paths) {
+    for (const Path &path : value->paths) {
       referenced_provenance.insert(path.provenance_id);
     }
-    for (const Edge& edge : value->edges) {
+    for (const Edge &edge : value->edges) {
       referenced_provenance.insert(edge.provenance_id);
     }
-    for (const Provenance& record : value->provenance) {
+    for (const Provenance &record : value->provenance) {
       if (referenced_provenance.count(record.id) == 0) {
         withheld.push_back(record.id);
       }
     }
     value->provenance.erase(
         std::remove_if(value->provenance.begin(), value->provenance.end(),
-                       [&referenced_provenance](const Provenance& record) {
+                       [&referenced_provenance](const Provenance &record) {
                          return referenced_provenance.count(record.id) == 0;
                        }),
         value->provenance.end());
@@ -2013,31 +2057,36 @@ class Builder {
     // whole of BLD-008.
     std::set<std::string> surviving;
     surviving.insert(claim_.id);
-    for (const Entity& entity : value->entities) surviving.insert(entity.id);
-    for (const Edge& edge : value->edges) surviving.insert(edge.id);
-    for (const Path& path : value->paths) surviving.insert(path.id);
-    for (const Fact& fact : value->facts) surviving.insert(fact.id);
-    for (const Unknown& unknown : value->unknowns) surviving.insert(unknown.id);
-    for (const Constraint& constraint : value->constraints) {
+    for (const Entity &entity : value->entities)
+      surviving.insert(entity.id);
+    for (const Edge &edge : value->edges)
+      surviving.insert(edge.id);
+    for (const Path &path : value->paths)
+      surviving.insert(path.id);
+    for (const Fact &fact : value->facts)
+      surviving.insert(fact.id);
+    for (const Unknown &unknown : value->unknowns)
+      surviving.insert(unknown.id);
+    for (const Constraint &constraint : value->constraints) {
       surviving.insert(constraint.id);
     }
-    for (const Provenance& record : value->provenance) {
+    for (const Provenance &record : value->provenance) {
       surviving.insert(record.id);
     }
-    for (const Omission& omission : value->omissions) {
+    for (const Omission &omission : value->omissions) {
       if (surviving.count(omission.subject) == 0) {
         withheld.push_back(omission.id);
       }
     }
     value->omissions.erase(
         std::remove_if(value->omissions.begin(), value->omissions.end(),
-                       [&surviving](const Omission& omission) {
+                       [&surviving](const Omission &omission) {
                          return surviving.count(omission.subject) == 0;
                        }),
         value->omissions.end());
 
     std::sort(withheld.begin(), withheld.end());
-    for (const std::string& member : withheld) {
+    for (const std::string &member : withheld) {
       Omission omission;
       omission.id =
           omission_ids_.Allocate("OM_level_projection_" + Sanitize(member));
@@ -2054,9 +2103,9 @@ class Builder {
   // An unknown blocks the claim and every derived fact the *projected* case
   // still reports, so the blocking set never names a member the projection
   // removed.
-  Status RetargetBlocking(EvidenceCase* value) {
+  Status RetargetBlocking(EvidenceCase *value) {
     std::vector<std::string> blocking = {value->primary_claim.id};
-    for (const Fact& fact : value->facts) {
+    for (const Fact &fact : value->facts) {
       if (fact.derived) {
         blocking.push_back(fact.id);
       }
@@ -2064,14 +2113,14 @@ class Builder {
     std::sort(blocking.begin(), blocking.end());
     blocking.erase(std::unique(blocking.begin(), blocking.end()),
                    blocking.end());
-    for (Unknown& unknown : value->unknowns) {
+    for (Unknown &unknown : value->unknowns) {
       unknown.blocking_ids = blocking;
     }
     return Status::Ok();
   }
 
-  void SortCase(EvidenceCase* value) const {
-    auto by_id = [](const auto& a, const auto& b) { return a.id < b.id; };
+  void SortCase(EvidenceCase *value) const {
+    auto by_id = [](const auto &a, const auto &b) { return a.id < b.id; };
     std::sort(value->entities.begin(), value->entities.end(), by_id);
     std::sort(value->edges.begin(), value->edges.end(), by_id);
     std::sort(value->paths.begin(), value->paths.end(), by_id);
@@ -2090,13 +2139,14 @@ class Builder {
     EntityKind kind = EntityKind::kUnspecified;
     std::string label;
   };
+
   struct AliasLink {
     std::string left;
     std::string right;
     EpistemicState epistemic = EpistemicState::kUnspecified;
   };
 
-  const EvidenceBuildRequest& request_;
+  const EvidenceBuildRequest &request_;
   core::StableId run_id_;
 
   std::map<std::string, EntityPlan> plans_;
@@ -2106,7 +2156,7 @@ class Builder {
   std::vector<Provenance> provenance_;
   std::map<std::string, std::string> fact_local_by_stable_;
   std::map<std::string, std::string> provenance_by_fact_;
-  std::map<std::string, const facts::RunFactBinding*> binding_by_fact_;
+  std::map<std::string, const facts::RunFactBinding *> binding_by_fact_;
   std::map<std::string, WitnessView> witness_by_fact_;
 
   std::vector<Entity> entities_;
@@ -2120,7 +2170,7 @@ class Builder {
   std::vector<SummaryReference> summaries_;
   std::vector<Dependency> dependencies_;
   std::vector<Omission> omissions_;
-  std::vector<const facts::AnalysisFact*> coverage_facts_;
+  std::vector<const facts::AnalysisFact *> coverage_facts_;
   std::vector<AliasLink> alias_links_;
 
   IdAllocator fact_ids_;
@@ -2134,7 +2184,7 @@ class Builder {
   std::string observation_sink_local_;
 };
 
-}  // namespace
+} // namespace
 
 std::string TranslateProducer(std::string_view m9_producer_id) {
   if (m9_producer_id == "evidence-query") {
@@ -2143,10 +2193,10 @@ std::string TranslateProducer(std::string_view m9_producer_id) {
   return std::string(m9_producer_id);
 }
 
-StatusOr<EvidenceCase> EvidenceCaseBuilder::Build(
-    const EvidenceBuildRequest& request) const {
+StatusOr<EvidenceCase>
+EvidenceCaseBuilder::Build(const EvidenceBuildRequest &request) const {
   Builder builder(request);
   return builder.Run();
 }
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence

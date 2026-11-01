@@ -50,11 +50,15 @@ constexpr int kNotImplemented = 4;
 // Maps a component name to the registered program name. These are the output
 // filenames the build generates the bundles from (v2_reach.cpp /
 // v2_memory_effects.cpp), sanitized by Souffle's synthesiser.
-const char* ProgramNameForComponent(std::string_view component) {
-  if (component == "reachability") return "v2_reach";
-  if (component == "memory-effects") return "v2_memory_effects";
-  if (component == "flow") return "v2_global_flow";
-  if (component == "effects") return "v2_effects";
+const char *ProgramNameForComponent(std::string_view component) {
+  if (component == "reachability")
+    return "v2_reach";
+  if (component == "memory-effects")
+    return "v2_memory_effects";
+  if (component == "flow")
+    return "v2_global_flow";
+  if (component == "effects")
+    return "v2_effects";
   return nullptr;
 }
 
@@ -66,8 +70,8 @@ const char* ProgramNameForComponent(std::string_view component) {
 //
 // Returns kInvalidArgument when the cell's kind disagrees with the column's
 // declared type, or when a symbol cell carries no text.
-int PushCell(souffle::tuple* row, const souffle::Relation& relation,
-             std::size_t column, const VeritasSouffleCell& cell) {
+int PushCell(souffle::tuple *row, const souffle::Relation &relation,
+             std::size_t column, const VeritasSouffleCell &cell) {
   const char primitive = relation.getAttrType(column)[0];
   if (cell.kind == VERITAS_SOUFFLE_CELL_SYMBOL) {
     if (primitive != 's' || cell.symbol == nullptr) {
@@ -96,9 +100,9 @@ int PushCell(souffle::tuple* row, const souffle::Relation& relation,
 // answer.
 //
 // `symbol` must outlive the cell it fills: the cell points at its buffer.
-int ReadCell(souffle::tuple& row, const souffle::Relation& relation,
-             std::size_t column, unsigned char kind, std::string* symbol,
-             VeritasSouffleCell* cell) {
+int ReadCell(souffle::tuple &row, const souffle::Relation &relation,
+             std::size_t column, unsigned char kind, std::string *symbol,
+             VeritasSouffleCell *cell) {
   const char primitive = relation.getAttrType(column)[0];
   cell->number = 0;
   cell->symbol = nullptr;
@@ -133,7 +137,7 @@ int ReadCell(souffle::tuple& row, const souffle::Relation& relation,
   return kInvalidArgument;
 }
 
-}  // namespace
+} // namespace
 
 // One open component: the program instance plus the component it was opened
 // for. The program owns every relation the component's rules use; Souffle
@@ -144,14 +148,14 @@ struct VeritasSouffleSession {
   std::unique_ptr<souffle::SouffleProgram> program;
 };
 
-int veritas_souffle_run(const char* component, const char* input_dir,
-                        const char* output_dir, unsigned jobs) {
-  const char* program_name = ProgramNameForComponent(component);
+int veritas_souffle_run(const char *component, const char *input_dir,
+                        const char *output_dir, unsigned jobs) {
+  const char *program_name = ProgramNameForComponent(component);
   if (program_name == nullptr) {
     return 2;
   }
 
-  souffle::SouffleProgram* program =
+  souffle::SouffleProgram *program =
       souffle::ProgramFactory::newInstance(program_name);
   if (program == nullptr) {
     return 3;
@@ -161,7 +165,7 @@ int veritas_souffle_run(const char* component, const char* input_dir,
   try {
     program->runAll(input_dir, output_dir, /*performIO=*/true,
                     /*pruneImdtRels=*/true);
-  } catch (const std::exception&) {
+  } catch (const std::exception &) {
     delete program;
     return 1;
   }
@@ -169,14 +173,14 @@ int veritas_souffle_run(const char* component, const char* input_dir,
   return 0;
 }
 
-int veritas_souffle_session_open(const char* component, unsigned jobs,
-                                 VeritasSouffleSession** out_session) {
+int veritas_souffle_session_open(const char *component, unsigned jobs,
+                                 VeritasSouffleSession **out_session) {
   if (component == nullptr || out_session == nullptr) {
     return kInvalidArgument;
   }
   *out_session = nullptr;
 
-  const char* program_name = ProgramNameForComponent(component);
+  const char *program_name = ProgramNameForComponent(component);
   if (program_name == nullptr) {
     return kInvalidArgument;
   }
@@ -193,15 +197,15 @@ int veritas_souffle_session_open(const char* component, unsigned jobs,
     session->component = component;
     session->program = std::move(program);
     *out_session = session.release();
-  } catch (const std::exception&) {
+  } catch (const std::exception &) {
     return kEngineFailure;
   }
   return kOk;
 }
 
-int veritas_souffle_session_insert(VeritasSouffleSession* session,
-                                   const char* relation,
-                                   const VeritasSouffleCell* cells,
+int veritas_souffle_session_insert(VeritasSouffleSession *session,
+                                   const char *relation,
+                                   const VeritasSouffleCell *cells,
                                    unsigned long long arity,
                                    unsigned long long row_count) {
   if (session == nullptr || relation == nullptr) {
@@ -210,7 +214,7 @@ int veritas_souffle_session_insert(VeritasSouffleSession* session,
   if (cells == nullptr && row_count != 0) {
     return kInvalidArgument;
   }
-  souffle::Relation* target = session->program->getRelation(relation);
+  souffle::Relation *target = session->program->getRelation(relation);
   if (target == nullptr) {
     return kNotFound;
   }
@@ -225,44 +229,43 @@ int veritas_souffle_session_insert(VeritasSouffleSession* session,
     for (unsigned long long r = 0; r < row_count; ++r) {
       row.rewind();
       for (unsigned long long c = 0; c < arity; ++c) {
-        const int status =
-            PushCell(&row, *target, static_cast<std::size_t>(c),
-                     cells[r * arity + c]);
+        const int status = PushCell(&row, *target, static_cast<std::size_t>(c),
+                                    cells[r * arity + c]);
         if (status != kOk) {
           return status;
         }
       }
       target->insert(row);
     }
-  } catch (const std::exception&) {
+  } catch (const std::exception &) {
     return kEngineFailure;
   }
   return kOk;
 }
 
-int veritas_souffle_session_run(VeritasSouffleSession* session) {
+int veritas_souffle_session_run(VeritasSouffleSession *session) {
   if (session == nullptr) {
     return kInvalidArgument;
   }
   try {
     session->program->runAll(/*inputDirectory=*/"", /*outputDirectory=*/"",
                              /*performIO=*/false, /*pruneImdtRels=*/true);
-  } catch (const std::exception&) {
+  } catch (const std::exception &) {
     return kEngineFailure;
   }
   return kOk;
 }
 
-int veritas_souffle_session_scan(VeritasSouffleSession* session,
-                                 const char* relation,
-                                 const unsigned char* cell_kinds,
+int veritas_souffle_session_scan(VeritasSouffleSession *session,
+                                 const char *relation,
+                                 const unsigned char *cell_kinds,
                                  unsigned long long arity,
-                                 VeritasSouffleRowSink sink, void* context) {
+                                 VeritasSouffleRowSink sink, void *context) {
   if (session == nullptr || relation == nullptr || cell_kinds == nullptr ||
       sink == nullptr) {
     return kInvalidArgument;
   }
-  souffle::Relation* target = session->program->getRelation(relation);
+  souffle::Relation *target = session->program->getRelation(relation);
   if (target == nullptr) {
     return kNotFound;
   }
@@ -276,26 +279,25 @@ int veritas_souffle_session_scan(VeritasSouffleSession* session,
     // columns in the same row cannot share (and overwrite) one buffer.
     std::vector<VeritasSouffleCell> cells(width);
     std::vector<std::string> symbols(width);
-    for (souffle::tuple& row : *target) {
+    for (souffle::tuple &row : *target) {
       for (std::size_t column = 0; column < width; ++column) {
-        const int status =
-            ReadCell(row, *target, column, cell_kinds[column],
-                     &symbols[column], &cells[column]);
+        const int status = ReadCell(row, *target, column, cell_kinds[column],
+                                    &symbols[column], &cells[column]);
         if (status != kOk) {
           return status;
         }
       }
       if (sink(context, cells.data(), arity) != 0) {
-        break;  // The caller asked to stop; that is not a failure.
+        break; // The caller asked to stop; that is not a failure.
       }
     }
-  } catch (const std::exception&) {
+  } catch (const std::exception &) {
     return kEngineFailure;
   }
   return kOk;
 }
 
-int veritas_souffle_session_reset(VeritasSouffleSession* session) {
+int veritas_souffle_session_reset(VeritasSouffleSession *session) {
   if (session == nullptr) {
     return kInvalidArgument;
   }
@@ -312,6 +314,6 @@ int veritas_souffle_session_reset(VeritasSouffleSession* session) {
   return kNotImplemented;
 }
 
-void veritas_souffle_session_close(VeritasSouffleSession* session) {
+void veritas_souffle_session_close(VeritasSouffleSession *session) {
   delete session;
 }

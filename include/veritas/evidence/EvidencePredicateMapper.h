@@ -67,25 +67,25 @@ namespace veritas::evidence {
 // Resolution is by canonical `core::ToString` text, so the lookup is stable and
 // independent of how the caller collected the entities.
 class StableIdResolver {
- public:
+public:
   virtual ~StableIdResolver() = default;
 
   // The case-local handle for `stable_id`, or `std::nullopt` when the case
   // declares no member for it. The mapper treats `std::nullopt` as a typed
   // failure: a referenced entity the case cannot name is a defect in the
   // caller's entity assignment, not a reason to drop the reference.
-  virtual std::optional<std::string> Resolve(
-      const core::StableId& stable_id) const = 0;
+  virtual std::optional<std::string>
+  Resolve(const core::StableId &stable_id) const = 0;
 };
 
 // The resolver the builder owns: a flat stable-id-text to handle table.
 class LocalIdTable : public StableIdResolver {
- public:
-  void Bind(const core::StableId& stable_id, std::string local_id);
-  std::optional<std::string> Resolve(
-      const core::StableId& stable_id) const override;
+public:
+  void Bind(const core::StableId &stable_id, std::string local_id);
+  std::optional<std::string>
+  Resolve(const core::StableId &stable_id) const override;
 
- private:
+private:
   std::map<std::string, std::string> by_text_;
 };
 
@@ -97,7 +97,7 @@ struct FactMappingHandle {
 };
 
 class EvidencePredicateMapper {
- public:
+public:
   // Lowers one M9/M10A semantic fact into an `eir.v1` fact.
   //
   // `fact`'s relation selects the built-in mapping; its cells are read through
@@ -115,51 +115,51 @@ class EvidencePredicateMapper {
   // epistemic state cannot be read, or when an entity reference has no
   // case-local handle. The `kUnknown` refusal differs in kind from the
   // missing-handle one: the row is well formed for *any* caller — the analysis
-  // declined to bound the access, so its `offset` and `size` cells are sentinels
-  // rather than measurements, and `range`/`capacity` have no spelling for an
-  // unbounded window — so no caller can express it, whereas an unresolvable
-  // reference is the caller's to repair. Never fails silently and never drops a
-  // fact.
-  StatusOr<Fact> MapFact(const facts::AnalysisFact& fact,
-                         const StableIdResolver& resolver,
-                         const FactMappingHandle& handle) const;
+  // declined to bound the access, so its `offset` and `size` cells are
+  // sentinels rather than measurements, and `range`/`capacity` have no spelling
+  // for an unbounded window — so no caller can express it, whereas an
+  // unresolvable reference is the caller's to repair. Never fails silently and
+  // never drops a fact.
+  StatusOr<Fact> MapFact(const facts::AnalysisFact &fact,
+                         const StableIdResolver &resolver,
+                         const FactMappingHandle &handle) const;
 
   // The EIR predicate name `relation` lowers to (`range`, `capacity`,
   // `reachable`, `alias`, `reads`, `writes`), or `std::nullopt` when the
   // relation has no built-in mapping. Exposed so a caller can test
   // supportability without constructing a fact.
-  static std::optional<std::string_view> PredicateName(
-      facts::RelationId relation);
+  static std::optional<std::string_view>
+  PredicateName(facts::RelationId relation);
 
   // The stable producer identity a mapped fact records for `relation`
   // (`analysis.value_range`, `analysis.memory_effect`, ...). Every spelling is
   // a `QualifiedId`, so a mapped fact's producer is always EIR-T-writable.
-  static std::optional<std::string_view> ProducerName(
-      facts::RelationId relation);
+  static std::optional<std::string_view>
+  ProducerName(facts::RelationId relation);
 
- private:
+private:
   // One focused method per built-in relation. Each reads exactly the cells its
   // relation's registry entry declares and builds one predicate.
-  StatusOr<Fact> MapRange(const facts::AnalysisFact& fact,
-                          const StableIdResolver& resolver,
-                          const FactMappingHandle& handle) const;
-  StatusOr<Fact> MapCapacity(const facts::AnalysisFact& fact,
-                             const StableIdResolver& resolver,
-                             const FactMappingHandle& handle) const;
-  StatusOr<Fact> MapReachability(const facts::AnalysisFact& fact,
-                                 const StableIdResolver& resolver,
-                                 const FactMappingHandle& handle) const;
-  StatusOr<Fact> MapAlias(const facts::AnalysisFact& fact,
-                          const StableIdResolver& resolver,
-                          const FactMappingHandle& handle) const;
-  StatusOr<Fact> MapMemoryEffect(const facts::AnalysisFact& fact,
-                                 const StableIdResolver& resolver,
-                                 const FactMappingHandle& handle) const;
+  StatusOr<Fact> MapRange(const facts::AnalysisFact &fact,
+                          const StableIdResolver &resolver,
+                          const FactMappingHandle &handle) const;
+  StatusOr<Fact> MapCapacity(const facts::AnalysisFact &fact,
+                             const StableIdResolver &resolver,
+                             const FactMappingHandle &handle) const;
+  StatusOr<Fact> MapReachability(const facts::AnalysisFact &fact,
+                                 const StableIdResolver &resolver,
+                                 const FactMappingHandle &handle) const;
+  StatusOr<Fact> MapAlias(const facts::AnalysisFact &fact,
+                          const StableIdResolver &resolver,
+                          const FactMappingHandle &handle) const;
+  StatusOr<Fact> MapMemoryEffect(const facts::AnalysisFact &fact,
+                                 const StableIdResolver &resolver,
+                                 const FactMappingHandle &handle) const;
 
   // The shared tail: reads the epistemic cell, copies it, and assembles the
   // `Fact`. `predicate` is already built by the relation-specific method.
-  StatusOr<Fact> Assemble(const facts::AnalysisFact& fact,
-                          const FactMappingHandle& handle,
+  StatusOr<Fact> Assemble(const facts::AnalysisFact &fact,
+                          const FactMappingHandle &handle,
                           Expression predicate) const;
 };
 
@@ -176,6 +176,6 @@ EpistemicState CopyEpistemicState(analysis::semantic::EpistemicState state);
 // confidence stronger than the state it is given.
 Confidence ConfidenceForState(EpistemicState state);
 
-}  // namespace veritas::evidence
+} // namespace veritas::evidence
 
-#endif  // VERITAS_EVIDENCE_EVIDENCE_PREDICATE_MAPPER_H_
+#endif // VERITAS_EVIDENCE_EVIDENCE_PREDICATE_MAPPER_H_

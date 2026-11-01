@@ -29,16 +29,16 @@ bool ContainsControlCharacter(std::string_view text) {
   return false;
 }
 
-}  // namespace
+} // namespace
 
-ByteRangeKind RelationRangeKind(const ByteRange& range) {
+ByteRangeKind RelationRangeKind(const ByteRange &range) {
   if (range.offset.has_value() && range.size.has_value()) {
     return ByteRangeKind::kKnown;
   }
   return ByteRangeKind::kUnknown;
 }
 
-Status Validate(const ByteRange& range) {
+Status Validate(const ByteRange &range) {
   const bool offset_known = range.offset.has_value();
   const bool size_known = range.size.has_value();
   if (offset_known != size_known) {
@@ -47,7 +47,7 @@ Status Validate(const ByteRange& range) {
   return Status::Ok();
 }
 
-Status Validate(const AbstractObject& object) {
+Status Validate(const AbstractObject &object) {
   if (object.id.kind != core::IdKind::kAbstractObject) {
     return Status::InvalidArgument("abstract object ID has wrong kind");
   }
@@ -62,7 +62,7 @@ Status Validate(const AbstractObject& object) {
   return Status::Ok();
 }
 
-Status Validate(const MemoryLocation& location) {
+Status Validate(const MemoryLocation &location) {
   if (location.id.kind != core::IdKind::kMemoryRef) {
     return Status::InvalidArgument("memory location ID has wrong kind");
   }
@@ -75,4 +75,4 @@ Status Validate(const MemoryLocation& location) {
   return Status::Ok();
 }
 
-}  // namespace veritas::analysis::semantic
+} // namespace veritas::analysis::semantic

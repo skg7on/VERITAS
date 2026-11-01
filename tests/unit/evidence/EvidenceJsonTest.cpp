@@ -58,8 +58,6 @@
 #include <gtest/gtest.h>
 
 #include "evidence/EvidenceScenario.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/JSON.h"
 #include "veritas/core/Ids.h"
 #include "veritas/core/Status.h"
 #include "veritas/evidence/EirText.h"
@@ -68,6 +66,8 @@
 #include "veritas/evidence/EvidenceQueryService.h"
 #include "veritas/evidence/EvidenceValidator.h"
 #include "veritas/evidence/SliceTypes.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/JSON.h"
 
 namespace veritas::evidence {
 namespace {
@@ -94,7 +94,7 @@ EvidenceCase Finalized(EvidenceCase value) {
   return value;
 }
 
-std::string MustJson(const EvidenceCase& value) {
+std::string MustJson(const EvidenceCase &value) {
   StatusOr<std::string> json = ToEvidenceJson(value);
   if (!json.ok()) {
     ADD_FAILURE() << "ToEvidenceJson refused: " << json.status().message();
@@ -103,7 +103,7 @@ std::string MustJson(const EvidenceCase& value) {
   return std::move(json).value();
 }
 
-std::string JsonText(const Value& value) {
+std::string JsonText(const Value &value) {
   std::string text;
   llvm::raw_string_ostream os(text);
   llvm::json::OStream(os, /*IndentSize=*/0).value(value);
@@ -127,10 +127,10 @@ Value MustParse(llvm::StringRef text) {
 // aborting, so one malformed member reports once instead of hiding the rest of
 // the oracle's findings behind a fatal return.
 
-const Value& At(const Value& object, llvm::StringRef key) {
+const Value &At(const Value &object, llvm::StringRef key) {
   static const Value missing(nullptr);
-  if (const Object* members = object.getAsObject()) {
-    if (const Value* found = members->get(key)) {
+  if (const Object *members = object.getAsObject()) {
+    if (const Value *found = members->get(key)) {
       return *found;
     }
   }
@@ -139,10 +139,10 @@ const Value& At(const Value& object, llvm::StringRef key) {
   return missing;
 }
 
-std::vector<std::string> Keys(const Value& value) {
+std::vector<std::string> Keys(const Value &value) {
   std::vector<std::string> keys;
-  if (const Object* members = value.getAsObject()) {
-    for (const auto& entry : *members) {
+  if (const Object *members = value.getAsObject()) {
+    for (const auto &entry : *members) {
       keys.push_back(entry.first.str());
     }
   } else {
@@ -152,12 +152,12 @@ std::vector<std::string> Keys(const Value& value) {
   return keys;
 }
 
-void ExpectKeys(const Value& value, std::vector<std::string> expected) {
+void ExpectKeys(const Value &value, std::vector<std::string> expected) {
   std::sort(expected.begin(), expected.end());
   EXPECT_EQ(Keys(value), expected) << "at " << JsonText(value);
 }
 
-std::string StringOf(const Value& value) {
+std::string StringOf(const Value &value) {
   if (std::optional<llvm::StringRef> text = value.getAsString()) {
     return text->str();
   }
@@ -165,7 +165,7 @@ std::string StringOf(const Value& value) {
   return {};
 }
 
-int64_t IntOf(const Value& value) {
+int64_t IntOf(const Value &value) {
   if (std::optional<int64_t> number = value.getAsInteger()) {
     return *number;
   }
@@ -173,7 +173,7 @@ int64_t IntOf(const Value& value) {
   return 0;
 }
 
-bool BoolOf(const Value& value) {
+bool BoolOf(const Value &value) {
   if (std::optional<bool> flag = value.getAsBoolean()) {
     return *flag;
   }
@@ -181,9 +181,9 @@ bool BoolOf(const Value& value) {
   return false;
 }
 
-const Array& ArrayOf(const Value& value) {
+const Array &ArrayOf(const Value &value) {
   static const Array empty;
-  if (const Array* items = value.getAsArray()) {
+  if (const Array *items = value.getAsArray()) {
     return *items;
   }
   EXPECT_TRUE(false) << "expected a JSON array, got " << JsonText(value);
@@ -193,9 +193,9 @@ const Array& ArrayOf(const Value& value) {
 // Records are located by their case-local handle rather than by position
 // wherever a test names a specific one, so the assertion does not silently
 // depend on the canonical ordering rule.
-const Value& FindById(const Value& array, llvm::StringRef id) {
+const Value &FindById(const Value &array, llvm::StringRef id) {
   static const Value missing(nullptr);
-  for (const Value& record : ArrayOf(array)) {
+  for (const Value &record : ArrayOf(array)) {
     if (StringOf(At(record, "id")) == id) {
       return record;
     }
@@ -204,20 +204,20 @@ const Value& FindById(const Value& array, llvm::StringRef id) {
   return missing;
 }
 
-bool IsNull(const Value& value) { return value.getAsNull().has_value(); }
+bool IsNull(const Value &value) { return value.getAsNull().has_value(); }
 
-bool IsObject(const Value& value) { return value.getAsObject() != nullptr; }
+bool IsObject(const Value &value) { return value.getAsObject() != nullptr; }
 
 // `null` is how the document spells "the model carries none". The canonical
 // order key spells that same absence as the empty string, which is what
 // `StableIdComponent` returns for a disengaged optional.
-std::string OptionalStringOf(const Value& value) {
+std::string OptionalStringOf(const Value &value) {
   return IsNull(value) ? std::string() : StringOf(value);
 }
 
-std::vector<std::string> StringsOf(const Value& value) {
+std::vector<std::string> StringsOf(const Value &value) {
   std::vector<std::string> out;
-  for (const Value& item : ArrayOf(value)) {
+  for (const Value &item : ArrayOf(value)) {
     out.push_back(StringOf(item));
   }
   return out;
@@ -228,7 +228,7 @@ std::vector<std::string> StringsOf(const Value& value) {
 // they are. The fixture happens to store two of them out of order, which is
 // exactly the case that would otherwise read as a writer bug: it is not, and
 // the model's own contract says these lists are sets.
-void ExpectSameStrings(const Value& got, std::vector<std::string> want) {
+void ExpectSameStrings(const Value &got, std::vector<std::string> want) {
   std::vector<std::string> actual = StringsOf(got);
   std::sort(actual.begin(), actual.end());
   std::sort(want.begin(), want.end());
@@ -243,34 +243,34 @@ void ExpectSameStrings(const Value& got, std::vector<std::string> want) {
 
 std::string_view ExpressionKindName(Expression::Kind kind) {
   switch (kind) {
-    case Expression::Kind::kUnspecified:
-      return "unspecified";
-    case Expression::Kind::kBool:
-      return "bool";
-    case Expression::Kind::kInteger:
-      return "integer";
-    case Expression::Kind::kString:
-      return "string";
-    case Expression::Kind::kSymbol:
-      return "symbol";
-    case Expression::Kind::kReference:
-      return "reference";
-    case Expression::Kind::kCall:
-      return "call";
-    case Expression::Kind::kNot:
-      return "not";
-    case Expression::Kind::kCompare:
-      return "compare";
-    case Expression::Kind::kAnd:
-      return "and";
-    case Expression::Kind::kOr:
-      return "or";
-    case Expression::Kind::kImplies:
-      return "implies";
-    case Expression::Kind::kForAll:
-      return "forall";
-    case Expression::Kind::kExists:
-      return "exists";
+  case Expression::Kind::kUnspecified:
+    return "unspecified";
+  case Expression::Kind::kBool:
+    return "bool";
+  case Expression::Kind::kInteger:
+    return "integer";
+  case Expression::Kind::kString:
+    return "string";
+  case Expression::Kind::kSymbol:
+    return "symbol";
+  case Expression::Kind::kReference:
+    return "reference";
+  case Expression::Kind::kCall:
+    return "call";
+  case Expression::Kind::kNot:
+    return "not";
+  case Expression::Kind::kCompare:
+    return "compare";
+  case Expression::Kind::kAnd:
+    return "and";
+  case Expression::Kind::kOr:
+    return "or";
+  case Expression::Kind::kImplies:
+    return "implies";
+  case Expression::Kind::kForAll:
+    return "forall";
+  case Expression::Kind::kExists:
+    return "exists";
   }
   return "expression";
 }
@@ -281,7 +281,7 @@ bool IsCommutative(Expression::Kind kind) {
 
 // --- The model oracle -------------------------------------------------------
 
-void CheckExpression(const Value& got, const Expression& want);
+void CheckExpression(const Value &got, const Expression &want);
 
 // An unordered expression list — the operands of a commutative `kAnd`/`kOr`,
 // and `Path::conditions` (the conjunction the path asserts, which
@@ -292,12 +292,12 @@ void CheckExpression(const Value& got, const Expression& want);
 // kind and an operator/callee string would be indistinguishable to this
 // matcher; the count assertion still holds, and no node in either fixture does
 // that.
-void CheckUnorderedExpressions(const Value& got,
-                               const std::vector<Expression>& want) {
-  const Array& operands = ArrayOf(got);
+void CheckUnorderedExpressions(const Value &got,
+                               const std::vector<Expression> &want) {
+  const Array &operands = ArrayOf(got);
   ASSERT_EQ(operands.size(), want.size());
   std::vector<bool> used(want.size(), false);
-  for (const Value& operand : operands) {
+  for (const Value &operand : operands) {
     const std::string kind = StringOf(At(operand, "kind"));
     const std::string text = StringOf(At(operand, "text"));
     bool matched = false;
@@ -316,7 +316,7 @@ void CheckUnorderedExpressions(const Value& got,
   }
 }
 
-void CheckExpression(const Value& got, const Expression& want) {
+void CheckExpression(const Value &got, const Expression &want) {
   ExpectKeys(got, {"boolean", "integer", "kind", "operands", "text"});
   EXPECT_EQ(StringOf(At(got, "kind")), ExpressionKindName(want.kind));
   EXPECT_EQ(StringOf(At(got, "text")), want.text);
@@ -326,7 +326,7 @@ void CheckExpression(const Value& got, const Expression& want) {
     CheckUnorderedExpressions(At(got, "operands"), want.operands);
     return;
   }
-  const Array& operands = ArrayOf(At(got, "operands"));
+  const Array &operands = ArrayOf(At(got, "operands"));
   ASSERT_EQ(operands.size(), want.operands.size());
   for (std::size_t i = 0; i < want.operands.size(); ++i) {
     CheckExpression(operands[i], want.operands[i]);
@@ -337,8 +337,8 @@ void CheckExpression(const Value& got, const Expression& want) {
 // none, the canonical `kind:sha256:<digest>` string when it does. A field that
 // disappeared would fail `ExpectKeys`; a field that degraded to the empty
 // string fails here.
-void CheckOptionalStableId(const Value& got,
-                           const std::optional<core::StableId>& want) {
+void CheckOptionalStableId(const Value &got,
+                           const std::optional<core::StableId> &want) {
   if (!want.has_value()) {
     EXPECT_TRUE(IsNull(got)) << "expected null, got " << JsonText(got);
     return;
@@ -346,11 +346,11 @@ void CheckOptionalStableId(const Value& got,
   EXPECT_EQ(StringOf(got), core::ToString(*want));
 }
 
-void CheckStableId(const Value& got, const core::StableId& want) {
+void CheckStableId(const Value &got, const core::StableId &want) {
   EXPECT_EQ(StringOf(got), core::ToString(want));
 }
 
-void CheckProgram(const Value& got, const ProgramBinding& want) {
+void CheckProgram(const Value &got, const ProgramBinding &want) {
   ExpectKeys(got, {"analysis_configuration_id", "analysis_run_id",
                    "analyzer_versions", "build_variant_id", "repository_id",
                    "revision_id", "target_triple", "type_layout_id"});
@@ -363,16 +363,16 @@ void CheckProgram(const Value& got, const ProgramBinding& want) {
   EXPECT_EQ(StringOf(At(got, "type_layout_id")), want.type_layout_id);
   CheckOptionalStableId(At(got, "analysis_run_id"), want.analysis_run_id);
 
-  const Array& versions = ArrayOf(At(got, "analyzer_versions"));
+  const Array &versions = ArrayOf(At(got, "analyzer_versions"));
   ASSERT_EQ(versions.size(), want.analyzer_versions.size());
-  for (const Value& version : versions) {
+  for (const Value &version : versions) {
     ExpectKeys(version, {"configuration", "producer", "version"});
     const std::string producer = StringOf(At(version, "producer"));
     const std::string text = StringOf(At(version, "version"));
     const std::string configuration = StringOf(At(version, "configuration"));
     const bool found = std::any_of(
         want.analyzer_versions.begin(), want.analyzer_versions.end(),
-        [&](const AnalyzerVersion& candidate) {
+        [&](const AnalyzerVersion &candidate) {
           return candidate.producer == producer && candidate.version == text &&
                  candidate.configuration == configuration;
         });
@@ -380,9 +380,9 @@ void CheckProgram(const Value& got, const ProgramBinding& want) {
   }
 }
 
-void CheckClaim(const Value& got, const Claim& want) {
-  ExpectKeys(
-      got, {"description", "id", "kind", "predicate", "severity", "subject"});
+void CheckClaim(const Value &got, const Claim &want) {
+  ExpectKeys(got,
+             {"description", "id", "kind", "predicate", "severity", "subject"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
   EXPECT_EQ(StringOf(At(got, "kind")), ToString(want.kind));
   EXPECT_EQ(StringOf(At(got, "subject")), want.subject);
@@ -391,25 +391,25 @@ void CheckClaim(const Value& got, const Claim& want) {
   CheckExpression(At(got, "predicate"), want.predicate);
 }
 
-void CheckEntity(const Value& got, const Entity& want) {
+void CheckEntity(const Value &got, const Entity &want) {
   ExpectKeys(got, {"id", "kind", "properties", "stable_id"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
   EXPECT_EQ(StringOf(At(got, "kind")), ToString(want.kind));
   CheckOptionalStableId(At(got, "stable_id"), want.stable_id);
-  const Value& properties = At(got, "properties");
+  const Value &properties = At(got, "properties");
   ExpectKeys(properties, [&] {
     std::vector<std::string> names;
-    for (const auto& entry : want.properties) {
+    for (const auto &entry : want.properties) {
       names.push_back(entry.first);
     }
     return names;
   }());
-  for (const auto& entry : want.properties) {
+  for (const auto &entry : want.properties) {
     CheckExpression(At(properties, entry.first), entry.second);
   }
 }
 
-void CheckEdge(const Value& got, const Edge& want) {
+void CheckEdge(const Value &got, const Edge &want) {
   ExpectKeys(got, {"epistemic", "expandable", "from", "id", "kind",
                    "provenance_id", "summarized_by", "to"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
@@ -422,7 +422,7 @@ void CheckEdge(const Value& got, const Edge& want) {
   EXPECT_EQ(BoolOf(At(got, "expandable")), want.expandable);
 }
 
-void CheckPath(const Value& got, const Path& want) {
+void CheckPath(const Value &got, const Path &want) {
   ExpectKeys(got, {"conditions", "entity_ids", "feasibility", "id", "kind",
                    "provenance_id"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
@@ -434,7 +434,7 @@ void CheckPath(const Value& got, const Path& want) {
   CheckUnorderedExpressions(At(got, "conditions"), want.conditions);
 }
 
-void CheckFact(const Value& got, const Fact& want) {
+void CheckFact(const Value &got, const Fact &want) {
   ExpectKeys(got, {"confidence", "derived", "epistemic", "id", "predicate",
                    "producer", "provenance_id", "stable_id"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
@@ -447,7 +447,7 @@ void CheckFact(const Value& got, const Fact& want) {
   CheckExpression(At(got, "predicate"), want.predicate);
 }
 
-void CheckAssumption(const Value& got, const Assumption& want) {
+void CheckAssumption(const Value &got, const Assumption &want) {
   ExpectKeys(got, {"id", "predicate", "scope", "source"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
   EXPECT_EQ(StringOf(At(got, "source")), want.source);
@@ -455,7 +455,7 @@ void CheckAssumption(const Value& got, const Assumption& want) {
   CheckExpression(At(got, "predicate"), want.predicate);
 }
 
-void CheckHypothesis(const Value& got, const Hypothesis& want) {
+void CheckHypothesis(const Value &got, const Hypothesis &want) {
   ExpectKeys(got, {"confidence", "id", "predicate", "producer", "reason"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
   EXPECT_EQ(StringOf(At(got, "producer")), want.producer);
@@ -464,7 +464,7 @@ void CheckHypothesis(const Value& got, const Hypothesis& want) {
   CheckExpression(At(got, "predicate"), want.predicate);
 }
 
-void CheckUnknown(const Value& got, const Unknown& want) {
+void CheckUnknown(const Value &got, const Unknown &want) {
   ExpectKeys(got, {"blocking_ids", "id", "property", "reason", "reason_code",
                    "suggested_resolution"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
@@ -476,7 +476,7 @@ void CheckUnknown(const Value& got, const Unknown& want) {
   CheckExpression(At(got, "property"), want.property);
 }
 
-void CheckConstraint(const Value& got, const Constraint& want) {
+void CheckConstraint(const Value &got, const Constraint &want) {
   ExpectKeys(got, {"epistemic", "expression", "id", "provenance_id", "scope"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
   EXPECT_EQ(StringOf(At(got, "scope")), want.scope);
@@ -485,7 +485,7 @@ void CheckConstraint(const Value& got, const Constraint& want) {
   CheckExpression(At(got, "expression"), want.expression);
 }
 
-void CheckProvenance(const Value& got, const Provenance& want) {
+void CheckProvenance(const Value &got, const Provenance &want) {
   ExpectKeys(got, {"analysis_run_id", "configuration", "id", "input_fact_ids",
                    "producer", "rule", "source_anchor_id", "version"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
@@ -498,7 +498,7 @@ void CheckProvenance(const Value& got, const Provenance& want) {
   CheckOptionalStableId(At(got, "analysis_run_id"), want.analysis_run_id);
 }
 
-void CheckProofObligation(const Value& got, const ProofObligation& want) {
+void CheckProofObligation(const Value &got, const ProofObligation &want) {
   ExpectKeys(got, {"budget", "goal_kind", "id", "predicate", "result_id",
                    "status", "verification_producer", "verifier_kinds"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
@@ -512,7 +512,7 @@ void CheckProofObligation(const Value& got, const ProofObligation& want) {
   CheckExpression(At(got, "budget"), want.budget);
 }
 
-void CheckSummaryReference(const Value& got, const SummaryReference& want) {
+void CheckSummaryReference(const Value &got, const SummaryReference &want) {
   ExpectKeys(got, {"components", "function_id", "id", "summary_id"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
   EXPECT_EQ(StringOf(At(got, "function_id")), want.function_id);
@@ -520,14 +520,14 @@ void CheckSummaryReference(const Value& got, const SummaryReference& want) {
   ExpectSameStrings(At(got, "components"), want.components);
 }
 
-void CheckDependency(const Value& got, const Dependency& want) {
+void CheckDependency(const Value &got, const Dependency &want) {
   ExpectKeys(got, {"id", "kind", "stable_id"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
   EXPECT_EQ(StringOf(At(got, "kind")), ToString(want.kind));
   CheckStableId(At(got, "stable_id"), want.stable_id);
 }
 
-void CheckOmission(const Value& got, const Omission& want) {
+void CheckOmission(const Value &got, const Omission &want) {
   ExpectKeys(got, {"expandable", "id", "kind", "reason", "subject"});
   EXPECT_EQ(StringOf(At(got, "id")), want.id);
   EXPECT_EQ(StringOf(At(got, "kind")), want.kind);
@@ -543,17 +543,17 @@ void CheckOmission(const Value& got, const Omission& want) {
 // counterpart, and both go red. `ValidateEvidenceCase` refuses a case whose
 // members share a handle, so the index is unambiguous.
 template <typename Record>
-void CheckCollection(const Value& array, const std::vector<Record>& records,
-                     void (*check)(const Value&, const Record&)) {
-  const Array& items = ArrayOf(array);
+void CheckCollection(const Value &array, const std::vector<Record> &records,
+                     void (*check)(const Value &, const Record &)) {
+  const Array &items = ArrayOf(array);
   ASSERT_EQ(items.size(), records.size());
-  std::map<std::string, const Value*> by_id;
-  for (const Value& item : items) {
+  std::map<std::string, const Value *> by_id;
+  for (const Value &item : items) {
     const std::string id = StringOf(At(item, "id"));
     EXPECT_TRUE(by_id.emplace(id, &item).second)
         << "the document carries two records with the handle " << id;
   }
-  for (const Record& record : records) {
+  for (const Record &record : records) {
     const auto found = by_id.find(record.id);
     ASSERT_TRUE(found != by_id.end())
         << "the document omits the record " << record.id;
@@ -570,10 +570,10 @@ void CheckCollection(const Value& array, const std::vector<Record>& records,
 // own members, so it is an independent implementation of the documented rule
 // rather than a call into the writer.
 template <typename Family>
-void ExpectCanonicalOrder(const Value& array, llvm::StringRef what,
-                          const Family& family) {
+void ExpectCanonicalOrder(const Value &array, llvm::StringRef what,
+                          const Family &family) {
   std::vector<std::string> keys;
-  for (const Value& record : ArrayOf(array)) {
+  for (const Value &record : ArrayOf(array)) {
     const std::pair<std::string, std::string> parts = family(record);
     std::string key = parts.first;
     // A byte below every byte a spelling can contain, so a kind that is a
@@ -593,7 +593,7 @@ void ExpectCanonicalOrder(const Value& array, llvm::StringRef what,
 // collection is checked record by record against the model, and every key set
 // is asserted exactly, so a member the writer forgets is a key set that
 // disagrees and a red test.
-void CheckCase(const std::string& json, const EvidenceCase& want) {
+void CheckCase(const std::string &json, const EvidenceCase &want) {
   const Value root = MustParse(json);
   ExpectKeys(root, {"assumptions", "constraints", "dependencies", "edges",
                     "entities", "evidence_id", "facts", "hypotheses", "level",
@@ -623,7 +623,8 @@ void CheckCase(const std::string& json, const EvidenceCase& want) {
                   &CheckProofObligation);
   CheckCollection(At(root, "summaries"), want.summaries,
                   &CheckSummaryReference);
-  CheckCollection(At(root, "dependencies"), want.dependencies, &CheckDependency);
+  CheckCollection(At(root, "dependencies"), want.dependencies,
+                  &CheckDependency);
   CheckCollection(At(root, "omissions"), want.omissions, &CheckOmission);
 }
 
@@ -705,8 +706,8 @@ TEST(EvidenceJsonTest, CommutativeOperandsAreOrderInvariant) {
   ASSERT_TRUE(FinalizeEvidenceIdentity(&forward).ok());
 
   EvidenceCase reversed = forward;
-  EvidenceScenarioBuilder::Reverse(reversed.paths.front().conditions.front()
-                                       .operands);
+  EvidenceScenarioBuilder::Reverse(
+      reversed.paths.front().conditions.front().operands);
   ASSERT_TRUE(FinalizeEvidenceIdentity(&reversed).ok());
 
   EXPECT_EQ(*forward.evidence_id, *reversed.evidence_id);
@@ -732,18 +733,18 @@ TEST(EvidenceJsonTest, CollectionsAreInTheCanonicalOrderNotTheModels) {
   const EvidenceCase value = Finalized(MakeOverflowEvidenceCase());
   const Value root = MustParse(MustJson(value));
 
-  const auto kind_and_stable = [](const Value& record) {
+  const auto kind_and_stable = [](const Value &record) {
     return std::make_pair(StringOf(At(record, "kind")),
                           OptionalStringOf(At(record, "stable_id")));
   };
-  const auto kind_only = [](const Value& record) {
+  const auto kind_only = [](const Value &record) {
     return std::make_pair(StringOf(At(record, "kind")), std::string());
   };
-  const auto stable_only = [](const Value& record) {
+  const auto stable_only = [](const Value &record) {
     return std::make_pair(std::string(),
                           OptionalStringOf(At(record, "stable_id")));
   };
-  const auto handle_only = [](const Value&) {
+  const auto handle_only = [](const Value &) {
     return std::make_pair(std::string(), std::string());
   };
 
@@ -753,7 +754,7 @@ TEST(EvidenceJsonTest, CollectionsAreInTheCanonicalOrderNotTheModels) {
   ExpectCanonicalOrder(At(root, "facts"), "facts", stable_only);
   // A proof obligation's kind family is spelled `goal_kind`, not `kind`; the
   // key is the same either way.
-  const auto goal_kind_only = [](const Value& record) {
+  const auto goal_kind_only = [](const Value &record) {
     return std::make_pair(StringOf(At(record, "goal_kind")), std::string());
   };
   ExpectCanonicalOrder(At(root, "proof_obligations"), "proof obligations",
@@ -777,7 +778,7 @@ TEST(EvidenceJsonTest, CollectionsAreInTheCanonicalOrderNotTheModels) {
   // *different* sequence. So ordering by the handle alone is not a passing
   // strategy here.
   std::vector<std::string> handles;
-  for (const Value& entity : ArrayOf(At(root, "entities"))) {
+  for (const Value &entity : ArrayOf(At(root, "entities"))) {
     handles.push_back(StringOf(At(entity, "id")));
   }
   std::vector<std::string> sorted_handles = handles;
@@ -810,30 +811,30 @@ TEST(EvidenceJsonTest, DisengagedOptionalsAreNullAndNotAbsent) {
       << refused.message();
 
   EvidenceCase value = MakeOverflowEvidenceCase();
-  for (Entity& entity : value.entities) {
+  for (Entity &entity : value.entities) {
     entity.stable_id.reset();
   }
-  for (Fact& fact : value.facts) {
+  for (Fact &fact : value.facts) {
     fact.stable_id.reset();
   }
   const Status status = FinalizeEvidenceIdentity(&value);
   ASSERT_TRUE(status.ok()) << status.message();
 
   const Value root = MustParse(MustJson(value));
-  for (const Value& entity : ArrayOf(At(root, "entities"))) {
+  for (const Value &entity : ArrayOf(At(root, "entities"))) {
     EXPECT_TRUE(IsNull(At(entity, "stable_id"))) << JsonText(entity);
   }
-  for (const Value& fact : ArrayOf(At(root, "facts"))) {
+  for (const Value &fact : ArrayOf(At(root, "facts"))) {
     EXPECT_TRUE(IsNull(At(fact, "stable_id"))) << JsonText(fact);
   }
   CheckCase(MustJson(value), value);
 }
 
 // The spellings are the grammar's, not the writer's private vocabulary: these
-// are the exact terminals `docs/specs/veritas-evidence-ir-formal-specification.md`
-// fixes, written out here so a writer that quietly re-cased them is caught. JSON
-// carries the same spellings EIR-T does, which is what lets one reader parse
-// both.
+// are the exact terminals
+// `docs/specs/veritas-evidence-ir-formal-specification.md` fixes, written out
+// here so a writer that quietly re-cased them is caught. JSON carries the same
+// spellings EIR-T does, which is what lets one reader parse both.
 TEST(EvidenceJsonTest, EnumSpellingsAreTheGrammarsNotTheWriters) {
   const EvidenceCase value = Finalized(MakeOverflowEvidenceCase());
   const Value root = MustParse(MustJson(value));
@@ -842,11 +843,11 @@ TEST(EvidenceJsonTest, EnumSpellingsAreTheGrammarsNotTheWriters) {
   EXPECT_EQ(StringOf(At(root, "level")), "l1");
   EXPECT_EQ(StringOf(At(root, "verification_state")), "POSSIBLE_DEFECT");
 
-  const Value& claim = At(root, "primary_claim");
+  const Value &claim = At(root, "primary_claim");
   EXPECT_EQ(StringOf(At(claim, "kind")), "buffer_overflow");
   EXPECT_EQ(StringOf(At(claim, "severity")), "high");
 
-  const Value& path = FindById(At(root, "paths"), "P_value_flow");
+  const Value &path = FindById(At(root, "paths"), "P_value_flow");
   EXPECT_EQ(StringOf(At(path, "kind")), "value_flow");
   EXPECT_EQ(StringOf(At(path, "feasibility")), "SAT");
 
@@ -854,23 +855,25 @@ TEST(EvidenceJsonTest, EnumSpellingsAreTheGrammarsNotTheWriters) {
   // and `DependencyKind` are lower-case in the grammar, `RelationKind` is
   // upper-case. A writer that re-cased either to match the other is caught
   // here by name.
-  const Value& fact = FindById(At(root, "facts"), "F_capacity");
+  const Value &fact = FindById(At(root, "facts"), "F_capacity");
   EXPECT_EQ(StringOf(At(fact, "epistemic")), "must");
   EXPECT_EQ(StringOf(At(fact, "confidence")), "exact");
   EXPECT_EQ(StringOf(At(At(fact, "predicate"), "kind")), "call");
-  EXPECT_EQ(StringOf(At(FindById(At(root, "facts"), "F_alias_may"), "epistemic")),
-            "may");
+  EXPECT_EQ(
+      StringOf(At(FindById(At(root, "facts"), "F_alias_may"), "epistemic")),
+      "may");
   EXPECT_EQ(
       StringOf(At(FindById(At(root, "facts"), "F_alias_may"), "confidence")),
       "medium");
 
-  EXPECT_EQ(StringOf(At(FindById(At(root, "edges"), "ED_decode_memcpy"), "kind")),
-            "CALLS");
+  EXPECT_EQ(
+      StringOf(At(FindById(At(root, "edges"), "ED_decode_memcpy"), "kind")),
+      "CALLS");
   EXPECT_EQ(
       StringOf(At(FindById(At(root, "edges"), "ED_srcbuf_dstbuf"), "kind")),
       "MAY_ALIAS");
 
-  const Value& obligation = FindById(At(root, "proof_obligations"), "O1");
+  const Value &obligation = FindById(At(root, "proof_obligations"), "O1");
   EXPECT_EQ(StringOf(At(obligation, "goal_kind")), "prove");
   EXPECT_EQ(StringOf(At(obligation, "status")), "PENDING");
   EXPECT_EQ(StringOf(At(At(obligation, "predicate"), "kind")), "forall");
@@ -880,8 +883,9 @@ TEST(EvidenceJsonTest, EnumSpellingsAreTheGrammarsNotTheWriters) {
       StringOf(At(FindById(At(root, "unknowns"), "U_vendor_validate_contract"),
                   "reason_code")),
       "EXTERNAL_FUNCTION");
-  EXPECT_EQ(StringOf(At(FindById(At(root, "unknowns"), "U_dominating_check_truncated"),
-                       "reason_code")),
+  EXPECT_EQ(StringOf(At(
+                FindById(At(root, "unknowns"), "U_dominating_check_truncated"),
+                "reason_code")),
             "ANALYSIS_TIMEOUT");
 
   EXPECT_EQ(
@@ -892,7 +896,7 @@ TEST(EvidenceJsonTest, EnumSpellingsAreTheGrammarsNotTheWriters) {
   // subsystem owns — so the document carries it verbatim rather than mapping
   // it through any spelling table.
   EXPECT_EQ(StringOf(At(FindById(At(root, "omissions"), "OM_summary_expansion"),
-                       "kind")),
+                        "kind")),
             "summary_expansion");
 }
 
@@ -923,7 +927,7 @@ std::string NastyText() {
   return text;
 }
 
-}  // namespace
+} // namespace
 
 TEST(EvidenceJsonTest, EscapedStringsSurviveAParseBackToTheOriginalBytes) {
   const std::string nasty = NastyText();
@@ -954,12 +958,13 @@ TEST(EvidenceJsonTest, EscapedStringsSurviveAParseBackToTheOriginalBytes) {
   // The property *key* round-trips too: the parser hands back the escaped
   // member name as the unescaped bytes, so a writer that escaped the key
   // wrongly — or not at all — produces an object with a different key.
-  const Value& properties = At(FindById(At(root, "entities"), carrier), "properties");
-  const Object* members = properties.getAsObject();
+  const Value &properties =
+      At(FindById(At(root, "entities"), carrier), "properties");
+  const Object *members = properties.getAsObject();
   ASSERT_NE(members, nullptr);
-  const Value* recovered = members->get("key \" with \\ quote");
-  ASSERT_NE(recovered, nullptr) << "the property key did not survive: "
-                                << JsonText(properties);
+  const Value *recovered = members->get("key \" with \\ quote");
+  ASSERT_NE(recovered, nullptr)
+      << "the property key did not survive: " << JsonText(properties);
   EXPECT_EQ(StringOf(At(*recovered, "kind")), "call");
   EXPECT_EQ(StringOf(At(*recovered, "text")), "tainted");
 }
@@ -1010,12 +1015,12 @@ TEST(EvidenceJsonTest, RefusesWhatTheEirTextWriterRefuses) {
   EvidenceCase stale = Finalized(MakeOverflowEvidenceCase());
   stale.primary_claim.description = "edited after the identity was computed";
 
-  const std::vector<std::pair<std::string, const EvidenceCase*>> cases = {
+  const std::vector<std::pair<std::string, const EvidenceCase *>> cases = {
       {"unfinalized", &unfinalized},
       {"dangling", &dangling},
       {"stale", &stale},
   };
-  for (const auto& entry : cases) {
+  for (const auto &entry : cases) {
     const Status json = ToEvidenceJson(*entry.second).status();
     const Status text =
         WriteEirText(*entry.second, EirTextStyle::kCanonical).status();
@@ -1113,7 +1118,7 @@ std::string BadUtf8Name() {
 // `InvalidArgument` and no document. The two assertions before the refusal are
 // the ones that make the test about this boundary rather than about the
 // validator.
-void ExpectLegalCaseRefused(const EvidenceCase& value, llvm::StringRef what) {
+void ExpectLegalCaseRefused(const EvidenceCase &value, llvm::StringRef what) {
   const Status valid = RequireValidEvidenceCase(value);
   ASSERT_TRUE(valid.ok()) << what.str() << ": " << valid.message();
   ASSERT_TRUE(value.evidence_id.has_value()) << what.str();
@@ -1125,7 +1130,7 @@ void ExpectLegalCaseRefused(const EvidenceCase& value, llvm::StringRef what) {
       << what.str() << ": " << json.status().message();
 }
 
-}  // namespace
+} // namespace
 
 // The object-key path. Unguarded this returns `Ok`: the key reaches
 // `llvm::json::Object` without the check, `json::OStream` rewrites it to
@@ -1172,11 +1177,11 @@ TEST(EvidenceJsonTest, RefusesAVerifierKindThatIsNotValidUtf8) {
 // that can carry it.
 TEST(EvidenceJsonTest, WritesACaseWhoseProducerHasNoEirTextSpelling) {
   const EvidenceCase value = Finalized(MakeOverflowEvidenceCase());
-  const bool present = std::any_of(
-      value.provenance.begin(), value.provenance.end(),
-      [](const Provenance& record) {
-        return record.producer == kQueryCompletionProducerId;
-      });
+  const bool present =
+      std::any_of(value.provenance.begin(), value.provenance.end(),
+                  [](const Provenance &record) {
+                    return record.producer == kQueryCompletionProducerId;
+                  });
   ASSERT_TRUE(present) << "the fixture no longer carries the query producer";
 
   EXPECT_FALSE(WriteEirText(value, EirTextStyle::kCanonical).ok());
@@ -1184,5 +1189,5 @@ TEST(EvidenceJsonTest, WritesACaseWhoseProducerHasNoEirTextSpelling) {
   EXPECT_NE(json.find(kQueryCompletionProducerId), std::string::npos);
 }
 
-}  // namespace
-}  // namespace veritas::evidence
+} // namespace
+} // namespace veritas::evidence

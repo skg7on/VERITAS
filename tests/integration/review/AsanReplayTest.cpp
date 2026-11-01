@@ -46,15 +46,18 @@ std::string ReadFile(const std::filesystem::path &path) {
   std::ifstream in(path, std::ios::binary);
   return std::string(std::istreambuf_iterator<char>(in), {});
 }
+
 std::string Fixture(std::string_view name) {
   return ReadFile(std::filesystem::path(VERITAS_SOURCE_DIR) /
                   "tests/fixtures/review/asan_replay" / name);
 }
+
 void Write(const std::filesystem::path &path, std::string_view text) {
   std::filesystem::create_directories(path.parent_path());
   std::ofstream out(path, std::ios::binary);
   out << text;
 }
+
 int Git(const std::filesystem::path &root, std::vector<std::string> args) {
   args.insert(args.begin(), {"/usr/bin/git", "-C", root.string()});
   std::vector<char *> argv;
@@ -70,6 +73,7 @@ int Git(const std::filesystem::path &root, std::vector<std::string> args) {
   waitpid(pid, &status, 0);
   return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
+
 // Bounded probe used only to select a host compiler whose ASan runtime works.
 bool RunForSetup(const std::vector<std::string> &args, int timeout_ms) {
   pid_t pid = fork();
@@ -100,6 +104,7 @@ bool RunForSetup(const std::vector<std::string> &args, int timeout_ms) {
   waitpid(pid, &status, 0);
   return false;
 }
+
 [[maybe_unused]] std::string Capture(const char *command) {
   std::string out;
   std::FILE *pipe = ::popen(command, "r");
@@ -113,6 +118,7 @@ bool RunForSetup(const std::vector<std::string> &args, int timeout_ms) {
     out.pop_back();
   return out;
 }
+
 std::string FindAsanCompiler() {
   if (const char *env = std::getenv("VERITAS_ASAN_COMPILER"))
     if (::access(env, X_OK) == 0)
@@ -170,6 +176,7 @@ public:
       std::abort();
     path_ = result;
   }
+
   ~TempDir() {
     std::error_code ec;
     for (auto it = std::filesystem::recursive_directory_iterator(path_, ec);
@@ -180,6 +187,7 @@ public:
                                      std::filesystem::perms::owner_all, ec);
     std::filesystem::remove_all(path_, ec);
   }
+
   const std::filesystem::path &path() const { return path_; }
 
 private:
@@ -196,6 +204,7 @@ protected:
   std::string compiler_;
   std::string isolation_;
   uint32_t projects_ = 0;
+
   void SetUp() override {
     compiler_ = FindAsanCompiler();
     ASSERT_FALSE(compiler_.empty())
@@ -206,14 +215,17 @@ protected:
     isolation_ = "linux-bwrap";
 #endif
   }
+
   struct Project {
     std::filesystem::path root;
     ReviewSnapshot snapshot;
     StructuralIndex index;
   };
+
   struct Payload {
     std::string bytes, path;
   };
+
   Payload WritePayload(size_t size) {
     Payload p;
     p.bytes.resize(size);
@@ -225,6 +237,7 @@ protected:
     Write(p.path, p.bytes);
     return p;
   }
+
   std::optional<Project> Capture(std::string_view source,
                                  std::vector<std::string> flags = {}) {
     auto root = temp_.path() / ("project-" + std::to_string(++projects_));
@@ -267,6 +280,7 @@ protected:
     }
     return Project{root, *snapshot, *index};
   }
+
   std::optional<Project> CaptureChanged(std::string_view base,
                                         std::string_view working) {
     auto root = temp_.path() / ("project-" + std::to_string(++projects_));
@@ -309,6 +323,7 @@ protected:
     }
     return Project{root, *snapshot, *index};
   }
+
   std::optional<LocalEvidence> Evidence(const Project &project, EntityRef call,
                                         uint64_t capacity) {
     auto evidence = InvestigateLocal({project.index,
@@ -325,6 +340,7 @@ protected:
         return *evidence;
     return std::nullopt;
   }
+
   std::optional<LocalEvidence> FindEvidence(const Project &project,
                                             uint64_t capacity) {
     for (const auto &entity : project.index.entities()) {
@@ -337,6 +353,7 @@ protected:
     }
     return std::nullopt;
   }
+
   Json Request(const Project &project, const LocalEvidence &evidence,
                uint64_t capacity, uint64_t requested, uint64_t readable,
                const Payload &payload, std::string_view harness,
@@ -382,6 +399,7 @@ protected:
     std::get<Json::Object>(request.data)["obligation_id"] = *obligation;
     return request;
   }
+
   ReplayConfig Config(const Project &project, std::string harness,
                       std::string payload, std::string isolation,
                       uint64_t replay_wall_ms = 15000) {
@@ -398,11 +416,13 @@ protected:
     (void)replay_wall_ms;
     return config;
   }
+
   std::string HarnessPath() {
     return (std::filesystem::path(VERITAS_SOURCE_DIR) /
             "tests/fixtures/review/asan_replay/harness.cc")
         .string();
   }
+
   VerificationPolicy Policy(const Json &request, const ReplayResult &result) {
     VerificationPolicy policy;
     const auto &producer =
@@ -417,6 +437,7 @@ protected:
     (void)request;
     return policy;
   }
+
   void ExpectStatus(const ReplayResult &result, std::string_view status,
                     std::string_view outcome) {
     const auto &v = *result.verification.getAsObject();
@@ -425,6 +446,7 @@ protected:
     EXPECT_TRUE(
         ValidateWireType(result.verification, "VerificationResult").ok());
   }
+
   bool HasReason(const ReplayResult &result, std::string_view needle) {
     const auto &reasons = *result.verification.getAsObject()
                                ->getObject("coverage")
@@ -434,6 +456,7 @@ protected:
         return true;
     return false;
   }
+
   void ExpectPinnedDependencies(const ReplayResult &result) {
     const auto &dependencies =
         *result.verification.getAsObject()->getArray("input_dependencies");

@@ -51,7 +51,8 @@ constexpr std::size_t kWitnessArity = 5;
 // Releases the session on every exit path. VERITAS has no exceptions, so normal
 // control flow is the only path that reaches this.
 struct SessionCleanup {
-  VeritasSouffleSession* session;
+  VeritasSouffleSession *session;
+
   ~SessionCleanup() { veritas_souffle_session_close(session); }
 };
 
@@ -68,12 +69,12 @@ struct SessionCleanup {
 //
 // `text` owns the symbol a SYMBOL cell points at; the caller must keep it
 // alive and unmoved.
-StatusOr<VeritasSouffleCell> FlatCell(const facts::ExecutionCellValue& cell,
+StatusOr<VeritasSouffleCell> FlatCell(const facts::ExecutionCellValue &cell,
                                       facts::ColumnDomain domain,
-                                      std::string* text) {
+                                      std::string *text) {
   VeritasSouffleCell flat{};
   if (domain == facts::ColumnDomain::kString) {
-    const auto* symbol = std::get_if<std::string>(&cell);
+    const auto *symbol = std::get_if<std::string>(&cell);
     if (symbol == nullptr) {
       return Status::InvalidArgument("a symbol column carries a number");
     }
@@ -86,7 +87,7 @@ StatusOr<VeritasSouffleCell> FlatCell(const facts::ExecutionCellValue& cell,
   flat.kind = VERITAS_SOUFFLE_CELL_NUMBER;
   Status status = Status::Ok();
   std::visit(
-      [&](const auto& value) {
+      [&](const auto &value) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, std::string>) {
           status = Status::InvalidArgument("a numeric column carries a symbol");
@@ -126,9 +127,9 @@ StatusOr<VeritasSouffleCell> FlatCell(const facts::ExecutionCellValue& cell,
 // the real insert below would mean the relation exists and vanished between two
 // adjacent calls, so it is reported as the failure it is, as is any other
 // non-zero status on either call.
-Status InsertRelation(VeritasSouffleSession* session,
-                      const facts::RelationSchema& schema,
-                      const std::vector<const facts::ExecutionRow*>& rows) {
+Status InsertRelation(VeritasSouffleSession *session,
+                      const facts::RelationSchema &schema,
+                      const std::vector<const facts::ExecutionRow *> &rows) {
   const auto arity = static_cast<unsigned long long>(schema.columns.size());
 
   const int probe = veritas_souffle_session_insert(
@@ -154,13 +155,13 @@ Status InsertRelation(VeritasSouffleSession* session,
   cells.reserve(total);
   symbols.reserve(total);
 
-  for (const facts::ExecutionRow* row : rows) {
+  for (const facts::ExecutionRow *row : rows) {
     if (row->cells.size() != schema.columns.size()) {
       return Status::InvalidArgument("execution row does not match its schema");
     }
     for (std::size_t i = 0; i < schema.columns.size(); ++i) {
-      auto flat =
-          FlatCell(row->cells[i], schema.columns[i].domain, &symbols.emplace_back());
+      auto flat = FlatCell(row->cells[i], schema.columns[i].domain,
+                           &symbols.emplace_back());
       if (!flat.ok()) {
         return flat.status();
       }
@@ -172,27 +173,26 @@ Status InsertRelation(VeritasSouffleSession* session,
       session, schema.name.c_str(), cells.data(), arity,
       static_cast<unsigned long long>(rows.size()));
   if (status != 0) {
-    return Status::Internal("Souffle session refused " +
-                            std::to_string(rows.size()) + " rows for " +
-                            schema.name + " with code " +
-                            std::to_string(status));
+    return Status::Internal(
+        "Souffle session refused " + std::to_string(rows.size()) +
+        " rows for " + schema.name + " with code " + std::to_string(status));
   }
   return Status::Ok();
 }
 
 // Inserts the logical input's EDB, one relation at a time. Grouping makes each
 // relation a single batch and keeps the insert order independent of hashing.
-Status InsertEdb(VeritasSouffleSession* session,
-                 const WpaLogicalComponentInput& input) {
-  std::map<facts::RelationId, std::vector<const facts::ExecutionRow*>> grouped;
-  for (const facts::ExecutionRow& row : input.edb) {
+Status InsertEdb(VeritasSouffleSession *session,
+                 const WpaLogicalComponentInput &input) {
+  std::map<facts::RelationId, std::vector<const facts::ExecutionRow *>> grouped;
+  for (const facts::ExecutionRow &row : input.edb) {
     if (static_cast<std::size_t>(row.relation) >= facts::kRelationCountV2) {
       return Status::InvalidArgument("execution row names an unknown relation");
     }
     grouped[row.relation].push_back(&row);
   }
 
-  for (const auto& [relation, rows] : grouped) {
+  for (const auto &[relation, rows] : grouped) {
     Status status =
         InsertRelation(session, facts::RelationsV2().Get(relation), rows);
     if (!status.ok()) {
@@ -204,10 +204,11 @@ Status InsertEdb(VeritasSouffleSession* session,
 
 // --- Results: session cells back into semantic rows -------------------------
 
-StatusOr<facts::SemanticRow> ResultRowFromCells(
-    const WpaLogicalComponentInput& input, facts::RelationId relation,
-    const VeritasSouffleCell* cells, unsigned long long arity) {
-  const auto& schema = facts::RelationsV2().Get(relation);
+StatusOr<facts::SemanticRow>
+ResultRowFromCells(const WpaLogicalComponentInput &input,
+                   facts::RelationId relation, const VeritasSouffleCell *cells,
+                   unsigned long long arity) {
+  const auto &schema = facts::RelationsV2().Get(relation);
   if (arity != schema.columns.size()) {
     return Status::InvalidArgument("result row does not match its schema");
   }
@@ -217,7 +218,7 @@ StatusOr<facts::SemanticRow> ResultRowFromCells(
   row.cells.reserve(schema.columns.size());
   for (std::size_t i = 0; i < schema.columns.size(); ++i) {
     const facts::ColumnDomain domain = schema.columns[i].domain;
-    const VeritasSouffleCell& cell = cells[i];
+    const VeritasSouffleCell &cell = cells[i];
     if (domain == facts::ColumnDomain::kString) {
       if (cell.kind != VERITAS_SOUFFLE_CELL_SYMBOL || cell.symbol == nullptr) {
         return Status::InvalidArgument("a symbol column arrived as a number");
@@ -284,15 +285,15 @@ StatusOr<facts::SemanticRow> ResultRowFromCells(
 // Status, so it carries the first failure out through `status` and stops the
 // scan by returning non-zero.
 struct ResultScan {
-  const WpaLogicalComponentInput* input = nullptr;
+  const WpaLogicalComponentInput *input = nullptr;
   facts::RelationId relation{};
-  std::vector<facts::SemanticRow>* rows = nullptr;
+  std::vector<facts::SemanticRow> *rows = nullptr;
   Status status = Status::Ok();
 };
 
-int CollectResultRow(void* context, const VeritasSouffleCell* cells,
+int CollectResultRow(void *context, const VeritasSouffleCell *cells,
                      unsigned long long arity) {
-  auto* scan = static_cast<ResultScan*>(context);
+  auto *scan = static_cast<ResultScan *>(context);
   auto row = ResultRowFromCells(*scan->input, scan->relation, cells, arity);
   if (!row.ok()) {
     scan->status = row.status();
@@ -310,15 +311,16 @@ int CollectResultRow(void* context, const VeritasSouffleCell* cells,
 // reader, because a witness key is durable evidence and two copies of its
 // decoder would be kept in step by a test rather than by the compiler.
 struct WitnessScan {
-  std::vector<facts::WitnessEdge>* edges = nullptr;
+  std::vector<facts::WitnessEdge> *edges = nullptr;
   Status status = Status::Ok();
 };
 
-int CollectWitnessRow(void* context, const VeritasSouffleCell* cells,
+int CollectWitnessRow(void *context, const VeritasSouffleCell *cells,
                       unsigned long long arity) {
-  auto* scan = static_cast<WitnessScan*>(context);
+  auto *scan = static_cast<WitnessScan *>(context);
   if (arity != kWitnessArity) {
-    scan->status = Status::InvalidArgument("witness row must have five columns");
+    scan->status =
+        Status::InvalidArgument("witness row must have five columns");
     return 1;
   }
   for (std::size_t i = 0; i < kWitnessArity - 1; ++i) {
@@ -359,10 +361,10 @@ int CollectWitnessRow(void* context, const VeritasSouffleCell* cells,
 
 // The cell kinds a relation's columns arrive as: its schema domain decides,
 // exactly as it does on the way in.
-std::vector<unsigned char> CellKindsFor(const facts::RelationSchema& schema) {
+std::vector<unsigned char> CellKindsFor(const facts::RelationSchema &schema) {
   std::vector<unsigned char> kinds;
   kinds.reserve(schema.columns.size());
-  for (const auto& column : schema.columns) {
+  for (const auto &column : schema.columns) {
     kinds.push_back(column.domain == facts::ColumnDomain::kString
                         ? VERITAS_SOUFFLE_CELL_SYMBOL
                         : VERITAS_SOUFFLE_CELL_NUMBER);
@@ -370,45 +372,45 @@ std::vector<unsigned char> CellKindsFor(const facts::RelationSchema& schema) {
   return kinds;
 }
 
-Status ScanOutput(VeritasSouffleSession* session,
-                  const WpaLogicalComponentInput& input,
-                  facts::RawWpaEvaluation* raw) {
+Status ScanOutput(VeritasSouffleSession *session,
+                  const WpaLogicalComponentInput &input,
+                  facts::RawWpaEvaluation *raw) {
   // Every derived relation this component claims is an output of its program,
   // so the engine keeps it and a scan that cannot find it is a real failure
   // rather than a relation the rules dropped.
-  for (const auto& domain : ComponentDomains(input.component)) {
-    const auto& schema = facts::RelationsV2().Get(domain.derived);
+  for (const auto &domain : ComponentDomains(input.component)) {
+    const auto &schema = facts::RelationsV2().Get(domain.derived);
     const std::vector<unsigned char> kinds = CellKindsFor(schema);
     ResultScan scan{&input, domain.derived, &raw->results};
-    const int status = veritas_souffle_session_scan(
-        session, schema.name.c_str(), kinds.data(), kinds.size(),
-        CollectResultRow, &scan);
+    const int status =
+        veritas_souffle_session_scan(session, schema.name.c_str(), kinds.data(),
+                                     kinds.size(), CollectResultRow, &scan);
     if (status != 0) {
-      return Status::Internal("Souffle session could not scan " +
-                              schema.name + " with code " +
-                              std::to_string(status));
+      return Status::Internal("Souffle session could not scan " + schema.name +
+                              " with code " + std::to_string(status));
     }
     if (!scan.status.ok()) {
       return scan.status;
     }
   }
 
-  static constexpr std::array<unsigned char, kWitnessArity> kWitnessCellKinds = {
-      VERITAS_SOUFFLE_CELL_SYMBOL, VERITAS_SOUFFLE_CELL_SYMBOL,
-      VERITAS_SOUFFLE_CELL_SYMBOL, VERITAS_SOUFFLE_CELL_SYMBOL,
-      VERITAS_SOUFFLE_CELL_NUMBER};
+  static constexpr std::array<unsigned char, kWitnessArity> kWitnessCellKinds =
+      {VERITAS_SOUFFLE_CELL_SYMBOL, VERITAS_SOUFFLE_CELL_SYMBOL,
+       VERITAS_SOUFFLE_CELL_SYMBOL, VERITAS_SOUFFLE_CELL_SYMBOL,
+       VERITAS_SOUFFLE_CELL_NUMBER};
   WitnessScan witness_scan{&raw->witnesses};
   const int status = veritas_souffle_session_scan(
-      session, kWitnessRelation, kWitnessCellKinds.data(), kWitnessCellKinds.size(),
-      CollectWitnessRow, &witness_scan);
+      session, kWitnessRelation, kWitnessCellKinds.data(),
+      kWitnessCellKinds.size(), CollectWitnessRow, &witness_scan);
   if (status != 0) {
-    return Status::Internal("Souffle session could not scan Witness with code " +
-                            std::to_string(status));
+    return Status::Internal(
+        "Souffle session could not scan Witness with code " +
+        std::to_string(status));
   }
   return witness_scan.status;
 }
 
-}  // namespace
+} // namespace
 
 SouffleWpaExecutor::SouffleWpaExecutor(std::filesystem::path /*worker*/,
                                        std::string toolchain_identity)
@@ -422,8 +424,9 @@ std::string_view SouffleWpaExecutor::toolchain_identity() const {
   return toolchain_identity_;
 }
 
-StatusOr<facts::RawWpaEvaluation> SouffleWpaExecutor::Execute(
-    const WpaExecutionEnvelope& input, const WpaExecutionLimits& limits) const {
+StatusOr<facts::RawWpaEvaluation>
+SouffleWpaExecutor::Execute(const WpaExecutionEnvelope &input,
+                            const WpaExecutionLimits &limits) const {
   if (input.run.engine != facts::EngineIdentity::kSouffle) {
     return Status::InvalidArgument(
         "envelope engine identity does not match this executor");
@@ -444,7 +447,7 @@ StatusOr<facts::RawWpaEvaluation> SouffleWpaExecutor::Execute(
   // is evaluated with I/O disabled, and the relations this component owns are
   // scanned back out. No directory, no relation file, no text round trip.
   const std::string component(ComponentKindName(input.logical.component));
-  VeritasSouffleSession* session = nullptr;
+  VeritasSouffleSession *session = nullptr;
   const int open_status = veritas_souffle_session_open(
       component.c_str(), static_cast<unsigned>(limits.threads), &session);
   if (open_status != 0 || session == nullptr) {
@@ -473,4 +476,4 @@ StatusOr<facts::RawWpaEvaluation> SouffleWpaExecutor::Execute(
   return raw;
 }
 
-}  // namespace veritas::wpa
+} // namespace veritas::wpa

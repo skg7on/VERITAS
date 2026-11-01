@@ -60,19 +60,21 @@ TEST(ThinCpgTest, PreservesAllFourAliasStatesWithoutPairFanout) {
   int ordinal = 0;
   for (AliasState state : states) {
     CpgEdge edge;
-    edge.edge_id = Id(core::IdKind::kCpgEdge, "alias" + std::to_string(ordinal++));
+    edge.edge_id =
+        Id(core::IdKind::kCpgEdge, "alias" + std::to_string(ordinal++));
     edge.kind = EdgeKind::kAliases;
     edge.source_node_id = left;
     edge.target_node_id = right;
     edge.alias_state = state;
-    edge.support.push_back(
-        SupportRef{Id(core::IdKind::kFunctionSummary, "summary:one"), "prov:one"});
+    edge.support.push_back(SupportRef{
+        Id(core::IdKind::kFunctionSummary, "summary:one"), "prov:one"});
     ASSERT_TRUE(graph.AddEdge(std::move(edge)).ok());
   }
 
   std::size_t alias_edges = 0;
-  for (const auto& edge : graph.edges()) {
-    if (edge.kind == EdgeKind::kAliases) ++alias_edges;
+  for (const auto &edge : graph.edges()) {
+    if (edge.kind == EdgeKind::kAliases)
+      ++alias_edges;
   }
   EXPECT_EQ(alias_edges, 4u);
 }
@@ -101,7 +103,8 @@ TEST(ThinCpgTest, RejectsAliasEdgeWithoutAliasState) {
   edge.kind = EdgeKind::kAliases;
   edge.source_node_id = Id(core::IdKind::kMemoryRef, "a");
   edge.target_node_id = Id(core::IdKind::kMemoryRef, "b");
-  EXPECT_EQ(graph.AddEdge(std::move(edge)).code(), StatusCode::kInvalidArgument);
+  EXPECT_EQ(graph.AddEdge(std::move(edge)).code(),
+            StatusCode::kInvalidArgument);
 }
 
 TEST(ThinCpgTest, ValidateRejectsMissingEndpoint) {
@@ -118,5 +121,5 @@ TEST(ThinCpgTest, ValidateRejectsMissingEndpoint) {
   EXPECT_FALSE(graph.Validate().ok());
 }
 
-}  // namespace
-}  // namespace veritas::cpg
+} // namespace
+} // namespace veritas::cpg

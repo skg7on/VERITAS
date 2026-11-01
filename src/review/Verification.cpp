@@ -13,14 +13,18 @@
 // limitations under the License.
 
 #include "veritas/review/Verification.h"
+
 namespace veritas::review {
 namespace {
 using O = Json::Object;
+
 std::string Text(const O &o, std::string_view key) { return *o.getString(key); }
+
 Status Bad() {
   return Status::InvalidArgument(
       "verification authority/binding/witness mismatch");
 }
+
 StatusOr<std::string> Identity(const Json &j, std::string_view field,
                                bool obligation) {
   if (!j.getAsObject())
@@ -39,18 +43,22 @@ StatusOr<std::string> Identity(const Json &j, std::string_view field,
   return id->value();
 }
 } // namespace
+
 StatusOr<std::string> VerificationObligationId(const Json &q) {
   return Identity(q, "obligation_id", true);
 }
+
 StatusOr<std::string> VerificationResultId(const Json &r) {
   return Identity(r, "verification_id", false);
 }
+
 StatusOr<std::string> VerificationRequestDigest(const Json &q) {
   auto bytes = CanonicalJson(q);
   if (!bytes.ok())
     return bytes.status();
   return HashBytes(*bytes);
 }
+
 Status ValidateVerificationRequest(const Json &q) {
   auto st = ValidateWireType(q, "VerificationRequest");
   if (!st.ok())
@@ -67,6 +75,7 @@ Status ValidateVerificationRequest(const Json &q) {
     return Bad();
   return Status::Ok();
 }
+
 Status ValidateVerificationResult(const Json &q, const Json &r,
                                   const VerificationPolicy &p) {
   auto st = ValidateVerificationRequest(q);
@@ -141,6 +150,7 @@ Status ValidateVerificationResult(const Json &q, const Json &r,
   }
   return Status::Ok();
 }
+
 StatusOr<ReviewDisposition> ApplyVerification(ReviewDisposition state,
                                               const Json &q, const Json &r,
                                               const VerificationPolicy &p) {

@@ -30,7 +30,8 @@ StatusOr<build::AnalysisManifest> LoadFixtureManifest(std::string_view name) {
       .output_root = {},
   };
   auto input = build::ResolveProjectInput(request);
-  if (!input.ok()) return input.status();
+  if (!input.ok())
+    return input.status();
   return build::LoadProjectManifest(*input);
 }
 
@@ -47,11 +48,11 @@ TEST(ProjectAstExtractorTest, ExtractsFunctionsFromEveryTranslationUnit) {
 
   bool has_a = false;
   bool has_b = false;
-  for (const auto& declaration : index->declarations) {
-    has_a |= (declaration.qualified_name.find("a_function") !=
-              std::string::npos);
-    has_b |= (declaration.qualified_name.find("b_function") !=
-              std::string::npos);
+  for (const auto &declaration : index->declarations) {
+    has_a |=
+        (declaration.qualified_name.find("a_function") != std::string::npos);
+    has_b |=
+        (declaration.qualified_name.find("b_function") != std::string::npos);
   }
   EXPECT_TRUE(has_a);
   EXPECT_TRUE(has_b);
@@ -69,7 +70,7 @@ TEST(ProjectAstExtractorTest, ResolvesSystemHeadersWithoutExplicitSysroot) {
   // The system headers contribute a handful of inline functions, so don't pin
   // an exact count — assert the fixture's own function was actually extracted.
   bool has_system_header_function = false;
-  for (const auto& declaration : index->declarations) {
+  for (const auto &declaration : index->declarations) {
     has_system_header_function |=
         (declaration.qualified_name.find("system_header_function") !=
          std::string::npos);
@@ -77,5 +78,5 @@ TEST(ProjectAstExtractorTest, ResolvesSystemHeadersWithoutExplicitSysroot) {
   EXPECT_TRUE(has_system_header_function);
 }
 
-}  // namespace
-}  // namespace veritas::frontend::clang
+} // namespace
+} // namespace veritas::frontend::clang

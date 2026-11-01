@@ -37,7 +37,7 @@ namespace {
 
 constexpr std::uint64_t kUnproven = std::numeric_limits<std::uint64_t>::max();
 
-void AppendField(std::string* out, std::string_view value) {
+void AppendField(std::string *out, std::string_view value) {
   out->append(std::to_string(value.size()));
   out->push_back(':');
   out->append(value);
@@ -59,7 +59,7 @@ void AppendField(std::string* out, std::string_view value) {
 // intern after it -- and `Release` drops the bytes and the lookup index, which
 // have no reader once every consumer holds a rank or has copied what it needs.
 class KeyInterner {
- public:
+public:
   // Returned by `Find` for a key that was never interned. Callers that can see
   // an undeclared key -- a witness may name a row no one published -- have to
   // distinguish absent from present, which a dense id cannot.
@@ -73,7 +73,7 @@ class KeyInterner {
       return found->second;
     }
     const std::uint32_t id = static_cast<std::uint32_t>(keys_.size());
-    char* const stored = Allocate(key.size());
+    char *const stored = Allocate(key.size());
     std::memcpy(stored, key.data(), key.size());
     const std::string_view view(stored, key.size());
     keys_.push_back(view);
@@ -96,7 +96,8 @@ class KeyInterner {
     const std::size_t count = keys_.size();
     std::vector<std::uint32_t> order(count);
     std::iota(order.begin(), order.end(), std::uint32_t{0});
-    std::ranges::sort(order, {}, [this](std::uint32_t id) { return keys_[id]; });
+    std::ranges::sort(order, {},
+                      [this](std::uint32_t id) { return keys_[id]; });
     ranks_.assign(count, 0);
     by_rank_.assign(count, 0);
     for (std::size_t i = 0; i < count; ++i) {
@@ -131,7 +132,7 @@ class KeyInterner {
     used_ = 0;
   }
 
- private:
+private:
   // A bump-allocated block of key bytes. A raw array rather than a
   // `std::vector<char>`: a vector value-initializes every element on the way in
   // and destroys every element on the way out, which is two passes over a
@@ -146,7 +147,7 @@ class KeyInterner {
   // Bump allocation out of fixed-size chunks. Offsets into one big buffer would
   // be smaller, but the interned views must survive the buffer's growth, and a
   // chunk that is never reallocated gives them somewhere stable to point.
-  char* Allocate(std::size_t bytes) {
+  char *Allocate(std::size_t bytes) {
     constexpr std::size_t kChunkBytes = std::size_t{1} << 20;
     if (chunks_.empty() || used_ + bytes > chunks_.back().size) {
       const std::size_t capacity = bytes > kChunkBytes ? bytes : kChunkBytes;
@@ -154,7 +155,7 @@ class KeyInterner {
           Chunk{std::unique_ptr<char[]>(new char[capacity]), capacity});
       used_ = 0;
     }
-    char* const out = chunks_.back().bytes.get() + used_;
+    char *const out = chunks_.back().bytes.get() + used_;
     used_ += bytes;
     return out;
   }
@@ -182,7 +183,7 @@ struct Derivation {
   // The rule itself, for its priority and its id. The registry is a process
   // lifetime constant, so a derivation names the rule rather than copying its
   // id string out of the interner.
-  const RuleSpec* spec = nullptr;
+  const RuleSpec *spec = nullptr;
   // Ordinal -> input row id, ascending by ordinal. Keyed by ordinal rather than
   // by input key because one input may legitimately occupy two ordinals: a
   // self-join -- a single Datalog row satisfying two argument positions of the
@@ -200,13 +201,13 @@ struct DerivationKey {
   std::uint32_t rule = 0;
   std::uint32_t derivation = 0;
 
-  auto operator<=>(const DerivationKey&) const = default;
+  auto operator<=>(const DerivationKey &) const = default;
 };
 
 // The order two derivations of one result are compared in once their costs and
 // priorities tie: the ordered (rule, firing key) the nested maps supplied by
 // iterating in key order.
-bool DerivationOrder(const Derivation& left, const Derivation& right) {
+bool DerivationOrder(const Derivation &left, const Derivation &right) {
   if (left.rule != right.rule) {
     return left.rule < right.rule;
   }
@@ -222,7 +223,7 @@ struct WitnessOrder {
   std::uint32_t ordinal = 0;
   std::uint32_t input = 0;
 
-  auto operator<=>(const WitnessOrder&) const = default;
+  auto operator<=>(const WitnessOrder &) const = default;
 };
 
 // Reorders `values` by `keys` ascending, permuting both together. The keys were
@@ -231,7 +232,7 @@ struct WitnessOrder {
 // on: equal keys mean equal facts and equal edges, which hash to the same
 // bytes.
 template <typename T, typename Key>
-void SortByKeys(std::vector<T>* values, std::vector<Key>* keys) {
+void SortByKeys(std::vector<T> *values, std::vector<Key> *keys) {
   std::vector<std::uint32_t> order(values->size());
   std::iota(order.begin(), order.end(), std::uint32_t{0});
   std::ranges::sort(order, {},
@@ -248,16 +249,16 @@ void SortByKeys(std::vector<T>* values, std::vector<Key>* keys) {
   *keys = std::move(sorted_keys);
 }
 
-std::string HashOf(const std::string& bytes) {
+std::string HashOf(const std::string &bytes) {
   return core::DigestToHex(core::ComputeSHA256(
       std::as_bytes(std::span(bytes.data(), bytes.size()))));
 }
 
-}  // namespace
+} // namespace
 
-CanonicalResultHashes ComputeCanonicalResultHashes(
-    std::span<const AnalysisFact> input_facts,
-    std::span<const WitnessEdge> input_witnesses) {
+CanonicalResultHashes
+ComputeCanonicalResultHashes(std::span<const AnalysisFact> input_facts,
+                             std::span<const WitnessEdge> input_witnesses) {
   // The inputs are ordered here rather than trusted, so a caller cannot hash a
   // producer-dependent iteration order. Both orders are decided by interned
   // keys: the previous comparators encoded both rows of every pair they looked
@@ -276,7 +277,7 @@ CanonicalResultHashes ComputeCanonicalResultHashes(
   }
   std::vector<WitnessOrder> witness_ids(input_witnesses.size());
   for (std::size_t i = 0; i < input_witnesses.size(); ++i) {
-    const WitnessEdge& edge = input_witnesses[i];
+    const WitnessEdge &edge = input_witnesses[i];
     key.clear();
     AppendSemanticKey(&key, edge.result.row);
     const std::uint32_t result = rows.Intern(key);
@@ -297,10 +298,9 @@ CanonicalResultHashes ComputeCanonicalResultHashes(
   std::ranges::sort(fact_ranks);
   std::vector<WitnessOrder> witness_ranks(witness_ids.size());
   for (std::size_t i = 0; i < witness_ids.size(); ++i) {
-    witness_ranks[i] =
-        WitnessOrder{rows.Rank(witness_ids[i].result),
-                     labels.Rank(witness_ids[i].rule), witness_ids[i].ordinal,
-                     rows.Rank(witness_ids[i].input)};
+    witness_ranks[i] = WitnessOrder{
+        rows.Rank(witness_ids[i].result), labels.Rank(witness_ids[i].rule),
+        witness_ids[i].ordinal, rows.Rank(witness_ids[i].input)};
   }
   std::ranges::sort(witness_ranks);
 
@@ -315,7 +315,7 @@ CanonicalResultHashes ComputeCanonicalResultHashes(
   std::string fixpoint_bytes;
   AppendField(&fixpoint_bytes, "veritas.wpa.fixpoint.v1");
   AppendField(&fixpoint_bytes, hashes.external_hash);
-  for (const WitnessOrder& edge : witness_ranks) {
+  for (const WitnessOrder &edge : witness_ranks) {
     AppendField(&fixpoint_bytes, rows.Key(edge.result));
     AppendField(&fixpoint_bytes, labels.Key(edge.rule));
     AppendField(&fixpoint_bytes, rows.Key(edge.input));
@@ -325,12 +325,12 @@ CanonicalResultHashes ComputeCanonicalResultHashes(
   return hashes;
 }
 
-StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
-    const CanonicalizationRequest& request) {
+StatusOr<CanonicalizedResult>
+ResultCanonicalizer::Canonicalize(const CanonicalizationRequest &request) {
   if (request.evaluation == nullptr) {
     return Status::InvalidArgument("missing raw evaluation");
   }
-  const RawWpaEvaluation& raw = *request.evaluation;
+  const RawWpaEvaluation &raw = *request.evaluation;
 
   // Every key this call compares is interned once. `rows` covers the declared
   // roots and the asserted results, which are the only rows a witness may name;
@@ -342,15 +342,15 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
   // Row id -> the row itself. A row that is both a root and a result appears in
   // both, and the root is the one a witness cites, exactly as the two keyed
   // maps this replaces decided it.
-  std::vector<const SemanticRow*> root_rows;
-  std::vector<const SemanticRow*> result_rows;
+  std::vector<const SemanticRow *> root_rows;
+  std::vector<const SemanticRow *> result_rows;
   // Result index -> row id, in the order the results were asserted, which is
   // how the deduplicating map counted its distinct keys.
   std::vector<std::uint32_t> result_row_ids;
 
   // 1. Roots ground every proof. A root's key is what a witness edge cites.
-  for (const auto& span : {request.local_roots, request.successor_roots}) {
-    for (const auto& root : span) {
+  for (const auto &span : {request.local_roots, request.successor_roots}) {
+    for (const auto &root : span) {
       auto valid = ValidateSemanticRow(root.fact.row);
       if (!valid.ok()) {
         return valid;
@@ -372,7 +372,7 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
 
   // 2. Index the asserted results. A witness may only speak about a result the
   // engine actually published.
-  for (const auto& row : raw.results) {
+  for (const auto &row : raw.results) {
     auto valid = ValidateSemanticRow(row);
     if (!valid.ok()) {
       return valid;
@@ -397,7 +397,7 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
   // lookup per edge compares integers.
   std::vector<Derivation> derivations;
   std::map<DerivationKey, std::size_t> derivation_index;
-  for (const auto& edge : raw.witnesses) {
+  for (const auto &edge : raw.witnesses) {
     key.clear();
     AppendSemanticKey(&key, edge.result.row);
     const std::uint32_t result = rows.Find(key);
@@ -405,7 +405,7 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
       return Status::InvalidArgument(
           "witness names a result that was not published");
     }
-    const RuleSpec* rule = RulesV2().Find(edge.rule_id);
+    const RuleSpec *rule = RulesV2().Find(edge.rule_id);
     if (rule == nullptr) {
       return Status::InvalidArgument("witness names an unregistered rule");
     }
@@ -432,18 +432,19 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
     const auto [found, inserted] = derivation_index.emplace(
         DerivationKey{result, rule_id, derivation_id}, derivations.size());
     if (inserted) {
-      derivations.push_back(Derivation{
-          .result = result, .rule = rule_id, .derivation = derivation_id,
-          .spec = rule});
+      derivations.push_back(Derivation{.result = result,
+                                       .rule = rule_id,
+                                       .derivation = derivation_id,
+                                       .spec = rule});
     }
     // Taken after the possible push_back: the vector's storage moves.
-    Derivation& derivation = derivations[found->second];
+    Derivation &derivation = derivations[found->second];
     // With the derivation key, alternative proof steps land in separate groups,
     // so two different inputs at one ordinal indicate an engine defect rather
     // than a legal alternative proof. One input at two ordinals is the legal
     // self-join and is recorded as such.
-    const auto slot = std::ranges::find_if(
-        derivation.inputs, [&](const auto& entry) {
+    const auto slot =
+        std::ranges::find_if(derivation.inputs, [&](const auto &entry) {
           return entry.first == edge.input_ordinal;
         });
     if (slot != derivation.inputs.end()) {
@@ -452,8 +453,8 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
             "witness binds two inputs at one ordinal");
       }
     } else {
-      const auto position = std::ranges::find_if(
-          derivation.inputs, [&](const auto& entry) {
+      const auto position =
+          std::ranges::find_if(derivation.inputs, [&](const auto &entry) {
             return entry.first > edge.input_ordinal;
           });
       derivation.inputs.insert(position, {edge.input_ordinal, input});
@@ -467,7 +468,7 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
   // before the relaxation and the selection walk the derivations.
   rows.Finish();
   labels.Finish();
-  for (Derivation& derivation : derivations) {
+  for (Derivation &derivation : derivations) {
     derivation.rule = labels.Rank(derivation.rule);
     derivation.derivation = labels.Rank(derivation.derivation);
   }
@@ -486,19 +487,18 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
   // falls back on, so it is also the order the arity check below must report a
   // first failure in.
   std::ranges::sort(derivations,
-                    [&](const Derivation& left, const Derivation& right) {
+                    [&](const Derivation &left, const Derivation &right) {
                       if (left.result != right.result) {
-                        return rows.Rank(left.result) <
-                               rows.Rank(right.result);
+                        return rows.Rank(left.result) < rows.Rank(right.result);
                       }
                       return DerivationOrder(left, right);
                     });
 
   // 4. Validate derivation arity: every derivation's input ordinals must be
-  // exactly {0, ..., rule.arity - 1}. The per-edge checks above already reject a
-  // duplicated ordinal, so a derivation that holds its rule's declared arity in
-  // ascending distinct ordinals holds precisely those.
-  for (const Derivation& derivation : derivations) {
+  // exactly {0, ..., rule.arity - 1}. The per-edge checks above already reject
+  // a duplicated ordinal, so a derivation that holds its rule's declared arity
+  // in ascending distinct ordinals holds precisely those.
+  for (const Derivation &derivation : derivations) {
     if (derivation.inputs.size() != derivation.spec->arity) {
       return Status::InvalidArgument(
           "witness derivation has the wrong number of inputs");
@@ -534,8 +534,8 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
   // a vector per row would be a header per row for a graph of out-degree one or
   // two. Counting sort over the input ordinals.
   std::vector<std::uint32_t> consumer_begin(rows.Count() + 1, 0);
-  for (const Derivation& derivation : derivations) {
-    for (const auto& [ordinal, input] : derivation.inputs) {
+  for (const Derivation &derivation : derivations) {
+    for (const auto &[ordinal, input] : derivation.inputs) {
       ++consumer_begin[input + 1];
     }
   }
@@ -547,7 +547,7 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
     std::vector<std::uint32_t> fill(consumer_begin.begin(),
                                     consumer_begin.end() - 1);
     for (std::uint32_t index = 0; index < derivations.size(); ++index) {
-      for (const auto& [ordinal, input] : derivations[index].inputs) {
+      for (const auto &[ordinal, input] : derivations[index].inputs) {
         consumers[fill[input]++] = index;
       }
     }
@@ -570,10 +570,10 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
     // Cleared on the way out rather than never set, so a derivation whose
     // inputs fall again is queued a second time.
     queued[index] = 0;
-    Derivation& derivation = derivations[index];
+    Derivation &derivation = derivations[index];
     std::uint64_t total = 0;
     bool provable = true;
-    for (const auto& [ordinal, input] : derivation.inputs) {
+    for (const auto &[ordinal, input] : derivation.inputs) {
       total += 1;
       if (cost[input] == kUnproven) {
         provable = false;
@@ -621,17 +621,16 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
     // The derivations are grouped by result in rank order, so this result's run
     // is the contiguous one at the cursor.
     const std::size_t begin = next;
-    while (next < derivations.size() &&
-           derivations[next].result == result_id) {
+    while (next < derivations.size() && derivations[next].result == result_id) {
       ++next;
     }
     if (cost[result_id] == kUnproven) {
       return Status::FailedPrecondition(
           "published result has no finite proof rooted in declared inputs");
     }
-    const Derivation* selected = nullptr;
+    const Derivation *selected = nullptr;
     for (std::size_t index = begin; index < next; ++index) {
-      const Derivation& derivation = derivations[index];
+      const Derivation &derivation = derivations[index];
       if (derivation.cost == kUnproven) {
         continue;
       }
@@ -641,14 +640,15 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
         selected = &derivation;
       }
       // Equal cost and equal priority fall back to the ordered (rule id,
-      // derivation key), which the run above already supplies deterministically.
+      // derivation key), which the run above already supplies
+      // deterministically.
     }
     if (selected == nullptr) {
       return Status::FailedPrecondition(
           "published result has no finite proof rooted in declared inputs");
     }
 
-    const SemanticRow& row = *result_rows[result_id];
+    const SemanticRow &row = *result_rows[result_id];
     auto fact = MakeFact(row);
     if (!fact.ok()) {
       return fact.status();
@@ -657,15 +657,16 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
     const std::uint32_t result_rank = rows.Rank(result_id);
     fact_order_keys.push_back(result_rank);
 
-    for (const auto& [ordinal, input] : selected->inputs) {
-      const SemanticRow* input_row =
+    for (const auto &[ordinal, input] : selected->inputs) {
+      const SemanticRow *input_row =
           root_rows[input] != nullptr ? root_rows[input] : result_rows[input];
-      canonical.witnesses.push_back(WitnessEdge{.result = SemanticKey{row},
-                                                .rule_id = selected->spec->id,
-                                                .input = SemanticKey{*input_row},
-                                                .input_ordinal = ordinal});
-      witness_order.push_back(WitnessOrder{result_rank, selected->rule, ordinal,
-                                           rows.Rank(input)});
+      canonical.witnesses.push_back(
+          WitnessEdge{.result = SemanticKey{row},
+                      .rule_id = selected->spec->id,
+                      .input = SemanticKey{*input_row},
+                      .input_ordinal = ordinal});
+      witness_order.push_back(
+          WitnessOrder{result_rank, selected->rule, ordinal, rows.Rank(input)});
     }
   }
 
@@ -681,11 +682,11 @@ StatusOr<CanonicalizedResult> ResultCanonicalizer::Canonicalize(
   // ExternalHash covers only what a predecessor can see: the published
   // semantics. Witness edges are deliberately excluded so re-proving a fact
   // does not schedule predecessors that cannot observe the difference.
-  const auto hashes = ComputeCanonicalResultHashes(canonical.facts,
-                                                   canonical.witnesses);
+  const auto hashes =
+      ComputeCanonicalResultHashes(canonical.facts, canonical.witnesses);
   canonical.fixpoint_hash = hashes.fixpoint_hash;
   canonical.external_hash = hashes.external_hash;
   return canonical;
 }
 
-}  // namespace veritas::facts
+} // namespace veritas::facts

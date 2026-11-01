@@ -22,11 +22,11 @@
 #include <system_error>
 
 #include "ProjectFixture.h"
-#include "llvm/TargetParser/Host.h"
 #include "veritas/analysis/ProjectAnalysisRequest.h"
 #include "veritas/build/AnalysisManifest.h"
 #include "veritas/build/ProjectInput.h"
 #include "veritas/core/Status.h"
+#include "llvm/TargetParser/Host.h"
 
 namespace veritas::build {
 namespace {
@@ -46,7 +46,7 @@ TEST(ProjectManifestLoaderTest, LoadsSmokeProject) {
   ASSERT_TRUE(manifest.ok()) << manifest.status().message();
 
   ASSERT_EQ(manifest->translation_units.size(), 1u);
-  const auto& tu = manifest->translation_units[0];
+  const auto &tu = manifest->translation_units[0];
   EXPECT_EQ(tu.source_path.root_kind, PathRootKind::kRepository);
   EXPECT_EQ(tu.source_path.root_id, "repository");
   EXPECT_EQ(tu.source_path.relative_path.generic_string(), "smoke.cpp");
@@ -109,8 +109,7 @@ TEST(ProjectManifestLoaderTest, ExplicitTargetFlagOverridesTheHostTriple) {
   // another target cannot share the host's provisional layout identity.
   auto host = LoadProjectManifest(*ResolveFixture("smoke"));
   ASSERT_TRUE(host.ok()) << host.status().message();
-  EXPECT_NE(manifest->context.type_layout_hash,
-            host->context.type_layout_hash);
+  EXPECT_NE(manifest->context.type_layout_hash, host->context.type_layout_hash);
 }
 
 TEST(ProjectManifestLoaderTest, LoadsEveryTranslationUnitDeterministically) {
@@ -138,8 +137,7 @@ TEST(ProjectManifestLoaderTest, CanonicalBytesStableAcrossCheckoutRoots) {
   ASSERT_TRUE(first.ok());
   ASSERT_TRUE(second.ok());
   EXPECT_EQ(ToCanonicalBytes(*first), ToCanonicalBytes(*second));
-  EXPECT_EQ(first->context.source_tree_hash,
-            second->context.source_tree_hash);
+  EXPECT_EQ(first->context.source_tree_hash, second->context.source_tree_hash);
   EXPECT_EQ(first->context.compilation_database_hash,
             second->context.compilation_database_hash);
   EXPECT_EQ(first->context.repository_id, second->context.repository_id);
@@ -170,8 +168,8 @@ TEST(ProjectManifestLoaderTest, ArgumentContainingProjectRootIsSubstituted) {
   // reintroduces the speculative-rewrite bug, the raw project_root would
   // appear in the canonical bytes and break cross-checkout stability.
   const auto project_string = input->project_root.generic_string();
-  for (const auto& tu : manifest->translation_units) {
-    for (const auto& arg : tu.arguments) {
+  for (const auto &tu : manifest->translation_units) {
+    for (const auto &arg : tu.arguments) {
       EXPECT_EQ(arg.find(project_string), std::string::npos)
           << "argument leaks project root: " << arg;
     }
@@ -198,8 +196,7 @@ TEST(ProjectManifestLoaderTest, SourceTreeHashIgnoresVeritasOutputDirectory) {
 
   auto after = LoadProjectManifest(*input);
   ASSERT_TRUE(after.ok()) << after.status().message();
-  EXPECT_EQ(before->context.source_tree_hash,
-            after->context.source_tree_hash);
+  EXPECT_EQ(before->context.source_tree_hash, after->context.source_tree_hash);
   EXPECT_EQ(before->context.repository_id, after->context.repository_id);
   EXPECT_EQ(ToCanonicalBytes(*before), ToCanonicalBytes(*after));
 }
@@ -212,5 +209,5 @@ TEST(ProjectManifestLoaderTest, MissingTranslationUnitFailsWholeLoad) {
   EXPECT_EQ(manifest.status().code(), StatusCode::kFailedPrecondition);
 }
 
-}  // namespace
-}  // namespace veritas::build
+} // namespace
+} // namespace veritas::build

@@ -40,7 +40,7 @@ constexpr long long kMaxMedianWallMs = 30000;
 constexpr long long kMaxPeakRssMb = 2048;
 
 long long CurrentPeakRssMb() {
-  struct rusage usage {};
+  struct rusage usage{};
   getrusage(RUSAGE_SELF, &usage);
   // ru_maxrss is bytes on macOS (darwin), kilobytes on Linux.
 #if defined(__APPLE__)
@@ -65,14 +65,14 @@ TEST(WpaPerformanceQualificationTest, WithinCeilingsAndDeterministic) {
   for (int i = 0; i < kIterations; ++i) {
     ProjectAnalyzer analyzer;
     const auto start = std::chrono::steady_clock::now();
-    auto result = analyzer.AnalyzeProject(FixtureRequest(),
-                                          AnalysisConfig::Default());
+    auto result =
+        analyzer.AnalyzeProject(FixtureRequest(), AnalysisConfig::Default());
     const auto end = std::chrono::steady_clock::now();
     ASSERT_TRUE(result.ok()) << result.status().message();
 
-    wall_ms.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(
-                          end - start)
-                          .count());
+    wall_ms.push_back(
+        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+            .count());
     run_ids.push_back(result->wpa_run_id);
 
     // Production Souffle is the engine for every run.
@@ -95,5 +95,5 @@ TEST(WpaPerformanceQualificationTest, WithinCeilingsAndDeterministic) {
               median_wall, peak_rss);
 }
 
-}  // namespace
-}  // namespace veritas::analysis
+} // namespace
+} // namespace veritas::analysis

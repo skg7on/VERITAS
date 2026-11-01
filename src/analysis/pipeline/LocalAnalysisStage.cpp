@@ -22,8 +22,8 @@
 
 namespace veritas::analysis::pipeline {
 
-StatusOr<LocalAnalysisResult> RunLocalAnalysis(
-    const build::AnalysisManifest& manifest) {
+StatusOr<LocalAnalysisResult>
+RunLocalAnalysis(const build::AnalysisManifest &manifest) {
   llvm::ProjectIrBuilder ir_builder;
   auto program_ir = ir_builder.BuildProjectIr(manifest);
   if (!program_ir.ok()) {
@@ -38,7 +38,7 @@ StatusOr<LocalAnalysisResult> RunLocalAnalysis(
 
   std::vector<summary::v2::FunctionSummary> drafts;
   drafts.reserve(local_facts->size());
-  for (const auto& facts : *local_facts) {
+  for (const auto &facts : *local_facts) {
     auto summary = summary::BuildLocalSummaryV2(facts, manifest.context);
     if (!summary.ok()) {
       return summary.status();
@@ -49,4 +49,4 @@ StatusOr<LocalAnalysisResult> RunLocalAnalysis(
   return LocalAnalysisResult{std::move(*program_ir), std::move(drafts)};
 }
 
-}  // namespace veritas::analysis::pipeline
+} // namespace veritas::analysis::pipeline

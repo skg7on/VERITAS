@@ -436,12 +436,13 @@ StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
                                   core::IdKind::kMemoryRef);
       if (!memory.ok())
         return memory.status();
-      const std::string &diagnostic = effect.location().object().diagnostic_name();
-      const std::string label =
-          diagnostic.empty() ? effect.location().memory_location_id()
-                             : diagnostic;
-      auto add_memory = graph.AddNode(
-          CpgNode{*memory, NodeKind::kMemoryObject, label});
+      const std::string &diagnostic =
+          effect.location().object().diagnostic_name();
+      const std::string label = diagnostic.empty()
+                                    ? effect.location().memory_location_id()
+                                    : diagnostic;
+      auto add_memory =
+          graph.AddNode(CpgNode{*memory, NodeKind::kMemoryObject, label});
       if (!add_memory.ok())
         return add_memory;
       const EdgeKind kind = effect.kind() == v1::EFFECT_KIND_WRITE
@@ -456,7 +457,8 @@ StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
 
     // FLOWS_TO. V2 value flows carry stable kValueRef identities.
     for (const auto &flow : summary.value_flows()) {
-      auto source = ParseIdOfKind(flow.source_value_id(), core::IdKind::kValueRef);
+      auto source =
+          ParseIdOfKind(flow.source_value_id(), core::IdKind::kValueRef);
       auto sink =
           ParseIdOfKind(flow.destination_value_id(), core::IdKind::kValueRef);
       if (!source.ok())
@@ -494,9 +496,10 @@ StatusOr<ThinCpg> BuildThinCpg(const CpgProjectionInput &input) {
       auto add_left = graph.AddNode(CpgNode{
           *left, NodeKind::kMemoryObject,
           left_diag.empty() ? alias.left().memory_location_id() : left_diag});
-      auto add_right = graph.AddNode(CpgNode{
-          *right, NodeKind::kMemoryObject,
-          right_diag.empty() ? alias.right().memory_location_id() : right_diag});
+      auto add_right = graph.AddNode(
+          CpgNode{*right, NodeKind::kMemoryObject,
+                  right_diag.empty() ? alias.right().memory_location_id()
+                                     : right_diag});
       if (!add_left.ok())
         return add_left;
       if (!add_right.ok())

@@ -21,14 +21,14 @@ namespace {
 
 // Fake clock for deterministic testing
 class FakeClock {
- public:
+public:
   FakeClock() : current_(std::chrono::steady_clock::time_point{}) {}
 
   std::chrono::steady_clock::time_point Now() const { return current_; }
 
   void Advance(std::chrono::seconds delta) { current_ += delta; }
 
- private:
+private:
   std::chrono::steady_clock::time_point current_;
 };
 
@@ -147,5 +147,5 @@ TEST(SvfBudgetTest, BudgetReasonNameReturnsValidStrings) {
                "alias_pair_limit");
 }
 
-}  // namespace
-}  // namespace veritas::analysis::svf
+} // namespace
+} // namespace veritas::analysis::svf

@@ -31,7 +31,7 @@ namespace {
 using veritas::core::MakeStableId;
 
 // Read an entire file into a string. Returns nullopt on I/O failure.
-std::optional<std::string> ReadFile(const std::filesystem::path& path) {
+std::optional<std::string> ReadFile(const std::filesystem::path &path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
     return std::nullopt;
@@ -50,21 +50,32 @@ bool IsControl(char c) {
 }
 
 std::optional<ModelEffectKind> ParseEffectKind(std::string_view token) {
-  if (token == "read") return ModelEffectKind::kRead;
-  if (token == "write") return ModelEffectKind::kWrite;
-  if (token == "allocate") return ModelEffectKind::kAllocate;
-  if (token == "deallocate") return ModelEffectKind::kDeallocate;
-  if (token == "unknown") return ModelEffectKind::kUnknown;
+  if (token == "read")
+    return ModelEffectKind::kRead;
+  if (token == "write")
+    return ModelEffectKind::kWrite;
+  if (token == "allocate")
+    return ModelEffectKind::kAllocate;
+  if (token == "deallocate")
+    return ModelEffectKind::kDeallocate;
+  if (token == "unknown")
+    return ModelEffectKind::kUnknown;
   return std::nullopt;
 }
 
 std::optional<EpistemicState> ParseEpistemic(std::string_view token) {
-  if (token == "must") return EpistemicState::kMust;
-  if (token == "may") return EpistemicState::kMay;
-  if (token == "must_not") return EpistemicState::kMustNot;
-  if (token == "inferred") return EpistemicState::kInferred;
-  if (token == "assumed") return EpistemicState::kAssumed;
-  if (token == "unknown") return EpistemicState::kUnknown;
+  if (token == "must")
+    return EpistemicState::kMust;
+  if (token == "may")
+    return EpistemicState::kMay;
+  if (token == "must_not")
+    return EpistemicState::kMustNot;
+  if (token == "inferred")
+    return EpistemicState::kInferred;
+  if (token == "assumed")
+    return EpistemicState::kAssumed;
+  if (token == "unknown")
+    return EpistemicState::kUnknown;
   return std::nullopt;
 }
 
@@ -78,22 +89,25 @@ std::optional<std::array<std::string, 5>> SplitFields(std::string_view line) {
   for (std::size_t i = 0; i <= line.size(); ++i) {
     const bool at_end = (i == line.size());
     if (!at_end && line[i] != '\t') {
-      if (IsControl(line[i])) return std::nullopt;
+      if (IsControl(line[i]))
+        return std::nullopt;
       continue;
     }
-    if (field >= fields.size()) return std::nullopt;  // too many fields
+    if (field >= fields.size())
+      return std::nullopt; // too many fields
     fields[field] = std::string(line.substr(start, i - start));
     ++field;
     start = i + 1;
   }
-  if (field != fields.size()) return std::nullopt;  // too few fields
+  if (field != fields.size())
+    return std::nullopt; // too few fields
   return fields;
 }
 
-}  // namespace
+} // namespace
 
-StatusOr<ModelBundle> ModelBundle::Load(const std::filesystem::path& rows,
-                                        const std::filesystem::path& manifest) {
+StatusOr<ModelBundle> ModelBundle::Load(const std::filesystem::path &rows,
+                                        const std::filesystem::path &manifest) {
   // 1. Read and parse the one-line manifest.
   auto manifest_bytes = ReadFile(manifest);
   if (!manifest_bytes.has_value()) {
@@ -130,10 +144,12 @@ StatusOr<ModelBundle> ModelBundle::Load(const std::filesystem::path& rows,
   std::size_t line_start = 0;
   while (line_start <= canonical_bytes.size()) {
     std::size_t line_end = canonical_bytes.find('\n', line_start);
-    if (line_end == std::string::npos) line_end = canonical_bytes.size();
+    if (line_end == std::string::npos)
+      line_end = canonical_bytes.size();
     std::string_view line(canonical_bytes.data() + line_start,
                           line_end - line_start);
-    if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+    if (!line.empty() && line.back() == '\r')
+      line.remove_suffix(1);
 
     if (!line.empty()) {
       auto fields = SplitFields(line);
@@ -141,8 +157,8 @@ StatusOr<ModelBundle> ModelBundle::Load(const std::filesystem::path& rows,
         return Status::InvalidArgument(
             "model row is not five control-free tab-separated fields");
       }
-      const std::string& seed = (*fields)[0];
-      const std::string& symbol = (*fields)[1];
+      const std::string &seed = (*fields)[0];
+      const std::string &symbol = (*fields)[1];
       const auto effect = ParseEffectKind((*fields)[2]);
       const auto epistemic = ParseEpistemic((*fields)[4]);
       if (!effect.has_value()) {
@@ -170,9 +186,9 @@ StatusOr<ModelBundle> ModelBundle::Load(const std::filesystem::path& rows,
       }
 
       FunctionModel model;
-      model.model_id = MakeStableId(
-          core::IdKind::kModel,
-          std::as_bytes(std::span(seed.data(), seed.size())));
+      model.model_id =
+          MakeStableId(core::IdKind::kModel,
+                       std::as_bytes(std::span(seed.data(), seed.size())));
       model.symbol = symbol;
       model.effect = *effect;
       model.subject = (*fields)[3];
@@ -183,13 +199,14 @@ StatusOr<ModelBundle> ModelBundle::Load(const std::filesystem::path& rows,
       previous_seed = seed;
     }
 
-    if (line_end == canonical_bytes.size()) break;
+    if (line_end == canonical_bytes.size())
+      break;
     line_start = line_end + 1;
   }
 
   // 4. Build the symbol -> range index over the sorted model table.
   for (std::size_t i = 0; i < bundle.models_.size(); ++i) {
-    const std::string& symbol = bundle.models_[i].symbol;
+    const std::string &symbol = bundle.models_[i].symbol;
     auto it = bundle.index_.find(symbol);
     if (it == bundle.index_.end()) {
       bundle.index_.emplace(symbol, std::make_pair(i, i + 1));
@@ -208,8 +225,8 @@ StatusOr<ModelBundle> ModelBundle::Load(const std::filesystem::path& rows,
   return bundle;
 }
 
-std::span<const FunctionModel> ModelBundle::Lookup(
-    std::string_view symbol) const {
+std::span<const FunctionModel>
+ModelBundle::Lookup(std::string_view symbol) const {
   const auto it = index_.find(std::string(symbol));
   if (it == index_.end()) {
     return {};
@@ -218,4 +235,4 @@ std::span<const FunctionModel> ModelBundle::Lookup(
   return std::span<const FunctionModel>(models_.data() + begin, end - begin);
 }
 
-}  // namespace veritas::analysis::semantic
+} // namespace veritas::analysis::semantic
