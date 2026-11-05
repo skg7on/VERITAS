@@ -76,6 +76,45 @@ false match. Legacy stores may build the index once, with progress and explicit
 cost, or return UNSUPPORTED; they do not pretend a full scan is bounded work.
 Native Explain remains under the same snapshot and depth/member budget.
 
+### RDX12 operational contract
+
+Native publication builds the sidecar for a fresh run and extends a ready
+sidecar on subsequent batches. The index is sealed to the run's ordered v4
+receipt chain, current fact membership, and the local metadata file. The
+Evidence snapshot verifies the receipt chain and file binding inside its
+SQLite read transaction without traversing native fact rows. The index stores relation keys
+and typed cell digests; returned members are checked against the canonical
+native row and its current run binding. A sidecar committed out of step with
+metadata is unusable until rebuilt. With SQLite rollback journals the two
+files commit together. If a store uses WAL and a crash leaves only one commit
+durable, the seal check refuses the skewed generation. No authoritative table
+or schema version changes.
+
+For an older v4 store, a missing sidecar, or an interrupted rebuild, the bounded
+path reports `UNSUPPORTED` while the legacy fact API and native Explain remain
+available. To rebuild the sidecar, run:
+
+```sh
+veritas-query rebuild-fact-lookup --db <dir> --run <run-id>
+```
+
+This maintenance command explicitly scans that run's current bindings in
+chunks, checks canonical rows and atomically seals the replacement. It can hold
+a database lock and should be run outside latency-sensitive queries. If it fails
+or is interrupted, retry the command; the earlier complete index (if present
+and still current) or explicit refusal remains visible. A store without a
+sealed v4 receipt must be reanalyzed into a new store. The sidecar is local:
+omit it from metadata backups and rebuild it after restoring or copying a
+store. Readers that predate RDX12 ignore the sidecar.
+
+Page byte limits count the serialized native Fact payloads. Evidence shares a
+100,000-candidate, 4,096-selector and 1 MiB fact payload allowance across each
+slot's selector streams and reports the limiting budget on truncated results.
+These limits cover the fact reads; they do not change CPG acquisition or
+Explain's separate depth and member allowances. No new semantic producer or
+closed-world scope is registered by RDX12.
+
+
 ## 3. Compositional kernels and proofs
 
 Store local transfer/boundary summaries in a new `boundary-summary.v1` artifact:

@@ -24,6 +24,8 @@
 #include <utility>
 #include <vector>
 
+#include <sys/stat.h>
+
 #include "veritas/core/Hash.h"
 #include "veritas/facts/FactProto.h"
 #include "veritas/facts/HexCodec.h"
@@ -130,11 +132,27 @@ StatusOr<FactStore> FactStore::Open(const std::filesystem::path &db_path) {
   if (Status s = store->ApplySchema(); !s.ok()) {
     return s;
   }
-  return FactStore(std::move(store).value());
+  // SQLite pins the native tables and the derived sidecar on the same
+  // connection. Only publication/explicit maintenance initializes the index.
+  if (auto s = store->Execute("ATTACH DATABASE ? AS fact_lookup",
+                              {(db_path / "fact_lookup.v1.db").string()});
+      !s.ok()) {
+    return s;
+  }
+  // Bind this derived cache to the local metadata file. Copying/restoring a
+  // store to a new file requires rebuilding the cache, even if its latest
+  // receipts happen to match (e.g. after a v3 store starts publishing v4).
+  struct stat metadata_info{};
+  if (::stat((db_path / "metadata.db").c_str(), &metadata_info) != 0)
+    return Status::Internal("failed to identify native fact metadata file");
+  auto identity = std::to_string(metadata_info.st_dev) + ":" +
+                  std::to_string(metadata_info.st_ino);
+  return FactStore(std::move(store).value(), std::move(identity));
 }
 
-FactStore::FactStore(summarydb::MetadataStore store)
-    : metadata_store_(std::move(store)) {}
+FactStore::FactStore(summarydb::MetadataStore store, std::string store_identity)
+    : metadata_store_(std::move(store)),
+      store_identity_(std::move(store_identity)) {}
 
 FactStore::FactStore(FactStore &&) noexcept = default;
 FactStore &FactStore::operator=(FactStore &&) noexcept = default;
@@ -262,6 +280,38 @@ Status FactStore::Publish(const AnalysisFactBatch &batch) {
     return err;
   };
 
+  if (s = InitFactLookup(); !s.ok())
+    return rollback(s);
+  auto previous_receipt = ReadLookupReceipt(run_id);
+  if (!previous_receipt.ok())
+    return rollback(previous_receipt.status());
+
+  // Publication adds (or replaces the binding of) facts, never removes them.
+  // Increment only a known complete index. A legacy or interrupted run must
+  // first be rebuilt explicitly, since this batch need not include prior facts.
+  bool index_batch = false;
+  if (*previous_receipt) {
+    auto ready = ReadyLookupFingerprint(run_id, **previous_receipt);
+    if (!ready.ok())
+      return rollback(ready.status());
+    index_batch = ready->has_value();
+  } else {
+    auto current =
+        metadata_store_.Query("SELECT 1 FROM run_fact_bindings WHERE run_id = "
+                              "? AND is_current = 1 LIMIT 1",
+                              {run_id});
+    if (!current.ok())
+      return rollback(current.status());
+    index_batch = current->empty();
+    if (index_batch) {
+      if (auto cleared = ClearFactLookup(run_id); !cleared.ok())
+        return rollback(cleared);
+    }
+  }
+  summarydb::BulkInsertBatcher lookup(
+      metadata_store_,
+      "INSERT OR IGNORE INTO fact_lookup.fact_lookup_v1 VALUES", 5);
+
   // Canonical facts: the run's derived facts plus their rooted inputs, all
   // stored for display. Only the derived facts get an occurrence binding.
   //
@@ -307,6 +357,11 @@ Status FactStore::Publish(const AnalysisFactBatch &batch) {
     binding.selected_witness_id = witness != witness_id_by_fact.end()
                                       ? witness->second
                                       : core::ToString(fact.fact_id);
+    if (index_batch) {
+      s = AppendLookupFact(lookup, run_id, fact);
+      if (!s.ok())
+        return rollback(s);
+    }
     s = AppendBinding(bindings, binding);
     if (!s.ok()) {
       return rollback(s);
@@ -377,10 +432,28 @@ Status FactStore::Publish(const AnalysisFactBatch &batch) {
     return rollback(s);
   }
 
-  return metadata_store_.CommitTransaction();
+  if (index_batch) {
+    if (s = lookup.Flush(); !s.ok())
+      return rollback(s);
+    auto receipt = ReadLookupReceipt(run_id);
+    if (!receipt.ok())
+      return rollback(receipt.status());
+    if (!*receipt)
+      return rollback(Status::Internal("published fact receipt is missing"));
+    if (s = SealFactLookup(run_id, **receipt); !s.ok())
+      return rollback(s);
+  }
+  s = metadata_store_.CommitTransaction();
+  return s.ok() ? s : rollback(s);
 }
 
 StatusOr<AnalysisFact> FactStore::GetFact(core::StableId fact_id) {
+  return ReadCanonicalFact(fact_id, nullptr);
+}
+
+StatusOr<AnalysisFact>
+FactStore::ReadCanonicalFact(core::StableId fact_id,
+                             std::uint64_t *output_bytes) {
   auto rows = metadata_store_.Query(
       "SELECT cells_hex FROM analysis_facts WHERE fact_id = ?",
       {core::ToString(fact_id)});
@@ -398,7 +471,14 @@ StatusOr<AnalysisFact> FactStore::GetFact(core::StableId fact_id) {
   if (!proto.ParseFromString(*decoded)) {
     return Status::Internal("failed to parse stored fact");
   }
-  return FromProtoFact(proto);
+  auto fact = FromProtoFact(proto);
+  if (!fact.ok())
+    return fact.status();
+  if (fact->fact_id != fact_id)
+    return Status::FailedPrecondition("stored fact does not match lookup ID");
+  if (output_bytes)
+    *output_bytes = proto.ByteSizeLong();
+  return fact;
 }
 
 StatusOr<RunFactBinding> FactStore::GetBinding(core::StableId run_id,

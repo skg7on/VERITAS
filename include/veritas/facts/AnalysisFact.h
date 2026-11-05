@@ -75,6 +75,9 @@ struct AnalysisFact {
   bool operator==(const AnalysisFact &) const = default;
 };
 
+// Validates the variant and stable-ID kind for a column value.
+Status ValidateSemanticCell(ColumnDomain domain, const SemanticCellValue &cell);
+
 // Validates a semantic row against its relation schema: cell count, per-cell
 // domain, stable-ID kind, and canonical unknown-range payloads.
 Status ValidateSemanticRow(const SemanticRow &row);

@@ -17,7 +17,7 @@
 // integration tests.
 //
 // OpenSnapshot pins every read to one AnalysisRun in a real FactStore, serving
-// facts through FactStore::GetCurrentFacts and provenance through
+// facts through FactStore::ReadFacts and provenance through
 // ProvenanceStore::Explain. One SQLite read transaction pins the current fact,
 // selected-witness and summary bindings for the snapshot lifetime. Immutable
 // summary objects are read by their pinned IDs through the optional CAS reader.
@@ -25,8 +25,8 @@
 //
 // DeriveSnapshotDescriptor is the single authority for the descriptor the query
 // service pins. It is deliberately minimal: it derives the descriptor from an
-// already-loaded CPG projection, an already-open FactStore, and the run's
-// current facts. Materializing the analysis itself (the M1→M6 pipeline) is not
+// already-loaded CPG projection and a native run identity. Materializing the
+// analysis itself (the M1→M6 pipeline) is not
 // this header's job — `veritas-build analyze` and the integration-test
 // harnesses own that.
 
@@ -77,7 +77,7 @@ public:
     }
     if (auto status = store_.metadata_store().BeginTransaction(); !status.ok())
       return status;
-    std::unique_ptr<EvidenceReadSnapshot> snapshot(
+    std::unique_ptr<Snapshot> snapshot(
         new Snapshot(&store_, descriptor_, summaries_));
     if (!descriptor_.revision.empty() || !descriptor_.build_variant.empty()) {
       auto run = store_.metadata_store().Query(
@@ -91,7 +91,8 @@ public:
         return Status::FailedPrecondition(
             "stale analysis run revision/build binding");
     }
-    return snapshot;
+    snapshot->PinFactLookup();
+    return std::unique_ptr<EvidenceReadSnapshot>(std::move(snapshot));
   }
 
 private:
@@ -110,6 +111,26 @@ private:
     StatusOr<std::vector<facts::AnalysisFact>>
     GetCurrentFacts() const override {
       return store_->GetCurrentFacts(descriptor_.analysis_run_id);
+    }
+
+    void PinFactLookup() {
+      auto fingerprint =
+          store_->FactLookupFingerprint(descriptor_.analysis_run_id);
+      if (!fingerprint.ok()) {
+        lookup_status_ = fingerprint.status();
+        return;
+      }
+      descriptor_.fact_snapshot_fingerprint = std::move(*fingerprint);
+    }
+
+    StatusOr<facts::FactPage>
+    ReadFacts(const facts::FactSelector &selector,
+              const facts::PageRequest &request) const override {
+      if (!lookup_status_.ok())
+        return lookup_status_;
+      return store_->ReadFacts(descriptor_.analysis_run_id,
+                               descriptor_.fact_snapshot_fingerprint, selector,
+                               request);
     }
 
     StatusOr<fact_proto::ProvenanceGraph>
@@ -173,6 +194,7 @@ private:
   private:
     facts::FactStore *store_;
     SnapshotDescriptor descriptor_;
+    Status lookup_status_;
     summarydb::SummaryRepository *summaries_;
   };
 
@@ -186,21 +208,22 @@ private:
 // `repository` is the content-derived RepositoryID (never the checkout path),
 // `revision`/`build_variant` are read back from the CPG ProjectionMetadata so
 // they agree with the projection by construction, and
-// `fact_snapshot_fingerprint` is the canonical digest over the run's current
-// fact IDs (order-independent). Falls back to the empty string for `repository`
-// when the caller has none, which changes the fingerprint but not its
-// determinism.
+// The native backend supplies the pinned receipt fingerprint on open. The
+// optional legacy fact list remains supported for callers that already have it.
 inline SnapshotDescriptor DeriveSnapshotDescriptor(
     const cpg::ThinCpg &cpg, std::string repository,
     core::StableId analysis_run_id,
-    const std::vector<facts::AnalysisFact> &current_facts) {
+    const std::vector<facts::AnalysisFact> &current_facts = {}) {
   SnapshotDescriptor descriptor;
   descriptor.repository = std::move(repository);
   descriptor.revision = core::ToString(cpg.metadata().revision_id);
   descriptor.build_variant = core::ToString(cpg.metadata().build_variant_id);
   descriptor.analysis_config = std::string(kAnalysisConfigV1);
   descriptor.analysis_run_id = analysis_run_id;
-  descriptor.fact_snapshot_fingerprint = ReturnedMemberDigest(current_facts);
+  // Native snapshots replace this legacy descriptor value with a pinned
+  // receipt fingerprint without scanning any facts.
+  if (!current_facts.empty())
+    descriptor.fact_snapshot_fingerprint = ReturnedMemberDigest(current_facts);
   return descriptor;
 }
 

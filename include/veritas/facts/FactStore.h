@@ -29,6 +29,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "veritas/core/Ids.h"
@@ -36,7 +37,12 @@
 #include "veritas/facts/AnalysisFact.h"
 #include "veritas/facts/AnalysisFactBus.h"
 #include "veritas/facts/AnalysisRun.h"
+#include "veritas/facts/FactPage.h"
 #include "veritas/summarydb/MetadataStore.h"
+
+namespace veritas::evidence {
+class FactStoreEvidenceBackend;
+}
 
 namespace veritas::facts {
 
@@ -93,11 +99,16 @@ public:
   // The facts currently bound in a run (their current bindings).
   StatusOr<std::vector<AnalysisFact>> GetCurrentFacts(core::StableId run_id);
 
+  // Explicit maintenance, never invoked by a bounded read. Rebuilds the run's
+  // sidecar entries from authoritative current bindings in one transaction.
+  Status RebuildFactLookup(core::StableId run_id);
+
   // The shared SQLite connection, for ProvenanceStore::Explain.
   summarydb::MetadataStore &metadata_store() { return metadata_store_; }
 
 private:
-  explicit FactStore(summarydb::MetadataStore store);
+  explicit FactStore(summarydb::MetadataStore store,
+                     std::string store_identity);
 
   // Queues one fact on a bulk writer instead of writing a statement per fact.
   Status AppendFact(summarydb::BulkInsertBatcher &facts,
@@ -109,7 +120,36 @@ private:
   Status AppendBinding(summarydb::BulkInsertBatcher &bindings,
                        const RunFactBinding &binding);
 
+  friend class veritas::evidence::FactStoreEvidenceBackend;
+
+  // These reads share the Evidence snapshot's active SQLite transaction.
+  StatusOr<std::string> FactLookupFingerprint(core::StableId run_id);
+  StatusOr<FactPage> ReadFacts(core::StableId run_id,
+                               std::string_view snapshot_digest,
+                               const FactSelector &selector,
+                               const PageRequest &request);
+
+  struct LookupReceipt {
+    std::string batch_id;
+    std::string snapshot_digest;
+  };
+
+  Status InitFactLookup();
+  StatusOr<std::optional<LookupReceipt>>
+  ReadLookupReceipt(std::string_view run_id);
+  StatusOr<std::optional<std::string>>
+  ReadyLookupFingerprint(std::string_view run_id, const LookupReceipt &receipt);
+  Status AppendLookupFact(summarydb::BulkInsertBatcher &rows,
+                          const std::string &run_id, const AnalysisFact &fact);
+  StatusOr<std::vector<std::vector<std::string>>>
+  CurrentFactKeys(std::string_view run_id, std::string_view after);
+  Status ClearFactLookup(std::string_view run_id);
+  Status SealFactLookup(std::string_view run_id, const LookupReceipt &receipt);
+  StatusOr<AnalysisFact> ReadCanonicalFact(core::StableId fact_id,
+                                           std::uint64_t *output_bytes);
+
   summarydb::MetadataStore metadata_store_;
+  std::string store_identity_;
 
   FactStore(const FactStore &) = delete;
   FactStore &operator=(const FactStore &) = delete;

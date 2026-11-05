@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <optional>
@@ -194,112 +195,147 @@ struct FactQueryOutcome {
   QueryCertificate certificate;
 };
 
-// Applies the open-world fact budget: matching candidates are sorted by
-// canonical fact ID, the canonical prefix is returned, and examined_items
-// counts every matching candidate the query assessed.
-StatusOr<FactQueryOutcome>
-RunFactQuery(std::vector<facts::AnalysisFact> matches,
-             const EvidenceQueryBudget &budget, const std::string &fingerprint,
-             std::string_view query_kind,
-             std::vector<core::StableId> scope_refs, core::StableId run_id) {
-  std::sort(matches.begin(), matches.end(), FactIdLess);
-  const std::size_t examined = matches.size();
-  const std::size_t limit = budget.max_facts_per_query;
+using facts::ColumnDomain;
+using facts::FactSelector;
+using facts::RelationId;
 
-  EvidenceFactSet result;
-  result.metadata.analysis_run_id = run_id;
-  if (matches.size() > limit) {
-    result.facts.assign(matches.begin(),
-                        matches.begin() + static_cast<std::ptrdiff_t>(limit));
-    result.metadata.completeness = QueryCompleteness::kTruncated;
-    result.metadata.truncation_reasons = {TruncationReason::kMaxFacts};
-    result.metadata.examined_items = examined;
-  } else {
-    result.facts = std::move(matches);
-    result.metadata.completeness = QueryCompleteness::kComplete;
-    result.metadata.truncation_reasons.clear();
-    result.metadata.examined_items = examined;
-  }
-
-  auto certificate = MakeQueryCertificate(
-      query_kind, std::move(scope_refs), budget, fingerprint,
-      result.metadata.completeness, result.metadata.truncation_reasons,
-      result.metadata.examined_items, ReturnedMemberDigest(result.facts),
-      run_id);
-  if (!certificate.ok()) {
-    return certificate.status();
-  }
-  result.metadata.query_provenance_id = certificate->completion_fact.fact_id;
-
-  return FactQueryOutcome{std::move(result), std::move(*certificate)};
+FactSelector ByCell(RelationId relation, std::uint32_t column,
+                    ColumnDomain domain, facts::SemanticCellValue value) {
+  return {relation, {{column, domain, std::move(value)}}};
 }
 
-// The dominating-check query is closed-world: proving absence requires
-// examining every candidate check, so the fact budget bounds the examination
-// horizon rather than only the returned prefix. A complete-empty result proves
-// no check dominates; a truncated-empty result proves only that the examined
-// prefix held none.
+std::vector<FactSelector> SlotSelectors(std::string_view kind,
+                                        core::StableId ref) {
+  using enum RelationId;
+  using enum ColumnDomain;
+  if (kind == kKindRange || kind == kKindCapacity || kind == kKindAlias) {
+    // A value ref is not a memory ref. Preserve the old empty traversal
+    // without coercing it into a memory identifier or authorizing absence.
+    if (ref.kind != core::IdKind::kMemoryRef)
+      return {};
+    if (kind == kKindRange)
+      return {ByCell(kDirectRead, 1, kMemoryId, ref)};
+    if (kind == kKindCapacity)
+      return {ByCell(kDirectWrite, 1, kMemoryId, ref)};
+    return {ByCell(RelationId::kAlias, 0, kMemoryId, ref),
+            ByCell(RelationId::kAlias, 1, kMemoryId, ref)};
+  }
+  if (kind == kKindUnknown && ref.kind == core::IdKind::kFunctionVariant)
+    return {ByCell(kUnknownEffect, 0, kFunctionId, ref),
+            ByCell(kSupportUnknownEffect, 0, kFunctionId, ref)};
+  if (kind == kKindDominatingCheck)
+    return {{kSoundnessCoverage,
+             {{0, kString, core::ToString(ref)},
+              {1, kString, std::string(kDominatingCheckKind)}}}};
+  return {};
+}
+
+// Each slot shares one work/byte allowance across its selector streams. Even
+// empty seeks consume the independent selector-probe allowance. A truncated
+// input cannot be promoted to complete by union/deduplication.
+class FactSelection {
+public:
+  explicit FactSelection(const EvidenceQueryBudget &budget)
+      : limit_(static_cast<std::uint32_t>(std::min<std::size_t>(
+            budget.max_facts_per_query, facts::kMaxFactPageRows))) {}
+
+  template <typename Predicate>
+  Status Add(const EvidenceReadSnapshot &snapshot, const FactSelector &selector,
+             Predicate include) {
+    if (remaining_work_ == 0 || remaining_selectors_ == 0) {
+      reasons_.insert(TruncationReason::kMaxFactWork);
+      return Status::Ok();
+    }
+    if (remaining_bytes_ == 0) {
+      reasons_.insert(TruncationReason::kMaxFactBytes);
+      return Status::Ok();
+    }
+    --remaining_selectors_;
+    facts::PageRequest request{.limit = limit_,
+                               .max_examined = remaining_work_,
+                               .max_output_bytes = remaining_bytes_,
+                               .after = std::nullopt};
+    auto page = snapshot.ReadFacts(selector, request);
+    if (!page.ok())
+      return page.status();
+    if (page->examined > remaining_work_ ||
+        page->output_bytes > remaining_bytes_ || page->facts.size() > limit_)
+      return Status::FailedPrecondition(
+          "fact backend exceeded its page allowance");
+    remaining_work_ -= page->examined;
+    remaining_bytes_ -= page->output_bytes;
+    if (!page->exhausted) {
+      if (page->work_exhausted)
+        reasons_.insert(TruncationReason::kMaxFactWork);
+      else if (page->required_output_bytes)
+        reasons_.insert(TruncationReason::kMaxFactBytes);
+      else
+        reasons_.insert(TruncationReason::kMaxFacts);
+    }
+    for (auto &fact : page->facts) {
+      if (include(fact))
+        facts_.try_emplace(fact.fact_id, std::move(fact));
+    }
+    if (facts_.size() > limit_) {
+      reasons_.insert(TruncationReason::kMaxFacts);
+      facts_.erase(std::next(facts_.begin(), limit_), facts_.end());
+    }
+    return Status::Ok();
+  }
+
+  bool CanRead() const {
+    return remaining_work_ != 0 && remaining_bytes_ != 0 &&
+           remaining_selectors_ != 0;
+  }
+
+  EvidenceFactSet Finish(core::StableId run_id) && {
+    EvidenceFactSet result;
+    result.metadata.analysis_run_id = run_id;
+    result.metadata.examined_items = kMaxWork - remaining_work_;
+    result.metadata.completeness = reasons_.empty()
+                                       ? QueryCompleteness::kComplete
+                                       : QueryCompleteness::kTruncated;
+    result.metadata.truncation_reasons.assign(reasons_.begin(), reasons_.end());
+    for (auto &[id, fact] : facts_)
+      result.facts.push_back(std::move(fact));
+    return result;
+  }
+
+private:
+  static constexpr std::size_t kMaxWork = 100000;
+  std::uint32_t limit_;
+  std::uint64_t remaining_work_ = kMaxWork;
+  std::uint64_t remaining_bytes_ = 1024 * 1024;
+  std::uint32_t remaining_selectors_ = facts::kMaxFactPageRows;
+  std::map<core::StableId, facts::AnalysisFact> facts_;
+  std::set<TruncationReason> reasons_;
+};
+
 StatusOr<FactQueryOutcome>
-RunDominatingChecks(const EvidenceReadSnapshot &snapshot,
-                    core::StableId callsite_ref,
-                    const EvidenceQueryBudget &budget,
-                    const std::string &fingerprint, core::StableId run_id) {
-  auto facts = snapshot.GetCurrentFacts();
-  if (!facts.ok()) {
-    return facts.status();
-  }
-
-  std::vector<facts::AnalysisFact> candidates;
-  for (const auto &fact : *facts) {
-    if (fact.row.relation != facts::RelationId::kSoundnessCoverage) {
-      continue;
-    }
-    // Closed-world predicate: this matches coverage_kind == "dominating_check"
-    // with a callsite scope. The only producer today is M10A's
-    // CppRuleEvaluator, which emits coverage_kind == "dominating_check_absence"
-    // scoped by function symbol — so on real data no candidate matches and this
-    // query is complete-empty by construction. Aligning the kind/scope encoding
-    // is M10A's when a positive dominating-check fact actually lands.
-    const std::string *kind = StringCell(fact.row, 1);
-    if (kind == nullptr || *kind != kDominatingCheckKind) {
-      continue;
-    }
-    candidates.push_back(fact);
-  }
-  std::sort(candidates.begin(), candidates.end(), FactIdLess);
-
-  const std::size_t limit = budget.max_facts_per_query;
-  const std::size_t examined = std::min(candidates.size(), limit);
-  const bool truncated = candidates.size() > limit;
-  const std::string scope_text = core::ToString(callsite_ref);
-
-  EvidenceFactSet result;
-  result.metadata.analysis_run_id = run_id;
-  result.metadata.examined_items = examined;
-  for (std::size_t i = 0; i < examined; ++i) {
-    const std::string *scope = StringCell(candidates[i].row, 0);
-    if (scope != nullptr && *scope == scope_text) {
-      result.facts.push_back(candidates[i]);
+RunFactQuery(const EvidenceReadSnapshot &snapshot,
+             const std::optional<core::StableId> &scope,
+             const EvidenceQueryBudget &budget, const std::string &fingerprint,
+             std::string_view query_kind, core::StableId run_id) {
+  FactSelection selection(budget);
+  std::vector<core::StableId> refs;
+  if (scope) {
+    refs.push_back(*scope);
+    for (const auto &selector : SlotSelectors(query_kind, *scope)) {
+      if (auto s = selection.Add(snapshot, selector,
+                                 [](const auto &) { return true; });
+          !s.ok())
+        return s;
     }
   }
-  if (truncated) {
-    result.metadata.completeness = QueryCompleteness::kTruncated;
-    result.metadata.truncation_reasons = {TruncationReason::kMaxFacts};
-  } else {
-    result.metadata.completeness = QueryCompleteness::kComplete;
-    result.metadata.truncation_reasons.clear();
-  }
-
+  auto result = std::move(selection).Finish(run_id);
   auto certificate = MakeQueryCertificate(
-      kKindDominatingCheck, {callsite_ref}, budget, fingerprint,
+      query_kind, std::move(refs), budget, fingerprint,
       result.metadata.completeness, result.metadata.truncation_reasons,
       result.metadata.examined_items, ReturnedMemberDigest(result.facts),
       run_id);
-  if (!certificate.ok()) {
+  if (!certificate.ok())
     return certificate.status();
-  }
   result.metadata.query_provenance_id = certificate->completion_fact.fact_id;
-
   return FactQueryOutcome{std::move(result), std::move(*certificate)};
 }
 
@@ -506,25 +542,49 @@ StatusOr<FlowQueryOutcome> RunValueFlow(const cpg::ThinCpg &cpg,
     path_nodes.insert(path.nodes.begin(), path.nodes.end());
   }
 
-  auto facts = snapshot.GetCurrentFacts();
-  if (!facts.ok()) {
-    return facts.status();
+  FactSelection selection(budget);
+  for (const auto relation :
+       {RelationId::kGlobalFlow, RelationId::kSupportGlobalFlow}) {
+    if (src.kind == core::IdKind::kValueRef) {
+      auto s = selection.Add(snapshot,
+                             ByCell(relation, 0, ColumnDomain::kValueId, src),
+                             [](const auto &) { return true; });
+      if (!s.ok())
+        return s;
+    }
+    if (dst.kind == core::IdKind::kValueRef) {
+      auto s = selection.Add(snapshot,
+                             ByCell(relation, 1, ColumnDomain::kValueId, dst),
+                             [](const auto &) { return true; });
+      if (!s.ok())
+        return s;
+    }
+    for (const auto &node : path_nodes) {
+      if (node == src || node.kind != core::IdKind::kValueRef)
+        continue;
+      const bool had_allowance = selection.CanRead();
+      auto s = selection.Add(snapshot,
+                             ByCell(relation, 0, ColumnDomain::kValueId, node),
+                             [&](const facts::AnalysisFact &fact) {
+                               const auto *sink_id = StableIdCell(fact.row, 1);
+                               return sink_id && path_nodes.contains(*sink_id);
+                             });
+      if (!s.ok())
+        return s;
+      if (!had_allowance)
+        break;
+    }
   }
-  for (const auto &fact : *facts) {
-    if (fact.row.relation != facts::RelationId::kGlobalFlow &&
-        fact.row.relation != facts::RelationId::kSupportGlobalFlow) {
-      continue;
-    }
-    const core::StableId *source_id = StableIdCell(fact.row, 0);
-    const core::StableId *sink_id = StableIdCell(fact.row, 1);
-    const bool relevant =
-        (source_id != nullptr && *source_id == src) ||
-        (sink_id != nullptr && *sink_id == dst) ||
-        (source_id != nullptr && sink_id != nullptr &&
-         path_nodes.count(*source_id) != 0 && path_nodes.count(*sink_id) != 0);
-    if (!relevant) {
-      continue;
-    }
+  auto selected = std::move(selection).Finish(run_id);
+  slice.metadata.examined_items += selected.metadata.examined_items;
+  if (selected.metadata.completeness == QueryCompleteness::kTruncated) {
+    slice.metadata.completeness = QueryCompleteness::kTruncated;
+    auto &truncation = slice.metadata.truncation_reasons;
+    truncation.insert(truncation.end(),
+                      selected.metadata.truncation_reasons.begin(),
+                      selected.metadata.truncation_reasons.end());
+  }
+  for (const auto &fact : selected.facts) {
     const sem::EpistemicState *state = EpistemicCell(fact.row, 2);
     if (state == nullptr) {
       continue;
@@ -704,24 +764,10 @@ EvidenceQueryService::GetRanges(core::StableId value_ref,
   if (!snapshot.ok()) {
     return snapshot.status();
   }
-  auto facts = (*snapshot)->GetCurrentFacts();
-  if (!facts.ok()) {
-    return facts.status();
-  }
-  std::vector<facts::AnalysisFact> matches;
-  for (const auto &fact : *facts) {
-    if (fact.row.relation != facts::RelationId::kDirectRead) {
-      continue;
-    }
-    const core::StableId *memory = StableIdCell(fact.row, 1);
-    if (memory != nullptr && *memory == value_ref) {
-      matches.push_back(fact);
-    }
-  }
   const std::string fingerprint = SnapshotFingerprint(
       (*snapshot)->descriptor(), CpgProjectionFingerprint(*cpg_));
-  auto outcome = RunFactQuery(std::move(matches), budget, fingerprint,
-                              kKindRange, {value_ref}, run_id_);
+  auto outcome = RunFactQuery(**snapshot, value_ref, budget, fingerprint,
+                              kKindRange, run_id_);
   if (!outcome.ok()) {
     return outcome.status();
   }
@@ -738,24 +784,10 @@ EvidenceQueryService::GetCapacities(core::StableId memory_ref,
   if (!snapshot.ok()) {
     return snapshot.status();
   }
-  auto facts = (*snapshot)->GetCurrentFacts();
-  if (!facts.ok()) {
-    return facts.status();
-  }
-  std::vector<facts::AnalysisFact> matches;
-  for (const auto &fact : *facts) {
-    if (fact.row.relation != facts::RelationId::kDirectWrite) {
-      continue;
-    }
-    const core::StableId *memory = StableIdCell(fact.row, 1);
-    if (memory != nullptr && *memory == memory_ref) {
-      matches.push_back(fact);
-    }
-  }
   const std::string fingerprint = SnapshotFingerprint(
       (*snapshot)->descriptor(), CpgProjectionFingerprint(*cpg_));
-  auto outcome = RunFactQuery(std::move(matches), budget, fingerprint,
-                              kKindCapacity, {memory_ref}, run_id_);
+  auto outcome = RunFactQuery(**snapshot, memory_ref, budget, fingerprint,
+                              kKindCapacity, run_id_);
   if (!outcome.ok()) {
     return outcome.status();
   }
@@ -772,26 +804,10 @@ EvidenceQueryService::GetAliases(core::StableId memory_ref,
   if (!snapshot.ok()) {
     return snapshot.status();
   }
-  auto facts = (*snapshot)->GetCurrentFacts();
-  if (!facts.ok()) {
-    return facts.status();
-  }
-  std::vector<facts::AnalysisFact> matches;
-  for (const auto &fact : *facts) {
-    if (fact.row.relation != facts::RelationId::kAlias) {
-      continue;
-    }
-    const core::StableId *left = StableIdCell(fact.row, 0);
-    const core::StableId *right = StableIdCell(fact.row, 1);
-    if ((left != nullptr && *left == memory_ref) ||
-        (right != nullptr && *right == memory_ref)) {
-      matches.push_back(fact);
-    }
-  }
   const std::string fingerprint = SnapshotFingerprint(
       (*snapshot)->descriptor(), CpgProjectionFingerprint(*cpg_));
-  auto outcome = RunFactQuery(std::move(matches), budget, fingerprint,
-                              kKindAlias, {memory_ref}, run_id_);
+  auto outcome = RunFactQuery(**snapshot, memory_ref, budget, fingerprint,
+                              kKindAlias, run_id_);
   if (!outcome.ok()) {
     return outcome.status();
   }
@@ -808,25 +824,10 @@ EvidenceQueryService::GetUnknowns(core::StableId scope_ref,
   if (!snapshot.ok()) {
     return snapshot.status();
   }
-  auto facts = (*snapshot)->GetCurrentFacts();
-  if (!facts.ok()) {
-    return facts.status();
-  }
-  std::vector<facts::AnalysisFact> matches;
-  for (const auto &fact : *facts) {
-    if (fact.row.relation != facts::RelationId::kUnknownEffect &&
-        fact.row.relation != facts::RelationId::kSupportUnknownEffect) {
-      continue;
-    }
-    const core::StableId *function = StableIdCell(fact.row, 0);
-    if (function != nullptr && *function == scope_ref) {
-      matches.push_back(fact);
-    }
-  }
   const std::string fingerprint = SnapshotFingerprint(
       (*snapshot)->descriptor(), CpgProjectionFingerprint(*cpg_));
-  auto outcome = RunFactQuery(std::move(matches), budget, fingerprint,
-                              kKindUnknown, {scope_ref}, run_id_);
+  auto outcome = RunFactQuery(**snapshot, scope_ref, budget, fingerprint,
+                              kKindUnknown, run_id_);
   if (!outcome.ok()) {
     return outcome.status();
   }
@@ -845,8 +846,8 @@ EvidenceQueryService::GetDominatingChecks(core::StableId callsite_ref,
   }
   const std::string fingerprint = SnapshotFingerprint(
       (*snapshot)->descriptor(), CpgProjectionFingerprint(*cpg_));
-  auto outcome = RunDominatingChecks(**snapshot, callsite_ref, budget,
-                                     fingerprint, run_id_);
+  auto outcome = RunFactQuery(**snapshot, callsite_ref, budget, fingerprint,
+                              kKindDominatingCheck, run_id_);
   if (!outcome.ok()) {
     return outcome.status();
   }
@@ -935,50 +936,8 @@ EvidenceQueryService::BuildEvidenceInput(const ClaimSeed &claim_seed,
   auto run_fact_query = [&](EvidenceFactSet *slot,
                             const std::optional<core::StableId> &ref,
                             std::string_view kind) -> Status {
-    auto facts = (*snapshot)->GetCurrentFacts();
-    if (!facts.ok()) {
-      return facts.status();
-    }
-    std::vector<facts::AnalysisFact> matches;
-    if (ref.has_value()) {
-      for (const auto &fact : *facts) {
-        if (kind == kKindRange) {
-          if (fact.row.relation != facts::RelationId::kDirectRead)
-            continue;
-          const core::StableId *cell = StableIdCell(fact.row, 1);
-          if (cell != nullptr && *cell == *ref)
-            matches.push_back(fact);
-        } else if (kind == kKindCapacity) {
-          if (fact.row.relation != facts::RelationId::kDirectWrite)
-            continue;
-          const core::StableId *cell = StableIdCell(fact.row, 1);
-          if (cell != nullptr && *cell == *ref)
-            matches.push_back(fact);
-        } else if (kind == kKindAlias) {
-          if (fact.row.relation != facts::RelationId::kAlias)
-            continue;
-          const core::StableId *left = StableIdCell(fact.row, 0);
-          const core::StableId *right = StableIdCell(fact.row, 1);
-          if ((left != nullptr && *left == *ref) ||
-              (right != nullptr && *right == *ref)) {
-            matches.push_back(fact);
-          }
-        } else if (kind == kKindUnknown) {
-          if (fact.row.relation != facts::RelationId::kUnknownEffect &&
-              fact.row.relation != facts::RelationId::kSupportUnknownEffect) {
-            continue;
-          }
-          const core::StableId *cell = StableIdCell(fact.row, 0);
-          if (cell != nullptr && *cell == *ref)
-            matches.push_back(fact);
-        }
-      }
-    }
-    std::vector<core::StableId> scope_refs;
-    if (ref.has_value())
-      scope_refs.push_back(*ref);
-    auto outcome = RunFactQuery(std::move(matches), budget, fingerprint, kind,
-                                std::move(scope_refs), run_id_);
+    auto outcome =
+        RunFactQuery(**snapshot, ref, budget, fingerprint, kind, run_id_);
     if (!outcome.ok()) {
       return outcome.status();
     }
@@ -1007,8 +966,8 @@ EvidenceQueryService::BuildEvidenceInput(const ClaimSeed &claim_seed,
     return s;
   }
 
-  auto checks = RunDominatingChecks(**snapshot, claim_seed.sink_ref, budget,
-                                    fingerprint, run_id_);
+  auto checks = RunFactQuery(**snapshot, claim_seed.sink_ref, budget,
+                             fingerprint, kKindDominatingCheck, run_id_);
   if (!checks.ok()) {
     return checks.status();
   }

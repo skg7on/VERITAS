@@ -788,6 +788,10 @@ std::string_view ToString(TruncationReason value) {
     return "max_facts";
   case TruncationReason::kMaxProvenanceDepth:
     return "max_provenance_depth";
+  case TruncationReason::kMaxFactWork:
+    return "max_fact_work";
+  case TruncationReason::kMaxFactBytes:
+    return "max_fact_bytes";
   }
   return "unspecified";
 }
@@ -843,6 +847,10 @@ StatusOr<TruncationReason> ParseTruncationReason(std::string_view text) {
     return TruncationReason::kMaxFacts;
   if (text == "max_provenance_depth")
     return TruncationReason::kMaxProvenanceDepth;
+  if (text == "max_fact_work")
+    return TruncationReason::kMaxFactWork;
+  if (text == "max_fact_bytes")
+    return TruncationReason::kMaxFactBytes;
   return Status::InvalidArgument("unrecognized truncation reason");
 }
 

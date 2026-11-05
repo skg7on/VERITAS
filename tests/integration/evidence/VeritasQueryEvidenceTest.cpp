@@ -1351,6 +1351,26 @@ TEST(VeritasQueryEvidenceTest, LegacyProjectionHasNoExactCallSiteCapability) {
             std::string::npos);
 }
 
+TEST(VeritasQueryEvidenceTest, MissingLookupRequiresExplicitRebuild) {
+  auto oracle = BuildOracle("evidence_overflow_unsafe");
+  ASSERT_TRUE(oracle.ok()) << oracle.status().message();
+  const auto indexed = RunEvidenceOverflow(oracle->output_root);
+  ASSERT_EQ(indexed.exit_code, 0) << indexed.stdout_text;
+
+  ASSERT_TRUE(
+      std::filesystem::remove(oracle->output_root / "fact_lookup.v1.db"));
+  const auto legacy = RunEvidenceOverflow(oracle->output_root);
+  EXPECT_NE(legacy.exit_code, 0);
+  EXPECT_NE(legacy.stdout_text.find("UNSUPPORTED"), std::string::npos);
+  const auto rebuilt = RunVeritasQuery(
+      {"rebuild-fact-lookup", "--db", oracle->output_root.string(), "--run",
+       core::ToString(oracle->input.flow_slice.metadata.analysis_run_id)});
+  ASSERT_EQ(rebuilt.exit_code, 0) << rebuilt.stdout_text;
+  const auto restored = RunEvidenceOverflow(oracle->output_root);
+  ASSERT_EQ(restored.exit_code, 0) << restored.stdout_text;
+  EXPECT_EQ(restored.stdout_text, indexed.stdout_text);
+}
+
 TEST(VeritasQueryEvidenceTest, CliEmitsGoldenSliceJsonDeterministically) {
   auto oracle = BuildOracle("evidence_overflow_unsafe");
   ASSERT_TRUE(oracle.ok()) << oracle.status().message();
