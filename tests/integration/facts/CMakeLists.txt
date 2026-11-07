@@ -44,3 +44,8 @@ if(VERITAS_WPA_ENGINE STREQUAL "souffle")
   target_compile_options(SemanticKeyFunctorTest PRIVATE -frtti -fexceptions)
   gtest_discover_tests(SemanticKeyFunctorTest DISCOVERY_TIMEOUT 60)
 endif()
+
+add_executable(FactPageTest FactPageTest.cpp)
+target_link_libraries(FactPageTest PRIVATE veritas::evidence veritas::summarydb GTest::gtest_main)
+veritas_add_warnings(FactPageTest)
+gtest_discover_tests(FactPageTest DISCOVERY_TIMEOUT 60)

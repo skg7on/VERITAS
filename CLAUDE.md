@@ -111,7 +111,11 @@ corpus; #165 now has an operator-adapter evaluation harness and fail-closed
 reporting, while real model comparisons, independent adjudication and release
 qualification remain OPEN. See
 [runtime foundation](plugins/veritas-evidence-review/README.md). Native
-SVF/Soufflé requirements remain unchanged.
+SVF/Soufflé requirements remain unchanged. #166/RDX12 adds receipt-pinned
+typed native fact pages through a rebuildable sidecar. Evidence fact slots no
+longer scan the run. Missing/stale sidecars refuse bounded reads and may be
+rebuilt explicitly from sealed v4 native receipts; traversal exhaustion alone
+does not authorize a negative semantic claim.
 
 Canonical configure and build (uses `CMakePresets.json` at repo root):
 

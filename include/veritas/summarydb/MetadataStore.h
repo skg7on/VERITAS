@@ -144,6 +144,8 @@ public:
   // M3: Begin a transaction.
   Status BeginTransaction();
 
+  bool InTransaction() const { return in_transaction_; }
+
   // M3: Commit a transaction.
   Status CommitTransaction();
 

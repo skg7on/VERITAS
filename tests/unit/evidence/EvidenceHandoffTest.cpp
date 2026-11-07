@@ -362,8 +362,7 @@ TEST(EvidenceHandoffTest, CarriesCompleteEmptyCheckEvidence) {
   EvidenceScenarioBuilder builder;
   const ClaimSeed seed = MakeClaimSeed(builder);
 
-  // One dominating check for a *different* callsite, so this sink has none but
-  // the query still examines a candidate.
+  // A check for a different callsite does not enter the selected stream.
   FakeEvidenceBackend backend(Descriptor(builder));
   backend.SetFacts(
       {CheckFact(builder, builder.Id(core::IdKind::kCallSite, "elsewhere"))});
@@ -377,7 +376,7 @@ TEST(EvidenceHandoffTest, CarriesCompleteEmptyCheckEvidence) {
   EXPECT_TRUE(checks.facts.empty());
   EXPECT_EQ(checks.metadata.completeness, QueryCompleteness::kComplete);
   EXPECT_TRUE(checks.metadata.truncation_reasons.empty());
-  EXPECT_EQ(checks.metadata.examined_items, 1u);
+  EXPECT_EQ(checks.metadata.examined_items, 0u);
   EXPECT_EQ(checks.metadata.analysis_run_id, backend.run_id());
   EXPECT_EQ(checks.metadata.query_provenance_id.kind, core::IdKind::kFact);
 }
@@ -388,16 +387,9 @@ TEST(EvidenceHandoffTest, CarriesTruncatedEmptyCheckEvidence) {
   EvidenceScenarioBuilder builder;
   const ClaimSeed seed = MakeClaimSeed(builder);
 
-  // Many candidate checks (for other callsites) exceed the fact budget, so the
-  // closed-world search for this sink truncates without finding a match.
-  std::vector<AnalysisFact> facts;
-  for (int i = 0; i < 8; ++i) {
-    facts.push_back(
-        CheckFact(builder, builder.Id(core::IdKind::kCallSite,
-                                      "elsewhere-" + std::to_string(i))));
-  }
+  // Simulate a page that spent all its work on rejected index candidates.
   FakeEvidenceBackend backend(Descriptor(builder));
-  backend.SetFacts(facts);
+  backend.ExhaustWorkFor(facts::RelationId::kSoundnessCoverage);
 
   cpg::ThinCpg cpg = FlowCpg(builder, seed);
   EvidenceQueryService service(cpg, backend, backend.run_id());
@@ -408,8 +400,9 @@ TEST(EvidenceHandoffTest, CarriesTruncatedEmptyCheckEvidence) {
   EXPECT_TRUE(checks.facts.empty());
   EXPECT_EQ(checks.metadata.completeness, QueryCompleteness::kTruncated);
   ASSERT_EQ(checks.metadata.truncation_reasons.size(), 1u);
-  EXPECT_EQ(checks.metadata.truncation_reasons[0], TruncationReason::kMaxFacts);
-  EXPECT_EQ(checks.metadata.examined_items, 2u);
+  EXPECT_EQ(checks.metadata.truncation_reasons[0],
+            TruncationReason::kMaxFactWork);
+  EXPECT_EQ(checks.metadata.examined_items, 100000u);
 }
 
 // M2 carry-forward: ValidateQueryCompletion accepts a self-consistent

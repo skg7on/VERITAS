@@ -57,6 +57,7 @@ constexpr std::string_view kUsage =
     "<dir>\n"
     "  veritas-query flow <src-id> <dst-id> --projection <id> --db <dir> "
     "[--max-depth N --max-nodes N --max-paths N]\n"
+    "  veritas-query rebuild-fact-lookup --db <dir> --run <run-id>\n"
     "  veritas-query evidence overflow --sink <value> --format <fmt> --db "
     "<dir> "
     "[--callsite <callsite-id> --level l0|l1|l2 --output <path> --max-depth N "
@@ -357,16 +358,11 @@ int RunEvidenceOverflow(const std::vector<std::string> &args) {
   if (!fact_store.ok())
     return ReportError(fact_store.status().message());
 
-  auto current_facts = fact_store->GetCurrentFacts(*run_id);
-  if (!current_facts.ok())
-    return ReportError(current_facts.status().message());
-
-  const veritas::evidence::SnapshotDescriptor descriptor =
-      veritas::evidence::DeriveSnapshotDescriptor(*cpg, (*repository)[0][0],
-                                                  *run_id, *current_facts);
+  const auto descriptor = veritas::evidence::DeriveSnapshotDescriptor(
+      *cpg, (*repository)[0][0], *run_id);
 
   auto seed = veritas::evidence::ResolveOverflowClaimSeed(
-      *cpg, *current_facts, options.sink, options.callsite);
+      *cpg, {}, options.sink, options.callsite);
   if (!seed.ok())
     return ReportError(seed.status().message());
 
@@ -463,6 +459,30 @@ int main(int argc, char *argv[]) {
 
   if (command == "evidence") {
     return RunEvidenceOverflow(args);
+  }
+
+  if (command == "rebuild-fact-lookup") {
+    if (args.size() != 5 || args[1] != "--db" || args[3] != "--run" ||
+        args[2].empty())
+      return ReportError(
+          "expected rebuild-fact-lookup --db <dir> --run <run-id>");
+    auto run_id = ParseStableId(args[4]);
+    if (!run_id.ok() || run_id->kind != veritas::core::IdKind::kAnalysisRun ||
+        !veritas::core::HexToDigest(run_id->digest_hex))
+      return ReportError("invalid analysis run ID");
+    auto existing = veritas::summarydb::MetadataStore::OpenReadOnly(
+        std::filesystem::path(args[2]) / "metadata.db");
+    if (!existing.ok())
+      return ReportError(existing.status().message());
+    auto store = veritas::facts::FactStore::Open(args[2]);
+    if (!store.ok())
+      return ReportError(store.status().message());
+    std::cerr << "Rebuilding fact lookup from current native bindings...\n";
+    auto status = store->RebuildFactLookup(*run_id);
+    if (!status.ok())
+      return ReportError(status.message());
+    std::cerr << "Fact lookup ready.\n";
+    return 0;
   }
 
   std::string db_path;

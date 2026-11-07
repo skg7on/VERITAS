@@ -33,6 +33,7 @@
 #include "veritas/core/Status.h"
 #include "veritas/fact/v1/fact.pb.h"
 #include "veritas/facts/AnalysisFact.h"
+#include "veritas/facts/FactPage.h"
 #include "veritas/facts/ProvenanceStore.h"
 #include "veritas/summary/SummaryArtifact.h"
 
@@ -66,6 +67,13 @@ public:
   // sort by canonical semantic ID before applying any budget.
   virtual StatusOr<std::vector<facts::AnalysisFact>>
   GetCurrentFacts() const = 0;
+
+  // The default explicitly refuses bounded reads. It never scans the run.
+  virtual StatusOr<facts::FactPage>
+  ReadFacts(const facts::FactSelector &, const facts::PageRequest &) const {
+    return Status::FailedPrecondition(
+        "UNSUPPORTED: indexed fact reads unavailable");
+  }
 
   // Bounded explanation of one fact within the pinned run.
   virtual StatusOr<veritas::fact::v1::ProvenanceGraph>

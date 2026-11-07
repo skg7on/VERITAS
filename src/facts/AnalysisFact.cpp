@@ -86,8 +86,7 @@ Status MatchExecutionType(const ExecutionCellValue &cell) {
              : Status::InvalidArgument("execution cell type mismatch");
 }
 
-Status ValidateSemanticCell(ColumnDomain domain,
-                            const SemanticCellValue &cell) {
+Status MatchSemanticCell(ColumnDomain domain, const SemanticCellValue &cell) {
   switch (domain) {
   case ColumnDomain::kFunctionId:
     return MatchStableId(cell, core::IdKind::kFunctionVariant);
@@ -394,6 +393,11 @@ Status ValidateEpistemicAdmission(const RelationSchema &schema,
 }
 
 } // namespace
+
+Status ValidateSemanticCell(ColumnDomain domain,
+                            const SemanticCellValue &cell) {
+  return MatchSemanticCell(domain, cell);
+}
 
 Status ValidateSemanticRow(const SemanticRow &row) {
   if (!IsValidRelation(row.relation)) {

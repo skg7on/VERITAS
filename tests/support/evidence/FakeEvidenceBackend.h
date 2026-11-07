@@ -20,8 +20,10 @@
 #ifndef VERITAS_TESTING_FAKE_EVIDENCE_BACKEND_H_
 #define VERITAS_TESTING_FAKE_EVIDENCE_BACKEND_H_
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -62,6 +64,8 @@ public:
 
   void SetAutoBumpOnExplain(bool enabled) { auto_bump_on_explain_ = enabled; }
 
+  void ExhaustWorkFor(facts::RelationId relation) { exhausted_ = relation; }
+
   core::StableId run_id() const { return descriptor_.analysis_run_id; }
 
   StatusOr<std::unique_ptr<evidence::EvidenceReadSnapshot>>
@@ -93,6 +97,52 @@ private:
         ++backend_->generation_;
       }
       return facts;
+    }
+
+    StatusOr<facts::FactPage>
+    ReadFacts(const facts::FactSelector &selector,
+              const facts::PageRequest &request) const override {
+      if (backend_->generation_ != generation_)
+        return Status::FailedPrecondition("evidence snapshot changed; retry");
+      if (backend_->auto_bump_)
+        ++backend_->generation_;
+      facts::FactPage page;
+      if (backend_->exhausted_ == selector.relation) {
+        page.examined = request.max_examined;
+        page.work_exhausted = true;
+        return page;
+      }
+      std::vector<const facts::AnalysisFact *> selected;
+      for (const auto &fact : backend_->facts_) {
+        if (fact.row.relation == selector.relation &&
+            std::ranges::all_of(selector.equalities, [&](const auto &eq) {
+              return fact.row.cells[eq.column] == eq.value;
+            }))
+          selected.push_back(&fact);
+      }
+      std::ranges::sort(selected, {},
+                        [](const auto *fact) { return fact->fact_id; });
+      for (const auto *fact : selected) {
+        if (page.examined == request.max_examined) {
+          page.work_exhausted = true;
+          return page;
+        }
+        ++page.examined;
+        if (page.facts.size() == request.limit)
+          return page;
+        auto proto = facts::ToProtoFact(*fact);
+        if (!proto.ok())
+          return proto.status();
+        const auto bytes = proto->ByteSizeLong();
+        if (bytes > request.max_output_bytes - page.output_bytes) {
+          page.required_output_bytes = page.output_bytes + bytes;
+          return page;
+        }
+        page.output_bytes += bytes;
+        page.facts.push_back(*fact);
+      }
+      page.exhausted = true;
+      return page;
     }
 
     StatusOr<fake_proto::ProvenanceGraph>
@@ -174,6 +224,7 @@ private:
   std::uint32_t provenance_depth_;
   bool auto_bump_;
   bool auto_bump_on_explain_ = false;
+  std::optional<facts::RelationId> exhausted_;
 };
 
 } // namespace veritas::testing

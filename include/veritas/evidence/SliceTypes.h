@@ -62,6 +62,8 @@ enum class TruncationReason {
   kMaxPaths,
   kMaxFacts,
   kMaxProvenanceDepth,
+  kMaxFactWork,
+  kMaxFactBytes,
 };
 
 // ClaimKind is the M10B-owned finding classification that crosses the M10B/M10C

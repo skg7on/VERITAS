@@ -43,7 +43,7 @@ namespace veritas::evidence {
 // selected witness and run binding. M10C reuses these spellings rather than
 // declaring look-alike constants.
 inline constexpr std::string_view kQueryImplementationVersion =
-    "veritas-evidence-query.v1";
+    "veritas-evidence-query.v2";
 inline constexpr std::string_view kQueryCompletionRuleId =
     "evidence.query_completion.v1";
 inline constexpr std::string_view kQueryCompletionProducerId = "evidence-query";

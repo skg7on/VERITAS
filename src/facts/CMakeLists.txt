@@ -57,6 +57,7 @@ add_library(veritas_facts
   Epistemic.cpp
   FactProto.cpp
   FactStore.cpp
+  FactLookup.cpp
   ProvenanceStore.cpp
 )
 
