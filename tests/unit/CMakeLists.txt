@@ -26,6 +26,7 @@ add_subdirectory(cpg)
 add_subdirectory(analysis)
 add_subdirectory(facts)
 add_subdirectory(wpa)
+add_subdirectory(query)
 add_subdirectory(evidence)
 add_subdirectory(observability)
 
