@@ -539,6 +539,24 @@ StatusOr<QueryPlan> PlanQuery(const QueryDescriptor &descriptor,
                     std::to_string(unknown_count) +
                         " explicit unknown(s) keep the scope open");
       }
+      // Shared or escaped memory is open unless a versioned boundary contract
+      // covers it. An alias fact that is not an explicit no-alias claim is the
+      // available conservative signal.
+      if (v2_summary != nullptr && PredicateUsesMemory(predicate)) {
+        std::size_t shared_aliases = 0;
+        for (const auto &alias : v2_summary->alias_facts()) {
+          if (alias.kind() != v2::ALIAS_KIND_NO_ALIAS) {
+            ++shared_aliases;
+          }
+        }
+        if (shared_aliases > 0 &&
+            CoveringBoundary(boundaries, predicate, std::nullopt) == nullptr) {
+          AddFrontier(&plan.frontier, QueryFrontierKind::kSharedMemory,
+                      function,
+                      std::to_string(shared_aliases) +
+                          " alias fact(s) may share memory");
+        }
+      }
     }
   }
 
