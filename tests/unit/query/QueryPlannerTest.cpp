@@ -123,6 +123,16 @@ void AddOpenCall(v2::FunctionSummary *summary, std::string_view from,
   call->set_provenance_ref("test:open-call");
 }
 
+void AddMayAlias(v2::FunctionSummary *summary, std::string_view left,
+                 std::string_view right) {
+  auto *alias = summary->add_alias_facts();
+  alias->mutable_left()->set_memory_location_id(
+      core::ToString(Id(core::IdKind::kMemoryRef, left)));
+  alias->mutable_right()->set_memory_location_id(
+      core::ToString(Id(core::IdKind::kMemoryRef, right)));
+  alias->set_kind(v2::ALIAS_KIND_MAY_ALIAS);
+}
+
 DependencySnapshot Snapshot(std::vector<summary::SummaryArtifact> summaries) {
   DependencySnapshot snapshot;
   snapshot.revision_id = Id(core::IdKind::kRevision, "revision");
@@ -530,6 +540,89 @@ TEST(QueryPlannerTest, AdmitsExactlyTheSccBudget) {
   EXPECT_FALSE(excluded->scope_closed);
   EXPECT_EQ(excluded->sccs.size(), 2u);
   EXPECT_NE(FindFrontier(*excluded, QueryFrontierKind::kSccBudget), nullptr);
+}
+
+TEST(QueryPlannerTest, IndirectAndVirtualDispatchKeepFrontierOpen) {
+  for (const auto dispatch :
+       {v2::DISPATCH_KIND_INDIRECT, v2::DISPATCH_KIND_VIRTUAL}) {
+    auto f = Summary("f");
+    AddOpenCall(&f, "f", "f-indirect", dispatch);
+    auto snapshot = Snapshot({f});
+    auto descriptor =
+        Descriptor(QueryPredicate::kReachableCall, {FunctionRef("f")});
+    auto plan = PlanQuery(descriptor, snapshot);
+    ASSERT_TRUE(plan.ok()) << plan.status().message();
+
+    EXPECT_FALSE(plan->scope_closed);
+    const auto *unresolved =
+        FindFrontier(*plan, QueryFrontierKind::kUnresolvedCall);
+    ASSERT_NE(unresolved, nullptr);
+    ASSERT_TRUE(unresolved->ref.has_value());
+    EXPECT_EQ(*unresolved->ref, Id(core::IdKind::kCallSite, "f-indirect"));
+  }
+}
+
+TEST(QueryPlannerTest, SharedMemoryKeepsTheFrontierOpen) {
+  auto f = Summary("f");
+  AddMayAlias(&f, "m1", "m2");
+  auto snapshot = Snapshot({f});
+  auto descriptor = Descriptor(QueryPredicate::kMayRead, {FunctionRef("f")},
+                               {MemoryRef("m1", "f")});
+  auto plan = PlanQuery(descriptor, snapshot);
+  ASSERT_TRUE(plan.ok()) << plan.status().message();
+
+  EXPECT_FALSE(plan->scope_closed);
+  EXPECT_NE(FindFrontier(*plan, QueryFrontierKind::kSharedMemory), nullptr);
+}
+
+TEST(QueryPlannerTest, BoundaryCoversSharedMemory) {
+  auto f = Summary("f");
+  AddMayAlias(&f, "m1", "m2");
+
+  BoundarySummary boundary;
+  boundary.function_variant_id = Id(core::IdKind::kFunctionVariant, "f");
+  boundary.configuration_digest = std::string(64, 'a');
+  boundary.layout_digest = std::string(64, 'b');
+  boundary.supported_predicates = {QueryPredicate::kMayRead};
+  boundary.producer_version = "boundary-producer.v1";
+  auto boundary_id = ComputeBoundarySummaryId(boundary);
+  ASSERT_TRUE(boundary_id.ok()) << boundary_id.status().message();
+
+  auto snapshot = Snapshot({f});
+  snapshot.boundary_summaries.push_back(boundary);
+  auto descriptor = Descriptor(QueryPredicate::kMayRead, {FunctionRef("f")},
+                               {MemoryRef("m1", "f")});
+  descriptor.boundary_summaries.push_back(*boundary_id);
+  auto plan = PlanQuery(descriptor, snapshot);
+  ASSERT_TRUE(plan.ok()) << plan.status().message();
+
+  EXPECT_TRUE(plan->scope_closed);
+  EXPECT_TRUE(plan->frontier.empty());
+}
+
+TEST(QueryPlannerTest, PlannedDependenciesMatchTheSeed) {
+  auto f0 = Summary("f0");
+  AddCall(&f0, "f0", "f1");
+  auto f1 = Summary("f1");
+  AddCall(&f1, "f1", "f2");
+  auto snapshot = Snapshot({f0, f1, Summary("f2")});
+  auto descriptor =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("f0")});
+  auto plan = PlanQuery(descriptor, snapshot);
+  ASSERT_TRUE(plan.ok()) << plan.status().message();
+
+  EXPECT_EQ(plan->component, wpa::WpaComponentKind::kReachability);
+  EXPECT_EQ(plan->relation, facts::RelationId::kReachableCall);
+  EXPECT_EQ(plan->local_relations,
+            PredicateLocalRelations(QueryPredicate::kReachableCall));
+  ASSERT_EQ(plan->sccs.size(), 3u);
+  // Reverse-topological order: the callee-most SCC runs first and has no
+  // successor; each caller names exactly the successor it depends on.
+  EXPECT_TRUE(plan->sccs[0].successors.empty());
+  ASSERT_EQ(plan->sccs[1].successors.size(), 1u);
+  EXPECT_EQ(plan->sccs[1].successors.front(), plan->sccs[0].scc_id);
+  ASSERT_EQ(plan->sccs[2].successors.size(), 1u);
+  EXPECT_EQ(plan->sccs[2].successors.front(), plan->sccs[1].scc_id);
 }
 
 } // namespace

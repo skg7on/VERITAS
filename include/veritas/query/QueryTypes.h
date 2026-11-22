@@ -161,6 +161,9 @@ std::optional<core::IdKind> PredicateSinkKind(QueryPredicate predicate);
 // Path-local predicates derive facts only from paths between their endpoints;
 // an excluded callee that cannot reach the sink therefore cannot contribute.
 bool PredicateIsPathLocal(QueryPredicate predicate);
+// Memory/effect predicates can be affected by shared or escaped memory, so
+// their scope stays open unless a boundary contract covers it.
+bool PredicateUsesMemory(QueryPredicate predicate);
 // The base relations the component consumes locally, recorded in the plan.
 std::vector<facts::RelationId>
 PredicateLocalRelations(QueryPredicate predicate);
@@ -354,6 +357,7 @@ enum class QueryFrontierKind : std::uint8_t {
   kExternalBoundary,
   kMissingBoundary,
   kUnknownEffect,
+  kSharedMemory,
   kRowBudget,
   kTimeout,
   kProofBudget,

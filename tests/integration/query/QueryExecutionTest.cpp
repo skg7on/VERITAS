@@ -169,6 +169,18 @@ void AddMemoryEffect(v2::FunctionSummary *summary, std::string_view memory,
   effect->set_provenance_ref("test:memory-effect");
 }
 
+void AddAlias(v2::FunctionSummary *summary, std::string_view left,
+              std::string_view right, v2::AliasKind kind) {
+  auto *alias = summary->add_alias_facts();
+  alias->mutable_left()->set_memory_location_id(
+      core::ToString(Id(core::IdKind::kMemoryRef, left)));
+  alias->mutable_right()->set_memory_location_id(
+      core::ToString(Id(core::IdKind::kMemoryRef, right)));
+  alias->set_kind(kind);
+  alias->set_epistemic(v1::EPISTEMIC_STATE_MAY);
+  alias->set_provenance_ref("test:alias");
+}
+
 DependencySnapshot Snapshot(std::vector<summary::SummaryArtifact> summaries) {
   DependencySnapshot snapshot;
   snapshot.revision_id = Id(core::IdKind::kRevision, "revision");
@@ -648,6 +660,35 @@ TEST(QueryExecutionTest, ClosedMayWriteMatchesBaseline) {
   ASSERT_TRUE(run.has_value());
   EXPECT_TRUE(IsCompleteAnswer(run->artifact));
   EXPECT_EQ(run->artifact.results, expected);
+}
+
+TEST(QueryExecutionTest, SharedMemoryReadMatchesBaselineButStaysOpen) {
+  auto f = Summary("f");
+  AddMemoryEffect(&f, "m1", false);
+  AddAlias(&f, "m1", "m2", v2::ALIAS_KIND_MAY_ALIAS);
+  const DependencySnapshot snapshot = Snapshot({f});
+  const auto descriptor = Descriptor(
+      QueryPredicate::kMayRead, {FunctionRef("f")}, {MemoryRef("m1", "f")});
+
+  const Baseline baseline = RunBaseline(snapshot, QueryPredicate::kMayRead);
+  const auto expected =
+      FilterBySourceRelation(baseline.facts, facts::RelationId::kMayRead,
+                             Id(core::IdKind::kFunctionVariant, "f"));
+  ASSERT_FALSE(expected.empty());
+
+  auto run = RunQuery(snapshot, descriptor);
+  ASSERT_TRUE(run.has_value());
+  EXPECT_EQ(run->artifact.results, expected);
+  // A possible alias keeps the memory scope open even though the direct read
+  // is derived: the answer is inspectable, never a closed-world claim.
+  EXPECT_FALSE(IsCompleteAnswer(run->artifact));
+  bool saw_shared = false;
+  for (const auto &entry : run->artifact.coverage.frontier) {
+    if (entry.kind == QueryFrontierKind::kSharedMemory) {
+      saw_shared = true;
+    }
+  }
+  EXPECT_TRUE(saw_shared);
 }
 
 TEST(QueryExecutionTest, UnknownEffectMatchesBaselineButStaysOpen) {

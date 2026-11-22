@@ -370,6 +370,11 @@ bool PredicateIsPathLocal(QueryPredicate predicate) {
          predicate == QueryPredicate::kGlobalFlow;
 }
 
+bool PredicateUsesMemory(QueryPredicate predicate) {
+  return predicate == QueryPredicate::kMayRead ||
+         predicate == QueryPredicate::kMayWrite;
+}
+
 std::vector<facts::RelationId>
 PredicateLocalRelations(QueryPredicate predicate) {
   switch (predicate) {
@@ -1185,6 +1190,8 @@ std::string_view FrontierKindName(QueryFrontierKind kind) {
     return "missing-boundary";
   case QueryFrontierKind::kUnknownEffect:
     return "unknown-effect";
+  case QueryFrontierKind::kSharedMemory:
+    return "shared-memory";
   case QueryFrontierKind::kRowBudget:
     return "row-budget";
   case QueryFrontierKind::kTimeout:
