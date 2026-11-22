@@ -29,6 +29,7 @@
 
 #include "ProofSelector.h"
 #include "veritas/facts/ResultCanonicalizer.h"
+#include "veritas/wpa/CallGraph.h"
 
 namespace veritas::query {
 namespace {
@@ -131,12 +132,11 @@ std::vector<std::string> BuildAssumptions(const QueryPlan &plan) {
 WpaQueryExecutor::WpaQueryExecutor(
     wpa::WpaExecutor &engine, std::vector<summary::SummaryArtifact> summaries,
     facts::AnalysisRunSemanticDescriptor semantics, std::string snapshot_digest,
-    wpa::CallGraph call_graph, wpa::SccGraph scc_graph,
-    wpa::WpaSummaryIndex summary_index)
+    wpa::SccGraph scc_graph, wpa::WpaSummaryIndex summary_index)
     : engine_(engine), summaries_(std::move(summaries)),
       semantics_(std::move(semantics)),
       snapshot_digest_(std::move(snapshot_digest)),
-      call_graph_(std::move(call_graph)), scc_graph_(std::move(scc_graph)),
+      scc_graph_(std::move(scc_graph)),
       summary_index_(std::move(summary_index)) {}
 
 StatusOr<std::unique_ptr<WpaQueryExecutor>>
@@ -162,10 +162,9 @@ WpaQueryExecutor::Create(wpa::WpaExecutor &engine,
   // The summary index points into the summaries vector's buffer. A vector move
   // preserves that allocation, so the index stays valid after the move into
   // the executor's member.
-  return std::unique_ptr<WpaQueryExecutor>(
-      new WpaQueryExecutor(engine, std::move(summaries), std::move(semantics),
-                           std::move(snapshot_digest), std::move(*call_graph),
-                           std::move(*scc_graph), std::move(*index)));
+  return std::unique_ptr<WpaQueryExecutor>(new WpaQueryExecutor(
+      engine, std::move(summaries), std::move(semantics),
+      std::move(snapshot_digest), std::move(*scc_graph), std::move(*index)));
 }
 
 facts::EngineIdentity WpaQueryExecutor::identity() const {

@@ -43,7 +43,6 @@
 #include "veritas/query/QueryPlanner.h"
 #include "veritas/query/QueryTypes.h"
 #include "veritas/summary/SummaryArtifact.h"
-#include "veritas/wpa/CallGraph.h"
 #include "veritas/wpa/SccGraph.h"
 #include "veritas/wpa/WpaComponent.h"
 #include "veritas/wpa/WpaExecutor.h"
@@ -108,14 +107,13 @@ private:
   WpaQueryExecutor(wpa::WpaExecutor &engine,
                    std::vector<summary::SummaryArtifact> summaries,
                    facts::AnalysisRunSemanticDescriptor semantics,
-                   std::string snapshot_digest, wpa::CallGraph call_graph,
-                   wpa::SccGraph scc_graph, wpa::WpaSummaryIndex summary_index);
+                   std::string snapshot_digest, wpa::SccGraph scc_graph,
+                   wpa::WpaSummaryIndex summary_index);
 
   wpa::WpaExecutor &engine_;
   std::vector<summary::SummaryArtifact> summaries_;
   facts::AnalysisRunSemanticDescriptor semantics_;
   std::string snapshot_digest_;
-  wpa::CallGraph call_graph_;
   wpa::SccGraph scc_graph_;
   wpa::WpaSummaryIndex summary_index_;
 };

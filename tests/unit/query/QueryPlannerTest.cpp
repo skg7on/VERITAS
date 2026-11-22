@@ -117,7 +117,7 @@ void AddOpenCall(v2::FunctionSummary *summary, std::string_view from,
                  std::string_view callsite, v2::DispatchKind dispatch) {
   auto *call = summary->add_calls();
   call->set_call_site_id(core::ToString(Id(core::IdKind::kCallSite, callsite)));
-  call->set_callee_symbol(callsite);
+  call->set_callee_symbol(std::string(callsite));
   call->set_dispatch(dispatch);
   call->set_epistemic(v1::EPISTEMIC_STATE_MAY);
   call->set_provenance_ref("test:open-call");
