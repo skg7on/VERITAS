@@ -101,22 +101,34 @@ std::vector<AnalysisFact> FilterResults(const std::vector<AnalysisFact> &facts,
   return results;
 }
 
-std::vector<std::string> BuildAssumptions(const QueryPlan &plan) {
+StatusOr<std::vector<std::string>> BuildAssumptions(const QueryPlan &plan) {
   std::vector<std::string> assumptions;
   assumptions.push_back(
       "query.relevance-filter:v1:admitted-sccs=" +
       std::to_string(plan.sccs.size()) +
       ";relevant-functions=" + std::to_string(plan.relevant_functions.size()));
   for (const auto &boundary : plan.boundary_summaries) {
-    const std::string function = core::ToString(boundary.function_variant_id);
-    assumptions.push_back("boundary:" + function +
+    auto id = ComputeBoundarySummaryId(boundary);
+    if (!id.ok()) {
+      return id.status();
+    }
+    // The boundary's own identity is the checkable link from an injected fact
+    // back to the versioned contract that warrants it.
+    const std::string &key = id->value();
+    assumptions.push_back("boundary:" + key +
                           ":producer=" + boundary.producer_version);
+    assumptions.push_back("boundary:" + key + ":function=" +
+                          core::ToString(boundary.function_variant_id));
     for (const auto &assumption : boundary.assumptions) {
-      assumptions.push_back("boundary:" + function + ":" + assumption);
+      assumptions.push_back("boundary:" + key + ":" + assumption);
     }
     for (const auto &site : boundary.covered_call_sites) {
-      assumptions.push_back("boundary:" + function +
+      assumptions.push_back("boundary:" + key +
                             ":covers-callsite:" + core::ToString(site));
+    }
+    for (const auto &fact : boundary.facts) {
+      assumptions.push_back("boundary:" + key +
+                            ":fact:" + core::ToString(fact.fact_id));
     }
   }
   std::sort(assumptions.begin(), assumptions.end());
@@ -370,11 +382,53 @@ StatusOr<QueryArtifact> ExecuteQuery(const QueryPlan &plan,
     }
 
     add_roots(kernel->logical);
-    all_facts.insert(all_facts.end(), canonical->facts.begin(),
-                     canonical->facts.end());
+
+    // An admitted boundary summary is part of its member's answer, not merely
+    // frontier closure. A covered external/unresolved call contributes the
+    // boundary's conservative effect as a rooted result; without this an
+    // artifact could be marked complete while omitting the fact the boundary
+    // declares.
+    std::vector<AnalysisFact> scc_facts = canonical->facts;
+    const auto scc_members = members_by_scc.find(scc.scc_id);
+    if (scc_members != members_by_scc.end()) {
+      for (const auto &boundary : plan.boundary_summaries) {
+        if (!scc_members->second.contains(boundary.function_variant_id) ||
+            !BoundarySupports(boundary, plan.descriptor.predicate)) {
+          continue;
+        }
+        auto boundary_id = ComputeBoundarySummaryId(boundary);
+        if (!boundary_id.ok()) {
+          return boundary_id.status();
+        }
+        boundary_rows += boundary.facts.size();
+        for (const auto &fact : boundary.facts) {
+          roots.emplace(
+              fact.fact_id,
+              facts::RootedInputFact{
+                  .fact = fact,
+                  .provenance_ref = "query:boundary",
+                  .producer_id = boundary.producer_version,
+                  .source_anchor_id = boundary_id->value(),
+                  .summary_id = core::ToString(boundary.function_variant_id),
+                  .description = "admitted boundary fact"});
+          scc_facts.push_back(fact);
+        }
+      }
+    }
+    std::sort(scc_facts.begin(), scc_facts.end(),
+              [](const AnalysisFact &a, const AnalysisFact &b) {
+                return a.fact_id < b.fact_id;
+              });
+    scc_facts.erase(
+        std::unique(scc_facts.begin(), scc_facts.end(),
+                    [](const AnalysisFact &a, const AnalysisFact &b) {
+                      return a.fact_id == b.fact_id;
+                    }),
+        scc_facts.end());
+    all_facts.insert(all_facts.end(), scc_facts.begin(), scc_facts.end());
     all_witnesses.insert(all_witnesses.end(), canonical->witnesses.begin(),
                          canonical->witnesses.end());
-    completed.emplace(scc.scc_id, canonical->facts);
+    completed.emplace(scc.scc_id, std::move(scc_facts));
   }
 
   const auto candidates = FilterResults(all_facts, plan.descriptor);
@@ -407,7 +461,11 @@ StatusOr<QueryArtifact> ExecuteQuery(const QueryPlan &plan,
   coverage.predicate_supported = true;
   coverage.scope_closed = plan.scope_closed;
   coverage.frontier = std::move(frontier);
-  coverage.assumptions = BuildAssumptions(plan);
+  auto assumptions = BuildAssumptions(plan);
+  if (!assumptions.ok()) {
+    return assumptions.status();
+  }
+  coverage.assumptions = std::move(*assumptions);
   coverage.examined_rows = examined;
   coverage.proof_edges = proof->edges.size();
   coverage.proof_truncated = proof->truncated;

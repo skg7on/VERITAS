@@ -457,5 +457,80 @@ TEST(QueryPlannerTest, QuerySeedRegistryMatchesManifest) {
   }
 }
 
+TEST(QueryPlannerTest, ModelsMoveQueryIdentity) {
+  auto descriptor =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("f")});
+  auto base = ComputeQueryId(descriptor);
+  ASSERT_TRUE(base.ok()) << base.status().message();
+
+  bool found = false;
+  for (auto &producer : descriptor.producers) {
+    if (producer.name == "veritas.models") {
+      producer.version = "models.v2";
+      producer.config_digest = std::string(64, 'f');
+      found = true;
+    }
+  }
+  ASSERT_TRUE(found) << "the canonical producer set must bind the model bundle";
+  auto moved = ComputeQueryId(descriptor);
+  ASSERT_TRUE(moved.ok());
+  EXPECT_NE(*base, *moved);
+}
+
+TEST(QueryPlannerTest, AdmitsExactlyTheFunctionBudget) {
+  // A two-function recursive SCC is admitted at exactly the limit and excluded
+  // whole one function below it.
+  auto f = Summary("f");
+  AddCall(&f, "f", "g");
+  auto g = Summary("g");
+  AddCall(&g, "g", "f");
+  const DependencySnapshot snapshot = Snapshot({f, g});
+
+  auto at_limit =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("f")});
+  at_limit.limits.max_functions = 2;
+  auto admitted = PlanQuery(at_limit, snapshot);
+  ASSERT_TRUE(admitted.ok()) << admitted.status().message();
+  EXPECT_TRUE(admitted->scope_closed);
+  EXPECT_EQ(admitted->sccs.size(), 1u);
+  EXPECT_TRUE(admitted->excluded_sccs.empty());
+
+  auto below_limit = at_limit;
+  below_limit.limits.max_functions = 1;
+  auto excluded = PlanQuery(below_limit, snapshot);
+  ASSERT_TRUE(excluded.ok()) << excluded.status().message();
+  EXPECT_FALSE(excluded->scope_closed);
+  EXPECT_TRUE(excluded->sccs.empty());
+  EXPECT_NE(FindFrontier(*excluded, QueryFrontierKind::kOversizedScc), nullptr);
+}
+
+TEST(QueryPlannerTest, AdmitsExactlyTheSccBudget) {
+  std::vector<summary::SummaryArtifact> summaries;
+  for (int i = 0; i < 3; ++i) {
+    auto summary = Summary("f" + std::to_string(i));
+    if (i + 1 < 3) {
+      AddCall(&summary, "f" + std::to_string(i), "f" + std::to_string(i + 1));
+    }
+    summaries.push_back(summary);
+  }
+  const DependencySnapshot snapshot = Snapshot(std::move(summaries));
+
+  auto at_limit =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("f0")});
+  at_limit.limits.max_sccs = 3;
+  auto admitted = PlanQuery(at_limit, snapshot);
+  ASSERT_TRUE(admitted.ok()) << admitted.status().message();
+  EXPECT_TRUE(admitted->scope_closed);
+  EXPECT_EQ(admitted->sccs.size(), 3u);
+
+  auto below_limit = at_limit;
+  below_limit.limits.max_sccs = 2;
+  auto excluded = PlanQuery(below_limit, snapshot);
+  ASSERT_TRUE(excluded.ok()) << excluded.status().message();
+  EXPECT_FALSE(excluded->scope_closed);
+  EXPECT_EQ(excluded->sccs.size(), 2u);
+  EXPECT_NE(FindFrontier(*excluded, QueryFrontierKind::kSccBudget), nullptr);
+}
+
 } // namespace
 } // namespace veritas::query

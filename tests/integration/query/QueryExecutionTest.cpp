@@ -72,6 +72,17 @@ TypedRef FunctionRef(std::string_view name) {
   return TypedRef{core::IdKind::kFunctionVariant, id, id};
 }
 
+TypedRef ValueRef(std::string_view value, std::string_view function) {
+  return TypedRef{core::IdKind::kValueRef, Id(core::IdKind::kValueRef, value),
+                  Id(core::IdKind::kFunctionVariant, function)};
+}
+
+TypedRef MemoryRef(std::string_view memory, std::string_view function) {
+  return TypedRef{core::IdKind::kMemoryRef,
+                  Id(core::IdKind::kMemoryRef, memory),
+                  Id(core::IdKind::kFunctionVariant, function)};
+}
+
 facts::AnalysisRunSemanticDescriptor Semantics() {
   facts::AnalysisRunSemanticDescriptor semantics;
   semantics.build_variant_id = Id(core::IdKind::kBuildVariant, "bv");
@@ -127,12 +138,71 @@ void AddCall(v2::FunctionSummary *summary, std::string_view from,
   call->set_provenance_ref("test:call");
 }
 
+void AddOpenExternalCall(v2::FunctionSummary *summary,
+                         std::string_view callsite) {
+  auto *call = summary->add_calls();
+  call->set_call_site_id(core::ToString(Id(core::IdKind::kCallSite, callsite)));
+  call->set_callee_symbol(std::string(callsite));
+  call->set_dispatch(v2::DISPATCH_KIND_EXTERNAL);
+  call->set_epistemic(v1::EPISTEMIC_STATE_MAY);
+  call->set_provenance_ref("test:external-call");
+}
+
+void AddValueFlow(v2::FunctionSummary *summary, std::string_view source,
+                  std::string_view destination) {
+  auto *flow = summary->add_value_flows();
+  flow->set_source_value_id(
+      core::ToString(Id(core::IdKind::kValueRef, source)));
+  flow->set_destination_value_id(
+      core::ToString(Id(core::IdKind::kValueRef, destination)));
+  flow->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  flow->set_provenance_ref("test:flow");
+}
+
+void AddMemoryEffect(v2::FunctionSummary *summary, std::string_view memory,
+                     bool is_write) {
+  auto *effect = summary->add_memory_effects();
+  effect->set_kind(is_write ? v1::EFFECT_KIND_WRITE : v1::EFFECT_KIND_READ);
+  effect->mutable_location()->set_memory_location_id(
+      core::ToString(Id(core::IdKind::kMemoryRef, memory)));
+  effect->set_epistemic(v1::EPISTEMIC_STATE_MUST);
+  effect->set_provenance_ref("test:memory-effect");
+}
+
 DependencySnapshot Snapshot(std::vector<summary::SummaryArtifact> summaries) {
   DependencySnapshot snapshot;
   snapshot.revision_id = Id(core::IdKind::kRevision, "revision");
   snapshot.semantics = Semantics();
   snapshot.summaries = std::move(summaries);
   return snapshot;
+}
+
+std::optional<AnalysisFact> MakeReachableFact(std::string_view source,
+                                              std::string_view target) {
+  SemanticRow row;
+  row.relation = facts::RelationId::kReachableCall;
+  row.cells = {Id(core::IdKind::kFunctionVariant, source),
+               Id(core::IdKind::kFunctionVariant, target),
+               analysis::semantic::EpistemicState::kMust};
+  auto fact = facts::MakeFact(row);
+  if (!fact.ok()) {
+    return std::nullopt;
+  }
+  return *fact;
+}
+
+BoundarySummary MakeBoundary(std::string_view function,
+                             std::vector<AnalysisFact> facts,
+                             std::vector<StableId> covered_call_sites = {}) {
+  BoundarySummary boundary;
+  boundary.function_variant_id = Id(core::IdKind::kFunctionVariant, function);
+  boundary.configuration_digest = std::string(64, 'a');
+  boundary.layout_digest = std::string(64, 'b');
+  boundary.supported_predicates = {QueryPredicate::kReachableCall};
+  boundary.covered_call_sites = std::move(covered_call_sites);
+  boundary.producer_version = "test-boundary.v1";
+  boundary.facts = std::move(facts);
+  return boundary;
 }
 
 facts::AnalysisRunManifest ManifestFor(const DependencySnapshot &snapshot) {
@@ -276,6 +346,7 @@ public:
     kTimeout,
     kWorkerDeath,
     kUnprovenResult,
+    kMalformedRow,
   };
 
   ScriptedQueryExecutor(QueryExecutor &inner, Mode mode)
@@ -301,10 +372,20 @@ public:
     case Mode::kWorkerDeath:
       return Status::Internal("scripted worker death");
     case Mode::kUnprovenResult:
+    case Mode::kMalformedRow:
       break;
     }
     auto result = inner_.Execute(request, limits);
     if (!result.ok()) {
+      return result;
+    }
+    if (mode_ == Mode::kMalformedRow) {
+      // A row that does not match its relation's schema. The canonicalizer
+      // must refuse it rather than publish a malformed fact.
+      SemanticRow malformed;
+      malformed.relation = facts::RelationId::kReachableCall;
+      malformed.cells = {Id(core::IdKind::kFunctionVariant, "only-one-cell")};
+      result->evaluation.results.push_back(std::move(malformed));
       return result;
     }
     // A result the engine never derived and did not witness. The canonicalizer
@@ -394,8 +475,14 @@ TEST(QueryExecutionTest, UnrelatedCodeDoesNotExpandFixedQuery) {
   EXPECT_EQ(small->plan.sccs.size(), large->plan.sccs.size());
   EXPECT_EQ(small->artifact.cost.kernels_executed,
             large->artifact.cost.kernels_executed);
+  EXPECT_EQ(small->artifact.cost.worker_setup_count,
+            large->artifact.cost.worker_setup_count);
   EXPECT_EQ(small->artifact.cost.materialized_rows,
             large->artifact.cost.materialized_rows);
+  EXPECT_EQ(small->artifact.cost.successor_support_rows,
+            large->artifact.cost.successor_support_rows);
+  EXPECT_EQ(small->artifact.cost.boundary_rows,
+            large->artifact.cost.boundary_rows);
   EXPECT_EQ(small->artifact.results, large->artifact.results);
   EXPECT_EQ(small->artifact.proof, large->artifact.proof);
   EXPECT_TRUE(small->artifact.coverage.predicate_supported);
@@ -486,6 +573,306 @@ TEST(QueryExecutionTest, MissingPremisePreventsSeal) {
                  *source == Id(core::IdKind::kFunctionVariant, "b") &&
                  *target == Id(core::IdKind::kFunctionVariant, "a"));
   }
+}
+
+std::optional<AnalysisFact>
+FindReachableFact(const std::vector<AnalysisFact> &facts,
+                  const StableId &source, const StableId &target) {
+  for (const auto &fact : facts) {
+    if (fact.row.relation != facts::RelationId::kReachableCall ||
+        fact.row.cells.size() < 2) {
+      continue;
+    }
+    const auto *s = std::get_if<StableId>(&fact.row.cells[0]);
+    const auto *t = std::get_if<StableId>(&fact.row.cells[1]);
+    if (s != nullptr && t != nullptr && *s == source && *t == target) {
+      return fact;
+    }
+  }
+  return std::nullopt;
+}
+
+TEST(QueryExecutionTest, ClosedGlobalFlowMatchesBaseline) {
+  auto f = Summary("f");
+  AddValueFlow(&f, "v1", "v2");
+  const DependencySnapshot snapshot = Snapshot({f});
+  const auto descriptor =
+      Descriptor(QueryPredicate::kGlobalFlow, {ValueRef("v1", "f")},
+                 {ValueRef("v2", "f")});
+
+  const Baseline baseline = RunBaseline(snapshot, QueryPredicate::kGlobalFlow);
+  const auto expected =
+      FilterBySourceRelation(baseline.facts, facts::RelationId::kGlobalFlow,
+                             Id(core::IdKind::kValueRef, "v1"));
+  ASSERT_FALSE(expected.empty()) << "the closed fixture must derive a flow";
+
+  auto run = RunQuery(snapshot, descriptor);
+  ASSERT_TRUE(run.has_value());
+  EXPECT_TRUE(IsCompleteAnswer(run->artifact));
+  EXPECT_EQ(run->artifact.results, expected);
+}
+
+TEST(QueryExecutionTest, ClosedMayReadMatchesBaseline) {
+  auto f = Summary("f");
+  AddMemoryEffect(&f, "m", false);
+  const DependencySnapshot snapshot = Snapshot({f});
+  const auto descriptor = Descriptor(QueryPredicate::kMayRead,
+                                     {FunctionRef("f")}, {MemoryRef("m", "f")});
+
+  const Baseline baseline = RunBaseline(snapshot, QueryPredicate::kMayRead);
+  const auto expected =
+      FilterBySourceRelation(baseline.facts, facts::RelationId::kMayRead,
+                             Id(core::IdKind::kFunctionVariant, "f"));
+  ASSERT_FALSE(expected.empty()) << "the closed fixture must derive a read";
+
+  auto run = RunQuery(snapshot, descriptor);
+  ASSERT_TRUE(run.has_value());
+  EXPECT_TRUE(IsCompleteAnswer(run->artifact));
+  EXPECT_EQ(run->artifact.results, expected);
+}
+
+TEST(QueryExecutionTest, ClosedMayWriteMatchesBaseline) {
+  auto f = Summary("f");
+  AddMemoryEffect(&f, "m", true);
+  const DependencySnapshot snapshot = Snapshot({f});
+  const auto descriptor = Descriptor(QueryPredicate::kMayWrite,
+                                     {FunctionRef("f")}, {MemoryRef("m", "f")});
+
+  const Baseline baseline = RunBaseline(snapshot, QueryPredicate::kMayWrite);
+  const auto expected =
+      FilterBySourceRelation(baseline.facts, facts::RelationId::kMayWrite,
+                             Id(core::IdKind::kFunctionVariant, "f"));
+  ASSERT_FALSE(expected.empty()) << "the closed fixture must derive a write";
+
+  auto run = RunQuery(snapshot, descriptor);
+  ASSERT_TRUE(run.has_value());
+  EXPECT_TRUE(IsCompleteAnswer(run->artifact));
+  EXPECT_EQ(run->artifact.results, expected);
+}
+
+TEST(QueryExecutionTest, UnknownEffectMatchesBaselineButStaysOpen) {
+  auto f = Summary("f");
+  f.add_unknowns()->set_kind("indirect-call");
+  const DependencySnapshot snapshot = Snapshot({f});
+  const auto descriptor =
+      Descriptor(QueryPredicate::kUnknownEffect, {FunctionRef("f")});
+
+  const Baseline baseline =
+      RunBaseline(snapshot, QueryPredicate::kUnknownEffect);
+  const auto expected =
+      FilterBySourceRelation(baseline.facts, facts::RelationId::kUnknownEffect,
+                             Id(core::IdKind::kFunctionVariant, "f"));
+  ASSERT_FALSE(expected.empty()) << "the unknown must surface as a typed fact";
+
+  auto run = RunQuery(snapshot, descriptor);
+  ASSERT_TRUE(run.has_value());
+  EXPECT_EQ(run->artifact.results, expected);
+  // An explicit unknown keeps the scope open even though the typed effect is
+  // derived: the answer is inspectable, never a closed-world claim.
+  EXPECT_FALSE(IsCompleteAnswer(run->artifact));
+  bool saw_unknown = false;
+  for (const auto &entry : run->artifact.coverage.frontier) {
+    if (entry.kind == QueryFrontierKind::kUnknownEffect) {
+      saw_unknown = true;
+    }
+  }
+  EXPECT_TRUE(saw_unknown);
+}
+
+TEST(QueryExecutionTest, BoundaryFactAnswersACoveredExternalCall) {
+  auto f = Summary("f");
+  const auto site = Id(core::IdKind::kCallSite, "f-external");
+  AddOpenExternalCall(&f, "f-external");
+
+  auto declared = MakeReachableFact("f", "external-target");
+  ASSERT_TRUE(declared.has_value());
+  const BoundarySummary boundary = MakeBoundary("f", {*declared}, {site});
+  auto boundary_id = ComputeBoundarySummaryId(boundary);
+  ASSERT_TRUE(boundary_id.ok()) << boundary_id.status().message();
+
+  DependencySnapshot snapshot = Snapshot({f});
+  snapshot.boundary_summaries.push_back(boundary);
+  auto descriptor =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("f")});
+  descriptor.boundary_summaries.push_back(*boundary_id);
+
+  auto run = RunQuery(snapshot, descriptor);
+  ASSERT_TRUE(run.has_value());
+  EXPECT_TRUE(run->plan.scope_closed);
+  EXPECT_TRUE(IsCompleteAnswer(run->artifact));
+  ASSERT_EQ(run->artifact.results.size(), 1u);
+  EXPECT_EQ(run->artifact.results.front(), *declared);
+  EXPECT_EQ(run->artifact.cost.boundary_rows, 1u);
+
+  // The artifact names the exact boundary contract that warrants the fact.
+  const std::string link = "boundary:" + boundary_id->value() +
+                           ":fact:" + core::ToString(declared->fact_id);
+  EXPECT_NE(std::find(run->artifact.coverage.assumptions.begin(),
+                      run->artifact.coverage.assumptions.end(), link),
+            run->artifact.coverage.assumptions.end());
+}
+
+TEST(QueryExecutionTest, BoundarySupportForExcludedSuccessorMatchesBaseline) {
+  auto a = Summary("a");
+  AddCall(&a, "a", "b1");
+  auto b1 = Summary("b1");
+  AddCall(&b1, "b1", "b2");
+  auto b2 = Summary("b2");
+  AddCall(&b2, "b2", "b1");
+  AddCall(&b2, "b2", "d");
+  const DependencySnapshot snapshot = Snapshot({a, b1, b2, Summary("d")});
+
+  auto b1_to_d = MakeReachableFact("b1", "d");
+  auto b2_to_d = MakeReachableFact("b2", "d");
+  ASSERT_TRUE(b1_to_d.has_value());
+  ASSERT_TRUE(b2_to_d.has_value());
+  const BoundarySummary b1_boundary = MakeBoundary("b1", {*b1_to_d});
+  const BoundarySummary b2_boundary = MakeBoundary("b2", {*b2_to_d});
+  auto b1_id = ComputeBoundarySummaryId(b1_boundary);
+  auto b2_id = ComputeBoundarySummaryId(b2_boundary);
+  ASSERT_TRUE(b1_id.ok());
+  ASSERT_TRUE(b2_id.ok());
+
+  const auto a_id = Id(core::IdKind::kFunctionVariant, "a");
+  const auto d_id = Id(core::IdKind::kFunctionVariant, "d");
+
+  DependencySnapshot covered = snapshot;
+  covered.boundary_summaries = {b1_boundary, b2_boundary};
+  auto descriptor =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("a")});
+  // The recursive {b1, b2} SCC is oversized, so it is excluded whole. The
+  // boundary summaries stand in for it and must reach the admitted caller.
+  descriptor.limits.max_functions = 1;
+  descriptor.boundary_summaries = {*b1_id, *b2_id};
+
+  auto run = RunQuery(covered, descriptor);
+  ASSERT_TRUE(run.has_value());
+  EXPECT_FALSE(IsCompleteAnswer(run->artifact));
+  bool saw_oversized = false;
+  for (const auto &entry : run->artifact.coverage.frontier) {
+    if (entry.kind == QueryFrontierKind::kOversizedScc) {
+      saw_oversized = true;
+    }
+  }
+  EXPECT_TRUE(saw_oversized);
+
+  const auto query_a_d = FindReachableFact(run->artifact.results, a_id, d_id);
+  ASSERT_TRUE(query_a_d.has_value())
+      << "boundary support must reach the admitted caller";
+
+  // The boundary-supported fact is exactly the baseline fact.
+  const Baseline baseline =
+      RunBaseline(snapshot, QueryPredicate::kReachableCall);
+  const auto baseline_a_d = FindReachableFact(baseline.facts, a_id, d_id);
+  ASSERT_TRUE(baseline_a_d.has_value());
+  EXPECT_EQ(*query_a_d, *baseline_a_d);
+
+  // Without the boundary summaries the same query cannot derive it: the
+  // boundary, not the engine, supplies the excluded successor's facts.
+  auto bare_descriptor = descriptor;
+  bare_descriptor.boundary_summaries.clear();
+  auto bare = RunQuery(snapshot, bare_descriptor);
+  ASSERT_TRUE(bare.has_value());
+  EXPECT_FALSE(
+      FindReachableFact(bare->artifact.results, a_id, d_id).has_value());
+}
+
+TEST(QueryExecutionTest, ProofBudgetDropsWholeResults) {
+  auto a = Summary("a");
+  AddCall(&a, "a", "b");
+  auto b = Summary("b");
+  AddCall(&b, "b", "c");
+  auto c = Summary("c");
+  AddCall(&c, "c", "d");
+  const DependencySnapshot snapshot = Snapshot({a, b, c, Summary("d")});
+
+  auto full_descriptor =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("a")});
+  auto full = RunQuery(snapshot, full_descriptor);
+  ASSERT_TRUE(full.has_value());
+  ASSERT_GE(full->artifact.results.size(), 2u);
+
+  auto limited_descriptor = full_descriptor;
+  limited_descriptor.limits.max_proof_edges = 1;
+  auto limited = RunQuery(snapshot, limited_descriptor);
+  ASSERT_TRUE(limited.has_value());
+
+  EXPECT_FALSE(IsCompleteAnswer(limited->artifact));
+  EXPECT_TRUE(limited->artifact.coverage.proof_truncated);
+  EXPECT_LE(limited->artifact.coverage.proof_edges, 1u);
+  EXPECT_LT(limited->artifact.results.size(), full->artifact.results.size());
+  bool saw_budget = false;
+  for (const auto &entry : limited->artifact.coverage.frontier) {
+    if (entry.kind == QueryFrontierKind::kProofBudget) {
+      saw_budget = true;
+    }
+  }
+  EXPECT_TRUE(saw_budget);
+
+  // Omitted, never truncated: every returned result is a complete answer the
+  // unbudgeted run also returns.
+  for (const auto &fact : limited->artifact.results) {
+    EXPECT_NE(std::find(full->artifact.results.begin(),
+                        full->artifact.results.end(), fact),
+              full->artifact.results.end());
+  }
+}
+
+TEST(QueryExecutionTest, RecordsWorkerAndGlobalSvfSetup) {
+  auto a = Summary("a");
+  AddCall(&a, "a", "b");
+  const DependencySnapshot snapshot = Snapshot({a, Summary("b")});
+  const auto descriptor =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("a")});
+
+  auto run = RunQuery(snapshot, descriptor);
+  ASSERT_TRUE(run.has_value());
+  const auto &cost = run->artifact.cost;
+  EXPECT_GT(cost.kernels_executed, 0u);
+  EXPECT_EQ(cost.worker_setup_count, cost.kernels_executed);
+  EXPECT_EQ(cost.materialized_rows, run->artifact.coverage.examined_rows);
+  EXPECT_EQ(run->artifact.coverage.proof_edges, run->artifact.proof.size());
+  EXPECT_FALSE(cost.global_svf_bootstrap);
+  EXPECT_EQ(cost.global_svf_bootstrap_identity, "not-run:local-summary-input");
+}
+
+TEST(QueryExecutionTest, SummaryOrderDoesNotChangeTheArtifact) {
+  auto a = Summary("a");
+  AddCall(&a, "a", "b");
+  auto b = Summary("b");
+  AddCall(&b, "b", "c");
+  const std::vector<summary::SummaryArtifact> ordered = {a, b, Summary("c")};
+  const std::vector<summary::SummaryArtifact> reversed(ordered.rbegin(),
+                                                       ordered.rend());
+  const auto descriptor =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("a")});
+
+  auto first = RunQuery(Snapshot(ordered), descriptor);
+  auto second = RunQuery(Snapshot(reversed), descriptor);
+  ASSERT_TRUE(first.has_value());
+  ASSERT_TRUE(second.has_value());
+  EXPECT_EQ(first->artifact.results, second->artifact.results);
+  EXPECT_EQ(first->artifact.proof, second->artifact.proof);
+  EXPECT_EQ(first->artifact.artifact_id, second->artifact.artifact_id);
+}
+
+TEST(QueryExecutionTest, MalformedKernelOutputPublishesNothing) {
+  auto f = Summary("f");
+  AddCall(&f, "f", "g");
+  const DependencySnapshot snapshot = Snapshot({f, Summary("g")});
+  const auto descriptor =
+      Descriptor(QueryPredicate::kReachableCall, {FunctionRef("f")});
+
+  auto plan = PlanQuery(descriptor, snapshot);
+  ASSERT_TRUE(plan.ok()) << plan.status().message();
+  auto inner = MakeExecutor(snapshot);
+  ASSERT_TRUE(inner.has_value());
+  ScriptedQueryExecutor scripted(*inner->executor,
+                                 ScriptedQueryExecutor::Mode::kMalformedRow);
+  auto artifact = ExecuteQuery(*plan, scripted);
+
+  EXPECT_FALSE(artifact.ok());
+  EXPECT_EQ(artifact.status().code(), StatusCode::kInvalidArgument);
 }
 
 } // namespace
