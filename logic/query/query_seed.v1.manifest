@@ -1,0 +1,72 @@
+# query_seed.v1.manifest — the registered query-seed contract.
+#
+# This file is the human-readable mirror of the compiled registry in
+# src/query/QueryTypes.cpp (`RegisteredQuerySeeds`).
+# QueryPlannerTest.QuerySeedRegistryMatchesManifest fails if the two disagree.
+#
+# A seeded query does not define a new rule bundle and never modifies a
+# baseline bundle. It fixes the admitted SCC set (computed from the typed
+# endpoints and the dependency snapshot) and binds the predicate's endpoint
+# columns before the recursive evaluation. The named baseline bundle then runs
+# unchanged, including its WeakenEpistemic rules; the query layer only filters
+# the resulting tuples to the requested endpoints.
+#
+# source_kind/sink_kind use the stable core::IdKind spellings. A "-" sink means
+# the predicate has no typed sink column.
+#
+# seed_manifest_version=query-seed.v1
+# predicate=<registry name>
+# component=<WPA component kind>
+# relation=<relations.v2 IDB relation>
+# source_kind=<stable id kind>
+# sink_kind=<stable id kind>|-
+# baseline_bundle=<path to the unchanged executable rules>
+# epistemic=weakening-preserved
+# seed_policy=scc-set+typed-endpoints
+
+seed_manifest_version=query-seed.v1
+
+predicate=reachable-call
+component=reachability
+relation=ReachableCall
+source_kind=funcvar
+sink_kind=funcvar
+baseline_bundle=logic/reachability/reachability.v2.dl
+epistemic=weakening-preserved
+seed_policy=scc-set+typed-endpoints
+
+predicate=global-flow
+component=flow
+relation=GlobalFlow
+source_kind=valref
+sink_kind=valref
+baseline_bundle=logic/flow/global_flow.v2.dl
+epistemic=weakening-preserved
+seed_policy=scc-set+typed-endpoints
+
+predicate=may-read
+component=memory-effects
+relation=MayRead
+source_kind=funcvar
+sink_kind=memref
+baseline_bundle=logic/memory_effects/memory_effects.v2.dl
+epistemic=weakening-preserved
+seed_policy=scc-set+typed-endpoints
+
+predicate=may-write
+component=memory-effects
+relation=MayWrite
+source_kind=funcvar
+sink_kind=memref
+baseline_bundle=logic/memory_effects/memory_effects.v2.dl
+epistemic=weakening-preserved
+seed_policy=scc-set+typed-endpoints
+
+predicate=unknown-effect
+component=effects
+relation=UnknownEffect
+source_kind=funcvar
+sink_kind=-
+baseline_bundle=logic/effects/effects.v2.dl
+epistemic=weakening-preserved
+seed_policy=scc-set+typed-endpoints
