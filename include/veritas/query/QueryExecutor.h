@@ -119,7 +119,9 @@ private:
 };
 
 // Executes every admitted SCC of `plan` in its recorded order, then selects the
-// endpoint-matching results and a finite rooted proof for each.
+// endpoint-matching results and a finite rooted proof for each. An admitted
+// boundary summary contributes its declared facts to its member SCC's results
+// and as roots, so a closed frontier is always backed by the fact it cites.
 //
 // Failure contract:
 //   * a plan whose QueryId no longer re-derives, or whose snapshot digest
